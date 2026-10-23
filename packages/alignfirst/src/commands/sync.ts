@@ -1,5 +1,3 @@
-import { closeSync, openSync, readSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseArgs } from "node:util";
 
@@ -13,12 +11,16 @@ import {
   gitOutputOrUndefined,
   gitOutputRaw,
   gitSucceeds,
-  GitTimeoutError,
 } from "../git.js";
 import { parseCommandArgs } from "../parse-args.js";
 import { archiveThresholdDays, autoArchive } from "../plans/archive.js";
 import { resolvePlansMode } from "../plans/mode.js";
-import { findStoppedRebase, renderStoppedRebase, resolveStoppedRebase } from "../plans/rebase.js";
+import {
+  findStoppedRebase,
+  rebaseInProgress,
+  renderStoppedRebase,
+  resolveStoppedRebase,
+} from "../plans/rebase.js";
 import { acquireSyncLock } from "../plans/sync-lock.js";
 import { layoutOf } from "../project-layout.js";
 
@@ -123,34 +125,11 @@ async function runAttempt(
   }
 }
 
+// A running session log is named `*.running.md` by aligndev and renamed when its run ends, so Git
+// itself leaves it out of the snapshot, however late it appears.
 async function snapshot(ctx: CommandContext, repoDir: string): Promise<void> {
-  const excluded = gitOutputRaw(repoDir, "ls-files", "--others", "--exclude-standard", "-z")
-    .split("\0")
-    .filter((path) => basename(dirname(path)) === "_aligndev" && path.endsWith(".md"))
-    .filter((path) => isRunningLog(join(repoDir, path)));
-  await git(
-    ctx,
-    repoDir,
-    "add",
-    "-A",
-    "--",
-    ".",
-    ...excluded.map((path) => `:(literal,exclude)${path}`),
-  );
+  await git(ctx, repoDir, "add", "-A", "--", ".", ":(exclude,glob)**/_aligndev/*.running.md");
   if (hasStagedChanges(repoDir)) await git(ctx, repoDir, "commit", "--quiet", "-m", "sync");
-}
-
-function isRunningLog(path: string): boolean {
-  const handle = openSync(path, "r");
-  try {
-    const buffer = Buffer.alloc(8192);
-    const text = buffer.subarray(0, readSync(handle, buffer, 0, buffer.length, 0)).toString("utf8");
-    if (!text.startsWith("---\n")) return false;
-    const end = text.indexOf("\n---\n", 3);
-    return end !== -1 && text.slice(4, end).split("\n").includes("status: running");
-  } finally {
-    closeSync(handle);
-  }
 }
 
 async function consolidateSyncCommits(ctx: CommandContext, repoDir: string): Promise<void> {
@@ -176,7 +155,7 @@ async function integrate(ctx: CommandContext, repoDir: string): Promise<void> {
   try {
     await gitNetwork(ctx, repoDir, ["pull", "--rebase"]);
   } catch (error) {
-    if (error instanceof GitTimeoutError || findStoppedRebase(repoDir) === undefined) throw error;
+    if (!rebaseInProgress(repoDir)) throw error;
     try {
       await resolveStoppedRebase(ctx, repoDir);
     } catch (resolutionError) {
@@ -198,8 +177,7 @@ async function push(ctx: CommandContext, repoDir: string): Promise<AttemptResult
   try {
     await gitNetwork(ctx, repoDir, ["push", "--quiet", "-u", "origin", "HEAD"]);
     return { kind: "done", sent: true };
-  } catch (error) {
-    if (error instanceof GitTimeoutError) throw error;
+  } catch {
     await gitNetwork(ctx, repoDir, ["fetch", "--quiet"]);
     if (
       hasUpstream(repoDir) &&

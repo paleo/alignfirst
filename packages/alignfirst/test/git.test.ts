@@ -1,6 +1,6 @@
 import type * as ChildProcess from "node:child_process";
 import { spawn } from "node:child_process";
-import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -77,7 +77,8 @@ describe("non-interactive Git", () => {
     expect(nonInteractiveEnv(dir)).toMatchObject({
       GIT_TERMINAL_PROMPT: "0",
       GIT_EDITOR: "true",
-      GIT_SSH_COMMAND: "ssh -o BatchMode=yes",
+      GIT_SSH_COMMAND:
+        "ssh -o BatchMode=yes -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=3",
     });
   });
 
@@ -99,44 +100,24 @@ describe("non-interactive Git", () => {
     expect(nonInteractiveEnv(dir).GIT_SSH_COMMAND).toBeUndefined();
   });
 
-  it("times out after Git exits without waiting for inherited transport pipes", async () => {
+  it("lets HTTPS transfers give up on a stall", async () => {
     const dir = makeFixture();
     git(dir, "init", "--quiet");
-    const script = join(dir, "ssh");
-    const pidFile = join(dir, "git-pid");
-    const helperPidFile = join(dir, "helper-pid");
-    writeFileSync(
-      script,
-      `#!/bin/sh\necho $PPID > '${pidFile}'\necho $$ > '${helperPidFile}'\nexec sleep 3\n`,
-    );
-    chmodSync(script, 0o755);
-    vi.stubEnv("GIT_SSH_COMMAND", script);
-    vi.stubEnv("GIT_SSH_VARIANT", "ssh");
-    const started = Date.now();
-    try {
-      await expect(
-        gitNetwork(
-          { stdout: makeSink(), stderr: makeSink() },
-          dir,
-          ["fetch", "ssh://example.invalid/repo.git"],
-          200,
-        ),
-      ).rejects.toThrow("git fetch timed out after 0.2 seconds.");
-      expect(Date.now() - started).toBeLessThan(2_000);
-      const child = vi.mocked(spawn).mock.results.at(-1)?.value;
-      expect(child?.stdout?.destroyed).toBe(true);
-      expect(child?.stderr?.destroyed).toBe(true);
-      expect(existsSync(pidFile)).toBe(true);
-      expect(() => process.kill(Number(readFileSync(pidFile, "utf8")), 0)).toThrow();
-    } finally {
-      if (existsSync(helperPidFile)) {
-        try {
-          process.kill(Number(readFileSync(helperPidFile, "utf8")), "SIGKILL");
-        } catch {
-          /* Already exited. */
-        }
-      }
-    }
+    git(dir, "commit", "--quiet", "--allow-empty", "-m", "base");
+    const stderr = makeSink();
+    await gitNetwork({ stdout: makeSink(), stderr }, dir, ["fetch", "--quiet", dir]);
+    expect(stderr.text()).toBe("");
+    expect(vi.mocked(spawn).mock.lastCall?.[1]).toEqual([
+      "-C",
+      dir,
+      "-c",
+      "http.lowSpeedLimit=1000",
+      "-c",
+      "http.lowSpeedTime=30",
+      "fetch",
+      "--quiet",
+      dir,
+    ]);
   });
 });
 

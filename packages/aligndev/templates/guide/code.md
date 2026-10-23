@@ -13,7 +13,7 @@ Run `{{ALIGNDEV}} code` from the root of the selected worktree, so the agent wor
 
 {{ALIGNFIRST_SETUP}}
 
-Each ticketed run writes `.plans/<ticket>/_aligndev/<stamp>.md`. This file is the durable record of the run. It may live in the project's companion directory; the `sessionFile:` line of `{{ALIGNDEV}} code status` gives the actual path. Its frontmatter carries `status` (`running` → `succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome. A run that answers more than once lists each response oldest first, separated by `---- Later result ----`. A substantive report may precede a short later acknowledgement; report the substantive outcome.
+Each ticketed run writes `.plans/<ticket>/_aligndev/<stamp>.running.md`, renamed to `<stamp>.md` when the run ends; `{{ALIGNDEV}} code status` accepts either name. This file is the durable record of the run. It may live in the project's companion directory; the `sessionFile:` line of `{{ALIGNDEV}} code status` gives the actual path. Its frontmatter carries `status` (`running` → `succeeded`/`failed`) and the `sessionId`, and the `---- Result ----` block holds the outcome. A run that answers more than once lists each response oldest first, separated by `---- Later result ----`. A substantive report may precede a short later acknowledgement; report the substantive outcome.
 
 {{#openclaw}}
 ## How it runs

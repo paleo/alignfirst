@@ -81,28 +81,28 @@ describe("resolveSessionFilePath", () => {
 
   it("uses the ticket _aligndev directory", () => {
     const path = resolveSessionFilePath(sessionsDir, "29", FIXED_DATE, () => false);
-    expect(path).toBe(join(sessionsDir, "29", "_aligndev", "20260701-091503.md"));
+    expect(path).toBe(join(sessionsDir, "29", "_aligndev", "20260701-091503.running.md"));
   });
 
   it("uses the root _aligndev directory without a ticket", () => {
     const path = resolveSessionFilePath(sessionsDir, undefined, FIXED_DATE, () => false);
-    expect(path).toBe(join(sessionsDir, "_aligndev", "20260701-091503.md"));
+    expect(path).toBe(join(sessionsDir, "_aligndev", "20260701-091503.running.md"));
   });
 
   it("writes under a separate sessions directory", () => {
     const companionTree = join("/companions", "proj", ".plans");
     expect(resolveSessionFilePath(companionTree, "29", FIXED_DATE, () => false)).toBe(
-      join(companionTree, "29", "_aligndev", "20260701-091503.md"),
+      join(companionTree, "29", "_aligndev", "20260701-091503.running.md"),
     );
   });
 
-  it("appends a numeric suffix on same-second collisions", () => {
+  it("appends a numeric suffix on same-second collisions, running or completed", () => {
     const taken = new Set([
-      join(sessionsDir, "29", "_aligndev", "20260701-091503.md"),
+      join(sessionsDir, "29", "_aligndev", "20260701-091503.running.md"),
       join(sessionsDir, "29", "_aligndev", "20260701-091503-2.md"),
     ]);
     const path = resolveSessionFilePath(sessionsDir, "29", FIXED_DATE, (p) => taken.has(p));
-    expect(path).toBe(join(sessionsDir, "29", "_aligndev", "20260701-091503-3.md"));
+    expect(path).toBe(join(sessionsDir, "29", "_aligndev", "20260701-091503-3.running.md"));
   });
 });
 
@@ -217,24 +217,26 @@ describe("session file lifecycle", () => {
       makeFrontmatter({ meta: "retry" }),
     );
     expect(second).not.toBe(first);
-    expect(second).toBe(first.replace(/\.md$/, "-2.md"));
+    expect(second).toBe(first.replace(/\.running\.md$/, "-2.running.md"));
     for (const [path, key, other] of [
       [first, "winner", "retry"],
       [second, "retry", "winner"],
     ]) {
       appendTranscript(path, `PRIVATE:${key}\n`);
-      applyCompletion(path, {
+      const completed = applyCompletion(path, {
         status: "succeeded",
         endedAt: FIXED_DATE.toISOString(),
         exitReason: "completed",
         sessionId: key,
         result: `FINAL:${key}`,
       });
-      expect(readCompletion(path)).toMatchObject({
+      expect(completed).toBe(path.replace(/\.running\.md$/, ".md"));
+      expect(existsSync(path)).toBe(false);
+      expect(readCompletion(completed)).toMatchObject({
         frontmatter: { meta: key, sessionId: key, status: "succeeded" },
         result: `FINAL:${key}`,
       });
-      const content = readFileSync(path, "utf8");
+      const content = readFileSync(completed, "utf8");
       expect(content).toContain(`PRIVATE:${key}`);
       expect(content).not.toContain(`PRIVATE:${other}`);
     }
@@ -247,7 +249,7 @@ describe("session file lifecycle", () => {
     symlinkSync(target, first);
     expect(existsSync(first)).toBe(false);
     const second = createSessionFile(dir, undefined, FIXED_DATE, makeFrontmatter({ meta: "safe" }));
-    expect(second).toBe(first.replace(/\.md$/, "-2.md"));
+    expect(second).toBe(first.replace(/\.running\.md$/, "-2.running.md"));
     expect(readlinkSync(first)).toBe(target);
     expect(existsSync(target)).toBe(false);
     expect(readCompletion(second).frontmatter.meta).toBe("safe");
@@ -291,13 +293,16 @@ describe("session file lifecycle", () => {
     appendTranscript(sessionFilePath, "[init] session abc\n");
     appendTranscript(sessionFilePath, "some assistant text\n");
 
-    applyCompletion(sessionFilePath, {
-      status: "succeeded",
-      endedAt: "2026-07-01T09:41:20.000Z",
-      exitReason: "completed",
-      sessionId: "abc",
-      result: "All done.",
-    });
+    // A record written before the `.running.md` convention keeps its name.
+    expect(
+      applyCompletion(sessionFilePath, {
+        status: "succeeded",
+        endedAt: "2026-07-01T09:41:20.000Z",
+        exitReason: "completed",
+        sessionId: "abc",
+        result: "All done.",
+      }),
+    ).toBe(sessionFilePath);
 
     const completion = readCompletion(sessionFilePath);
     expect(completion.frontmatter.status).toBe("succeeded");

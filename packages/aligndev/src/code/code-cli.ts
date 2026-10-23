@@ -28,6 +28,7 @@ import type { QuotaReader } from "./quota.js";
 import { runAgent, type RunConfig } from "./run-agent.js";
 import {
   applyCompletion,
+  completedSessionPath,
   createSessionFile,
   findNewestSessionFile,
   listSessionRecords,
@@ -169,9 +170,11 @@ export async function runCode(
 
 function showStatus(ctx: CodeContext, target: StatusTarget, includeResult: boolean): number {
   const tree = sessionTreeOf(readReport(ctx), ctx);
-  const sessionFilePath = resolveStatusTargetSessionFile(tree, target);
-  const completion = reconcileSessionFile(sessionFilePath, tree.machineId);
-  ctx.stdout.write(renderSessionStatus(tree.cwd, sessionFilePath, completion.frontmatter));
+  const completion = reconcileSessionFile(
+    resolveStatusTargetSessionFile(tree, target),
+    tree.machineId,
+  );
+  ctx.stdout.write(renderSessionStatus(tree.cwd, completion.path, completion.frontmatter));
   if (
     includeResult &&
     completion.frontmatter.status !== "running" &&
@@ -257,17 +260,22 @@ function loadMessage(args: SessionArgs, cwd: string): void {
   );
 }
 
+// A caller may retain the `.running.md` path of a run that has ended since: it resolves to the
+// completed file.
 function resolveStatusSessionFile(tree: SessionTree, input: string): string {
-  const sessionFilePath = resolve(tree.cwd, input);
+  const requestedPath = resolve(tree.cwd, input);
   const sessionsDir = displayPath(tree.cwd, tree.sessionsDir);
-  if (!isSessionFilePath(tree.sessionsDir, sessionFilePath)) {
+  if (!isSessionFilePath(tree.sessionsDir, requestedPath)) {
     throw new Error(
       `Error: status requires a session file under ${sessionsDir}/_aligndev/ or ` +
         `${sessionsDir}/<ticket>/_aligndev/.`,
     );
   }
+  const sessionFilePath = existsSync(requestedPath)
+    ? requestedPath
+    : completedSessionPath(requestedPath);
   if (!existsSync(sessionFilePath)) {
-    throw new Error(`Error: session file not found: ${displayPath(tree.cwd, sessionFilePath)}`);
+    throw new Error(`Error: session file not found: ${displayPath(tree.cwd, requestedPath)}`);
   }
   if (!isSessionFilePath(realpathSync(tree.sessionsDir), realpathSync(sessionFilePath))) {
     throw new Error(`Error: the session file resolves outside ${sessionsDir}/.`);
@@ -582,14 +590,14 @@ async function runSession(
       (agent === "codex"
         ? " For Codex aliases, update the Codex CLI or select an explicit full model slug."
         : "");
-    applyCompletion(sessionFilePath, {
+    const completedPath = applyCompletion(sessionFilePath, {
       status: "failed",
       endedAt: new Date().toISOString(),
       exitReason: "error",
       sessionId: args.resume ?? null,
       result: message,
     });
-    writeFailureDiagnostic(ctx, sessionFilePath, message);
+    writeFailureDiagnostic(ctx, completedPath, message);
     return 1;
   }
 
@@ -607,6 +615,7 @@ async function runSession(
   });
   createMissingCompanion(report);
   const result = await runAgent(runConfig, createAgentAdapter(agent), stdout);
+  const completedPath = completedSessionPath(sessionFilePath);
 
   if (args.resume === undefined && result.sessionId) {
     stdout.write(`\nSession ID: ${result.sessionId}\n`);
@@ -614,7 +623,7 @@ async function runSession(
   if (result.authRequired) {
     writeFailureDiagnostic(
       ctx,
-      sessionFilePath,
+      completedPath,
       `${nativeContext(code)} not authenticated — an administrator must re-login ` +
         "with the same effective environment as the child (apply profile unset/env/configDir, " +
         "including HOME, PATH and credential routing), from the same working directory. " +
@@ -625,7 +634,7 @@ async function runSession(
   if (result.status === "succeeded") return 0;
   writeFailureDiagnostic(
     ctx,
-    sessionFilePath,
+    completedPath,
     `${nativeContext(code)}: ${failureDiagnostic(agent, result.result)}${args.resume === undefined ? "" : " Check that the native conversation exists in this configuration; select the correct --profile or start a new session. No account fallback was attempted."}`,
   );
   return 1;

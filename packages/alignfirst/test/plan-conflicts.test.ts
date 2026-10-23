@@ -252,7 +252,7 @@ it("stops an unsupported directory/file conflict without pushing", async () => {
   );
 });
 
-it("stops before staging a filename that cannot be decoded losslessly", async () => {
+it("aborts the rebase when a conflicted filename cannot be decoded losslessly", async () => {
   const fixture = await makeFixture();
   for (const [repo, content] of [
     [fixture.clone, "local\n"],
@@ -270,6 +270,7 @@ it("stops before staging a filename that cannot be decoded losslessly", async ()
 
   expect(result.code).toBe(1);
   expect(result.stderr).toContain("non-UTF-8 Git output");
+  expect(result.stderr).toContain("back to its state before the pull");
   expect(findStoppedRebase(fixture.clone)).toBeUndefined();
   expect(git(fixture.remote, "rev-parse", "HEAD")).toBe(before);
 });
@@ -329,7 +330,7 @@ it("drops a net-empty sync history back to the upstream", async () => {
   expect(result.stdout).toContain("nothing to send");
 });
 
-it.each(["product-plans/_aligndev/[run]*.md", "product-plans/78/_aligndev/run.md"])(
+it.each(["product-plans/_aligndev/[run]*.running.md", "product-plans/78/_aligndev/run.running.md"])(
   "keeps running logs untracked until completion: %s",
   async (path) => {
     const fixture = await makeFixture();
@@ -340,19 +341,28 @@ it.each(["product-plans/_aligndev/[run]*.md", "product-plans/78/_aligndev/run.md
     expect(git(fixture.remote, "ls-tree", "-r", "--name-only", "HEAD")).not.toContain(path);
     expect(git(fixture.clone, "ls-files", "--others", "--exclude-standard")).toBe(path);
     expect(git(fixture.clone, "ls-files", "--cached")).not.toContain(path);
-    write(fixture.clone, path, "---\nstatus: succeeded\n---\nfinished\n");
+    const completed = path.replace(".running.md", ".md");
+    write(fixture.clone, completed, "---\nstatus: succeeded\n---\nfinished\n");
+    rmSync(join(fixture.clone, path));
     expect((await runMain(["sync"], { cwd: fixture.product })).code).toBe(0);
-    expect(remoteContent(fixture, path)).toBe("---\nstatus: succeeded\n---\nfinished\n");
+    expect(remoteContent(fixture, completed)).toBe("---\nstatus: succeeded\n---\nfinished\n");
   },
 );
 
-it.each([
-  "status: running\n",
-  "---\nstatus: running\n",
-  "---\nstatus: succeeded\n---\nstatus: running\n",
-])("sends session-shaped files without running frontmatter: %j", async (content) => {
+it("keeps an archived running log local too", async () => {
   const fixture = await makeFixture();
-  const path = "product-plans/78/_aligndev/run.md";
+  const path = "product-plans/_archives/78/_aligndev/run.running.md";
+  write(fixture.clone, path, "---\nstatus: running\n---\n");
+  const result = await runMain(["sync"], { cwd: fixture.product });
+  expect(result.code, result.stderr).toBe(0);
+  expect(git(fixture.clone, "ls-files", "--others", "--exclude-standard")).toBe(path);
+});
+
+it.each([
+  ["product-plans/78/_aligndev/run.md", "---\nstatus: running\n---\n"],
+  ["product-plans/78/run.running.md", "not a session log\n"],
+])("sends files by name, not by content: %s", async (path, content) => {
+  const fixture = await makeFixture();
   write(fixture.clone, path, content);
   const result = await runMain(["sync"], { cwd: fixture.product });
   expect(result.code, result.stderr).toBe(0);
@@ -370,7 +380,7 @@ it("continues syncing already-tracked running logs without migration", async () 
 
 it("keeps a running log local through automatic conflict resolution", async () => {
   const fixture = await makeFixture({ "product-plans/80/spec.md": "base\n" });
-  const running = "product-plans/80/_aligndev/run.md";
+  const running = "product-plans/80/_aligndev/run.running.md";
   const content = "---\nstatus: running\n---\ntranscript\n";
   write(fixture.clone, running, content);
   write(fixture.clone, "product-plans/80/spec.md", "local\n");
@@ -473,7 +483,7 @@ it("retries after the remote advances just before the first push", async () => {
   const wrapper = join(bin, "git");
   writeFileSync(
     wrapper,
-    `#!/bin/sh\nif [ "$3" = push ] && [ ! -f '${marker}' ]; then\n  touch '${marker}'\n  '${realGit}' -C '${fixture.other}' push --quiet || exit $?\nfi\nexec '${realGit}' "$@"\n`,
+    `#!/bin/sh\ncase " $* " in *" push "*)\n  if [ ! -f '${marker}' ]; then\n    touch '${marker}'\n    '${realGit}' -C '${fixture.other}' push --quiet || exit $?\n  fi\nesac\nexec '${realGit}' "$@"\n`,
   );
   chmodSync(wrapper, 0o755);
   vi.stubEnv("PATH", `${bin}:${process.env.PATH}`);

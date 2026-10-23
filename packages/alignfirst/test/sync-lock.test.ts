@@ -1,14 +1,22 @@
-import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import type * as Fs from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 
 import { acquireSyncLock } from "../src/plans/sync-lock.js";
 import { configureGit, git, makeTempDir } from "./helpers.js";
 
 const dirs: string[] = [];
+const actualRenameSync = (await vi.importActual<typeof Fs>("node:fs")).renameSync;
+
+vi.mock("node:fs", async (original) => {
+  const fs = await original<typeof Fs>();
+  return { ...fs, renameSync: vi.fn(fs.renameSync) };
+});
 
 afterEach(() => {
+  vi.mocked(renameSync).mockReset().mockImplementation(actualRenameSync);
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -44,6 +52,22 @@ it("replaces a lock whose process is conclusively gone", () => {
   expect(lock.kind).toBe("acquired");
   expect(readFileSync(join(path, "pid"), "utf8")).toBe(String(process.pid));
   if (lock.kind === "acquired") lock.release();
+});
+
+it("yields to a concurrent takeover of the same stale lock", () => {
+  const dir = fixture();
+  const path = join(dir, ".git/alignfirst-sync.lock");
+  mkdirSync(path);
+  writeFileSync(join(path, "pid"), "2147483647");
+  // The other process, having seen the same dead pid, takes over first.
+  vi.mocked(renameSync).mockImplementationOnce(() => {
+    writeFileSync(join(path, "pid"), "1");
+    const error = new Error("ENOENT") as NodeJS.ErrnoException;
+    error.code = "ENOENT";
+    throw error;
+  });
+  expect(acquireSyncLock(dir)).toEqual({ kind: "busy", path, pid: 1 });
+  expect(readFileSync(join(path, "pid"), "utf8")).toBe("1");
 });
 
 function fixture(): string {

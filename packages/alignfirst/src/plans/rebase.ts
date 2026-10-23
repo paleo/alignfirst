@@ -14,16 +14,20 @@ export interface StoppedRebase {
 }
 
 export function findStoppedRebase(repoDir: string): StoppedRebase | undefined {
-  const inProgress = ["rebase-merge", "rebase-apply"].some((name) => {
-    const path = gitOutputOrUndefined(repoDir, "rev-parse", "--git-path", name);
-    return path !== undefined && path !== "" && existsSync(resolve(repoDir, path));
-  });
-  if (!inProgress) return;
+  if (!rebaseInProgress(repoDir)) return;
   const conflicts = gitOutputRaw(repoDir, "diff", "-z", "--name-only", "--diff-filter=U");
   return {
     repoDir,
     conflictedFiles: conflicts.split("\0").filter((path) => path !== ""),
   };
+}
+
+// Decodes no path, so it also answers when a conflicted name cannot be read losslessly.
+export function rebaseInProgress(repoDir: string): boolean {
+  return ["rebase-merge", "rebase-apply"].some((name) => {
+    const path = gitOutputOrUndefined(repoDir, "rev-parse", "--git-path", name);
+    return path !== undefined && path !== "" && existsSync(resolve(repoDir, path));
+  });
 }
 
 export async function resolveStoppedRebase(streams: Streams, repoDir: string): Promise<void> {

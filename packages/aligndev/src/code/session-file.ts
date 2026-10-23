@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
@@ -51,6 +52,10 @@ export interface SessionFrontmatter {
 
 export const RESULT_MARKER = "\n---- Result ----\n";
 const LATER_RESULT_SEPARATOR = "\n\n---- Later result ----\n\n";
+// A run is written as `<stamp>.running.md` and renamed to `<stamp>.md` when it ends, so the
+// work-files sync can leave running logs out by name. Records written before this convention keep
+// their name and their `running` status until their run ends.
+const RUNNING_SUFFIX = ".running.md";
 
 export function createSessionFile(
   sessionsDir: string,
@@ -63,6 +68,7 @@ export function createSessionFile(
   const stamp = formatStamp(now);
   for (let suffix = 1; ; ++suffix) {
     const path = sessionFileCandidate(dir, stamp, suffix);
+    if (existsSync(completedSessionPath(path))) continue;
     try {
       claimSessionFile(path, frontmatter);
       return path;
@@ -73,7 +79,12 @@ export function createSessionFile(
 }
 
 function sessionFileCandidate(dir: string, stamp: string, suffix: number): string {
-  return join(dir, `${stamp}${suffix === 1 ? "" : `-${suffix}`}.md`);
+  return join(dir, `${stamp}${suffix === 1 ? "" : `-${suffix}`}${RUNNING_SUFFIX}`);
+}
+
+export function completedSessionPath(sessionFilePath: string): string {
+  if (!sessionFilePath.endsWith(RUNNING_SUFFIX)) return sessionFilePath;
+  return `${sessionFilePath.slice(0, -RUNNING_SUFFIX.length)}.md`;
 }
 
 function claimSessionFile(path: string, frontmatter: SessionFrontmatter): void {
@@ -91,7 +102,11 @@ export function resolveSessionFilePath(
   const dir = join(sessionsDir, ...(ticket === undefined ? [] : [ticket]), "_aligndev");
   const stamp = formatStamp(now);
   let suffix = 1;
-  while (fileExists(sessionFileCandidate(dir, stamp, suffix))) ++suffix;
+  while (
+    fileExists(sessionFileCandidate(dir, stamp, suffix)) ||
+    fileExists(completedSessionPath(sessionFileCandidate(dir, stamp, suffix)))
+  )
+    ++suffix;
   return sessionFileCandidate(dir, stamp, suffix);
 }
 
@@ -120,9 +135,10 @@ export function formatResults(earlier: readonly string[], last: string): string 
   return [...earlier, last].join(LATER_RESULT_SEPARATOR);
 }
 
-// Appends the result block, then rewrites the frontmatter in place. Append-first keeps the tailed
-// transcript intact until the single terminal rewrite.
-export function applyCompletion(sessionFilePath: string, update: CompletionUpdate): void {
+// Appends the result block, then rewrites the frontmatter in place, then renames the file to its
+// completed name. Returns that name. Append-first keeps the tailed transcript intact until the
+// single terminal rewrite.
+export function applyCompletion(sessionFilePath: string, update: CompletionUpdate): string {
   const content = readFileSync(sessionFilePath, "utf-8");
   const { frontmatter, body } = splitSessionFile(content);
   const updated: SessionFrontmatter = {
@@ -137,6 +153,9 @@ export function applyCompletion(sessionFilePath: string, update: CompletionUpdat
   };
   const resultBlock = `${RESULT_MARKER}\n${update.result}\n`;
   writeFileSync(sessionFilePath, `${serializeFrontmatter(updated)}\n${body}${resultBlock}`);
+  const completedPath = completedSessionPath(sessionFilePath);
+  if (completedPath !== sessionFilePath) renameSync(sessionFilePath, completedPath);
+  return completedPath;
 }
 
 export function appendTranscript(sessionFilePath: string, text: string): void {
@@ -162,16 +181,21 @@ export function readCompletion(sessionFilePath: string): SessionCompletion {
   return { frontmatter, result };
 }
 
+export interface ReconciledSession extends SessionCompletion {
+  // The completed name when sealing renamed the file.
+  path: string;
+}
+
 export function reconcileSessionFile(
   sessionFilePath: string,
   machineId: string,
   now: Date = new Date(),
-): SessionCompletion {
+): ReconciledSession {
   const completion = readCompletion(sessionFilePath);
   const update = interruptedCompletion(completion.frontmatter, machineId, now);
-  if (!update) return completion;
-  applyCompletion(sessionFilePath, update);
+  if (!update) return { ...completion, path: sessionFilePath };
   return {
+    path: applyCompletion(sessionFilePath, update),
     frontmatter: {
       ...completion.frontmatter,
       status: update.status,
@@ -246,9 +270,8 @@ export function listSessionRecords(sessionsDir: string, machineId: string): Sess
   for (const dir of sessionDirs) {
     for (const entry of readEntries(dir)) {
       if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
-      const path = join(dir, entry.name);
-      const completion = reconcileSessionFileOrSkip(path, machineId);
-      if (completion) records.push({ path, frontmatter: completion.frontmatter });
+      const completion = reconcileSessionFileOrSkip(join(dir, entry.name), machineId);
+      if (completion) records.push({ path: completion.path, frontmatter: completion.frontmatter });
     }
   }
   return records;
@@ -260,7 +283,7 @@ export function findNewestSessionFile(dir: string): string | undefined {
   let newestSuffix = -1;
   for (const entry of readEntries(dir)) {
     if (!entry.isFile()) continue;
-    const match = /^(\d{8}-\d{6})(?:-(\d+))?\.md$/.exec(entry.name);
+    const match = /^(\d{8}-\d{6})(?:-(\d+))?(?:\.running)?\.md$/.exec(entry.name);
     if (!match) continue;
     const stamp = match[1];
     const suffix = Number(match[2] ?? 0);
@@ -285,7 +308,7 @@ function readEntries(dir: string): Dirent[] {
 function reconcileSessionFileOrSkip(
   path: string,
   machineId: string,
-): SessionCompletion | undefined {
+): ReconciledSession | undefined {
   try {
     return reconcileSessionFile(path, machineId);
   } catch {

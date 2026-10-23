@@ -49,7 +49,9 @@ The session file is the durable handoff of a run. Its frontmatter holds `profile
 
 Each new record carries `machineId`, a random UUID read from `~/.alignfirst/machine-id`, created on first use with an exclusive write. Concurrent creators read the winning id. An empty or unreadable file is an error; older records read as `machineId: null`.
 
-Session files live under the project's `_aligndev` location, read from `alignfirst config --json`: `<ticket>/_aligndev/`, or `_aligndev/` without a ticket. That location is below the project's `.plans/`, unless a companion directory holds a separate tree. A new session log reaches the work-files repository only after its run ends.
+Session files live under the project's `_aligndev` location, read from `alignfirst config --json`: `<ticket>/_aligndev/`, or `_aligndev/` without a ticket. That location is below the project's `.plans/`, unless a companion directory holds a separate tree.
+
+A run is written as `<stamp>.running.md` and renamed to `<stamp>.md` when it ends, by completion or by sealing. `alignfirst sync` leaves `_aligndev/*.running.md` out of its snapshots, so a log reaches the work-files repository only once its run has ended. `code status <path>` resolves a retained `.running.md` path to the completed file. Records written before this convention keep their name and their `running` status until their run ends.
 
 The CLI creates a missing companion before launch, independently of permission mode. Claude Code/Codex normal modes add it through `--add-dir`; Pi uses ordinary OS access. When some AlignFirst files live there, a new session's prompt starts with `alignfirst context`. See [Companion Directories](companion-directories.md).
 

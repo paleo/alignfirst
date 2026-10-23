@@ -5,73 +5,32 @@ import { basename, dirname, resolve } from "node:path";
 import { CliError } from "./cli-error.js";
 import type { Streams } from "./context.js";
 
-const NETWORK_TIMEOUT_MS = 60_000;
-
-export class GitTimeoutError extends CliError {}
+// Stalled transports give up on their own: SSH through the default command below, HTTPS through
+// these options. A configured SSH command keeps its own timeouts.
+const HTTP_STALL_OPTIONS = ["-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=30"];
+const DEFAULT_SSH_COMMAND =
+  "ssh -o BatchMode=yes -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=3";
 
 export function git(streams: Streams, dir: string, ...args: string[]): Promise<void> {
   return spawnGit(streams, dir, args);
 }
 
-export function gitNetwork(
-  streams: Streams,
-  dir: string,
-  args: string[],
-  timeoutMs = NETWORK_TIMEOUT_MS,
-): Promise<void> {
-  return spawnGit(streams, dir, args, timeoutMs);
+export function gitNetwork(streams: Streams, dir: string, args: string[]): Promise<void> {
+  return spawnGit(streams, dir, [...HTTP_STALL_OPTIONS, ...args]);
 }
 
-function spawnGit(
-  streams: Streams,
-  dir: string,
-  args: string[],
-  timeoutMs?: number,
-): Promise<void> {
+function spawnGit(streams: Streams, dir: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn("git", ["-C", dir, ...args], {
       stdio: ["ignore", "pipe", "pipe"],
       env: nonInteractiveEnv(dir),
     });
-    let timedOut = false;
-    let killTimer: NodeJS.Timeout | undefined;
-    const timer =
-      timeoutMs === undefined
-        ? undefined
-        : setTimeout(() => {
-            timedOut = true;
-            child.kill("SIGTERM");
-            killTimer = setTimeout(() => child.kill("SIGKILL"), 2_000);
-          }, timeoutMs);
-    function clearTimers(): void {
-      clearTimeout(timer);
-      clearTimeout(killTimer);
-    }
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (text: string) => streams.stdout.write(text));
     child.stderr.on("data", (text: string) => streams.stderr.write(text));
-    child.once("error", (error) => {
-      clearTimers();
-      reject(gitFailure(args, error.message));
-    });
-    child.once("exit", () => {
-      clearTimers();
-      // Transport helpers may keep the pipes open after Git exits.
-      if (timedOut) {
-        child.stdout.destroy();
-        child.stderr.destroy();
-        reject(
-          new GitTimeoutError(
-            `git ${gitSubcommand(args)} timed out after ${(timeoutMs ?? NETWORK_TIMEOUT_MS) / 1_000} seconds.`,
-          ),
-        );
-      }
-    });
-    child.once("close", (code) => {
-      clearTimers();
-      if (!timedOut) code === 0 ? resolve() : reject(gitFailure(args));
-    });
+    child.once("error", (error) => reject(gitFailure(args, error.message)));
+    child.once("close", (code) => (code === 0 ? resolve() : reject(gitFailure(args))));
   });
 }
 
@@ -82,7 +41,7 @@ export function nonInteractiveEnv(dir: string): NodeJS.ProcessEnv {
     env.GIT_SSH === undefined &&
     gitOutputOrUndefined(dir, "config", "--get", "core.sshCommand") === undefined
   )
-    env.GIT_SSH_COMMAND = "ssh -o BatchMode=yes";
+    env.GIT_SSH_COMMAND = DEFAULT_SSH_COMMAND;
   return env;
 }
 

@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { gitOutput } from "../git.js";
@@ -22,11 +22,24 @@ export function acquireSyncLock(repoDir: string): SyncLock | SyncLockBusy {
   if (createLock(path)) return lockHandle(path);
   const pid = readPid(path);
   if (pid !== undefined && processGone(pid)) {
-    rmSync(path, { recursive: true, force: true });
+    takeOverStaleLock(path);
     if (createLock(path)) return lockHandle(path);
     return { kind: "busy", path, pid: readPid(path) };
   }
   return { kind: "busy", path, pid };
+}
+
+// Renaming is atomic: of the processes that saw the same dead pid, exactly one moves the stale lock
+// aside. The others find no lock, or the winner's new one.
+function takeOverStaleLock(path: string): void {
+  const stale = `${path}.${process.pid}.stale`;
+  try {
+    renameSync(path, stale);
+  } catch (error) {
+    if (hasCode(error, "ENOENT")) return;
+    throw error;
+  }
+  rmSync(stale, { recursive: true, force: true });
 }
 
 function createLock(path: string): boolean {

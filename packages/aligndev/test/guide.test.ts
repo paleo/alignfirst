@@ -104,7 +104,7 @@ describe("renderCodeGuide", () => {
     expect(openclawInstructions).not.toContain("thread-handoff wake");
     expect(openclawInstructions).toContain("--meta <KEY>");
     expect(openclawInstructions).toContain("aligndev code status <session-file>");
-    expect(openclawInstructions).toContain(".plans/<ticket>/_aligndev/<stamp>.md");
+    expect(openclawInstructions).toContain(".plans/<ticket>/_aligndev/<stamp>.running.md");
     expect(openclawInstructions).toContain("the `sessionFile:` line of `aligndev code status`");
     expect(openclawInstructions).not.toContain("thread-reply");
     expect(openclawInstructions).not.toContain("process log");

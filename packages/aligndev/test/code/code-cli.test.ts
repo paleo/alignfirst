@@ -609,6 +609,31 @@ describe("status", () => {
     expect(readCompletion(sessionFilePath).frontmatter.status).toBe("failed");
   });
 
+  it("seals a dead running log under its completed name and resolves the retained path", async () => {
+    const runningPath = join(dir, ".plans", "1", "_aligndev", "20260829-115529.running.md");
+    const completedPath = join(dir, ".plans", "1", "_aligndev", "20260829-115529.md");
+    writeStatusRecord(2147483647, runningPath);
+    const stdout = makeSink();
+    const options = {
+      argv: ["node", "aligndev", "code", "status", ".plans/1/_aligndev/20260829-115529.running.md"],
+      cwd: dir,
+      env: { HOME: dir },
+      home: dir,
+      alignfirstCommand: ALIGNFIRST,
+      stdout,
+    };
+    expect(await main(options)).toBe(0);
+    expect(stdout.text()).toContain("sessionFile: .plans/1/_aligndev/20260829-115529.md\n");
+    expect(stdout.text()).toContain("exitReason: terminated\n");
+    expect(existsSync(runningPath)).toBe(false);
+    expect(readCompletion(completedPath).frontmatter.status).toBe("failed");
+    // The retained running path keeps working once the run has ended.
+    expect(await main(options)).toBe(0);
+    expect(stdout.text()).toContain(
+      "sessionFile: .plans/1/_aligndev/20260829-115529.md\nsessionId",
+    );
+  });
+
   it("reports a live run without changing its record", async () => {
     writeStatusRecord(process.pid);
     const stdout = makeSink();
@@ -1754,7 +1779,7 @@ describe("quiet execution", () => {
     const started = await launch(["new", "-m", "go", "--quiet"], fake.path);
     expect(started.code).toBe(0);
     expect(started.stdout).toBe(
-      `Session file: ${relative(project, started.file)}\n\n\nSession ID: session-1\n`,
+      `Session file: ${relative(project, started.file).replace(/\.md$/, ".running.md")}\n\n\nSession ID: session-1\n`,
     );
     expect(started.stderr).toBe("");
     expect(started.completion.result).toBe("final answer");
@@ -1762,7 +1787,9 @@ describe("quiet execution", () => {
     expect(readFileSync(started.file, "utf8")).toContain("private transcript");
     const resumed = await launch(["resume", "session-1", "-m", "more", "--quiet"], fake.path);
     expect(resumed.code).toBe(0);
-    expect(resumed.stdout).toBe(`Session file: ${relative(project, resumed.file)}\n\n`);
+    expect(resumed.stdout).toBe(
+      `Session file: ${relative(project, resumed.file).replace(/\.md$/, ".running.md")}\n\n`,
+    );
     expect(resumed.completion.frontmatter.command).toContain("--quiet");
   });
 

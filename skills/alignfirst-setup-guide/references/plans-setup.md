@@ -28,7 +28,7 @@ Set `plans.autoArchive: true`. Then `npx alignfirst sync` publishes changes and 
 directories and no-ticket session files under `_archives/`. The user can remove the field to opt out.
 `ALIGNFIRST_ARCHIVE_DAYS` sets the threshold in days and defaults to `7`.
 
-In shared mode, `sync` snapshots changes except untracked running session logs and consolidates pending `sync` commits before pulling. A lock in the clone serializes syncs; a busy lock or an advancing remote gets up to three attempts. An unresolvable conflict aborts the rebase, keeping local commits. Resolve it by hand with `git pull --rebase` in the work-files clone, then run `npx alignfirst sync` again.
+In shared mode, `sync` snapshots changes except running session logs (`_aligndev/*.running.md`) and consolidates pending `sync` commits before pulling. A lock in the clone serializes syncs; a busy lock or an advancing remote gets up to three attempts. An unresolvable conflict aborts the rebase, keeping local commits. Resolve it by hand with `git pull --rebase` in the work-files clone, then run `npx alignfirst sync` again.
 
 ## Configure the Project
 
