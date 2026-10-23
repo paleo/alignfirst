@@ -1,0 +1,6 @@
+{
+  "worktree": {
+    "setup": "npm run workspace -- setup",
+    "teardown": "npm run workspace -- teardown"
+  }
+}
