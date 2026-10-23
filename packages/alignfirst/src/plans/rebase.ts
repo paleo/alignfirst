@@ -30,8 +30,9 @@ export async function resolveStoppedRebase(streams: Streams, repoDir: string): P
   for (let step = 0; findStoppedRebase(repoDir) !== undefined; ++step) {
     if (step >= MAX_REBASE_STEPS)
       throw new CliError(`Could not finish the stopped rebase in ${repoDir}.`);
-    resolveConflictedPaths(streams, repoDir);
-    await git(streams, repoDir, "add", "-A");
+    const changed = resolveConflictedPaths(streams, repoDir);
+    if (changed.length > 0)
+      await git(streams, repoDir, "add", "-A", "--", ...changed.map((path) => `:(literal)${path}`));
     await continueRebase(streams, repoDir);
   }
 }
@@ -59,6 +60,6 @@ export function renderStoppedRebase(stopped: StoppedRebase, form: string): strin
     "Resolve the markers in these files, then run:",
     `  git -C ${stopped.repoDir} add -A && git -C ${stopped.repoDir} rebase --continue`,
     `  ${form} sync`,
-    `To discard the local side instead: git -C ${stopped.repoDir} rebase --abort`,
+    `To abandon the rebase and return the branch to its state before the pull, keeping the local commits: git -C ${stopped.repoDir} rebase --abort`,
   ].join("\n");
 }

@@ -274,15 +274,20 @@ describe("plans commands", () => {
       expect(check.stdout).toBe("");
       expect(check.stderr).toContain("Work-files synchronization stopped on a conflict");
     }
-    expect(
-      (
-        await runMain(["doctor"], {
-          cwd: fixture.product,
-          env: { PATH: "" },
-          home: fixture.root,
-        })
-      ).stdout,
-    ).toContain("[error] Work files: rebase stopped on a conflict in");
+    const doctor = await runMain(["doctor"], {
+      cwd: fixture.product,
+      env: { PATH: "" },
+      home: fixture.root,
+    });
+    expect(doctor.stdout).toContain("[error] Work files: rebase stopped on a conflict in");
+    expect(doctor.stdout).toContain(
+      `git -C ${fixture.clone} add -A && git -C ${fixture.clone} rebase --continue`,
+    );
+    expect(doctor.stdout).toContain(
+      `keeping the local commits: git -C ${fixture.clone} rebase --abort`,
+    );
+    expect(conflict.stderr).toContain("To abandon the rebase");
+    expect(findStoppedRebase(fixture.clone)).toBeDefined();
 
     writeFileSync(plan, "resolved\n");
     git(fixture.clone, "add", "-A");

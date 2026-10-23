@@ -1,12 +1,25 @@
+import { closeSync, openSync, readSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { parseArgs } from "node:util";
 
 import type { CommandContext } from "../context.js";
 import { CliError } from "../cli-error.js";
-import { git, gitOutput, gitSucceeds } from "../git.js";
+import { errorMessage } from "../errors.js";
+import {
+  git,
+  gitNetwork,
+  gitOutput,
+  gitOutputOrUndefined,
+  gitOutputRaw,
+  gitSucceeds,
+  GitTimeoutError,
+} from "../git.js";
 import { parseCommandArgs } from "../parse-args.js";
 import { archiveThresholdDays, autoArchive } from "../plans/archive.js";
 import { resolvePlansMode } from "../plans/mode.js";
 import { findStoppedRebase, renderStoppedRebase, resolveStoppedRebase } from "../plans/rebase.js";
+import { acquireSyncLock } from "../plans/sync-lock.js";
 import { layoutOf } from "../project-layout.js";
 
 export async function runSync(ctx: CommandContext, args: string[]): Promise<number> {
@@ -27,34 +40,24 @@ export async function runSync(ctx: CommandContext, args: string[]): Promise<numb
     ctx.stdout.write("(local mode, nothing to sync)\n");
     return 0;
   }
-  const repoDir = mode.repoToplevel;
-  assertNoStoppedRebase(repoDir, ctx.form);
-  await git(ctx, repoDir, "add", "-A");
-  if (hasStagedChanges(repoDir)) await git(ctx, repoDir, "commit", "--quiet", "-m", "sync");
-  if (hasUpstream(repoDir)) {
-    try {
-      await git(ctx, repoDir, "pull", "--rebase");
-    } catch {
-      if (findStoppedRebase(repoDir) === undefined)
-        throw new CliError("git pull failed. See the git output above.");
-      await resolveStoppedRebase(ctx, repoDir);
+  for (let attempt = 0; attempt < 3; ++attempt) {
+    const result = await runAttempt(ctx, mode.repoToplevel, thresholdDays);
+    if (result.kind === "done") {
+      ctx.stdout.write(
+        `Work files synchronized: ${result.sent ? "local changes sent" : "nothing to send"}.\n`,
+      );
+      return 0;
     }
-  }
-  if (thresholdDays !== undefined && autoArchive(layout, thresholdDays, ctx.stdout)) {
-    await git(ctx, repoDir, "add", "-A");
-    if (hasStagedChanges(repoDir)) await git(ctx, repoDir, "commit", "--quiet", "-m", "sync");
-  }
-  if (hasCommitsToSend(repoDir)) {
-    try {
-      await git(ctx, repoDir, "push", "--quiet", "-u", "origin", "HEAD");
-    } catch {
+    if (attempt === 2) {
+      if (result.kind === "lockBusy")
+        throw new CliError(
+          `Work-files sync lock is busy: ${result.path} (pid ${result.pid ?? "unknown"}). Retry, or remove the lock directory when that process is gone.`,
+        );
       throw new CliError(
-        `git push failed. See the git output above. Another synchronization may have landed first: run ${ctx.form} sync again.`,
+        "Work files could not be synchronized: another sync kept landing first. Retry later.",
       );
     }
-    ctx.stdout.write("Work files synchronized: local changes sent.\n");
-  } else {
-    ctx.stdout.write("Work files synchronized: nothing to send.\n");
+    await sleep(250 + Math.floor(Math.random() * 2251));
   }
   return 0;
 }
@@ -90,6 +93,121 @@ function parseSyncArgs(
     autoArchive: values["auto-archive"],
     noAutoArchive: values["no-auto-archive"],
   };
+}
+
+type AttemptResult =
+  | { kind: "done"; sent: boolean }
+  | { kind: "lockBusy"; path: string; pid: number | undefined }
+  | { kind: "remoteAdvanced" };
+
+async function runAttempt(
+  ctx: CommandContext,
+  repoDir: string,
+  thresholdDays: number | undefined,
+): Promise<AttemptResult> {
+  const lock = acquireSyncLock(repoDir);
+  if (lock.kind === "busy") return { kind: "lockBusy", path: lock.path, pid: lock.pid };
+  try {
+    assertNoStoppedRebase(repoDir, ctx.form);
+    await snapshot(ctx, repoDir);
+    if (hasUpstream(repoDir)) {
+      await consolidateSyncCommits(ctx, repoDir);
+      await integrate(ctx, repoDir);
+    }
+    if (thresholdDays !== undefined && autoArchive(layoutOf(ctx), thresholdDays, ctx.stdout))
+      await snapshot(ctx, repoDir);
+    if (!hasCommitsToSend(repoDir)) return { kind: "done", sent: false };
+    return await push(ctx, repoDir);
+  } finally {
+    lock.release();
+  }
+}
+
+async function snapshot(ctx: CommandContext, repoDir: string): Promise<void> {
+  const excluded = gitOutputRaw(repoDir, "ls-files", "--others", "--exclude-standard", "-z")
+    .split("\0")
+    .filter((path) => basename(dirname(path)) === "_aligndev" && path.endsWith(".md"))
+    .filter((path) => isRunningLog(join(repoDir, path)));
+  await git(
+    ctx,
+    repoDir,
+    "add",
+    "-A",
+    "--",
+    ".",
+    ...excluded.map((path) => `:(literal,exclude)${path}`),
+  );
+  if (hasStagedChanges(repoDir)) await git(ctx, repoDir, "commit", "--quiet", "-m", "sync");
+}
+
+function isRunningLog(path: string): boolean {
+  const handle = openSync(path, "r");
+  try {
+    const buffer = Buffer.alloc(8192);
+    const text = buffer.subarray(0, readSync(handle, buffer, 0, buffer.length, 0)).toString("utf8");
+    if (!text.startsWith("---\n")) return false;
+    const end = text.indexOf("\n---\n", 3);
+    return end !== -1 && text.slice(4, end).split("\n").includes("status: running");
+  } finally {
+    closeSync(handle);
+  }
+}
+
+async function consolidateSyncCommits(ctx: CommandContext, repoDir: string): Promise<void> {
+  const base = gitOutputOrUndefined(repoDir, "merge-base", "@{u}", "HEAD");
+  if (base === undefined) return;
+  const commits = gitOutputRaw(repoDir, "log", "--format=%H%x1f%P%x1f%B%x1e", `${base}..HEAD`)
+    .split("\x1e")
+    .map((record) => record.trim())
+    .filter((record) => record !== "");
+  if (
+    commits.length === 0 ||
+    commits.some((record) => {
+      const [, parents, body] = record.split("\x1f");
+      return parents.split(" ").length > 1 || body.trim() !== "sync";
+    })
+  )
+    return;
+  await git(ctx, repoDir, "reset", "--soft", base);
+  if (hasStagedChanges(repoDir)) await git(ctx, repoDir, "commit", "--quiet", "-m", "sync");
+}
+
+async function integrate(ctx: CommandContext, repoDir: string): Promise<void> {
+  try {
+    await gitNetwork(ctx, repoDir, ["pull", "--rebase"]);
+  } catch (error) {
+    if (error instanceof GitTimeoutError || findStoppedRebase(repoDir) === undefined) throw error;
+    try {
+      await resolveStoppedRebase(ctx, repoDir);
+    } catch (resolutionError) {
+      try {
+        await git(ctx, repoDir, "rebase", "--abort");
+      } catch (abortError) {
+        throw new CliError(
+          `${errorMessage(resolutionError)}\nAborting the rebase also failed: ${errorMessage(abortError)}`,
+        );
+      }
+      throw new CliError(
+        `${errorMessage(resolutionError)}\nThe work-files repository is back to its state before the pull. Resolve the conflict by hand in ${repoDir}: git pull --rebase, then ${ctx.form} sync.`,
+      );
+    }
+  }
+}
+
+async function push(ctx: CommandContext, repoDir: string): Promise<AttemptResult> {
+  try {
+    await gitNetwork(ctx, repoDir, ["push", "--quiet", "-u", "origin", "HEAD"]);
+    return { kind: "done", sent: true };
+  } catch (error) {
+    if (error instanceof GitTimeoutError) throw error;
+    await gitNetwork(ctx, repoDir, ["fetch", "--quiet"]);
+    if (
+      hasUpstream(repoDir) &&
+      !gitSucceeds(repoDir, "merge-base", "--is-ancestor", "@{u}", "HEAD")
+    )
+      return { kind: "remoteAdvanced" };
+    throw new CliError("git push failed. See the git output above.");
+  }
 }
 
 function assertNoStoppedRebase(repoDir: string, form: string): void {
