@@ -1,0 +1,31 @@
+import { randomUUID } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+
+import { errorMessage } from "../errors.js";
+
+export function readMachineId(home: string): string {
+  const path = join(home, ".alignfirst", "machine-id");
+  try {
+    const id = readOrCreateMachineId(path).trim();
+    if (id === "") throw new Error("file is empty");
+    return id;
+  } catch (error) {
+    throw new Error(`Could not read machine identity at ${path}: ${errorMessage(error)}`);
+  }
+}
+
+function readOrCreateMachineId(path: string): string {
+  try {
+    return readFileSync(path, "utf8");
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
+  }
+  mkdirSync(dirname(path), { recursive: true });
+  try {
+    writeFileSync(path, randomUUID(), { flag: "wx" });
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
+  }
+  return readFileSync(path, "utf8");
+}
