@@ -129,7 +129,7 @@ On the operator's machine, from the installed skill directory:
 
 Do not copy the alignfirst repository's `node_modules`, lock files or `skills-lock.json`. The rendered tree has no `variants/`.
 
-The workspace `AGENTS.md` (`infra/openclaw/workspace/AGENTS.md`) carries no code-hosting, ticketing or merging policy. When the deployment provides a ticketing CLI or code-hosting policy, the operator replaces `## No ticket-system access` and adds the corresponding ticketing, code-hosting and merging sections, keeping the file under 12 KB.
+The workspace `AGENTS.md` (`infra/openclaw/workspace/AGENTS.md`) carries one code-hosting policy: `## Pull requests` creates every PR as a draft. It carries no ticketing or merging policy. The operator adapts `## Pull requests` to the team's preference. When the deployment provides a ticketing CLI or a merging policy, the operator replaces `## No ticket-system access` and adds the corresponding ticketing and merging sections, keeping the file under 12 KB.
 
 ## Audits Before the First Commit
 

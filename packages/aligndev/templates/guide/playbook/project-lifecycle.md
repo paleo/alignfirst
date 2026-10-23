@@ -61,7 +61,7 @@ On approval:
 1. Complete `{{ALIGNDEV}} guide work-files-setup` under the approved preparation, then run `{{ALIGNFIRST}} sync`. Run `{{ALIGNFIRST}} ticket --side` from PROJECT_PATH, write `{TICKET_DIR}A1-request.md` with the recorded request, then run `{{ALIGNFIRST}} sync`.
 2. Create `{TICKET_ID}/alignfirst-setup` in the main worktree. This setup branch is the second main-worktree exception, next to new-project bootstrap.
 3. Run `{{ALIGNDEV}} guide code`. From PROJECT_PATH, delegate the preparation to the agent without a protocol: use the `alignfirst-setup-guide` skill and prepare the repository for an assistant, with the user's work-files repository decision and its URL. It must run `{{ALIGNDEV}} project doctor` after writing `.alignfirst.json` and before workspace setup, stopping on an unhealthy inventory. Instruct the agent to commit and push the branch. The setup guide's rule against pushing addresses a human's laptop session, not this procedure.
-4. Have the agent create a ready pull request, not a draft.
+4. Have the agent create a pull request.
 5. End the turn on the PR link and state that work resumes once the PR is merged.
 
 ### Step 5 — After the merge
