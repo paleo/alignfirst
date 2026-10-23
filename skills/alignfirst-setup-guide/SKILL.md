@@ -5,7 +5,7 @@ description: >-
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.52.0"
+  version: "0.52.1"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -51,16 +51,29 @@ Do not present the tooling menu or add unrelated tools on this route.
 
 ## Tooling Recommendation
 
-When the user asks what the project could adopt, inspect the repository and present these independent
-choices:
+When the user asks what they can set up in a project, check the skills listed in your context and inspect the repository. Present global skills separately from project tooling. Let the user choose any subset before installing or configuring it.
+
+### Global Skills
+
+Use the skill list in your context to check availability for the current agent:
+
+- `aligndev`: the coding-agent assistant's playbook.
+- `alignfirst`: recognition of protocols named in prose.
+- Command skills: `alspec`, `alplan`, `al`, `almerge`, `alreview`, `aldescription`, `alcatchup`, `alcatchupaad`, and `alcatchupspec`.
+
+Report which are available and propose installing the missing ones globally for the current agent. A name absent from the list is unavailable in this session; it does not prove the skill is absent on disk. If the host exposes no skill list, report availability as unknown. This check needs no filesystem scan, installer command, or `doctor` run.
+
+For approved installations, follow [AlignFirst skills setup](references/alignfirst-skills-setup.md#install-the-skills) or [the global `aligndev` skill procedure](references/coding-agent-assistant.md#3-install-the-skill-globally). Installing global skills alone does not configure the project or install Pi tools. The assistant-preparation route still skips command-skill installation unless the user separately requests those shortcuts.
+
+### Project Tooling
+
+Recommend global skills, AlignFirst protocols, and Docmap regardless of the project's language or stack. Inspect existing footprints to distinguish adoption from what is already available:
 
 - **AlignFirst protocols** provide collaborative specification, planning, implementation, merge, review, description, and catch-up workflows through the CLI. Command skills add shortcuts and can be installed on their own. A work-files repository is an optional sub-choice.
-- **docmap** makes the repository's `docs/` tree discoverable to agents and humans. It is available
-  through the AlignFirst CLI or as the standalone `@alignfirst/docmap` package.
-- **workspace** creates isolated git-worktree development environments.
+- **docmap** makes the repository's `docs/` tree discoverable to agents and humans. It is available through the AlignFirst CLI or as the standalone `@alignfirst/docmap` package. A missing `docs/` directory is an opportunity to bootstrap documentation, not a reason to omit the recommendation.
+- **workspace** creates isolated git-worktree development environments. For a Node project, recommend installing and using `@alignfirst/workspace` through [workspace setup](references/workspace-setup.md). Detect Node usage from the project's runtime declarations, scripts, dependencies, or documentation; a `package.json` used only for tooling is insufficient. When workspace tooling already exists, recommend its documented workflow rather than a replacement. For other stacks, offer workspace only on request or when repository evidence supports it; keep existing non-Node implementations authoritative.
 
-Determine whether a work-files repository exists before offering that option. Let the user choose
-any subset.
+Determine whether a work-files repository exists before offering that option.
 
 ## Project Instructions
 
