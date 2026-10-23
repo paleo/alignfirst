@@ -1,5 +1,13 @@
 # aligndev
 
+## 0.28.1
+
+### Patch Changes
+
+- bed9a51: Fixed interrupted-run detection to leave sessions from other machines and older installations untouched.
+- bed9a51: The playbook no longer decides whether a pull request is a draft or ready; the assistant's workspace instructions set that preference.
+- bed9a51: A run is now written as `<stamp>.running.md` and renamed to `<stamp>.md` when it ends, so work-file sync can leave running logs out by name. `code status` accepts either name.
+
 ## 0.28.0
 
 ### Minor Changes

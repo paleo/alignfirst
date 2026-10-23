@@ -1,5 +1,12 @@
 # alignfirst
 
+## 0.14.1
+
+### Patch Changes
+
+- bed9a51: The spec guide gives weight to simplicity when recommending an approach.
+- bed9a51: Made work-file sync retry concurrent updates, keep running session logs local, restore local commits after unresolvable conflicts, and let stalled network transports time out.
+
 ## 0.14.0
 
 ### Minor Changes
