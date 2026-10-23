@@ -29,6 +29,7 @@ export interface SessionFrontmatter {
   // Linux `/proc/<pid>/stat` start time. Distinguishes the original process from a later process
   // that reused its pid; null on platforms without `/proc` and in legacy records.
   pidStartTime: string | null;
+  machineId: string | null;
   // Realpath aligndev ran from. Scopes the single-protocol-run guard to the worktree, alongside the
   // ticket (several worktrees share one session tree, through a `.plans/` symlink or the companion
   // directory).
@@ -163,10 +164,11 @@ export function readCompletion(sessionFilePath: string): SessionCompletion {
 
 export function reconcileSessionFile(
   sessionFilePath: string,
+  machineId: string,
   now: Date = new Date(),
 ): SessionCompletion {
   const completion = readCompletion(sessionFilePath);
-  const update = interruptedCompletion(completion.frontmatter, now);
+  const update = interruptedCompletion(completion.frontmatter, machineId, now);
   if (!update) return completion;
   applyCompletion(sessionFilePath, update);
   return {
@@ -182,9 +184,15 @@ export function reconcileSessionFile(
 
 function interruptedCompletion(
   frontmatter: SessionFrontmatter,
+  machineId: string,
   now: Date,
 ): CompletionUpdate | undefined {
-  if (frontmatter.status !== "running" || isRecordedProcessAlive(frontmatter)) return;
+  if (
+    frontmatter.status !== "running" ||
+    frontmatter.machineId !== machineId ||
+    !isRecordedProcessGone(frontmatter)
+  )
+    return;
   return {
     status: "failed",
     endedAt: now.toISOString(),
@@ -194,20 +202,16 @@ function interruptedCompletion(
   };
 }
 
-function isRecordedProcessAlive(frontmatter: SessionFrontmatter): boolean {
-  if (frontmatter.pid === null || !isPidAlive(frontmatter.pid)) return false;
-  if (frontmatter.pidStartTime === null) return true;
-  const currentStartTime = readPidStartTime(frontmatter.pid);
-  return currentStartTime === null || currentStartTime === frontmatter.pidStartTime;
-}
-
-function isPidAlive(pid: number): boolean {
+function isRecordedProcessGone(frontmatter: SessionFrontmatter): boolean {
+  if (frontmatter.pid === null) return false;
   try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    return (err as NodeJS.ErrnoException).code !== "ESRCH";
+    process.kill(frontmatter.pid, 0);
+  } catch (error) {
+    return error instanceof Error && "code" in error && error.code === "ESRCH";
   }
+  if (frontmatter.pidStartTime === null) return false;
+  const currentStartTime = readPidStartTime(frontmatter.pid);
+  return currentStartTime !== null && currentStartTime !== frontmatter.pidStartTime;
 }
 
 export function readPidStartTime(pid: number): string | null {
@@ -229,10 +233,9 @@ export interface SessionRecord {
 // Lists every active session record: `<sessionsDir>/_aligndev/*.md` plus
 // `<sessionsDir>/<ticket>/_aligndev/*.md`. Archived tickets move under `_archives/` and leave the
 // registry. The session files are the registry — no separate registry file.
-// Self-healing: a `running` record whose pid is gone is a stale leftover from an interrupted run;
-// it gets sealed in passing so the launch guards never block on dead state. The returned records
-// reflect the post-healing state.
-export function listSessionRecords(sessionsDir: string): SessionRecord[] {
+// Seals only this installation's conclusively dead runs. Foreign, legacy and uncertain records
+// stay untouched and continue to block launches.
+export function listSessionRecords(sessionsDir: string, machineId: string): SessionRecord[] {
   const sessionDirs = [join(sessionsDir, "_aligndev")];
   for (const entry of readEntries(sessionsDir)) {
     if (entry.isDirectory() && !entry.name.startsWith("_")) {
@@ -244,7 +247,7 @@ export function listSessionRecords(sessionsDir: string): SessionRecord[] {
     for (const entry of readEntries(dir)) {
       if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
       const path = join(dir, entry.name);
-      const completion = reconcileSessionFileOrSkip(path);
+      const completion = reconcileSessionFileOrSkip(path, machineId);
       if (completion) records.push({ path, frontmatter: completion.frontmatter });
     }
   }
@@ -279,9 +282,12 @@ function readEntries(dir: string): Dirent[] {
 }
 
 // A malformed file (e.g. missing its frontmatter block) must not block every future launch.
-function reconcileSessionFileOrSkip(path: string): SessionCompletion | undefined {
+function reconcileSessionFileOrSkip(
+  path: string,
+  machineId: string,
+): SessionCompletion | undefined {
   try {
-    return reconcileSessionFile(path);
+    return reconcileSessionFile(path, machineId);
   } catch {
     return;
   }
@@ -337,6 +343,7 @@ export function parseFrontmatter(block: string): SessionFrontmatter {
     meta: map.meta ?? null,
     pid: parsePid(map.pid),
     pidStartTime: map.pidStartTime ?? null,
+    machineId: map.machineId ?? null,
     cwd: map.cwd ?? null,
     startedAt: map.startedAt ?? "",
     endedAt: map.endedAt ?? null,

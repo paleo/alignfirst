@@ -23,6 +23,7 @@ import {
   type SessionArgs,
   validateSessionArgs,
 } from "../../src/code/code-cli.js";
+import { readMachineId } from "../../src/code/machine-id.js";
 import { CLAUDE_DEFAULT_MODELS } from "../../src/code/models.js";
 import {
   appendTranscript,
@@ -397,6 +398,7 @@ describe("status", () => {
       meta: null,
       pid,
       pidStartTime: null,
+      machineId: readMachineId(dir),
       cwd: dir,
       startedAt: "2026-08-29T11:55:29.000Z",
       endedAt: null,
@@ -444,7 +446,7 @@ describe("status", () => {
     expect(output).toContain(`${RESULT_MARKER}\n${result}\n`);
     expect(await status(["--help"])).toContain("without reading settings");
     expect(readFileSync(settingsPath)).toEqual(before);
-    const records = listSessionRecords(join(dir, ".plans"));
+    const records = listSessionRecords(join(dir, ".plans"), readMachineId(dir));
     const stderr = makeSink();
     expect(
       await main({
@@ -459,7 +461,7 @@ describe("status", () => {
     ).toBe(1);
     if (settings.includes("gone")) expect(stderr.text()).toContain("gone");
     else expect(stderr.text()).toContain(settingsPath);
-    expect(listSessionRecords(join(dir, ".plans"))).toEqual(records);
+    expect(listSessionRecords(join(dir, ".plans"), readMachineId(dir))).toEqual(records);
     expect(readFileSync(settingsPath)).toEqual(before);
   });
 
@@ -506,7 +508,16 @@ describe("status", () => {
   });
 
   it("returns the reconciled result instead of a stale running echoed marker", async () => {
-    writeInitialSessionFile(sessionFilePath, statusFrontmatter({ status: "running", pid: null }));
+    const child = spawnSync("node", ["-e", ""]);
+    if (child.pid === undefined) throw new Error("failed to spawn a probe child");
+    writeInitialSessionFile(
+      sessionFilePath,
+      statusFrontmatter({
+        status: "running",
+        pid: child.pid,
+        machineId: readMachineId(dir),
+      }),
+    );
     appendTranscript(sessionFilePath, `${RESULT_MARKER}\nnot final\n`);
     const output = await status([sessionFilePath, "--result"]);
     expect(output).toContain("status: failed\n");
@@ -514,6 +525,59 @@ describe("status", () => {
     expect(output).toContain(`${RESULT_MARKER}\nSealed as interrupted:`);
     expect(output).not.toContain("not final");
     expect(readCompletion(sessionFilePath).result).toContain("is gone");
+  });
+
+  it.each(["another-machine", null])(
+    "preserves dead running records owned by %j for every status selector",
+    async (machineId) => {
+      const child = spawnSync("node", ["-e", ""]);
+      if (child.pid === undefined) throw new Error("failed to spawn a probe child");
+      const path = join(dir, ".plans", "1", "_aligndev", "20260829-115529.md");
+      const noTicket = join(dir, ".plans", "_aligndev", "20260829-115529.md");
+      for (const file of [path, noTicket]) {
+        writeInitialSessionFile(
+          file,
+          statusFrontmatter({
+            status: "running",
+            pid: child.pid,
+            machineId,
+            meta: "owner-check",
+          }),
+        );
+      }
+      const before = readFileSync(path, "utf8");
+      const beforeNoTicket = readFileSync(noTicket, "utf8");
+      for (const target of [
+        [path],
+        ["--ticket", "1"],
+        ["--no-ticket"],
+        ["--meta", "owner-check"],
+      ]) {
+        const output = await status([...target, "--result"]);
+        expect(output).toContain(`pid: ${child.pid}\nmachineId: ${machineId ?? ""}\n`);
+        expect(output).toContain("status: running\n");
+        expect(output).not.toContain(RESULT_MARKER);
+      }
+      expect(readFileSync(path, "utf8")).toBe(before);
+      expect(readFileSync(noTicket, "utf8")).toBe(beforeNoTicket);
+    },
+  );
+
+  it("leaves its own running record without a pid untouched", async () => {
+    writeInitialSessionFile(
+      sessionFilePath,
+      statusFrontmatter({
+        status: "running",
+        pid: null,
+        machineId: readMachineId(dir),
+      }),
+    );
+    const before = readFileSync(sessionFilePath, "utf8");
+    const output = await status([sessionFilePath, "--result"]);
+    expect(output).toContain("status: running\n");
+    expect(output).toContain(`pid: \nmachineId: ${readMachineId(dir)}\n`);
+    expect(output).not.toContain(RESULT_MARKER);
+    expect(readFileSync(sessionFilePath, "utf8")).toBe(before);
   });
 
   it("keeps terminal files without a Result block metadata-only", async () => {
@@ -540,6 +604,7 @@ describe("status", () => {
     expect(stdout.text()).toContain(
       "sessionFile: .plans/1/_aligndev/run.md\nsessionId: sess-42\nagent: claude\nprofile: \nmodel: \nstatus: failed\n",
     );
+    expect(stdout.text()).toContain(`pid: ${child.pid}\nmachineId: ${readMachineId(dir)}\n`);
     expect(stdout.text()).toContain("exitReason: terminated\n");
     expect(readCompletion(sessionFilePath).frontmatter.status).toBe("failed");
   });
@@ -738,6 +803,7 @@ describe("resolveTicket", () => {
         meta: null,
         pid: null,
         pidStartTime: null,
+        machineId: "test-machine",
         cwd: "/proj",
         startedAt: "2026-07-01T09:15:03.000Z",
         endedAt: null,
@@ -915,6 +981,7 @@ describe("launch guards", () => {
       meta: null,
       pid: process.pid,
       pidStartTime: null,
+      machineId: readMachineId(home),
       cwd: realCwd,
       startedAt: "2026-07-01T09:15:03.000Z",
       endedAt: null,
@@ -976,8 +1043,56 @@ describe("launch guards", () => {
     seedRecord("running.md", { sessionId: "abc" });
     const { code, stderr } = await run(["resume", "abc", "--message", "hi"]);
     expect(code).toBe(1);
-    expect(stderr).toContain(`session abc is still running (pid ${process.pid})`);
+    expect(stderr).toContain(
+      `session abc is still running (${join(plans, "30", "_aligndev", "running.md")}, pid ${process.pid})`,
+    );
+    expect(stderr).toContain("wait for it to finish");
+    expect(stderr).not.toContain("kill it");
   });
+
+  it.each(["another-machine", null])(
+    "keeps dead records owned by %j blocking resumes and protocol launches",
+    async (machineId) => {
+      const child = spawnSync("node", ["-e", ""]);
+      if (child.pid === undefined) throw new Error("failed to spawn a probe child");
+      seedRecord("foreign.md", { sessionId: "abc", pid: child.pid, machineId });
+      const path = join(plans, "30", "_aligndev", "foreign.md");
+      const before = readFileSync(path, "utf8");
+      for (const tokens of [
+        ["resume", "abc", "--message", "hi"],
+        ["new", "--protocol", "plan", "--ticket", "31"],
+      ]) {
+        const { code, stderr } = await run(tokens);
+        expect(code).toBe(1);
+        expect(stderr).toContain(path);
+        expect(stderr).toContain(
+          "this record was written by another machine or before machine identities",
+        );
+        expect(stderr).toContain(
+          "check it on its machine, or set its `status` by hand once the run has ended",
+        );
+        expect(stderr).not.toContain("kill it");
+      }
+      expect(readFileSync(path, "utf8")).toBe(before);
+      const records = listSessionRecords(plans, readMachineId(home));
+      expect(records).toHaveLength(1);
+      const otherWorktree = records.map((record) => ({
+        ...record,
+        frontmatter: { ...record.frontmatter, cwd: "/elsewhere" },
+      }));
+      const error = checkLaunchGuards(
+        parse(["new", "--protocol", "plan", "--ticket", "30"]),
+        "claude",
+        realCwd,
+        "30",
+        otherWorktree,
+        readMachineId(home),
+      );
+      expect(error).toContain("already active on ticket 30");
+      expect(error).toContain(path);
+      expect(error).toContain("set its `status` by hand once the run has ended");
+    },
+  );
 
   it("rejects legacy and cross-agent resumes", () => {
     const parsed = parse(["resume", "abc", "--message", "continue"]);
@@ -987,9 +1102,9 @@ describe("launch guards", () => {
         frontmatter: makeFrontmatter({ status: "succeeded", sessionId: "abc", agent: null }),
       },
     ];
-    expect(checkLaunchGuards(parsed, "claude", realCwd, undefined, legacy)).toContain(
-      "predates agent-aware sessions",
-    );
+    expect(
+      checkLaunchGuards(parsed, "claude", realCwd, undefined, legacy, readMachineId(home)),
+    ).toContain("predates agent-aware sessions");
 
     const codex = [
       {
@@ -997,14 +1112,21 @@ describe("launch guards", () => {
         frontmatter: makeFrontmatter({ status: "succeeded", sessionId: "abc", agent: "codex" }),
       },
     ];
-    const mismatch = checkLaunchGuards(parsed, "claude", realCwd, undefined, codex);
+    const mismatch = checkLaunchGuards(
+      parsed,
+      "claude",
+      realCwd,
+      undefined,
+      codex,
+      readMachineId(home),
+    );
     expect(mismatch).toContain("belongs to agent codex");
     expect(mismatch).toContain("selected agent is claude");
   });
 
   it("rejects a cross-agent resume before discovery or session creation", async () => {
     seedRecord("codex.md", { status: "succeeded", sessionId: "abc", agent: "codex" });
-    const before = listSessionRecords(plans).length;
+    const before = listSessionRecords(plans, readMachineId(home)).length;
     const modelResolver = vi.fn(async () => "gpt-5.6-terra");
     const stderr = makeSink();
     const otherHome = makeHome({
@@ -1023,7 +1145,7 @@ describe("launch guards", () => {
     expect(code).toBe(1);
     expect(stderr.text()).toContain("belongs to agent codex");
     expect(modelResolver).not.toHaveBeenCalled();
-    expect(listSessionRecords(plans)).toHaveLength(before);
+    expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(before);
   });
 
   it("sanitizes injected model-discovery failures on every output surface", async () => {
@@ -1047,7 +1169,7 @@ describe("launch guards", () => {
     expect(stdout.text()).toContain("Session file:");
     expect(stderr.text()).toContain("Could not resolve the codex model");
     expect(stdout.text() + stderr.text()).not.toContain("injected-resolver-secret");
-    const records = listSessionRecords(plans);
+    const records = listSessionRecords(plans, readMachineId(codexHome));
     expect(records).toHaveLength(1);
     expect(readCompletion(records[0].path)).toMatchObject({
       frontmatter: { status: "failed", exitReason: "error", sessionId: null },
@@ -1074,7 +1196,8 @@ describe("launch guards", () => {
 
     expect(code).toBe(1);
     expect(stdout.text()).toContain(`Session file: ${join(".plans", "side-2", "_aligndev")}`);
-    const [record] = listSessionRecords(plans);
+    const [record] = listSessionRecords(plans, readMachineId(home));
+    expect(record.frontmatter.machineId).toBe(readMachineId(home));
     expect(record.frontmatter.ticket).toBe("side-2");
     expect(record.frontmatter.command).toBe(
       'aligndev code new --protocol aad --no-ticket --message "go"',
@@ -1095,7 +1218,7 @@ describe("launch guards", () => {
     expect(code).toBe(1);
     expect(stderr.text()).toContain("alignfirst is not installed");
     expect(stderr.text()).toContain("executable /nonexistent/alignfirst (not found)");
-    expect(listSessionRecords(plans)).toEqual([]);
+    expect(listSessionRecords(plans, readMachineId(home))).toEqual([]);
   });
 
   it("rejects a protocol run while another run is active in the same worktree", async () => {
@@ -1104,6 +1227,9 @@ describe("launch guards", () => {
     expect(code).toBe(1);
     expect(stderr).toContain("a spec protocol run is already active in this worktree");
     expect(stderr).toContain(`pid ${process.pid}`);
+    expect(stderr).toContain(join(plans, "30", "_aligndev", "running.md"));
+    expect(stderr).toContain("wait for it to finish");
+    expect(stderr).not.toContain("kill it");
   });
 
   it("allows a protocol run when the active run sits in another worktree", () => {
@@ -1114,7 +1240,9 @@ describe("launch guards", () => {
         frontmatter: makeFrontmatter({ sessionId: "abc", cwd: "/elsewhere" }),
       },
     ];
-    expect(checkLaunchGuards(parsed, "claude", realCwd, "31", records)).toBeUndefined();
+    expect(
+      checkLaunchGuards(parsed, "claude", realCwd, "31", records, readMachineId(home)),
+    ).toBeUndefined();
   });
 
   it("lets a protocol run start while a plain run is active in the same worktree", () => {
@@ -1122,7 +1250,9 @@ describe("launch guards", () => {
     const records = [
       { path: "r.md", frontmatter: makeFrontmatter({ sessionId: "abc", protocol: null }) },
     ];
-    expect(checkLaunchGuards(parsed, "claude", realCwd, "31", records)).toBeUndefined();
+    expect(
+      checkLaunchGuards(parsed, "claude", realCwd, "31", records, readMachineId(home)),
+    ).toBeUndefined();
   });
 
   it("rejects a protocol run on a ticket with an active protocol run in another worktree", () => {
@@ -1133,17 +1263,17 @@ describe("launch guards", () => {
         frontmatter: makeFrontmatter({ sessionId: "abc", cwd: "/elsewhere", ticket: "31" }),
       },
     ];
-    expect(checkLaunchGuards(parsed, "claude", realCwd, "31", records)).toContain(
-      "a spec protocol run is already active on ticket 31",
-    );
+    expect(
+      checkLaunchGuards(parsed, "claude", realCwd, "31", records, readMachineId(home)),
+    ).toContain("a spec protocol run is already active on ticket 31");
   });
 
   it("rejects a protocol run on another ticket while a protocol run holds the worktree", () => {
     const parsed = parse(["new", "--protocol", "plan", "--ticket", "31"]);
     const records = [{ path: "r.md", frontmatter: makeFrontmatter({ sessionId: "abc" }) }];
-    expect(checkLaunchGuards(parsed, "claude", realCwd, "31", records)).toContain(
-      "a spec protocol run is already active in this worktree",
-    );
+    expect(
+      checkLaunchGuards(parsed, "claude", realCwd, "31", records, readMachineId(home)),
+    ).toContain("a spec protocol run is already active in this worktree");
   });
 
   it("lets a protocol run start while a resume without protocol runs on its ticket", () => {
@@ -1151,7 +1281,9 @@ describe("launch guards", () => {
     const records = [
       { path: "r.md", frontmatter: makeFrontmatter({ sessionId: "abc", protocol: null }) },
     ];
-    expect(checkLaunchGuards(parsed, "claude", realCwd, "30", records)).toBeUndefined();
+    expect(
+      checkLaunchGuards(parsed, "claude", realCwd, "30", records, readMachineId(home)),
+    ).toBeUndefined();
   });
 
   it("checks only the worktree for a --no-ticket protocol run", () => {
@@ -1162,7 +1294,9 @@ describe("launch guards", () => {
         frontmatter: makeFrontmatter({ sessionId: "abc", cwd: "/elsewhere" }),
       },
     ];
-    expect(checkLaunchGuards(parsed, "claude", realCwd, undefined, records)).toBeUndefined();
+    expect(
+      checkLaunchGuards(parsed, "claude", realCwd, undefined, records, readMachineId(home)),
+    ).toBeUndefined();
   });
 
   it("exempts no-protocol invocations from the busy-worktree guard", () => {
@@ -1178,10 +1312,14 @@ describe("launch guards", () => {
       },
     ];
     const answer = parse(["resume", "abc2", "--message", "answer"]);
-    expect(checkLaunchGuards(answer, "claude", realCwd, undefined, records)).toBeUndefined();
+    expect(
+      checkLaunchGuards(answer, "claude", realCwd, undefined, records, readMachineId(home)),
+    ).toBeUndefined();
 
     const execute = parse(["new", "--message", "Execute the plan"]);
-    expect(checkLaunchGuards(execute, "claude", realCwd, undefined, records)).toBeUndefined();
+    expect(
+      checkLaunchGuards(execute, "claude", realCwd, undefined, records, readMachineId(home)),
+    ).toBeUndefined();
   });
 });
 
@@ -1224,7 +1362,7 @@ describe("model selection", () => {
   }
 
   function newestFrontmatter(): SessionFrontmatter {
-    const records = listSessionRecords(plans);
+    const records = listSessionRecords(plans, readMachineId(home));
     return records.reduce((a, b) => (a.frontmatter.startedAt >= b.frontmatter.startedAt ? a : b))
       .frontmatter;
   }
@@ -1320,7 +1458,7 @@ describe("companion projects", () => {
     const started = await run(project, ["new", "-m", "go"]);
     expect(started.stderr).toContain("Could not resolve the claude model");
     expect(started.stdout).toContain(`Session file: ${join(plans, "_aligndev")}/`);
-    expect(listSessionRecords(plans)).toHaveLength(1);
+    expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(1);
   });
 
   it("writes a separate _aligndev tree and opens the ticket in both trees", async () => {
@@ -1335,10 +1473,10 @@ describe("companion projects", () => {
     expect(existsSync(join(plans, "29"))).toBe(true);
     expect(existsSync(join(sessions, "_archives", "29"))).toBe(false);
     expect(existsSync(join(plans, "29", "_aligndev"))).toBe(false);
-    expect(listSessionRecords(sessions)).toHaveLength(1);
+    expect(listSessionRecords(sessions, readMachineId(home))).toHaveLength(1);
 
     rmSync(join(plans, "29"), { recursive: true });
-    expect(listSessionRecords(sessions)).toHaveLength(1);
+    expect(listSessionRecords(sessions, readMachineId(home))).toHaveLength(1);
   });
 
   it("reserves a side ticket in the companion .plans", async () => {
@@ -1592,7 +1730,7 @@ describe("quiet execution", () => {
       stderr,
       modelResolver: async (_agent, model) => model,
     });
-    const records = listSessionRecords(plans);
+    const records = listSessionRecords(plans, readMachineId(home));
     const latest = records.reduce((a, b) =>
       a.frontmatter.startedAt >= b.frontmatter.startedAt ? a : b,
     );
@@ -1718,7 +1856,7 @@ describe("quiet execution", () => {
     expect(stderr.text()).toContain("Session file:");
     expect(stderr.text()).not.toContain(detail);
     expect(stderr.text().length).toBeLessThan(500);
-    const [record] = listSessionRecords(plans);
+    const [record] = listSessionRecords(plans, readMachineId(home));
     expect(readCompletion(record.path)).toMatchObject({
       frontmatter: { status: "failed" },
       result: expect.stringContaining("Could not resolve the claude model"),
@@ -1760,7 +1898,7 @@ describe("pi launches", () => {
   }
 
   function newest() {
-    return listSessionRecords(plans).reduce((a, b) =>
+    return listSessionRecords(plans, readMachineId(home)).reduce((a, b) =>
       a.frontmatter.startedAt >= b.frontmatter.startedAt ? a : b,
     );
   }
@@ -1823,7 +1961,7 @@ describe("pi launches", () => {
     expect((await launch(["new", "-m", "go", "--model", "terra"])).stderr).toContain(
       "one of: provider/model",
     );
-    expect(listSessionRecords(plans)).toHaveLength(0);
+    expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(0);
   });
 
   it("rejects another real worktree before writing a run or invoking pi", async () => {
@@ -1837,7 +1975,7 @@ describe("pi launches", () => {
     expect(result.code).toBe(1);
     expect(result.stderr).toContain(`must resume from its recorded directory ${other}`);
     expect(result.stdout).not.toContain("Session file:");
-    expect(listSessionRecords(plans)).toHaveLength(1);
+    expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(1);
     expect(existsSync(join(base, "bin", "pi-args.json"))).toBe(false);
   });
 
@@ -1859,15 +1997,34 @@ describe("pi launches", () => {
     };
     const args = parse(["resume", "pi-session", "-m", "go"]);
     expect(
-      checkLaunchGuards(args, "pi", realpathSync(project), undefined, [old, latest]),
+      checkLaunchGuards(
+        args,
+        "pi",
+        realpathSync(project),
+        undefined,
+        [old, latest],
+        readMachineId(home),
+      ),
     ).toBeUndefined();
-    expect(checkLaunchGuards(args, "claude", realpathSync(project), undefined, [latest])).toContain(
-      "belongs to agent pi",
-    );
     expect(
-      checkLaunchGuards(args, "pi", realpathSync(project), undefined, [
-        { ...latest, frontmatter: { ...latest.frontmatter, agent: "codex" } },
-      ]),
+      checkLaunchGuards(
+        args,
+        "claude",
+        realpathSync(project),
+        undefined,
+        [latest],
+        readMachineId(home),
+      ),
+    ).toContain("belongs to agent pi");
+    expect(
+      checkLaunchGuards(
+        args,
+        "pi",
+        realpathSync(project),
+        undefined,
+        [{ ...latest, frontmatter: { ...latest.frontmatter, agent: "codex" } }],
+        readMachineId(home),
+      ),
     ).toContain("selected agent is pi");
   });
 
@@ -2024,6 +2181,7 @@ function statusFrontmatter(overrides: Partial<SessionFrontmatter>): SessionFront
     meta: null,
     pid: null,
     pidStartTime: null,
+    machineId: "test-machine",
     cwd: null,
     startedAt: "2026-08-29T11:55:29.000Z",
     endedAt: "2026-08-29T11:56:29.000Z",

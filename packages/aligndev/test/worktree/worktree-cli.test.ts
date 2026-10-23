@@ -13,6 +13,7 @@ import {
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { readMachineId } from "../../src/code/machine-id.js";
 import { ALIGNFIRST_BIN, writeConfig, writeRegistry, writeSettings } from "../helpers.js";
 import {
   addWorktree,
@@ -723,7 +724,7 @@ describe("coding launch gate", () => {
       mkdirSync(sessions);
       const file = join(sessions, "stale.md");
       const contents =
-        "---\nagent: pi\nprofile: test\nsessionId: stale\nstatus: running\npid: 2147483647\nstartedAt: 2026-01-01T00:00:00.000Z\ncwd: " +
+        `---\nagent: pi\nprofile: test\nsessionId: stale\nstatus: running\npid: 2147483647\nmachineId: ${readMachineId(fixture.home)}\nstartedAt: 2026-01-01T00:00:00.000Z\ncwd: ` +
         repo +
         "\n---\n\nkeep\n";
       writeFileSync(file, contents);

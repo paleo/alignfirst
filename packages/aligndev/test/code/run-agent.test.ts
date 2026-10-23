@@ -673,6 +673,7 @@ function makeRun(resume?: string): { config: RunConfig; sessionFilePath: string 
     meta: null,
     pid: process.pid,
     pidStartTime: null,
+    machineId: "test-machine",
     cwd: dir,
     startedAt: new Date(0).toISOString(),
     endedAt: null,

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { main } from "../../src/cli.js";
+import { readMachineId } from "../../src/code/machine-id.js";
 import { listSessionRecords } from "../../src/code/session-file.js";
 import { ALIGNFIRST_BIN, installGit, writeConfig } from "../helpers.js";
 
@@ -85,7 +86,7 @@ describe("catchup launch", () => {
     expect(prompt).toContain("Content omitted: total limit exceeded.");
     expect(prompt).toContain("Run `alignfirst guide aad`");
     expect(prompt.endsWith(message)).toBe(true);
-    expect(listSessionRecords(plans)[0].frontmatter.command).toContain(
+    expect(listSessionRecords(plans, readMachineId(home))[0].frontmatter.command).toContain(
       '--message-file "message.md"',
     );
   });
@@ -148,7 +149,7 @@ describe("catchup launch", () => {
     ["--message-file", "missing.md"],
   ])("rejects invalid inputs before creating a session: %j", async (...args) => {
     expect(await run(["new", ...args])).toBe(1);
-    expect(listSessionRecords(plans)).toEqual([]);
+    expect(listSessionRecords(plans, readMachineId(home))).toEqual([]);
   });
 
   it("validates empty file content and protocol requirements", async () => {
@@ -166,7 +167,7 @@ describe("catchup launch", () => {
         "empty.md",
       ]),
     ).toBe(1);
-    expect(listSessionRecords(plans)).toEqual([]);
+    expect(listSessionRecords(plans, readMachineId(home))).toEqual([]);
   });
 
   it("aborts before launching or creating a session when catchup fails", async () => {
@@ -186,7 +187,7 @@ describe("catchup launch", () => {
       }),
     ).toBe(1);
     expect(error).toContain("ticket unavailable");
-    expect(listSessionRecords(plans)).toEqual([]);
+    expect(listSessionRecords(plans, readMachineId(home))).toEqual([]);
   });
 });
 

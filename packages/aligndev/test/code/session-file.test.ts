@@ -33,10 +33,11 @@ import {
 
 vi.mock("node:fs", async (original) => {
   const fs = await original<typeof FileSystem>();
-  return { ...fs, writeFileSync: vi.fn(fs.writeFileSync) };
+  return { ...fs, readFileSync: vi.fn(fs.readFileSync), writeFileSync: vi.fn(fs.writeFileSync) };
 });
 
 const FIXED_DATE = new Date(2026, 6, 1, 9, 15, 3); // local 2026-07-01 09:15:03
+const MACHINE_ID = "test-machine";
 
 describe("formatResults", () => {
   it("leaves a single response unchanged", () => {
@@ -63,6 +64,7 @@ function makeFrontmatter(overrides?: Partial<SessionFrontmatter>): SessionFrontm
     meta: null,
     pid: null,
     pidStartTime: null,
+    machineId: MACHINE_ID,
     cwd: null,
     startedAt: "2026-07-01T09:15:03.000Z",
     endedAt: null,
@@ -154,7 +156,8 @@ describe("frontmatter serialization", () => {
     expect(parseFrontmatter(block).agent).toBe("pi");
   });
 
-  it("reads omitted historical profile/agent fields as null", () => {
+  it("reads omitted historical profile/agent/machine fields as null", () => {
+    expect(parseFrontmatter("status: succeeded").machineId).toBeNull();
     expect(parseFrontmatter("status: succeeded").agent).toBeNull();
     expect(parseFrontmatter("status: succeeded").profile).toBeNull();
     expect(
@@ -193,7 +196,10 @@ describe("session file lifecycle", () => {
     dir = mkdtempSync(join(tmpdir(), "aligndev-session-"));
     sessionFilePath = join(dir, "session.md");
   });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => {
+    vi.restoreAllMocks();
+    rmSync(dir, { recursive: true, force: true });
+  });
 
   it("retries an atomic claim lost after path selection, preserving both runs and results", () => {
     const original = vi.mocked(writeFileSync).getMockImplementation();
@@ -329,7 +335,7 @@ describe("session file lifecycle", () => {
       makeFrontmatter({ pid: child.pid, sessionId: "requested-resume-id" }),
     );
 
-    const completion = reconcileSessionFile(sessionFilePath, FIXED_DATE);
+    const completion = reconcileSessionFile(sessionFilePath, MACHINE_ID, FIXED_DATE);
 
     expect(completion.frontmatter.sessionId).toBe("requested-resume-id");
     expect(readCompletion(sessionFilePath).frontmatter.sessionId).toBe("requested-resume-id");
@@ -347,8 +353,44 @@ describe("session file lifecycle", () => {
       makeFrontmatter({ pid: process.pid, pidStartTime: `${currentStartTime}-other` }),
     );
 
-    expect(reconcileSessionFile(sessionFilePath).frontmatter.status).toBe("failed");
+    expect(reconcileSessionFile(sessionFilePath, MACHINE_ID).frontmatter.status).toBe("failed");
   });
+
+  it.each(["EPERM", "EACCES"])(
+    "leaves a run untouched when probing its pid fails with %s",
+    (code) => {
+      writeInitialSessionFile(
+        sessionFilePath,
+        makeFrontmatter({ pid: process.pid, pidStartTime: "different-start" }),
+      );
+      const before = readFileSync(sessionFilePath, "utf8");
+      vi.spyOn(process, "kill").mockImplementation(() => {
+        throw Object.assign(new Error("probe denied"), { code });
+      });
+      expect(reconcileSessionFile(sessionFilePath, MACHINE_ID).frontmatter.status).toBe("running");
+      expect(readFileSync(sessionFilePath, "utf8")).toBe(before);
+    },
+  );
+
+  it.skipIf(process.platform !== "linux")(
+    "leaves a run untouched when its current start time is unreadable",
+    () => {
+      writeInitialSessionFile(
+        sessionFilePath,
+        makeFrontmatter({ pid: process.pid, pidStartTime: "different-start" }),
+      );
+      const before = readFileSync(sessionFilePath, "utf8");
+      const original = vi.mocked(readFileSync).getMockImplementation();
+      if (!original) throw new Error("Missing filesystem implementation.");
+      vi.mocked(readFileSync)
+        .mockImplementationOnce(original)
+        .mockImplementationOnce(() => {
+          throw new Error("unreadable stat");
+        });
+      expect(reconcileSessionFile(sessionFilePath, MACHINE_ID).frontmatter.status).toBe("running");
+      expect(readFileSync(sessionFilePath, "utf8")).toBe(before);
+    },
+  );
 
   it("distinguishes an absent result from an empty result block", () => {
     writeInitialSessionFile(sessionFilePath, makeFrontmatter());
@@ -417,7 +459,7 @@ describe("listSessionRecords", () => {
   }
 
   function listRecords() {
-    return listSessionRecords(plansDir);
+    return listSessionRecords(plansDir, MACHINE_ID);
   }
 
   // A just-exited child's pid is guaranteed dead (and not yet reused).
@@ -449,7 +491,7 @@ describe("listSessionRecords", () => {
     seedRecord(join("_archives", "30", "_aligndev"), "archived.md", makeFrontmatter(), sessionsDir);
     seedRecord(join("31", "_aligndev"), "project.md", makeFrontmatter());
 
-    const records = listSessionRecords(sessionsDir);
+    const records = listSessionRecords(sessionsDir, MACHINE_ID);
     expect(records.map((r) => r.path).sort()).toEqual([rootPath, ticketPath].sort());
   });
 
@@ -479,12 +521,28 @@ describe("listSessionRecords", () => {
     expect(sealed.result).toContain("is gone");
   });
 
-  it("seals a running record with no pid", () => {
-    seedRecord("_aligndev", "no-pid.md", makeFrontmatter());
-    expect(listRecords()[0].frontmatter.status).toBe("failed");
+  it("leaves a running record with no pid untouched", () => {
+    const path = seedRecord("_aligndev", "no-pid.md", makeFrontmatter());
+    const before = readFileSync(path, "utf8");
+    expect(listRecords()[0].frontmatter.status).toBe("running");
+    expect(readFileSync(path, "utf8")).toBe(before);
   });
 
-  it("leaves a running record with a live pid untouched", () => {
+  it.each(["another-machine", null])(
+    "leaves a dead running record with machine identity %j untouched",
+    (machineId) => {
+      const path = seedRecord(
+        "_aligndev",
+        "foreign.md",
+        makeFrontmatter({ pid: deadPid(), machineId }),
+      );
+      const before = readFileSync(path, "utf8");
+      expect(listRecords()[0].frontmatter.status).toBe("running");
+      expect(readFileSync(path, "utf8")).toBe(before);
+    },
+  );
+
+  it("leaves a running record with a live pid and no start time untouched", () => {
     const path = seedRecord("_aligndev", "live.md", makeFrontmatter({ pid: process.pid }));
     const records = listRecords();
     expect(records[0].frontmatter.status).toBe("running");

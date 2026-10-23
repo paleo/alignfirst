@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { main } from "../../src/cli.js";
+import { readMachineId } from "../../src/code/machine-id.js";
 import type { QuotaReader } from "../../src/code/quota.js";
 import {
   listSessionRecords,
@@ -129,7 +130,7 @@ async function launch(
 }
 
 function records() {
-  return listSessionRecords(join(project, ".plans"));
+  return listSessionRecords(join(project, ".plans"), readMachineId(home));
 }
 
 function newest() {
