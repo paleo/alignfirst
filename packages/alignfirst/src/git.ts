@@ -58,12 +58,15 @@ function spawnGit(
     child.once("exit", () => {
       clearTimers();
       // Transport helpers may keep the pipes open after Git exits.
-      if (timedOut)
+      if (timedOut) {
+        child.stdout.destroy();
+        child.stderr.destroy();
         reject(
           new GitTimeoutError(
             `git ${gitSubcommand(args)} timed out after ${(timeoutMs ?? NETWORK_TIMEOUT_MS) / 1_000} seconds.`,
           ),
         );
+      }
     });
     child.once("close", (code) => {
       clearTimers();

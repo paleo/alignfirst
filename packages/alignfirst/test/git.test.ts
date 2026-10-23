@@ -1,3 +1,5 @@
+import type * as ChildProcess from "node:child_process";
+import { spawn } from "node:child_process";
 import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -7,6 +9,11 @@ import { gitNetwork, nonInteractiveEnv, optionalRepositoryId, git as runGit } fr
 import { configureGit, git, makeSink, makeTempDir, runMain } from "./helpers.js";
 
 const dirs: string[] = [];
+
+vi.mock("node:child_process", async (original) => {
+  const childProcess = await original<typeof ChildProcess>();
+  return { ...childProcess, spawn: vi.fn(childProcess.spawn) };
+});
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -116,6 +123,9 @@ describe("non-interactive Git", () => {
         ),
       ).rejects.toThrow("git fetch timed out after 0.2 seconds.");
       expect(Date.now() - started).toBeLessThan(2_000);
+      const child = vi.mocked(spawn).mock.results.at(-1)?.value;
+      expect(child?.stdout?.destroyed).toBe(true);
+      expect(child?.stderr?.destroyed).toBe(true);
       expect(existsSync(pidFile)).toBe(true);
       expect(() => process.kill(Number(readFileSync(pidFile, "utf8")), 0)).toThrow();
     } finally {
