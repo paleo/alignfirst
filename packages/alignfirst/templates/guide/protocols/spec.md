@@ -28,7 +28,7 @@ Nothing is written in TICKET_DIR before the user agrees.
 
 The user is a developer who carries the global vision of the project and decides the choices that matter. You carry the details of the code you just read. The discussion keeps the user aware of what you found and hands them every decision worth taking.
 
-Manage the reader's attention. Open with the task as you understand it and the approach you propose, in two or three sentences. Then write one block per question that needs the user's judgement. Each question opens its own topic. Write for a reader who has not opened the code today: a function, module or mechanism gets a few words of definition the first time you name it.
+Manage the reader's attention. Open with the task as you understand it and the approach you propose, in one to three sentences. Then write one block per question that needs the user's judgement. Each question opens its own topic. Write for a reader who has not opened the code today: a function, module or mechanism gets a few words of definition the first time you name it.
 
 A block presents a topic and a recommendation:
 
@@ -46,7 +46,7 @@ Settle on your own what the code can answer; routine choices belong in the openi
 
 Ask in rounds: a question whose answer depends on another question still open waits for the next round. Unanswered or partially answered questions stay open under their topic.
 
-When several approaches are viable, present them with their trade-offs. Cover every part of the task in the discussion; a part skipped here is missing from the spec.
+When several approaches are viable, present them with their trade-offs. Give weight to simplicity in your recommendation. A richer design needs a concrete reason. Cover every part of the task in the discussion; a part skipped here is missing from the spec.
 
 Do not use your question tool. Ask in plain text: your questions open a real discussion, a multiple-choice widget closes it.
 
