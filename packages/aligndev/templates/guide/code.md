@@ -181,12 +181,12 @@ Don't reconstruct what happened: no re-running the agent, no `git` archaeology t
 {{#openclaw}}
 The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. The profile's nonempty `models` replaces its displayed allowlist. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
 
-`{{ALIGNDEV}} code status` checks that a `running` process still owns its recorded pid. A dead run is sealed as `status: failed`, `exitReason: terminated` before the command reports it. `{{ALIGNDEV}} code quota` works without a `.plans` directory and does not start a coding session. Its output belongs to the selected native quota CLI's account; account pairing with the coding child is not verified.
+`{{ALIGNDEV}} code status` seals a `running` record only when its `machineId` matches this installation and its pid is conclusively gone or reused. Foreign, legacy and uncertain records stay `running`; a sealed run reports `status: failed`, `exitReason: terminated`. `{{ALIGNDEV}} code quota` works without a `.plans` directory and does not start a coding session. Its output belongs to the selected native quota CLI's account; account pairing with the coding child is not verified.
 {{/openclaw}}
 {{#codingAgent}}
 The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. A nonempty profile `models` list replaces its accepted model list. Pi has no finite allowlist by default: native selectors pass through unchanged, preferably `provider/model`, with optional thinking suffix. For a Pi child without `--model`, a new run uses profile `defaultModel`, else Pi's own default; a resume retains and validates its recorded model. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
 
-`{{ALIGNDEV}} code status` checks that a `running` process still owns its recorded pid. A dead run is sealed as `status: failed`, `exitReason: terminated` before the command reports it. `{{ALIGNDEV}} code quota` needs no `.plans` and starts no session. Its output belongs to the selected native quota CLI's account; account pairing with the coding child is not verified.
+`{{ALIGNDEV}} code status` seals a `running` record only when its `machineId` matches this installation and its pid is conclusively gone or reused. Foreign, legacy and uncertain records stay `running`; a sealed run reports `status: failed`, `exitReason: terminated`. `{{ALIGNDEV}} code quota` needs no `.plans` and starts no session. Its output belongs to the selected native quota CLI's account; account pairing with the coding child is not verified.
 {{/codingAgent}}
 
 ### Profiles and resume

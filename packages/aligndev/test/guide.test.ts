@@ -152,7 +152,7 @@ describe("renderCodeGuide", () => {
     }
   });
 
-  it("requires stale-run reconciliation before completion reporting", () => {
+  it("limits stale-run reconciliation to the owning machine in both variants", () => {
     for (const platform of ["codingAgent", "openclaw"] as const) {
       const guide = renderCodeGuide(
         platform,
@@ -161,7 +161,11 @@ describe("renderCodeGuide", () => {
         undefined,
         GLOBAL_FORMS,
       );
-      expect(guide).toContain("`aligndev code status` checks that a `running` process");
+      expect(guide).toContain(
+        "`aligndev code status` seals a `running` record only when its `machineId` matches this installation",
+      );
+      expect(guide).toContain("its pid is conclusively gone or reused");
+      expect(guide).toContain("Foreign, legacy and uncertain records stay `running`");
     }
   });
 
