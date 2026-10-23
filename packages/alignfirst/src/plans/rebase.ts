@@ -37,7 +37,7 @@ export async function resolveStoppedRebase(streams: Streams, repoDir: string): P
 }
 
 async function continueRebase(streams: Streams, repoDir: string): Promise<void> {
-  const args = ["-c", "core.editor=true", "rebase", "--continue"];
+  const args = ["rebase", "--continue"];
   try {
     await git(streams, repoDir, ...args);
   } catch (error) {
