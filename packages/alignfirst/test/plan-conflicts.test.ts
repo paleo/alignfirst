@@ -1,11 +1,19 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, dirname, join } from "node:path";
 
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 
-import { findStoppedRebase } from "../src/plans/rebase.js";
-import { configureGit, git, makeTempDir, runMain } from "./helpers.js";
+import { findStoppedRebase, resolveStoppedRebase } from "../src/plans/rebase.js";
+import { configureGit, git, makeSink, makeTempDir, runMain } from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -18,6 +26,7 @@ interface Fixture {
 }
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -151,6 +160,8 @@ it("stops before a later local edit can be replayed onto the published document"
   git(fixture.clone, "add", "-A");
   git(fixture.clone, "commit", "--quiet", "-m", "local spec");
   write(fixture.clone, path, `local\n${middle}new tail\n`);
+  commitLocal(fixture, "sync");
+  const localBefore = git(fixture.clone, "rev-parse", "HEAD");
   write(fixture.other, path, `remote\n${middle}old tail\n`);
   publishOther(fixture);
   const before = git(fixture.remote, "rev-parse", "HEAD");
@@ -160,7 +171,9 @@ it("stops before a later local edit can be replayed onto the published document"
   expect(result.code).toBe(1);
   expect(result.stderr).toContain("a later local commit edits it");
   expect(git(fixture.remote, "rev-parse", "HEAD")).toBe(before);
-  expect(findStoppedRebase(fixture.clone)).toBeDefined();
+  expect(findStoppedRebase(fixture.clone)).toBeUndefined();
+  expect(git(fixture.clone, "rev-parse", "HEAD")).toBe(localBefore);
+  expect(result.stderr).toContain("back to its state before the pull");
   expect(remoteContent(fixture, path)).toBe(`remote\n${middle}old tail\n`);
   expect(readdirSync(join(fixture.clone, "product-plans/80"))).toEqual(["spec.md"]);
 });
@@ -184,6 +197,8 @@ it("stops when a later local document would refer to the wrong version", async (
   git(fixture.clone, "add", "-A");
   git(fixture.clone, "commit", "--quiet", "-m", "local spec");
   write(fixture.clone, "product-plans/80/plan.md", "Read [spec](spec.md).\n");
+  commitLocal(fixture, "sync");
+  const localBefore = git(fixture.clone, "rev-parse", "HEAD");
   write(fixture.other, "product-plans/80/spec.md", "remote spec\n");
   publishOther(fixture);
   const before = git(fixture.remote, "rev-parse", "HEAD");
@@ -193,7 +208,9 @@ it("stops when a later local document would refer to the wrong version", async (
   expect(result.code).toBe(1);
   expect(result.stderr).toContain("later local commit references a renamed document");
   expect(git(fixture.remote, "rev-parse", "HEAD")).toBe(before);
-  expect(findStoppedRebase(fixture.clone)).toBeDefined();
+  expect(findStoppedRebase(fixture.clone)).toBeUndefined();
+  expect(git(fixture.clone, "rev-parse", "HEAD")).toBe(localBefore);
+  expect(result.stderr).toContain("back to its state before the pull");
 });
 
 it("updates references in an earlier local document when its spec is renamed", async () => {
@@ -216,6 +233,8 @@ it("updates references in an earlier local document when its spec is renamed", a
 it("stops an unsupported directory/file conflict without pushing", async () => {
   const fixture = await makeFixture();
   write(fixture.clone, "product-plans/80/spec.md", "local file\n");
+  commitLocal(fixture, "local file");
+  const localBefore = git(fixture.clone, "rev-parse", "HEAD");
   write(fixture.other, "product-plans/80/spec.md/child.md", "remote child\n");
   publishOther(fixture);
   const before = git(fixture.remote, "rev-parse", "HEAD");
@@ -225,11 +244,15 @@ it("stops an unsupported directory/file conflict without pushing", async () => {
   expect(result.code).toBe(1);
   expect(result.stderr).toContain("Resolve the rebase manually");
   expect(git(fixture.remote, "rev-parse", "HEAD")).toBe(before);
-  expect(findStoppedRebase(fixture.clone)).toBeDefined();
-  expect(existsSync(join(fixture.clone, "product-plans/80/spec.md/child.md"))).toBe(true);
+  expect(findStoppedRebase(fixture.clone)).toBeUndefined();
+  expect(git(fixture.clone, "rev-parse", "HEAD")).toBe(localBefore);
+  expect(result.stderr).toContain("back to its state before the pull");
+  expect(readFileSync(join(fixture.clone, "product-plans/80/spec.md"), "utf8")).toBe(
+    "local file\n",
+  );
 });
 
-it("stops before staging a filename that cannot be decoded losslessly", async () => {
+it("aborts the rebase when a conflicted filename cannot be decoded losslessly", async () => {
   const fixture = await makeFixture();
   for (const [repo, content] of [
     [fixture.clone, "local\n"],
@@ -247,8 +270,237 @@ it("stops before staging a filename that cannot be decoded losslessly", async ()
 
   expect(result.code).toBe(1);
   expect(result.stderr).toContain("non-UTF-8 Git output");
+  expect(result.stderr).toContain("back to its state before the pull");
+  expect(findStoppedRebase(fixture.clone)).toBeUndefined();
   expect(git(fixture.remote, "rev-parse", "HEAD")).toBe(before);
 });
+
+it("consolidates repeated sync edits and preserves the final local session contents", async () => {
+  const path = "product-plans/78/_aligndev/x.md";
+  const fixture = await makeFixture({ [path]: "base\n" });
+  for (const content of ["first\n", "second\n", "final local\n"]) {
+    write(fixture.clone, path, content);
+    commitLocal(fixture, "sync");
+  }
+  write(fixture.other, path, "remote\n");
+  publishOther(fixture);
+  const result = await runMain(["sync"], { cwd: fixture.product });
+  expect(result.code, result.stderr).toBe(0);
+  expect(remoteContent(fixture, path)).toBe("remote\n");
+  expect(remoteContent(fixture, "product-plans/78/_aligndev/x-local-2.md")).toBe("final local\n");
+  expect(findStoppedRebase(fixture.clone)).toBeUndefined();
+});
+
+it("consolidates sync-only history into one commit with the same tree", async () => {
+  const fixture = await makeFixture();
+  const base = git(fixture.clone, "rev-parse", "@{u}");
+  for (const content of ["first", "second", "third"]) {
+    write(fixture.clone, "note.md", content);
+    commitLocal(fixture, "sync");
+  }
+  const tree = git(fixture.clone, "rev-parse", "HEAD^{tree}");
+  const result = await runMain(["sync"], { cwd: fixture.product });
+  expect(result.code, result.stderr).toBe(0);
+  expect(git(fixture.clone, "rev-list", "--count", `${base}..HEAD`)).toBe("1");
+  expect(git(fixture.clone, "rev-parse", "HEAD^{tree}")).toBe(tree);
+});
+
+it("keeps a mixed manual history unchanged", async () => {
+  const fixture = await makeFixture();
+  for (const message of ["sync", "manual change", "sync"]) {
+    write(fixture.clone, "note.md", message + Math.random());
+    commitLocal(fixture, message);
+  }
+  const head = git(fixture.clone, "rev-parse", "HEAD");
+  const result = await runMain(["sync"], { cwd: fixture.product });
+  expect(result.code, result.stderr).toBe(0);
+  expect(git(fixture.remote, "rev-parse", "HEAD")).toBe(head);
+});
+
+it("drops a net-empty sync history back to the upstream", async () => {
+  const fixture = await makeFixture();
+  const base = git(fixture.clone, "rev-parse", "@{u}");
+  write(fixture.clone, "note.md", "temporary");
+  commitLocal(fixture, "sync");
+  rmSync(join(fixture.clone, "note.md"));
+  commitLocal(fixture, "sync");
+  const result = await runMain(["sync"], { cwd: fixture.product });
+  expect(result.code, result.stderr).toBe(0);
+  expect(git(fixture.clone, "rev-parse", "HEAD")).toBe(base);
+  expect(result.stdout).toContain("nothing to send");
+});
+
+it.each(["product-plans/_aligndev/[run]*.running.md", "product-plans/78/_aligndev/run.running.md"])(
+  "keeps running logs untracked until completion: %s",
+  async (path) => {
+    const fixture = await makeFixture();
+    write(fixture.clone, path, `---\nstatus: running\n---\n${"transcript".repeat(200_000)}`);
+    write(fixture.clone, "note.md", "other document");
+    const result = await runMain(["sync"], { cwd: fixture.product });
+    expect(result.code, result.stderr).toBe(0);
+    expect(git(fixture.remote, "ls-tree", "-r", "--name-only", "HEAD")).not.toContain(path);
+    expect(git(fixture.clone, "ls-files", "--others", "--exclude-standard")).toBe(path);
+    expect(git(fixture.clone, "ls-files", "--cached")).not.toContain(path);
+    const completed = path.replace(".running.md", ".md");
+    write(fixture.clone, completed, "---\nstatus: succeeded\n---\nfinished\n");
+    rmSync(join(fixture.clone, path));
+    expect((await runMain(["sync"], { cwd: fixture.product })).code).toBe(0);
+    expect(remoteContent(fixture, completed)).toBe("---\nstatus: succeeded\n---\nfinished\n");
+  },
+);
+
+it("keeps an archived running log local too", async () => {
+  const fixture = await makeFixture();
+  const path = "product-plans/_archives/78/_aligndev/run.running.md";
+  write(fixture.clone, path, "---\nstatus: running\n---\n");
+  const result = await runMain(["sync"], { cwd: fixture.product });
+  expect(result.code, result.stderr).toBe(0);
+  expect(git(fixture.clone, "ls-files", "--others", "--exclude-standard")).toBe(path);
+});
+
+it.each([
+  ["product-plans/78/_aligndev/run.md", "---\nstatus: running\n---\n"],
+  ["product-plans/78/run.running.md", "not a session log\n"],
+])("sends files by name, not by content: %s", async (path, content) => {
+  const fixture = await makeFixture();
+  write(fixture.clone, path, content);
+  const result = await runMain(["sync"], { cwd: fixture.product });
+  expect(result.code, result.stderr).toBe(0);
+  expect(remoteContent(fixture, path)).toBe(content);
+});
+
+it("continues syncing already-tracked running logs without migration", async () => {
+  const path = "product-plans/78/_aligndev/run.md";
+  const fixture = await makeFixture({ [path]: "---\nstatus: running\n---\nold\n" });
+  write(fixture.clone, path, "---\nstatus: running\n---\nnew\n");
+  const result = await runMain(["sync"], { cwd: fixture.product });
+  expect(result.code, result.stderr).toBe(0);
+  expect(remoteContent(fixture, path)).toBe("---\nstatus: running\n---\nnew\n");
+});
+
+it("keeps a running log local through automatic conflict resolution", async () => {
+  const fixture = await makeFixture({ "product-plans/80/spec.md": "base\n" });
+  const running = "product-plans/80/_aligndev/run.running.md";
+  const content = "---\nstatus: running\n---\ntranscript\n";
+  write(fixture.clone, running, content);
+  write(fixture.clone, "product-plans/80/spec.md", "local\n");
+  write(fixture.other, "product-plans/80/spec.md", "remote\n");
+  publishOther(fixture);
+  const result = await runMain(["sync"], { cwd: fixture.product });
+  expect(result.code, result.stderr).toBe(0);
+  expect(git(fixture.clone, "ls-files", "--others", "--exclude-standard")).toBe(running);
+  expect(readFileSync(join(fixture.clone, running), "utf8")).toBe(content);
+  expect(git(fixture.remote, "ls-tree", "-r", "--name-only", "HEAD")).not.toContain(running);
+});
+
+it("leaves pending sync-message merges intact before Git's rebase", async () => {
+  const fixture = await makeFixture();
+  git(fixture.clone, "checkout", "--quiet", "-b", "side");
+  write(fixture.clone, "side.md", "side\n");
+  commitLocal(fixture, "sync");
+  git(fixture.clone, "checkout", "--quiet", "main");
+  write(fixture.clone, "main.md", "main\n");
+  commitLocal(fixture, "sync");
+  git(fixture.clone, "merge", "--quiet", "--no-ff", "-m", "sync", "side");
+  const head = git(fixture.clone, "rev-parse", "HEAD");
+  const beforeRebase = join(fixture.root, "before-rebase");
+  const hook = join(fixture.clone, ".git/hooks/pre-rebase");
+  writeFileSync(hook, `#!/bin/sh\ngit rev-parse HEAD > '${beforeRebase}'\n`);
+  chmodSync(hook, 0o755);
+  const result = await runMain(["sync"], { cwd: fixture.product });
+  expect(result.code, result.stderr).toBe(0);
+  expect(readFileSync(beforeRebase, "utf8").trim()).toBe(head);
+});
+
+it("does not retry an ordinary push rejection and releases the lock", async () => {
+  const fixture = await makeFixture();
+  const hook = join(fixture.remote, "hooks/pre-receive");
+  writeFileSync(hook, "#!/bin/sh\nexit 1\n");
+  chmodSync(hook, 0o755);
+  write(fixture.clone, "note.md", "local\n");
+  const random = vi.spyOn(Math, "random");
+  try {
+    const result = await runMain(["sync"], { cwd: fixture.product });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("git push failed");
+    expect(random).not.toHaveBeenCalled();
+    expect(existsSync(join(fixture.clone, ".git/alignfirst-sync.lock"))).toBe(false);
+    expect(findStoppedRebase(fixture.clone)).toBeUndefined();
+  } finally {
+    random.mockRestore();
+  }
+});
+
+it("stages only resolver paths and leaves an unrelated untracked file alone", async () => {
+  const fixture = await makeFixture({ "product-plans/80/spec.md": "base\n" });
+  write(fixture.clone, "product-plans/80/spec.md", "local\n");
+  commitLocal(fixture, "local");
+  write(fixture.other, "product-plans/80/spec.md", "remote\n");
+  publishOther(fixture);
+  expect(() => git(fixture.clone, "pull", "--rebase")).toThrow();
+  write(fixture.clone, "unrelated.md", "leave alone\n");
+  await resolveStoppedRebase({ stdout: makeSink(), stderr: makeSink() }, fixture.clone);
+  expect(git(fixture.clone, "ls-files", "--others", "--exclude-standard")).toBe("unrelated.md");
+  expect(git(fixture.clone, "ls-files", "--cached")).not.toContain("unrelated.md");
+  expect(findStoppedRebase(fixture.clone)).toBeUndefined();
+});
+
+it("reports a live lock after three attempts within ten seconds", async () => {
+  const fixture = await makeFixture();
+  const path = join(fixture.clone, ".git/alignfirst-sync.lock");
+  mkdirSync(path);
+  writeFileSync(join(path, "pid"), String(process.pid));
+  const started = Date.now();
+  const result = await runMain(["sync"], { cwd: fixture.product });
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain("lock is busy");
+  expect(result.stderr).toContain(path);
+  expect(result.stderr).toContain(String(process.pid));
+  expect(Date.now() - started).toBeLessThan(10_000);
+  expect(existsSync(path)).toBe(true);
+}, 10_000);
+
+it("replaces a stale lock and releases it after sync", async () => {
+  const fixture = await makeFixture();
+  const path = join(fixture.clone, ".git/alignfirst-sync.lock");
+  mkdirSync(path);
+  writeFileSync(join(path, "pid"), "2147483647");
+  const result = await runMain(["sync"], { cwd: fixture.product });
+  expect(result.code, result.stderr).toBe(0);
+  expect(existsSync(path)).toBe(false);
+});
+
+it("retries after the remote advances just before the first push", async () => {
+  const fixture = await makeFixture();
+  write(fixture.clone, "local.md", "local\n");
+  write(fixture.other, "remote.md", "remote\n");
+  git(fixture.other, "add", "-A");
+  git(fixture.other, "commit", "--quiet", "-m", "remote race");
+  const realGit = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
+  const bin = join(fixture.root, "bin");
+  const marker = join(fixture.root, "pushed");
+  mkdirSync(bin);
+  const wrapper = join(bin, "git");
+  writeFileSync(
+    wrapper,
+    `#!/bin/sh\ncase " $* " in *" push "*)\n  if [ ! -f '${marker}' ]; then\n    touch '${marker}'\n    '${realGit}' -C '${fixture.other}' push --quiet || exit $?\n  fi\nesac\nexec '${realGit}' "$@"\n`,
+  );
+  chmodSync(wrapper, 0o755);
+  vi.stubEnv("PATH", `${bin}:${process.env.PATH}`);
+  const result = await runMain(["sync"], { cwd: fixture.product });
+  expect(result.code, result.stderr).toBe(0);
+  expect(existsSync(marker)).toBe(true);
+  expect(result.stderr).toContain("rejected");
+  expect(remoteContent(fixture, "local.md")).toBe("local\n");
+  expect(remoteContent(fixture, "remote.md")).toBe("remote\n");
+  expect(git(fixture.remote, "log", "--format=%s")).toContain("remote race");
+  expect(findStoppedRebase(fixture.clone)).toBeUndefined();
+});
+
+function commitLocal(fixture: Fixture, message: string): void {
+  git(fixture.clone, "add", "-A");
+  git(fixture.clone, "commit", "--quiet", "-m", message);
+}
 
 async function makeFixture(initial: Record<string, string> = {}): Promise<Fixture> {
   const root = makeTempDir("alignfirst-conflicts-");

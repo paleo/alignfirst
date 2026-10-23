@@ -20,6 +20,7 @@ import {
 } from "../project/layout.js";
 import { validateEffectivePlans } from "../project/plans.js";
 import { type CodingAgent, createAgentAdapter } from "./coding-agent.js";
+import { readMachineId } from "./machine-id.js";
 import { expandModelAlias, type ExecutableModelResolver, resolveModels } from "./models.js";
 import { describeNativeStorage } from "./native-context.js";
 import { buildPrompt, PROTOCOLS } from "./prompt.js";
@@ -27,6 +28,7 @@ import type { QuotaReader } from "./quota.js";
 import { runAgent, type RunConfig } from "./run-agent.js";
 import {
   applyCompletion,
+  completedSessionPath,
   createSessionFile,
   findNewestSessionFile,
   listSessionRecords,
@@ -68,6 +70,7 @@ const TICKET_PATH_ERROR =
 
 export interface CodeContext {
   cwd: string;
+  home: string;
   env: NodeJS.ProcessEnv;
   stdout: Output;
   stderr: Output;
@@ -83,6 +86,7 @@ interface SessionTree {
   cwd: string;
   // The `.plans`-shaped directory holding the `_aligndev/` session directories.
   sessionsDir: string;
+  machineId: string;
 }
 
 export type CodeCommand =
@@ -129,8 +133,8 @@ export async function runCode(
     const config = loadSettings();
     const report = readReport(ctx);
     if (command.kind === "session") validateEffectivePlans(ctx);
-    const records =
-      command.kind === "session" ? listSessionRecords(report.locations._aligndev.path) : [];
+    const tree = command.kind === "session" ? sessionTreeOf(report, ctx) : undefined;
+    const records = tree === undefined ? [] : listSessionRecords(tree.sessionsDir, tree.machineId);
     const args = command.kind === "session" ? command.args : undefined;
     const previous =
       args?.resume === undefined
@@ -156,7 +160,8 @@ export async function runCode(
       ctx.stderr.write(`${validationError}\n`);
       return 1;
     }
-    return await runSession(command.args, code, ctx, report, records, previous);
+    if (tree === undefined) throw new Error("Missing session tree.");
+    return await runSession(command.args, code, ctx, report, tree, records, previous);
   } catch (error) {
     ctx.stderr.write(`${errorMessage(error)}\n`);
     return 1;
@@ -164,10 +169,12 @@ export async function runCode(
 }
 
 function showStatus(ctx: CodeContext, target: StatusTarget, includeResult: boolean): number {
-  const tree = sessionTreeOf(readReport(ctx), ctx.cwd);
-  const sessionFilePath = resolveStatusTargetSessionFile(tree, target);
-  const completion = reconcileSessionFile(sessionFilePath);
-  ctx.stdout.write(renderSessionStatus(tree.cwd, sessionFilePath, completion.frontmatter));
+  const tree = sessionTreeOf(readReport(ctx), ctx);
+  const completion = reconcileSessionFile(
+    resolveStatusTargetSessionFile(tree, target),
+    tree.machineId,
+  );
+  ctx.stdout.write(renderSessionStatus(tree.cwd, completion.path, completion.frontmatter));
   if (
     includeResult &&
     completion.frontmatter.status !== "running" &&
@@ -184,10 +191,11 @@ function readReport(ctx: CodeContext): ProjectReport {
   return report;
 }
 
-function sessionTreeOf(report: ProjectReport, cwd: string): SessionTree {
+function sessionTreeOf(report: ProjectReport, ctx: CodeContext): SessionTree {
   return {
-    cwd: realpathSync(cwd),
+    cwd: realpathSync(ctx.cwd),
     sessionsDir: report.locations._aligndev.path,
+    machineId: readMachineId(ctx.home),
   };
 }
 
@@ -231,7 +239,7 @@ function resolveStatusTargetSessionFile(tree: SessionTree, target: StatusTarget)
 // A run tagged with `--meta <key>` is found by that key alone: the session tree is shared across
 // worktrees, so its newest run may belong to another thread.
 function resolveMetaSessionFile(tree: SessionTree, meta: string): string {
-  const matches = listSessionRecords(tree.sessionsDir).filter(
+  const matches = listSessionRecords(tree.sessionsDir, tree.machineId).filter(
     (record) => record.frontmatter.meta === meta,
   );
   if (matches.length === 0) throw new Error(`Error: no session file with meta "${meta}".`);
@@ -252,17 +260,22 @@ function loadMessage(args: SessionArgs, cwd: string): void {
   );
 }
 
+// A caller may retain the `.running.md` path of a run that has ended since: it resolves to the
+// completed file.
 function resolveStatusSessionFile(tree: SessionTree, input: string): string {
-  const sessionFilePath = resolve(tree.cwd, input);
+  const requestedPath = resolve(tree.cwd, input);
   const sessionsDir = displayPath(tree.cwd, tree.sessionsDir);
-  if (!isSessionFilePath(tree.sessionsDir, sessionFilePath)) {
+  if (!isSessionFilePath(tree.sessionsDir, requestedPath)) {
     throw new Error(
       `Error: status requires a session file under ${sessionsDir}/_aligndev/ or ` +
         `${sessionsDir}/<ticket>/_aligndev/.`,
     );
   }
+  const sessionFilePath = existsSync(requestedPath)
+    ? requestedPath
+    : completedSessionPath(requestedPath);
   if (!existsSync(sessionFilePath)) {
-    throw new Error(`Error: session file not found: ${displayPath(tree.cwd, sessionFilePath)}`);
+    throw new Error(`Error: session file not found: ${displayPath(tree.cwd, requestedPath)}`);
   }
   if (!isSessionFilePath(realpathSync(tree.sessionsDir), realpathSync(sessionFilePath))) {
     throw new Error(`Error: the session file resolves outside ${sessionsDir}/.`);
@@ -306,6 +319,7 @@ function renderSessionStatus(
     `model: ${frontmatter.model ?? ""}`,
     `status: ${frontmatter.status}`,
     `pid: ${frontmatter.pid ?? ""}`,
+    `machineId: ${frontmatter.machineId ?? ""}`,
     `startedAt: ${frontmatter.startedAt}`,
     `endedAt: ${frontmatter.endedAt ?? ""}`,
     `exitReason: ${frontmatter.exitReason ?? ""}`,
@@ -502,20 +516,28 @@ async function runSession(
   code: CodeConfig,
   ctx: CodeContext,
   report: ProjectReport,
+  tree: SessionTree,
   records: SessionRecord[],
   previous: SessionRecord | undefined,
 ): Promise<number> {
   const { cwd, env, stdout, stderr, forms, alignfirstCommand, modelResolver } = ctx;
   const { agent } = code;
 
-  const tree = sessionTreeOf(report, cwd);
   const resolvedTicket = args.noTicket
     ? undefined
     : (args.ticket ??
       (args.resume === undefined
         ? inferTicketFromMessage(args.message ?? "")
         : (previous?.frontmatter.ticket ?? undefined)));
-  const guardError = checkLaunchGuards(args, agent, tree.cwd, resolvedTicket, records, previous);
+  const guardError = checkLaunchGuards(
+    args,
+    agent,
+    tree.cwd,
+    resolvedTicket,
+    records,
+    tree.machineId,
+    previous,
+  );
   if (guardError) {
     stderr.write(`${guardError}\n`);
     return 1;
@@ -542,7 +564,16 @@ async function runSession(
     tree.sessionsDir,
     ticket,
     now,
-    buildFrontmatter({ args, agent, profile: code.profile, model, now, realCwd: tree.cwd, ticket }),
+    buildFrontmatter({
+      args,
+      agent,
+      profile: code.profile,
+      model,
+      now,
+      realCwd: tree.cwd,
+      ticket,
+      machineId: tree.machineId,
+    }),
   );
   stdout.write(`Session file: ${displayPath(tree.cwd, sessionFilePath)}\n\n`);
 
@@ -559,14 +590,14 @@ async function runSession(
       (agent === "codex"
         ? " For Codex aliases, update the Codex CLI or select an explicit full model slug."
         : "");
-    applyCompletion(sessionFilePath, {
+    const completedPath = applyCompletion(sessionFilePath, {
       status: "failed",
       endedAt: new Date().toISOString(),
       exitReason: "error",
       sessionId: args.resume ?? null,
       result: message,
     });
-    writeFailureDiagnostic(ctx, sessionFilePath, message);
+    writeFailureDiagnostic(ctx, completedPath, message);
     return 1;
   }
 
@@ -584,6 +615,7 @@ async function runSession(
   });
   createMissingCompanion(report);
   const result = await runAgent(runConfig, createAgentAdapter(agent), stdout);
+  const completedPath = completedSessionPath(sessionFilePath);
 
   if (args.resume === undefined && result.sessionId) {
     stdout.write(`\nSession ID: ${result.sessionId}\n`);
@@ -591,7 +623,7 @@ async function runSession(
   if (result.authRequired) {
     writeFailureDiagnostic(
       ctx,
-      sessionFilePath,
+      completedPath,
       `${nativeContext(code)} not authenticated — an administrator must re-login ` +
         "with the same effective environment as the child (apply profile unset/env/configDir, " +
         "including HOME, PATH and credential routing), from the same working directory. " +
@@ -602,7 +634,7 @@ async function runSession(
   if (result.status === "succeeded") return 0;
   writeFailureDiagnostic(
     ctx,
-    sessionFilePath,
+    completedPath,
     `${nativeContext(code)}: ${failureDiagnostic(agent, result.result)}${args.resume === undefined ? "" : " Check that the native conversation exists in this configuration; select the correct --profile or start a new session. No account fallback was attempted."}`,
   );
   return 1;
@@ -647,6 +679,7 @@ export function checkLaunchGuards(
   realCwd: string,
   ticket: string | undefined,
   records: SessionRecord[],
+  machineId: string,
   previous?: SessionRecord,
 ): string | undefined {
   if (args.resume !== undefined) {
@@ -657,8 +690,8 @@ export function checkLaunchGuards(
     const running = matches.find((r) => r.frontmatter.status === "running");
     if (running) {
       return (
-        `Error: session ${args.resume} is still running (pid ${running.frontmatter.pid}); ` +
-        "wait for it to finish or kill it."
+        `Error: session ${args.resume} is still running (${running.path}, pid ${running.frontmatter.pid}); ` +
+        `${runningRecordAdvice(running, machineId)}.`
       );
     }
     const latest = previous ?? latestRecord(matches);
@@ -688,10 +721,10 @@ export function checkLaunchGuards(
       (r) => r.frontmatter.status === "running" && r.frontmatter.protocol !== null,
     );
     const sameWorktree = active.find((r) => r.frontmatter.cwd === realCwd);
-    if (sameWorktree) return busyProtocolError(sameWorktree, "in this worktree");
+    if (sameWorktree) return busyProtocolError(sameWorktree, "in this worktree", machineId);
     const sameTicket =
       ticket === undefined ? undefined : active.find((r) => r.frontmatter.ticket === ticket);
-    if (sameTicket) return busyProtocolError(sameTicket, `on ticket ${ticket}`);
+    if (sameTicket) return busyProtocolError(sameTicket, `on ticket ${ticket}`, machineId);
   }
   return;
 }
@@ -705,12 +738,19 @@ function sameRealDirectory(recorded: string | null, realCwd: string): boolean {
   }
 }
 
-function busyProtocolError(record: SessionRecord, scope: string): string {
+function busyProtocolError(record: SessionRecord, scope: string, machineId: string): string {
   return (
     `Error: a ${record.frontmatter.protocol} protocol run is already active ${scope} ` +
     `(${record.path}, pid ${record.frontmatter.pid}); one protocol run at a time per worktree ` +
-    "and per ticket."
+    `and per ticket; ${runningRecordAdvice(record, machineId)}.`
   );
+}
+
+function runningRecordAdvice(record: SessionRecord, machineId: string): string {
+  return record.frontmatter.machineId === machineId
+    ? "wait for it to finish"
+    : "this record was written by another machine or before machine identities: check it on its machine, " +
+        "or set its `status` by hand once the run has ended";
 }
 
 // The newest record of a non-empty list: a resumed session has one record per run.
@@ -795,6 +835,7 @@ interface FrontmatterInput {
   now: Date;
   realCwd: string;
   ticket: string | undefined;
+  machineId: string;
 }
 
 function buildFrontmatter(input: FrontmatterInput): SessionFrontmatter {
@@ -811,6 +852,7 @@ function buildFrontmatter(input: FrontmatterInput): SessionFrontmatter {
     meta: args.meta ?? null,
     pid: process.pid,
     pidStartTime: readPidStartTime(process.pid),
+    machineId: input.machineId,
     cwd: input.realCwd,
     startedAt: now.toISOString(),
     endedAt: null,

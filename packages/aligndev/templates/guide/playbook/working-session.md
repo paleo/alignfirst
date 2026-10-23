@@ -486,10 +486,10 @@ Two triggers, both edited through the agent:
 - You learn something non-obvious about how to work in a project — a command, a quirk, a convention not yet written down. Propose capturing it in the project's `DEVELOPERS.md`, created at the repository root when the project has none, ask for confirmation, then have the agent make the edit.
 {{/codingAgent}}
 {{#openclaw}}
-- The user asks to retain a rule for the project. No confirmation needed: the rule goes into both `AGENTS.md` and `DEVELOPERS.md`. When the thread has an active ticket and the rule is simple, add it on the current branch, so the ticket's PR carries it. When the rule is complex or the thread has no ticket, reserve a side ticket (Step 5), set up a workspace on a new branch for the rule, and create a ready pull request.
+- The user asks to retain a rule for the project. No confirmation needed: the rule goes into both `AGENTS.md` and `DEVELOPERS.md`. When the thread has an active ticket and the rule is simple, add it on the current branch, so the ticket's PR carries it. When the rule is complex or the thread has no ticket, reserve a side ticket (Step 5), set up a workspace on a new branch for the rule, and create a pull request.
 {{/openclaw}}
 {{#codingAgent}}
-- The user asks to retain a rule for the project. No confirmation needed: the rule goes into both `AGENTS.md` and `DEVELOPERS.md`. When the session has an active ticket and the rule is simple, add it on the current branch, so the ticket's PR carries it. When the rule is complex or the session has no ticket, reserve a side ticket (Step 5), set up a workspace on a new branch for the rule, and create a ready pull request.
+- The user asks to retain a rule for the project. No confirmation needed: the rule goes into both `AGENTS.md` and `DEVELOPERS.md`. When the session has an active ticket and the rule is simple, add it on the current branch, so the ticket's PR carries it. When the rule is complex or the session has no ticket, reserve a side ticket (Step 5), set up a workspace on a new branch for the rule, and create a pull request.
 {{/codingAgent}}
 
 {{#openclaw}}
@@ -549,7 +549,7 @@ The author of a branch you reviewed pushes fixes and asks you to check them, or 
 
 ### Merge/Pull requests
 
-You are the judge of when the ticket's scope is done — a ticket can span several coding sessions, so no single run completion decides it. When you judge it done, create the MR/PR without asking — as a **draft**, unless the user asked for a ready one. Mark it ready when the user says so.
+You are the judge of when the ticket's scope is done — a ticket can span several coding sessions, so no single run completion decides it. When you judge it done, create the MR/PR without asking.
 
 Before creating it: the code compiles, lint and tests pass, and you exercised the change manually (see "Always test the work manually"). Then run the review workflow with its fix step (see "Code review" above) — automatic, part of creating any MR/PR.
 

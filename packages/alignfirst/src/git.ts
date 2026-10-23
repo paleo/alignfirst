@@ -5,10 +5,25 @@ import { basename, dirname, resolve } from "node:path";
 import { CliError } from "./cli-error.js";
 import type { Streams } from "./context.js";
 
+// Stalled transports give up on their own: SSH through the default command below, HTTPS through
+// these options. A configured SSH command keeps its own timeouts.
+const HTTP_STALL_OPTIONS = ["-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=30"];
+const DEFAULT_SSH_COMMAND =
+  "ssh -o BatchMode=yes -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=3";
+
 export function git(streams: Streams, dir: string, ...args: string[]): Promise<void> {
+  return spawnGit(streams, dir, args);
+}
+
+export function gitNetwork(streams: Streams, dir: string, args: string[]): Promise<void> {
+  return spawnGit(streams, dir, [...HTTP_STALL_OPTIONS, ...args]);
+}
+
+function spawnGit(streams: Streams, dir: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn("git", ["-C", dir, ...args], {
-      stdio: ["inherit", "pipe", "pipe"],
+      stdio: ["ignore", "pipe", "pipe"],
+      env: nonInteractiveEnv(dir),
     });
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
@@ -17,6 +32,17 @@ export function git(streams: Streams, dir: string, ...args: string[]): Promise<v
     child.once("error", (error) => reject(gitFailure(args, error.message)));
     child.once("close", (code) => (code === 0 ? resolve() : reject(gitFailure(args))));
   });
+}
+
+export function nonInteractiveEnv(dir: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_EDITOR: "true" };
+  if (
+    env.GIT_SSH_COMMAND === undefined &&
+    env.GIT_SSH === undefined &&
+    gitOutputOrUndefined(dir, "config", "--get", "core.sshCommand") === undefined
+  )
+    env.GIT_SSH_COMMAND = DEFAULT_SSH_COMMAND;
+  return env;
 }
 
 function gitFailure(args: string[], detail?: string): CliError {

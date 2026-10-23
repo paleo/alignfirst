@@ -47,7 +47,11 @@ The prompt reaches the agent through stdin. A new session's prompt opens with a 
 
 The session file is the durable handoff of a run. Its frontmatter holds `profile` (named selection or null), `agent`, the user-facing `model`, `sessionId`, `status` (`running`, then `succeeded` or `failed`) and an optional `exitReason`; a `---- Result ----` block closes it. The block lists every completed response oldest first, separated by `---- Later result ----`. Each non-empty Claude `result` and each Pi assistant message ending with `stop` counts as a response. Earlier responses also precede failure or termination text. The completion turn finds it with `aligndev code status`. A response containing `---- Result ----` on its own line can be truncated by status because the legacy format also uses that line as its boundary. Fixing this ambiguity requires unambiguous payload framing with legacy-file support; it remains a follow-up limitation. String metadata containing control characters is JSON-quoted on one physical line, preserving embedded newlines in exact profile/model names through completion and resume.
 
+Each new record carries `machineId`, a random UUID read from `~/.alignfirst/machine-id`, created on first use with an exclusive write. Concurrent creators read the winning id. An empty or unreadable file is an error; older records read as `machineId: null`.
+
 Session files live under the project's `_aligndev` location, read from `alignfirst config --json`: `<ticket>/_aligndev/`, or `_aligndev/` without a ticket. That location is below the project's `.plans/`, unless a companion directory holds a separate tree.
+
+A run is written as `<stamp>.running.md` and renamed to `<stamp>.md` when it ends, by completion or by sealing. `alignfirst sync` leaves `_aligndev/*.running.md` out of its snapshots, so a log reaches the work-files repository only once its run has ended. `code status <path>` resolves a retained `.running.md` path to the completed file. Records written before this convention keep their name and their `running` status until their run ends.
 
 The CLI creates a missing companion before launch, independently of permission mode. Claude Code/Codex normal modes add it through `--add-dir`; Pi uses ordinary OS access. When some AlignFirst files live there, a new session's prompt starts with `alignfirst context`. See [Companion Directories](companion-directories.md).
 
@@ -57,7 +61,11 @@ The CLI creates a missing companion before launch, independently of permission m
 
 On handled termination, the CLI seals the session file (`status: failed`, `exitReason: terminated`), sends `SIGTERM` to its child, and escalates to `SIGKILL` after its two-second grace. The parent host owns attached process-tree supervision; this does not promise crash-proof descendant cleanup.
 
-Abrupt host loss, a crash or `SIGKILL` can leave a stale `running` status. `aligndev code status` checks that the recorded pid still runs; on Linux, the recorded process start time also detects pid reuse. A dead run is sealed as `terminated` before the report. The `contextTokens` line reports what the run left in the agent's context window; a resumed session keeps growing.
+Abrupt host loss, a crash or `SIGKILL` can leave a stale `running` status. Status queries and launch scans seal a record as `terminated` only when its `machineId` matches this installation and its process is conclusively gone: probing the pid returns `ESRCH`, or the pid exists and its readable Linux start time differs from the recorded one. Status prints `machineId` after `pid`.
+
+Foreign and legacy records stay untouched, as do records with no pid or an inconclusive process probe (`EPERM`, or a live pid with no recorded or readable current start time). Running records still block applicable launches. Guard errors name their path; foreign and legacy records must be checked on their machine, or have their `status` set by hand once the run has ended.
+
+The `contextTokens` line reports what the run left in the agent's context window; a resumed session keeps growing.
 
 ### Authentication
 

@@ -30,7 +30,7 @@ interface Blob {
   mode: string;
 }
 
-export function resolveConflictedPaths(streams: Streams, repoDir: string): void {
+export function resolveConflictedPaths(streams: Streams, repoDir: string): string[] {
   const conflicts = readConflicts(repoDir);
   const remote = readTree(repoDir, "HEAD");
   const local = readTree(repoDir, "REBASE_HEAD");
@@ -55,7 +55,7 @@ export function resolveConflictedPaths(streams: Streams, repoDir: string): void 
   preserveCompanionSummaries(repoDir, remote, local, resolution);
   preserveLocalReferences(repoDir, remote, local, resolution);
   assertNoLaterEdits(repoDir, resolution.renames);
-  applyResolution(repoDir, conflicts, resolution);
+  const changed = applyResolution(repoDir, conflicts, resolution);
   for (const path of conflicts.keys()) {
     const renamed = resolution.renames.get(path);
     streams.stdout.write(
@@ -64,6 +64,7 @@ export function resolveConflictedPaths(streams: Streams, repoDir: string): void 
         : `Resolved ${path}: kept the published version; saved the local version as ${renamed}.\n`,
     );
   }
+  return changed;
 }
 
 function readConflicts(repoDir: string): Map<string, Set<number>> {
@@ -283,7 +284,7 @@ function applyResolution(
   repoDir: string,
   conflicts: ReadonlyMap<string, Set<number>>,
   resolution: Resolution,
-): void {
+): string[] {
   const removed = [...new Set([...conflicts.keys(), ...resolution.renames.keys()])].filter(
     (path) => !resolution.files.has(path),
   );
@@ -303,6 +304,7 @@ function applyResolution(
     writeFileSync(target, content);
     chmodSync(target, mode);
   }
+  return [...removed, ...writes.map(({ path }) => path)];
 }
 
 function assertRegularPath(repoDir: string, path: string): void {

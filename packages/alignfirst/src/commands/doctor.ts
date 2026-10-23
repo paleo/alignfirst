@@ -176,7 +176,17 @@ function inspectGit(
 function inspectPlans(ctx: CommandContext): DoctorLine[] {
   const mode = resolvePlansMode(ctx.cwd, layoutOf(ctx).locations[".plans"], ctx.form, ctx.home);
   if (mode.kind === "shared" && findStoppedRebase(mode.repoToplevel) !== undefined)
-    return [{ level: "error", text: `rebase stopped on a conflict in ${mode.repoToplevel}` }];
+    return [
+      { level: "error", text: `rebase stopped on a conflict in ${mode.repoToplevel}` },
+      {
+        level: "error",
+        text: `git -C ${mode.repoToplevel} add -A && git -C ${mode.repoToplevel} rebase --continue`,
+      },
+      {
+        level: "error",
+        text: `To abandon the rebase and return the branch to its state before the pull, keeping the local commits: git -C ${mode.repoToplevel} rebase --abort`,
+      },
+    ];
   return [
     {
       level: "ok",

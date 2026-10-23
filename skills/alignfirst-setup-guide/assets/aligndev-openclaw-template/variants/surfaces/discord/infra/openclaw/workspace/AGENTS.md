@@ -95,3 +95,7 @@ These limits are deliberate rules, and you follow the rules. When one blocks you
 ## Red Lines
 
 - Don't exfiltrate API keys and tokens. Ever.
+
+## Pull requests
+
+By default, create every PR as a draft, unless the user asks for a ready one. 
