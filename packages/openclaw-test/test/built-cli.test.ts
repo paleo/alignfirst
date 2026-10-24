@@ -50,21 +50,19 @@ afterEach(async () => {
 });
 
 describe.each(runtimes)("built harness with %s", (runtime) => {
-  it("renders usage, malformed run and env recovery without losing the runtime", () => {
+  it.each([
+    { args: ["--help"] },
+    { args: ["run"] },
+    { args: ["run", "--channel"] },
+    { args: ["run", "--bogus"] },
+    { args: ["env", "oops"] },
+  ])("renders usage and recovery for $args without losing the runtime", ({ args }) => {
     const fixture = consumer();
-    for (const args of [
-      ["--help"],
-      ["run"],
-      ["run", "--channel"],
-      ["run", "--bogus"],
-      ["env", "oops"],
-    ]) {
-      const result = run(runtime, fixture, args);
-      expect(result.status, result.stderr).toBe(1);
-      const command = runtime === bun ? "bunx --bun @alignfirst/openclaw-test" : "openclaw-test";
-      expect(result.stderr).toContain(`usage: ${command}`);
-      if (args[0] === "run") expect(result.stderr).toContain(`${command} env up`);
-    }
+    const result = run(runtime, fixture, args);
+    expect(result.status, result.stderr).toBe(1);
+    const command = runtime === bun ? "bunx --bun @alignfirst/openclaw-test" : "openclaw-test";
+    expect(result.stderr).toContain(`usage: ${command}`);
+    if (args[0] === "run") expect(result.stderr).toContain(`${command} env up`);
   });
 
   it.each(["npm", "bun"])("retains %s package-runner recovery forms", (manager) => {
