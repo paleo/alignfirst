@@ -94,7 +94,11 @@ describe("validateEffectivePlans", () => {
   it("includes the invocation failure and the selected command form's preparation pointer", () => {
     const fixture = gateCommand("{}");
     fixture.ctx.alignfirstCommand = [join(fixture.ctx.cwd, "missing-alignfirst")];
-    fixture.ctx.forms = resolveCommandForms({ npm_config_user_agent: "npm" });
+    fixture.ctx.forms = resolveCommandForms({
+      npm_config_user_agent: "npm/12.2.0",
+      npm_command: "exec",
+      npm_lifecycle_event: "npx",
+    });
     expect(() => validateEffectivePlans(fixture.ctx)).toThrow("alignfirst is not installed");
     expect(() => validateEffectivePlans(fixture.ctx)).toThrow(
       "See `npx -y aligndev guide work-files-setup` for authorized preparation.",

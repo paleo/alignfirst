@@ -133,7 +133,11 @@ describe("context command", () => {
   it("renders the npx command form", async () => {
     const result = await runMain(["context"], {
       cwd: temp(),
-      env: { npm_config_user_agent: "npm/10.0.0 node/v22.0.0" },
+      env: {
+        npm_config_user_agent: "npm/10.0.0 node/v22.0.0",
+        npm_command: "exec",
+        npm_lifecycle_event: "npx",
+      },
     });
     expect(result.stdout).toContain("run `npx -y alignfirst guide <protocol>` and follow it");
   });

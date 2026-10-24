@@ -155,7 +155,11 @@ describe("guide command", () => {
   it("renders the npm command form", async () => {
     const result = await runMain(["guide"], {
       cwd: temp(),
-      env: { npm_config_user_agent: "npm/11.0.0 node/v22.0.0" },
+      env: {
+        npm_config_user_agent: "npm/11.0.0 node/v22.0.0",
+        npm_command: "exec",
+        npm_lifecycle_event: "npx",
+      },
     });
     expect(result.stdout).toContain("npx -y alignfirst guide spec");
   });

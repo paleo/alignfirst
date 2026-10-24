@@ -1,3 +1,4 @@
+import { type Invocation, packageCommand, renderCommand } from "@alignfirst/docmap/invocation";
 import { CliError } from "./cli-error.js";
 import type { ProjectConfig } from "./project-config.js";
 import { satisfiesRange } from "./version-range.js";
@@ -11,14 +12,14 @@ export function checkCliRange(
   config: ProjectConfig | undefined,
   installedVersion: string,
   commandArgs: string[],
+  invocation: Invocation,
 ): void {
   const result = cliRangeResult(config, installedVersion);
   if (result === undefined || result.satisfied) return;
-  const command = commandArgs.join(" ");
+  const recovery = packageCommand(invocation, invocation.target, `alignfirst@${result.range}`);
   throw new CliError(
     `alignfirst ${installedVersion} is installed; this project requires ${result.range}.\n` +
-      `Run a matching version:  npx -y alignfirst@"${result.range}" ${command}\n` +
-      `Or install it globally:  npm install -g alignfirst@"${result.range}"`,
+      `Run a matching version:  ${renderCommand(recovery, commandArgs)}`,
   );
 }
 

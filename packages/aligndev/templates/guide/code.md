@@ -89,7 +89,7 @@ Retain these distinct values for each run:
 Prepare the literal delegated prompt in a UTF-8 file, then launch the ordinary quoted shell command through `background` with `action: "start"` and `cwd`. Supply `--quiet --meta <unique-run-key>` yourself; the extension never parses or appends CLI options. This example assumes `/tmp/aligndev-request.txt` already contains the request. Generate a fresh key for every actual launch; the UUID below illustrates one run:
 
 ```json
-{"action":"start","command":"{{ALIGNDEV}} code new --message-file '/tmp/aligndev-request.txt' --quiet --meta 'a20bc7c1-c056-4d07-8cc2-90fe491a6df6'","cwd":"/srv/projects/example","label":"coding run"}
+{"action":"start","command":{{BACKGROUND_COMMAND_JSON}},"cwd":"/srv/projects/example","label":"coding run"}
 ```
 
 For resume, use `{{ALIGNDEV}} code resume <sessionId> --message-file <path> --quiet --meta <fresh-run-key>` from the original worktree. A Pi child must resume from its recorded directory. Use safe shell quoting for paths and options; never interpolate raw user text into a command. A quoted heredoc with `--message-file -` is another literal-input route.

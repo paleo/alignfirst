@@ -1,8 +1,13 @@
+import {
+  type LaunchEvidence,
+  invocationCommand,
+  readLaunchEvidence,
+  resolveInvocation,
+} from "@alignfirst/docmap/invocation";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 
 import { CliError } from "./cli-error.js";
-import { resolveCommandForm } from "./command-form.js";
 import { runCompanion } from "./commands/companion.js";
 import { runConfig } from "./commands/config.js";
 import { runContext } from "./commands/context.js";
@@ -20,6 +25,7 @@ import { checkCliRange } from "./version-guard.js";
 
 export interface MainOptions {
   argv?: string[];
+  evidence?: LaunchEvidence;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   home?: string;
@@ -30,13 +36,23 @@ export interface MainOptions {
 export async function main(options?: MainOptions): Promise<number> {
   const argv = options?.argv ?? process.argv;
   const env = options?.env ?? process.env;
+  const evidence = options?.evidence ?? {
+    ...readLaunchEvidence(),
+    env,
+    cwd: options?.cwd ?? process.cwd(),
+  };
+  const invocation = resolveInvocation(
+    { packageName: "alignfirst", binaryName: "alignfirst" },
+    evidence,
+  );
   const ctx: CommandContext = {
     cwd: options?.cwd ?? process.cwd(),
     env,
     home: options?.home ?? env.HOME ?? env.USERPROFILE ?? homedir(),
     stdout: options?.stdout ?? process.stdout,
     stderr: options?.stderr ?? process.stderr,
-    form: resolveCommandForm(env),
+    form: invocationCommand(invocation).withArgs,
+    invocation,
     version: readPackageVersion(),
   };
   const [command, ...args] = argv.slice(2);
@@ -51,7 +67,7 @@ export async function main(options?: MainOptions): Promise<number> {
     }
     if (command !== "config" && command !== "doctor") {
       ctx.projectConfig = resolveProjectConfig(layoutOf(ctx));
-      checkCliRange(ctx.projectConfig?.config, ctx.version, [command, ...args]);
+      checkCliRange(ctx.projectConfig?.config, ctx.version, [command, ...args], invocation);
       writeDeprecationWarnings(ctx.stderr, ctx.projectConfig);
     }
     const code = await dispatch(ctx, command, args);

@@ -1,3 +1,4 @@
+import type { LaunchEvidence } from "@alignfirst/docmap/invocation";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -5,9 +6,15 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { main } from "../src/cli.js";
+import { resolveCommandForms } from "../src/command-form.js";
+import { renderCodeGuide } from "../src/guide/code-guide.js";
 import { ALIGNFIRST_BIN, makeSink, writeConfig } from "./helpers.js";
 
-const NPX_ENV = { npm_config_user_agent: "npm/11.19.0 node/v26.0.0 linux x64" };
+const NPX_ENV = {
+  npm_config_user_agent: "npm/11.19.0 node/v26.0.0 linux x64",
+  npm_command: "exec",
+  npm_lifecycle_event: "npx",
+};
 
 // A global-form command: not preceded by `npx -y `, and not a usage title such as `aligndev code —`.
 const GLOBAL_COMMAND = /(?<!npx -y )\baligndev (code|project|guide)\b(?! —)/;
@@ -21,6 +28,85 @@ afterEach(() => {
 });
 
 describe("command forms", () => {
+  it.each([
+    ["node", {}, "aligndev", ["alignfirst"]],
+    ["node", NPX_ENV, "npx -y aligndev", ["npx", "-y", "alignfirst"]],
+    [
+      "node",
+      { npm_config_user_agent: "bun/1.4.4", npm_command: "exec" },
+      "bunx aligndev",
+      ["bunx", "alignfirst"],
+    ],
+    [
+      "bun",
+      { npm_config_user_agent: "bun/1.4.4", npm_command: "exec" },
+      "bunx --bun aligndev",
+      ["bunx", "--bun", "alignfirst"],
+    ],
+    ["bun", {}, "bunx --bun aligndev", ["bunx", "--bun", "alignfirst"]],
+    [
+      "node",
+      { npm_config_user_agent: "pnpm/10", npm_command: "dlx" },
+      "pnpm dlx aligndev",
+      ["pnpm", "dlx", "alignfirst"],
+    ],
+    [
+      "node",
+      { npm_config_user_agent: "yarn/4", npm_command: "dlx" },
+      "yarn dlx aligndev",
+      ["yarn", "dlx", "alignfirst"],
+    ],
+  ] as const)("preserves %s invocation %j", (runtime, env, self, counterpart) => {
+    const forms = resolveCommandForms(env, { runtime, env, cwd: "/tmp", executable: "/runtime" });
+    expect(forms.aligndev).toBe(self);
+    expect([forms.counterpart.executable, ...forms.counterpart.args]).toEqual(counterpart);
+    const guide = renderCodeGuide("codingAgent", "pi", undefined, undefined, forms);
+    const row = guide.split("\n").find((line) => line.startsWith('{"action":"start"'));
+    expect(JSON.parse(row ?? "").command).toContain(`${self} code new`);
+    expect(guide).toContain(`${forms.alignfirst} guide <protocol>`);
+  });
+
+  it.each(["npm", "bun"] as const)(
+    "retains verified %s scripts only for self and JSON-quotes background commands",
+    (manager) => {
+      const home = makeHome();
+      const name = 'dev"quoted\\path';
+      const entryPoint = join(home, "entry.mjs");
+      writeFileSync(entryPoint, "");
+      const script = `node ${entryPoint}`;
+      const manifest = join(home, "package.json");
+      writeFileSync(manifest, JSON.stringify({ scripts: { [name]: script, af: "alignfirst" } }));
+      const env = {
+        npm_config_user_agent: `${manager}/1`,
+        npm_command: manager === "npm" ? "run" : "run-script",
+        npm_lifecycle_event: name,
+        npm_lifecycle_script: script,
+        npm_package_json: manifest,
+      };
+      const evidence: LaunchEvidence = {
+        runtime: manager === "bun" ? "bun" : "node",
+        env,
+        cwd: home,
+        entryPoint,
+        executable: process.execPath,
+        parentArgv: ["/bin/sh", "-c", script],
+      };
+      const forms = resolveCommandForms(env, evidence);
+      expect(forms.invocation.launcher).toBe("projectScript");
+      expect(forms.aligndev).toBe(
+        manager === "npm" ? `npm run '${name}' --` : `bun --bun run '${name}'`,
+      );
+      expect(forms.alignfirst).toBe(
+        manager === "npm" ? "npx -y alignfirst" : "bunx --bun alignfirst",
+      );
+      const guide = renderCodeGuide("codingAgent", "pi", undefined, undefined, forms);
+      const row = guide.split("\n").find((line) => line.startsWith('{"action":"start"'));
+      const parsed = JSON.parse(row ?? "");
+      expect(parsed.command).toBe(
+        `${forms.aligndev} code new --message-file '/tmp/aligndev-request.txt' --quiet --meta 'a20bc7c1-c056-4d07-8cc2-90fe491a6df6'`,
+      );
+    },
+  );
   it.each([
     ["the aligndev help", ["--help"]],
     ["the code usage", ["code", "--help"]],

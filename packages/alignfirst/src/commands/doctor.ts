@@ -1,3 +1,9 @@
+import {
+  packageCommand,
+  readLaunchEvidence,
+  renderCommand,
+  resolveInvocation,
+} from "@alignfirst/docmap/invocation";
 import { existsSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -217,18 +223,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function inspectSkills(ctx: CommandContext): DoctorLine[] {
   const roots = resolveSkillRoots(ctx);
+  const invocation =
+    ctx.invocation ??
+    resolveInvocation(
+      { packageName: "alignfirst", binaryName: "alignfirst" },
+      { ...readLaunchEvidence(), env: ctx.env, cwd: ctx.cwd },
+    );
+  const update = renderCommand(
+    packageCommand(invocation, { packageName: "skills", binaryName: "skills" }, "skills"),
+    ["update", "--global", "--yes"],
+  );
   const alignfirst = findInstalledSkill(roots, "alignfirst");
   const alignfirstLine: DoctorLine =
     alignfirst === undefined
       ? { level: "ok", text: "alignfirst none" }
-      : describeInstalledSkill("alignfirst", alignfirst);
+      : describeInstalledSkill("alignfirst", alignfirst, update);
   const commands = COMMAND_SKILLS.map((name) => ({
     name,
     installed: findInstalledSkill(roots, name),
   }));
   if (commands.every(({ installed }) => installed === undefined))
     return [alignfirstLine, { level: "ok", text: "no command skill installed" }];
-  return [alignfirstLine, ...commands.map(describeCommandSkill)];
+  return [alignfirstLine, ...commands.map((command) => describeCommandSkill(command, update))];
 }
 
 interface CommandSkill {
@@ -236,18 +252,22 @@ interface CommandSkill {
   installed: InstalledSkill | undefined;
 }
 
-function describeCommandSkill({ name, installed }: CommandSkill): DoctorLine {
+function describeCommandSkill({ name, installed }: CommandSkill, update: string): DoctorLine {
   if (installed === undefined) return { level: "warn", text: `${name} missing` };
-  return describeInstalledSkill(name, installed);
+  return describeInstalledSkill(name, installed, update);
 }
 
-function describeInstalledSkill(name: string, installed: InstalledSkill): DoctorLine {
+function describeInstalledSkill(
+  name: string,
+  installed: InstalledSkill,
+  update: string,
+): DoctorLine {
   const version = installed.version ?? "unknown";
   const major = majorOf(installed.version);
   if (major === undefined || major < 4)
     return {
       level: "warn",
-      text: `${name} ${version} predates v4; update: npx -y skills update --global --yes`,
+      text: `${name} ${version} predates v4; update: ${update}`,
     };
   return { level: "ok", text: `${name} ${version} (${installed.root})` };
 }

@@ -34,11 +34,7 @@ export function renderCodeGuide(
         : `One of ${models.map((model) => `\`${model}\``).join(", ")}`,
     DEFAULT_MODEL:
       defaultModel === undefined ? "the coding agent's default" : `\`${defaultModel}\``,
-    ALIGNFIRST_SETUP: forms.viaNpx
-      ? "The project must be prepared for AlignFirst. `npx -y aligndev` runs the `alignfirst` CLI through `npx`."
-      : "The project must be prepared for AlignFirst, with the `alignfirst` CLI installed (`npm install -g alignfirst`).",
-    ALIGNFIRST_USE: forms.viaNpx
-      ? "`npx -y aligndev code` runs the `alignfirst` CLI through `npx`, and so does the agent: it runs `npx -y alignfirst guide <protocol>` in the project."
-      : "`aligndev code` requires the `alignfirst` CLI on `PATH`. The agent runs `alignfirst guide <protocol>` in the project, so the protocols come from the installed CLI.",
+    ALIGNFIRST_SETUP: `The project must be prepared for AlignFirst. AlignDev uses \`${forms.alignfirst}\` for the AlignFirst CLI.`,
+    ALIGNFIRST_USE: `\`${forms.aligndev} code\` and the agent use the same AlignFirst command: \`${forms.alignfirst} guide <protocol>\` in the project.`,
   });
 }

@@ -34,7 +34,11 @@ const OPENCLAW_CONFIG = {
 const CODING_AGENT_CONFIG = { platform: "codingAgent", code: { agent: "claude" } };
 
 const GLOBAL_FORMS = resolveCommandForms({});
-const NPX_ENV = { npm_config_user_agent: "npm/11.19.0 node/v26.8.1 linux x64" };
+const NPX_ENV = {
+  npm_config_user_agent: "npm/11.19.0 node/v26.8.1 linux x64",
+  npm_command: "exec",
+  npm_lifecycle_event: "npx",
+};
 const CHILDREN: readonly CodingAgent[] = ["claude", "codex", "pi"];
 
 const PLAYBOOK_TITLES: Record<string, string> = {
@@ -611,7 +615,7 @@ describe("work-files and lightweight worktree runbooks", () => {
         `Run \`${forms.alignfirst} plans check --json\` again from PROJECT_PATH`,
         "If `--json` is rejected",
         "selected AlignFirst CLI needs upgrading alongside AlignDev",
-        "project's local `alignfirst` dependency, which takes precedence",
+        "project's local `alignfirst` dependency first",
         "Retry the JSON check after upgrading",
         `${forms.alignfirst} config --json`,
         "existing companion copy wins over an existing project copy",

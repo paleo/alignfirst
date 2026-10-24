@@ -22,7 +22,11 @@ const COMPANION_SETUP = new URL(
   import.meta.url,
 );
 const REGISTRATION_STATES = ["missing", "profileOnly", "registered"] as const;
-const NPX_ENV = { npm_config_user_agent: "npm/11.19.0 node/v26.8.1 linux x64" };
+const NPX_ENV = {
+  npm_config_user_agent: "npm/11.19.0 node/v26.8.1 linux x64",
+  npm_command: "exec",
+  npm_lifecycle_event: "npx",
+};
 
 interface OnboardingReport extends ProjectReport {
   companion: OnboardingCompanion | null;

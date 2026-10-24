@@ -35,6 +35,9 @@ export function renderGuideTemplate(
   const placeholders: Record<string, string> = {
     ALIGNDEV: forms.aligndev,
     ALIGNFIRST: forms.alignfirst,
+    BACKGROUND_COMMAND_JSON: JSON.stringify(
+      `${forms.aligndev} code new --message-file '/tmp/aligndev-request.txt' --quiet --meta 'a20bc7c1-c056-4d07-8cc2-90fe491a6df6'`,
+    ),
     ...values,
   };
   let text = renderBlocks(readTemplate(`guide/${name}`), active, name);

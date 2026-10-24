@@ -169,7 +169,7 @@ function claudeAuthenticationMessage(detail?: string): string {
     "Coding agent not authenticated (authentication_failed): the host session is missing, " +
     "expired, or rejected. An administrator must re-login with the same effective environment and cwd as the child " +
     "(apply profile unset/env/configDir, including HOME, PATH and credential routing; run `claude`, then " +
-    "`/login`) before `aligndev code` can run again.";
+    "`/login`) before another coding run.";
   const reason = detail?.trim();
   return reason === undefined || reason === "" ? base : `${base}\n\n${reason}`;
 }

@@ -952,9 +952,7 @@ function renderHelp(
       : `${agent === "pi" ? "Pi native selectors (including provider/model:thinking)" : "Claude model values"} pass through unchanged.`;
   const modelPolicy =
     models === undefined ? "Any nonblank pi-native selector" : `One of ${models.join(", ")}`;
-  const requires = forms.viaNpx
-    ? "Requires: the alignfirst CLI, run through npx, for the project layout, side tickets and the\ndelegated protocols."
-    : "Requires: the alignfirst CLI on PATH (npm install -g alignfirst), for the project layout, side\ntickets and the delegated protocols.";
+  const requires = `Requires: the AlignFirst CLI through \`${forms.alignfirst}\`, for the project layout, side\ntickets and the delegated protocols.`;
   return `aligndev code — run a coding agent through AlignFirst protocols.
 
 Usage:
