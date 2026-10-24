@@ -85,7 +85,7 @@ export function runTicket(ctx: CommandContext, args: string[]): number {
 }
 
 function renderUsage(ctx: CommandContext): string {
-  return USAGE.replaceAll("{{FORM}}", ctx.form);
+  return USAGE.replaceAll("{{FORM}}", () => ctx.form);
 }
 
 function parseTicketArgs(

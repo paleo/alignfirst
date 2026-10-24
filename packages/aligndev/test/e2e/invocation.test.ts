@@ -53,7 +53,12 @@ describe("built script invocation", () => {
     expect(followup.status, followup.stderr).toBe(0);
     expect(followup.stdout).toContain("npm run 'ad$&' -- code status");
 
-    for (const args of [["context"], ["guide", "spec"], ["docmap", "--guide"]]) {
+    for (const args of [
+      ["context"],
+      ["guide", "spec"],
+      ["docmap", "--guide"],
+      ["ticket", "--help"],
+    ]) {
       const result = runScript("npm", fixture, "af$&", args);
       expect(result.status, result.stderr).toBe(0);
       expect(result.stdout).toContain("npm run 'af$&' --");

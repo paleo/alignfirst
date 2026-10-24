@@ -3,7 +3,15 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { configureGit, git, makeCompanionProject, makeTempDir, runMain } from "./helpers.js";
+import { runTicket } from "../src/commands/ticket.js";
+import {
+  configureGit,
+  git,
+  makeCompanionProject,
+  makeSink,
+  makeTempDir,
+  runMain,
+} from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -12,6 +20,24 @@ afterEach(() => {
 });
 
 describe("ticket command", () => {
+  it.each(["$&", "$'", "$`", "$$"])("preserves %s in help and error usage", (token) => {
+    const form = `npm run 'af${token}' --`;
+    const stdout = makeSink();
+    const ctx = {
+      cwd: "/tmp",
+      env: {},
+      home: "/tmp",
+      form,
+      version: "0.0.0",
+      stdout,
+      stderr: makeSink(),
+    };
+    expect(runTicket(ctx, ["--help"])).toBe(0);
+    expect(stdout.text().split(form)).toHaveLength(4);
+    expect(stdout.text()).not.toContain("{{FORM}}");
+    expect(() => runTicket(ctx, ["--unknown"])).toThrow(stdout.text().trim());
+  });
+
   it("creates, lists and restores ticket directories", async () => {
     const cwd = makeProject();
     const created = await runMain(["ticket", "78"], { cwd });

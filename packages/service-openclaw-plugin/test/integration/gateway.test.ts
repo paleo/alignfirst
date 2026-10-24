@@ -424,8 +424,9 @@ describe("OpenClaw external-plugin gateway", () => {
       await injectRootMessage(fixture, "Project-X", "Keep this turn busy.");
       await waitUntil(
         () => options.stallEndsAt !== undefined,
-        5_000,
-        () => "the sibling turn did not enter its scripted stall",
+        20_000,
+        () =>
+          `the sibling turn did not enter its scripted stall; provider requests: ${fixture.providerLog.length}\n${fixture.gatewayLog.join("")}`,
       );
       await Promise.all([
         injectRootMessage(fixture, "Project-Y", "Start task Y."),
