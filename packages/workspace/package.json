@@ -49,7 +49,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@alignfirst/docmap": "^0.11.3"
+    "@alignfirst/docmap": "~0.11.2"
   },
   "devDependencies": {
     "@types/node": "~26.6.5",

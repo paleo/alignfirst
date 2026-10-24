@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Build and pack the local harness and service plugin workspace packages into ./vendor/*.tgz.
+// Build and pack the local harness, plugins and invocation provider into ./vendor/*.tgz.
 //
 // aligndev-openclaw-tests is a standalone consumer (not a root workspace member) whose
 // Docker image installs these packages via `npm ci` at build time. Pulling them
@@ -20,9 +20,9 @@ const CONSUMER_DIR = resolve(HERE, "..");
 const VENDOR_DIR = resolve(HERE, "../vendor");
 const LOCK_PATH = resolve(CONSUMER_DIR, "package-lock.json");
 
-// Build order matters: the mock wrappers and harness resolve types from
-// channel-mock-core's dist, so it is built (and listed) first.
+// Build providers before consumers: invocation and channel types come from their dist exports.
 const PACKAGES = [
+  { name: "@alignfirst/docmap", tarball: "docmap.tgz" },
   { name: "@alignfirst/openclaw-channel-mock-core", tarball: "openclaw-channel-mock-core.tgz" },
   { name: "@alignfirst/openclaw-discord-mock", tarball: "openclaw-discord-mock.tgz" },
   { name: "@alignfirst/openclaw-slack-mock", tarball: "openclaw-slack-mock.tgz" },

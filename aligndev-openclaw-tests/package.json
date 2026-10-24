@@ -24,6 +24,7 @@
     "protobufjs": false
   },
   "dependencies": {
+    "@alignfirst/docmap": "file:vendor/docmap.tgz",
     "@anthropic-ai/sdk": "~0.135.0",
     "@alignfirst/openclaw-channel-mock-core": "file:vendor/openclaw-channel-mock-core.tgz",
     "@alignfirst/openclaw-discord-mock": "file:vendor/openclaw-discord-mock.tgz",

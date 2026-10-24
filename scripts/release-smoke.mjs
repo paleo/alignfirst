@@ -23,13 +23,11 @@ try {
 }
 
 function smokeTestRelease() {
-  const [docmap, alignfirst, aligndev, subagent, background] = [
-    "docmap",
-    "alignfirst",
-    "aligndev",
-    "pi-subagent",
-    "pi-background",
-  ].map(packWorkspace);
+  assert(
+    process.argv.slice(2).every((arg) => arg === "--cli-only"),
+    "Unknown smoke option",
+  );
+  const [docmap, alignfirst, aligndev] = ["docmap", "alignfirst", "aligndev"].map(packWorkspace);
   const cliRoot = disposableInstall("cli", [docmap, alignfirst, aligndev]);
   for (const packed of [docmap, alignfirst, aligndev]) {
     const manifest = installedManifest(cliRoot, packed.name);
@@ -45,16 +43,23 @@ function smokeTestRelease() {
   verifyCliVersion(cliRoot, "alignfirst", ["--version"], alignfirst.version);
   verifyCliVersion(cliRoot, "alignfirst", ["docmap", "--version"], docmap.version);
   verifyCliVersion(cliRoot, "aligndev", ["--version"], aligndev.version);
-  for (const executable of ["alignfirst", "aligndev"]) {
+  verifyCliVersion(cliRoot, "docmap", ["--version"], docmap.version);
+  verifyInvocationConsumers(cliRoot);
+  for (const executable of ["alignfirst", "aligndev", "docmap"]) {
     assert.match(
       execFileSync(join(cliRoot, "node_modules/.bin", executable), ["--help"], {
         cwd: cliRoot,
         encoding: "utf8",
         env: isolatedEnvironment(cliRoot),
       }),
-      /Usage:/i,
+      executable === "docmap" ? /Commands:/ : /Usage:/i,
     );
   }
+  console.log(
+    `CLI release smoke passed: docmap@${docmap.version}, alignfirst@${alignfirst.version}, aligndev@${aligndev.version}.`,
+  );
+  if (process.argv.includes("--cli-only")) return;
+  const [subagent, background] = ["pi-subagent", "pi-background"].map(packWorkspace);
   for (const packages of [[subagent], [background], [subagent, background]]) {
     const root = disposableInstall(
       packages.map((p) => p.name.split("/").at(-1)).join("-"),
@@ -101,6 +106,47 @@ function smokeTestRelease() {
   console.log(
     `Release smoke passed: alignfirst@${alignfirst.version}, aligndev@${aligndev.version}, Pi 1.3.0, both extensions independently/together.`,
   );
+}
+
+function verifyInvocationConsumers(root) {
+  execFileSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      `import assert from "node:assert/strict";
+       import { realpathSync } from "node:fs";
+       import { join } from "node:path";
+       import { fileURLToPath } from "node:url";
+       import { createCommand, renderCommand } from "@alignfirst/docmap/invocation";
+       assert.equal(renderCommand(createCommand("bunx", ["--bun", "alignfirst"])),
+         "bunx --bun alignfirst");
+       assert.equal(realpathSync(fileURLToPath(import.meta.resolve("@alignfirst/docmap/invocation"))),
+         join(process.cwd(), "node_modules/@alignfirst/docmap/dist/invocation.js"));`,
+    ],
+    { cwd: root, env: isolatedEnvironment(root), stdio: "inherit", timeout: 10000 },
+  );
+  const env = isolatedEnvironment(root);
+  env.PATH = `${join(root, "node_modules/.bin")}${process.platform === "win32" ? ";" : ":"}${env.PATH}`;
+  const project = join(root, "project");
+  mkdirSync(project);
+  writeFileSync(join(root, ".alignfirst-projects.json"), "{}\n");
+  execFileSync("git", ["init", "--quiet"], { cwd: project, env });
+  const report = JSON.parse(
+    execFileSync(
+      join(root, "node_modules/.bin/aligndev"),
+      ["project", "status", project, "--json"],
+      {
+        cwd: root,
+        env,
+        encoding: "utf8",
+        timeout: 10000,
+      },
+    ),
+  );
+  assert.equal(report.path, project, "Packed AlignDev must load the real AlignFirst config report");
+  assert.equal(report.companion, null);
+  assert.equal(report.locations.docs.path, join(project, "docs"));
 }
 
 function packWorkspace(directory) {
@@ -228,13 +274,8 @@ function isolatedEnvironment(root) {
   for (const key of Object.keys(env)) {
     if (
       /API_KEY|TOKEN|SECRET|PASSWORD/.test(key) ||
-      [
-        "NODE_PATH",
-        "NODE_OPTIONS",
-        "PI_PACKAGE_DIR",
-        "PI_MANAGED_INSTALL_ROOT",
-        "npm_config_user_agent",
-      ].includes(key)
+      ["NODE_PATH", "NODE_OPTIONS", "PI_PACKAGE_DIR", "PI_MANAGED_INSTALL_ROOT"].includes(key) ||
+      /^(npm_|NPM_|BUN_|INIT_CWD$)/.test(key)
     )
       delete env[key];
   }
