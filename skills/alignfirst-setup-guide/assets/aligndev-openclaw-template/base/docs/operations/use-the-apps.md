@@ -1,7 +1,7 @@
 ---
 title: Use the Apps
 read_when:
-  - letting a team member reach the assistant from the web, desktop or mobile apps
+  - letting someone reach the assistant from the desktop apps, or later from the mobile apps
   - a device pairing request is pending
   - a conversation does not reach a project
 ---
@@ -10,11 +10,44 @@ read_when:
 
 **Operator**, after the smoke test of [07-channel.md](../installations/07-channel.md). The OpenClaw apps are clients of the gateway that serves the channel: the web Control UI, the desktop apps and the mobile apps. A conversation created in an app is a working session, as a thread is on the channel.
 
+The desktop apps come first, through the SSH tunnel. The mobile apps come later, once app conversations prove useful: they need Tailscale Serve.
+
 The steps below derive from the installed OpenClaw documentation, under `/home/{{SERVICE_USER}}/.npm-system-global/lib/node_modules/openclaw/docs/`. Re-read the named documents after an OpenClaw upgrade.
 
-## 1. Expose the gateway
+## 1. Desktop apps
 
-The gateway listens on loopback, and the operator reaches it through an SSH tunnel ([04 § 11](../installations/04-openclaw.md#11-dashboard)). The team reaches it through Tailscale Serve (`gateway/stable-https-url.md`, `gateway/tailscale.md`). Tailscale terminates HTTPS on the tailnet and proxies to the loopback gateway, which opens no port of its own. The mobile apps need this `wss://` route: they refuse plain `ws://` beyond a private LAN.
+A desktop app reaches the loopback gateway through the SSH tunnel of [04 § 11](../installations/04-openclaw.md#11-dashboard), as the dashboard does (`gateway/remote.md`). Nothing new opens on the server. The tunnel logs in as `{{SERVER_ADMIN_USER}}`, so this route serves the people who hold that login.
+
+> **User action required.** Keep the tunnel running while the app is in use:
+>
+> ```sh
+> ssh -N -L 18789:127.0.0.1:18789 {{SERVER_ADMIN_USER}}@<vps-ip>
+> ```
+
+Each app connects to `ws://127.0.0.1:18789` with the gateway token (`platforms/*.md` lists the downloads):
+
+- **macOS**: `OpenClaw-<version>.dmg` from the OpenClaw GitHub releases. **Connection…** → **OpenClaw runs** → **Remote (another host)**, then the address and the token (`platforms/mac/remote.md`). The app's own **SSH tunnel** mode runs `openclaw` commands on the server and needs the CLI on the SSH account's `PATH`; the manual tunnel needs nothing there.
+- **Linux**: the desktop companion. **Gateways** → **Manage Gateways…** → **Add Gateway**, with a direct URL and token authentication (`platforms/linux.md`).
+- **Windows**: Windows Hub. **Advanced setup**, a remote gateway by URL and token (`platforms/windows.md`).
+
+The app loads the dashboard from `http://127.0.0.1:18789`, which the seed already lists in `gateway.controlUi.allowedOrigins`.
+
+The gateway sees a tunnelled connection as loopback, and approves its first pairing without a prompt (`gateway/pairing.md`). The approved device holds operator access to the gateway, `operator.admin` included: creating a conversation on a project folder requires it. Check the new device after the first connection:
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- openclaw devices list
+```
+
+The same silent approval covers the app's node, which offers the computer's screen and commands to the gateway. The assistant uses no node. An approved node would let a request from any team member act on that computer, so remove it. A removed node is never approved silently again; reject its later requests ([§ 3](#3-nodes-and-departures)).
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- openclaw nodes list
+sudo -i -u {{SERVICE_USER}} -- openclaw nodes remove --node <id>
+```
+
+## 2. Mobile apps, through Tailscale Serve
+
+Opt-in, for later. The mobile apps need a `wss://` route: they refuse plain `ws://` beyond a private LAN. Tailscale Serve provides one (`gateway/stable-https-url.md`, `gateway/tailscale.md`). Tailscale terminates HTTPS on the tailnet and proxies to the loopback gateway, which opens no port of its own. Serve also opens the web Control UI and the desktop apps to members without the `{{SERVER_ADMIN_USER}}` login.
 
 > **User action required.** In the Tailscale admin console, enable MagicDNS and **DNS > HTTPS Certificates**. Each team member's device joins the tailnet.
 
@@ -60,11 +93,9 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://<host>.<tailnet>.ts.net/
 
 The team uses `https://<host>.<tailnet>.ts.net` in a browser and `wss://<host>.<tailnet>.ts.net` where an app asks for a gateway URL.
 
-## 2. Devices
+### Devices
 
-Each device needs the operator's approval. An approved device holds operator access to the gateway, `operator.admin` included: creating a conversation on a project folder requires it. Approve only team members' devices.
-
-How a device pairs depends on the client (`web/control-ui/connect-and-pair.md`, `cli/qr.md`, `cli/dashboard.md`):
+Each device needs the operator's approval. Approve only team members' devices. How a device pairs depends on the client (`web/control-ui/connect-and-pair.md`, `cli/qr.md`, `cli/dashboard.md`):
 
 - **Mobile apps and Windows Hub** redeem a setup code. Generate one per device and hand it to the member through a private channel. The code is short-lived and carries the approval, so treat it like a password. Control UI → **Devices** → **Pair device** creates the same code from an approved browser.
 
@@ -72,7 +103,7 @@ How a device pairs depends on the client (`web/control-ui/connect-and-pair.md`, 
   sudo -i -u {{SERVICE_USER}} -- openclaw qr
   ```
 
-- **A browser** redeems a one-time link. `sudo -i -u {{SERVICE_USER}} -- openclaw dashboard --json` prints it as `browserUrl`, on the loopback address. Replace its base address with the `https://` Serve URL and its `gatewayUrl` fragment value with the `wss://` Serve URL, keep the other fragment values, and hand it to the member. It works once, within ten minutes.
+- **A browser** redeems a one-time link. `sudo -i -u {{SERVICE_USER}} -- openclaw dashboard --json` prints it as `browserUrl`, on the loopback address. Replace its base address with the `https://` Serve URL and its `gatewayUrl` fragment value with the `wss://` Serve URL, keep the other fragment values, and hand it to the member. It works once, within ten minutes. Use a persistent browser profile: a private window discards the device identity.
 - **The macOS and Linux desktop apps** sign in with the gateway token, then wait for approval. The token alone grants full operator access through the gateway's HTTP API (`gateway/tools-invoke-http-api.md`): share it only through the password manager.
 
 A device that signed in with the token appears as a pending request. Approve it after checking whose device it is:
@@ -82,7 +113,11 @@ sudo -i -u {{SERVICE_USER}} -- openclaw devices list
 sudo -i -u {{SERVICE_USER}} -- openclaw devices approve <request-id>
 ```
 
-The mobile apps also offer their device as a node: camera, location, screen and commands (`gateway/pairing.md`). The assistant uses no node. An approved node would let a request from any team member act on that device, so reject node requests:
+On iOS and Android, install the OpenClaw app from the App Store or Google Play, then open **Settings** → **Gateway** and scan the setup code (`platforms/ios.md`, `platforms/android.md`).
+
+## 3. Nodes and departures
+
+A mobile app or a desktop app offers its device as a node: camera, location, screen and commands (`gateway/pairing.md`). Reject every node request:
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- openclaw nodes pending
@@ -90,16 +125,6 @@ sudo -i -u {{SERVICE_USER}} -- openclaw nodes reject <request-id>
 ```
 
 When a member leaves, remove their devices with `openclaw devices remove <device-id>`. When they held the gateway token, rotate it ([04 § Rotating a secret](../installations/04-openclaw.md#rotating-a-secret)).
-
-## 3. Install the apps
-
-Each member installs a client, connects it to the Serve URL, then pairs it as above. `platforms/*.md` lists the downloads and requirements:
-
-- **Web**: any browser at the `https://` Serve URL. Use a persistent browser profile: a private window discards the device identity.
-- **macOS**: `OpenClaw-<version>.dmg` from the OpenClaw GitHub releases; **Connect to an existing Gateway**, with the gateway token (`platforms/macos.md`, `platforms/mac/remote.md`).
-- **Linux**: the desktop companion; **Add Gateway**, with the gateway token (`platforms/linux.md`).
-- **Windows**: Windows Hub; **Advanced setup**, a remote gateway with a setup code (`platforms/windows.md`).
-- **iOS and Android**: the OpenClaw app from the App Store or Google Play; **Settings** → **Gateway**, then scan the setup code (`platforms/ios.md`, `platforms/android.md`).
 
 ## 4. Conversations
 

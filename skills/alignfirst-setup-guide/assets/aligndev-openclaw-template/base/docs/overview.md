@@ -29,7 +29,7 @@ channel message ({{ASSISTANT_NAME}} on the selected surface)
 An app conversation needs no triage or handoff ([use-the-apps.md](operations/use-the-apps.md)):
 
 ```text
-app conversation (web, desktop or mobile app, through Tailscale Serve)
+app conversation (desktop app through the SSH tunnel; mobile app through Tailscale Serve)
   → OpenClaw gateway (same unit)
   → playbook (aligndev guide) → aligndev guide --channel app working-session
   → aligndev project (project inventory, canonical paths, ports)
@@ -51,7 +51,7 @@ The runtime model and the coding agent are independent choices: OpenClaw authent
 
 ## Firewall
 
-Default deny incoming, allow outgoing. The OpenClaw gateway binds to loopback. The operator reaches it through an SSH tunnel, the team's apps through Tailscale Serve; the channel connection is outbound.
+Default deny incoming, allow outgoing. The OpenClaw gateway binds to loopback. The operator and the desktop apps reach it through an SSH tunnel, the mobile apps through Tailscale Serve once enabled; the channel connection is outbound.
 
 | Port | Purpose |
 | --- | --- |

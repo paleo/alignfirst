@@ -187,8 +187,8 @@ configure_common() {
   set_secret_ref gateway.auth.token /GATEWAY_AUTH_TOKEN
   set_json gateway.controlUi.allowedOrigins \
     "[\"$GATEWAY_DASHBOARD_ORIGIN\",\"http://127.0.0.1:18789\"]"
-  # The team reaches the apps through Tailscale Serve (docs/operations/use-the-apps.md). The Serve
-  # origin, a .ts.net host, is a private same-origin load and needs no allowedOrigins entry.
+  # The mobile apps reach the gateway through Tailscale Serve (docs/operations/use-the-apps.md). The
+  # Serve origin, a .ts.net host, is a private same-origin load and needs no allowedOrigins entry.
   if [ "${GATEWAY_TAILSCALE_SERVE:-}" = on ]; then
     set_scalar gateway.tailscale.mode serve
     # The operator approves every device: a tailnet identity alone grants no operator access.

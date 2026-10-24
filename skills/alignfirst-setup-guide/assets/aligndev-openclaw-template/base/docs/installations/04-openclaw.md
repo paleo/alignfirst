@@ -280,7 +280,7 @@ sudo -i -u {{SERVICE_USER}} -- openclaw devices list
 sudo -i -u {{SERVICE_USER}} -- openclaw devices approve <request-id>
 ```
 
-Team members reach the gateway from the apps through Tailscale Serve, set up after the smoke test: [use-the-apps.md](../operations/use-the-apps.md).
+The desktop apps reach the gateway through the same tunnel, and the mobile apps through Tailscale Serve, set up after the smoke test: [use-the-apps.md](../operations/use-the-apps.md).
 
 ## 12. Reboot check
 

@@ -164,7 +164,7 @@ Every runbook states its role and its position at the top. Human steps are marke
 8. `09-dev-server-gateway.md` when selected — human: DNS wildcard record and API token, Authelia secrets, gateway users.
 9. `06-security-hardening.md` — last, because it locks what the others write.
 10. `07-channel.md`, smoke test — operator, from the chat client.
-11. `docs/operations/use-the-apps.md` — opens the apps to the team. Human: Tailscale login and tailnet settings; operator: Tailscale Serve through a re-seed, then each device's approval.
+11. `docs/operations/use-the-apps.md` — connects the desktop apps through the SSH tunnel; operator: device and node checks. Tailscale Serve for the mobile apps is opt-in and later. Human: Tailscale login and tailnet settings; operator: Serve through a re-seed, then each device's approval.
 12. `docs/operations/add-project.md` for each managed project. Prepare the project first through this skill's "Prepare a Project for an Assistant" route, which writes `.alignfirst.json`. Project discovery then needs no registration step.
 
 The operator records each task in `.reports/`, committed. The operations runbooks own the rest: `use-the-apps.md` (devices), `configure-assistant.md` (re-seed, secret rotation), `update-assistant.md`, `update-workspace.md`, `recover-assistant.md` (kill switch, backup, restore), `pair-dm-sender.md` (Discord).
@@ -191,7 +191,7 @@ The generated runbooks contain the concrete Ubuntu commands. Keep root commands 
   its regular thread session through a reply run the plugin dispatches, without a human nudge; for
   the wake command, the `openclaw` CLI runs as the service user from the gateway host.
 - Managed-project workspaces are isolated; reports return to the originating thread, and a conversation's report returns to that conversation.
-- The operator approves every app device, and only team members' devices; a tailnet identity alone grants no access, and no node capability is approved.
+- The operator approves every app device that comes through Tailscale Serve, and only team members' devices; a tailnet identity alone grants no access. A desktop app through the SSH tunnel pairs silently as a loopback client, and its node is removed: no node capability stays approved.
 - The runtime harness passes directly and through a private gateway agent turn; each exec shell selects the project runtime independently of OpenClaw's startup snapshot.
 - The gateway survives a reboot.
 - Kill switch, failed-command maintenance cleanup, backup, update and recovery have each been exercised.
