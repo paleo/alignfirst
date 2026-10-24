@@ -181,10 +181,11 @@ install_aligndev_config() {
     install -m 644 "$DIR/aligndev.settings.json" "$ALIGNDEV_CONFIG_FILE"
   fi
   # Explicit overrides avoid the seed cwd's project-registry selection. Validate every profile,
-  # including profiles reachable only through --profile or an editable project registry.
+  # including profiles reachable only through --profile or an editable project registry. The
+  # openclaw platform requires a surface; `app` is served on every deployment.
   local profile
   while IFS= read -r profile; do
-    aligndev guide code --profile "$profile" >/dev/null
+    aligndev guide code --profile "$profile" --channel app >/dev/null
   done < <(jq -r '.profiles[]' <<<"$DEPLOYMENT_PROFILES")
 }
 

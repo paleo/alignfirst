@@ -2,7 +2,7 @@
 title: Overview
 read_when:
   - starting any task in this repository
-  - tracing a request from the channel to a project
+  - tracing a request from the channel or an app to a project
 ---
 
 # Overview
@@ -26,6 +26,17 @@ channel message ({{ASSISTANT_NAME}} on the selected surface)
   → project workspace under ~/projects
 ```
 
+An app conversation needs no triage or handoff ([use-the-apps.md](operations/use-the-apps.md)):
+
+```text
+app conversation (web, desktop or mobile app, through Tailscale Serve)
+  → OpenClaw gateway (same unit)
+  → playbook (aligndev guide) → aligndev guide --channel app working-session
+  → aligndev project (project inventory, canonical paths, ports)
+  → aligndev code (delegation) → coding agent
+  → report in the same conversation
+```
+
 The runtime model and the coding agent are independent choices: OpenClaw authenticates its provider, `aligndev code` starts the agent in the selected named profile. `code.profile` is the deployment default; an explicit override or project registry selection takes precedence. Every provisioned coding/quota store pins `configDir: null` for native-default routing or an explicit service-account directory string. The shared inventory covers default/custom directories and deduplicates shared stores ([configuration.md](configuration.md)). Every provisioned account is available to the service UID; the editable project registry is routing, not authorization. OpenClaw remains the persistent parent even with a Pi child and needs no `pi-background` for delegation.
 
 ## Ownership
@@ -40,7 +51,7 @@ The runtime model and the coding agent are independent choices: OpenClaw authent
 
 ## Firewall
 
-Default deny incoming, allow outgoing. The OpenClaw gateway binds to loopback and is reached through an SSH tunnel; the channel connection is outbound.
+Default deny incoming, allow outgoing. The OpenClaw gateway binds to loopback. The operator reaches it through an SSH tunnel, the team's apps through Tailscale Serve; the channel connection is outbound.
 
 | Port | Purpose |
 | --- | --- |

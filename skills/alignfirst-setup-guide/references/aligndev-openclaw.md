@@ -1,6 +1,6 @@
 # Create an Assistant
 
-An assistant is a dedicated Linux service account. It receives work through Slack or Discord, and delegates coding to Claude Code, Codex or Pi through `aligndev code`. This reference produces its **admin repository**: a private repository rendered from `assets/aligndev-openclaw-template/`, holding the runbooks, the OpenClaw seed and the scripts that rebuild the server from scratch. Once the repository is published, its runbooks under `docs/installations/` take over.
+An assistant is a dedicated Linux service account. It receives work through Slack or Discord and the OpenClaw apps, and delegates coding to Claude Code, Codex or Pi through `aligndev code`. This reference produces its **admin repository**: a private repository rendered from `assets/aligndev-openclaw-template/`, holding the runbooks, the OpenClaw seed and the scripts that rebuild the server from scratch. Once the repository is published, its runbooks under `docs/installations/` take over.
 
 ## Deployment gate
 
@@ -46,7 +46,7 @@ The human performs every interactive authentication and secret entry. Credential
 
 ### Options
 
-- **Surface**: `slack` or `discord`.
+- **Surface**: `slack` or `discord`. Every surface also serves the OpenClaw apps (web, desktop, mobile) through the same gateway.
 - **Coding agent**: `claude-code`, `codex` or `pi`.
 - **Pi child choices**, when selected: provider, native model ID, default/custom native directory, authentication method and optional quota source, independently of OpenClaw's runtime model. Offer installation of the independent `pi-subagent` package only with approval and a duplicate-tool audit. Quota `codex`/`claude` needs its own installed CLI and separately authenticated store; see [Optional quota setup for Pi](coding-agent-assistant.md#optional-quota-setup-for-pi).
 - **Work-files repository**: yes or no. Yes when the team has one (see [plans-setup.md](plans-setup.md)).
@@ -148,7 +148,7 @@ node -e 'for (const f of process.argv.slice(1)) JSON.parse(require("fs").readFil
 npm run validate
 ```
 
-Both `rg` searches must be empty. On the service host, validate the inventory with `node infra/openclaw/deployment-profiles.mjs infra/openclaw/aligndev.settings.json /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json`. The seed then validates every installed profile through an explicit `aligndev guide code --profile <name>`, independent of the seed cwd's project selection. All provisioned profiles are available to the service account: the editable project registry selects routes, not account authorization. Add a search for every collected value that is not a token (the VPS IP, the work-files repository URL, every secret): none may appear in the rendered tree.
+Both `rg` searches must be empty. On the service host, validate the inventory with `node infra/openclaw/deployment-profiles.mjs infra/openclaw/aligndev.settings.json /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json`. The seed then validates every installed profile through an explicit `aligndev guide code --profile <name> --channel app`, independent of the seed cwd's project selection. All provisioned profiles are available to the service account: the editable project registry selects routes, not account authorization. Add a search for every collected value that is not a token (the VPS IP, the work-files repository URL, every secret): none may appear in the rendered tree.
 
 ## Deployment Lifecycle
 
@@ -164,9 +164,10 @@ Every runbook states its role and its position at the top. Human steps are marke
 8. `09-dev-server-gateway.md` when selected — human: DNS wildcard record and API token, Authelia secrets, gateway users.
 9. `06-security-hardening.md` — last, because it locks what the others write.
 10. `07-channel.md`, smoke test — operator, from the chat client.
-11. `docs/operations/add-project.md` for each managed project. Prepare the project first through this skill's "Prepare a Project for an Assistant" route, which writes `.alignfirst.json`. Project discovery then needs no registration step.
+11. `docs/operations/use-the-apps.md` — opens the apps to the team. Human: Tailscale login and tailnet settings; operator: Tailscale Serve through a re-seed, then each device's approval.
+12. `docs/operations/add-project.md` for each managed project. Prepare the project first through this skill's "Prepare a Project for an Assistant" route, which writes `.alignfirst.json`. Project discovery then needs no registration step.
 
-The operator records each task in `.reports/`, committed. The operations runbooks own the rest: `configure-assistant.md` (re-seed, secret rotation), `update-assistant.md`, `update-workspace.md`, `recover-assistant.md` (kill switch, backup, restore), `pair-dm-sender.md` (Discord).
+The operator records each task in `.reports/`, committed. The operations runbooks own the rest: `use-the-apps.md` (devices), `configure-assistant.md` (re-seed, secret rotation), `update-assistant.md`, `update-workspace.md`, `recover-assistant.md` (kill switch, backup, restore), `pair-dm-sender.md` (Discord).
 
 The seed carries only the settings the deployment decided, and follows an OpenClaw default when a release changes it. `docs/configuration.md` states the rule and `update-assistant.md` applies it at each core bump.
 
@@ -189,7 +190,8 @@ The generated runbooks contain the concrete Ubuntu commands. Keep root commands 
   `replyToMode` is `off` or Discord channel `autoThread` is `false`, and a complete request starts in
   its regular thread session through a reply run the plugin dispatches, without a human nudge; for
   the wake command, the `openclaw` CLI runs as the service user from the gateway host.
-- Managed-project workspaces are isolated; reports return to the originating thread.
+- Managed-project workspaces are isolated; reports return to the originating thread, and a conversation's report returns to that conversation.
+- The operator approves every app device, and only team members' devices; a tailnet identity alone grants no access, and no node capability is approved.
 - The runtime harness passes directly and through a private gateway agent turn; each exec shell selects the project runtime independently of OpenClaw's startup snapshot.
 - The gateway survives a reboot.
 - Kill switch, failed-command maintenance cleanup, backup, update and recovery have each been exercised.

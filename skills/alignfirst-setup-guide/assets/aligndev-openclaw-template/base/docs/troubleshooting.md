@@ -1,7 +1,7 @@
 ---
 title: Troubleshooting
 read_when:
-  - the gateway, a channel, the project routing or a delegation fails
+  - the gateway, a channel, an app, the project routing or a delegation fails
 ---
 
 # Troubleshooting
@@ -31,7 +31,7 @@ A project absent from the listing has no `.alignfirst.json` or sits outside a ma
 ## Delegation
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- aligndev guide code
+sudo -i -u {{SERVICE_USER}} -- aligndev guide code --channel app
 sudo -i -u {{SERVICE_USER}} -- \
   openclaw config get models.providers.{{RUNTIME_PROVIDER}}.agentRuntime --json
 # Expected: {"id":"openclaw"}
@@ -51,7 +51,7 @@ sudo -H -u {{SERVICE_USER}} /usr/bin/node \
   /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
   /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json \
   /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
-sudo -i -u {{SERVICE_USER}} -- aligndev guide code --profile <profile>
+sudo -i -u {{SERVICE_USER}} -- aligndev guide code --profile <profile> --channel app
 ```
 
 Deployment requires explicit `code.profile`; singleton counts and per-agent `default: true` flags do not replace it. Duplicate true flags for one agent fail even with a named selection. Unknown or obsolete keys warn on stderr and are ignored, without rewriting settings. Retired direct launch fields and `code.defaultProfiles` have no effect; convert them manually, preserving profile names. Recognized invalid fields and deployment safety violations still fail. A registry-selected profile overrides the global selection; an explicit `--profile` overrides both. Run `alignfirst config --json` from the real project to inspect routing. A resume under another account must find the same native conversation there; no automatic migration occurs. Pi also requires its recorded real cwd.
@@ -104,6 +104,15 @@ sudo journalctl _SYSTEMD_USER_UNIT=openclaw-gateway.service --since today --no-p
 ```
 
 See [gotchas.md](gotchas.md#when-the-bot-may-stay-silent).
+
+## App conversations
+
+Setup and pairing: [use-the-apps.md](operations/use-the-apps.md).
+
+- **The Serve URL times out from a team device** while `tailscale serve status` shows the route: the tailnet policy lacks the TCP 443 grant to the server.
+- **A device connects but gets no answer** (`pairing required`): its request is pending. Approve it with `openclaw devices list` and `openclaw devices approve <request-id>`.
+- **The Control UI reports `origin not allowed`**: the browser loaded it from an origin other than the Serve URL or the tunnel. Use the `https://…ts.net` URL; a different origin needs an entry in `gateway.controlUi.allowedOrigins`, set in `seed/common.sh`.
+- **A conversation does not find its project**: it started on a folder that is not a listed project, or on the agent workspace with a request naming none. The assistant then resolves the request against the project inventory; check the project with `aligndev project list` as under "Project routing".
 
 ## Incidents
 

@@ -55,7 +55,7 @@ Suggest `.local/` by default, even when the repo has no such directory yet: a gi
 
 `runtimeDir` (`.local-wt/` above) stays per-worktree, but the kernel symlinks its `workspace-registry/` sub-directory to the main worktree's, so every worktree reads one registry.
 
-The main worktree's project-local `.plans` may itself be a symlink into a separate work-files repository (see [plans-setup.md](plans-setup.md)); the symlink chain resolves on its own. Companion-backed plans resolve directly through `alignfirst config --json` and need no worktree link; omit `.plans` from `sharedDirs` in that case. AlignDev refuses effective plans tracked by the project's own repository. Missing or project-tracked plans follow the separately authorized `aligndev guide work-files-setup` before ticket or setup effects, without copying existing project files.
+The main worktree's project-local `.plans` may itself be a symlink into a separate work-files repository (see [plans-setup.md](plans-setup.md)); the symlink chain resolves on its own. Companion-backed plans resolve directly through `alignfirst config --json` and need no worktree link; omit `.plans` from `sharedDirs` in that case. AlignDev refuses effective plans tracked by the project's own repository. Missing or project-tracked plans follow the separately authorized `work-files-setup` guide topic of `aligndev` before ticket or setup effects, without copying existing project files.
 
 ### Port range
 

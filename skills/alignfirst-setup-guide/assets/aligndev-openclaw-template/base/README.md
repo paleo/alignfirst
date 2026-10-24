@@ -17,7 +17,7 @@ Private repository that reproduces and operates **{{ASSISTANT_NAME}}**, the Alig
 - [06-security-hardening.md](docs/installations/06-security-hardening.md) — last: it locks what the others write
 - [07-channel.md](docs/installations/07-channel.md) — smoke test
 
-Then [`docs/operations/`](docs/operations/), starting with [add-project.md](docs/operations/add-project.md).
+Then [`docs/operations/`](docs/operations/), starting with [use-the-apps.md](docs/operations/use-the-apps.md), which opens the apps to the team, and [add-project.md](docs/operations/add-project.md).
 
 ## Fresh clone
 

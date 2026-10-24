@@ -65,7 +65,7 @@ The deployment default is `code.profile`. To route this project elsewhere, edit 
 Use the real main-worktree path, not a linked worktree. A selection alone creates no companion and relocates no work files. The registry stays service-writable; it can choose any account provisioned in protected settings. It is routing, not account authorization.
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && alignfirst config --json && aligndev guide code'
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && alignfirst config --json && aligndev guide code --channel app'
 ```
 
 Confirm the effective profile, native directory and model without printing credentials. An explicit `--profile` overrides the registry. Changing a profile on resume must retain the native agent/session and selected account's conversation; it never copies sessions or silently starts another. Pi also requires the recorded real cwd.

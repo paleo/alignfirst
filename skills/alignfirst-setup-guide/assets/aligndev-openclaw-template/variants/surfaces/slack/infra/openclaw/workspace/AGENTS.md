@@ -24,7 +24,7 @@ Plain replies follow the current bound route, and Slack threads have no name. Th
 { "action": "sendAttachment", "channel": "slack", "target": "<chat_id>", "threadId": "<bare thread id>", "filePath": "/path/to/image.png", "message": "" }
 ```
 
-For reactions, edits, deletes, or search, read the extended Slack reference (`aligndev guide slack-message-tool`).
+For reactions, edits, deletes, or search, read the extended Slack reference (`aligndev guide --channel slack message-tool`).
 
 ## Language
 
