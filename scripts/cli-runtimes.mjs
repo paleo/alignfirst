@@ -40,6 +40,7 @@ try {
       "tmp",
       "consumer-runtime-child",
       "aligndev-owned-worktree",
+      "native-project",
     ]) {
       rmSync(join(output, name), { recursive: true, force: true });
     }
@@ -133,7 +134,7 @@ function buildAndInstall(env) {
     ...packages.flatMap((name) => ["--workspace", `./packages/${name}`]),
   ];
   run("build", npm, buildArgs, { ...env, HOME: process.env.HOME }, repository);
-  const dependencies = { openclaw: "2026.10.5" };
+  const dependencies = { openclaw: "2026.10.5", "yarn-classic": "npm:yarn@1.22.22" };
   for (const name of packages) {
     const packed = run(
       `pack-${name}`,
@@ -158,6 +159,9 @@ function buildAndInstall(env) {
           af: "alignfirst",
           "custom docs": "docmap",
           ad: "aligndev",
+          "af$&": "alignfirst",
+          "ad$&": "aligndev",
+          "dm$&": "docmap",
           workspace: "bun workspace.mjs",
           dev: "bun dev.mjs",
         },
@@ -183,6 +187,10 @@ function buildAndInstall(env) {
 }
 
 function prepareFixtures() {
+  copyFileSync(
+    join(repository, "scripts/test/cli-runtime-native.mjs"),
+    join(consumer, "native-agent.mjs"),
+  );
   copyFileSync(
     join(repository, "scripts/test/cli-runtime-agent.mjs"),
     join(consumer, "fake-agent.mjs"),

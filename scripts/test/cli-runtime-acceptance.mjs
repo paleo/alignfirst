@@ -6,6 +6,8 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
+  statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
@@ -99,6 +101,8 @@ function matrix() {
   }
   packageRunnerMatrix(npm, npx);
   scriptAndLockMatrix(npm, npx);
+  literalScriptMatrix(npm);
+  externalNativeMatrix(npm);
   console.log(
     "PASS real launch matrix, verified scripts, conflicting locks and packed package help",
   );
@@ -151,6 +155,149 @@ function scriptAndLockMatrix(npm, npx) {
     runtime: "node",
     contains: "npx -y @alignfirst/docmap",
   });
+}
+
+function literalScriptMatrix(npm) {
+  const context = check("dollar-script-context", npm, ["run", "af$&", "--", "context"], {
+    runtime: "node",
+    contains: "npm run 'af$&' -- guide <protocol>",
+  });
+  const emitted = context.match(/`(npm run 'af\$&' -- guide <protocol>)`/)[1];
+  shell(
+    "dollar-script-emitted-guide",
+    `${emitted.replace("<protocol>", "spec")} --protocol-only`,
+    "node",
+  );
+  check("dollar-docmap-guide", npm, ["run", "dm$&", "--", "--guide"], {
+    runtime: "node",
+    contains: "npm run 'dm$&' -- --check",
+  });
+}
+
+function externalNativeMatrix(npm) {
+  const project = join(output, "native-project");
+  const nativeBin = join(project, "native-bin");
+  const log = join(output, "native-processes.jsonl");
+  const settings = join(process.env.HOME, ".alignfirst", "aligndev.settings.json");
+  mkdirSync(nativeBin, { recursive: true });
+  mkdirSync(join(project, ".plans"));
+  writeFileSync(join(project, ".gitignore"), ".plans/\nnode_modules/\n");
+  mkdirSync(dirname(settings), { recursive: true });
+  symlinkSync(join(root, "node_modules"), join(project, "node_modules"));
+  writeFileSync(
+    join(project, "package.json"),
+    JSON.stringify({
+      private: true,
+      scripts: { ad: "aligndev", "ad$&": "aligndev" },
+    }),
+  );
+  check("native-git-init", "git", ["init", "-b", "main"], { cwd: project });
+  for (const name of ["claude", "codex"]) {
+    writeFileSync(join(nativeBin, name), readFileSync(join(root, "native-agent.mjs")), {
+      mode: 0o755,
+    });
+  }
+  const explicitBin = join(project, "explicit-bun");
+  mkdirSync(explicitBin);
+  symlinkSync(bun, join(explicitBin, "node"));
+  writeFileSync(
+    settings,
+    JSON.stringify({
+      platform: "codingAgent",
+      code: {
+        profile: "claude",
+        profiles: {
+          claude: { agent: "claude", defaultModel: "haiku" },
+          codex: { agent: "codex", defaultModel: "sol" },
+          explicitQuota: { agent: "claude", quota: { source: "codex" } },
+          explicitBun: {
+            agent: "claude",
+            defaultModel: "haiku",
+            env: { PATH: `${explicitBin}:${nativeBin}:${baseEnvironment.PATH}` },
+          },
+        },
+      },
+    }),
+  );
+  const env = { PATH: `${nativeBin}:${bin}:${baseEnvironment.PATH}`, CLI_NATIVE_LOG: log };
+  const launchers = [
+    ["node", node, [entries.aligndev], "node"],
+    ["bun-direct", bun, [entries.aligndev], "bun"],
+    ["bunx-forced", "bunx", ["--bun", "aligndev"], "bun"],
+    ["bun-script-forced", bun, ["--bun", "run", "ad"], "bun"],
+  ];
+  for (const [name, executable, prefix, runtime] of launchers) {
+    const invoke = (suffix, args) =>
+      check(`native-${name}-${suffix}`, executable, [...prefix, ...args], {
+        cwd: project,
+        env,
+        runtime,
+      });
+    invoke("agent", ["code", "new", "-m", "Offline native fixture", "--quiet"]);
+    invoke("implicit-claude-quota", ["code", "quota"]);
+    invoke("discovery-agent", ["code", "new", "--profile", "codex", "-m", "Discover", "--quiet"]);
+    invoke("implicit-codex-quota", ["code", "quota", "--profile", "codex"]);
+    invoke("explicit-quota", ["code", "quota", "--profile", "explicitQuota"]);
+  }
+  assert.ok(readRecords(log).length >= launchers.length * 6);
+  assert.ok(readRecords(log).every((record) => record.runtime === "node"));
+  const before = readRecords(log).length;
+  check(
+    "native-explicit-bun-PATH",
+    bun,
+    [
+      "--bun",
+      "run",
+      "ad",
+      "code",
+      "new",
+      "--profile",
+      "explicitBun",
+      "-m",
+      "Deliberate Bun",
+      "--quiet",
+    ],
+    {
+      cwd: project,
+      runtime: "bun",
+      env: { ...env, CLI_NATIVE_EXPECT: "bun" },
+    },
+  );
+  assert.equal(readRecords(log)[before].runtime, "bun");
+  const yarn = join(root, "node_modules", "yarn-classic", "bin", "yarn.js");
+  check("yarn-classic-version", node, [yarn, "--version"], { contains: "1.22.22" });
+  check("yarn-classic-counterpart", node, [yarn, "run", "ad", "code", "quota"], {
+    cwd: project,
+    env,
+    runtime: "node",
+    contains: "25% used",
+  });
+  const guide = check("dollar-aligndev-guide", npm, ["run", "ad$&", "--", "guide", "code"], {
+    cwd: project,
+    env,
+    runtime: "node",
+    contains: "npm run 'ad$&' -- code status",
+  });
+  assert.ok(!guide.includes("{{"));
+  check(
+    "dollar-aligndev-followup",
+    "/bin/sh",
+    ["-c", "npm run 'ad$&' -- code status --no-ticket"],
+    {
+      cwd: project,
+      env,
+      runtime: "node",
+    },
+  );
+  const owned = readRecords(commands).find(
+    (record) => record.label === "native-bunx-forced-agent",
+  ).observed;
+  const counterparts = owned.filter((record) => record.argv[0]?.endsWith("/alignfirst"));
+  assert.ok(counterparts.length > 0);
+  for (const record of counterparts) {
+    assert.equal(record.runtime, "bun");
+    assert.deepEqual(record.parentArgv.slice(0, 3), ["bunx", "--bun", "alignfirst"]);
+  }
 }
 
 function prepareProject() {
@@ -473,6 +620,7 @@ async function harnessLifecycle() {
     OPENCLAW_WORKSPACE_DIR: join(root, "workspace"),
     OPENCLAW_TEST_PROJECT_DIR: root,
     OPENCLAW_TEST_MODELS: "local/offline",
+    HARNESS_PRIVATE_KEY: "packed-private-key",
   };
   const harness = (label, args, options = {}) =>
     check(label, "bunx", ["--bun", "@alignfirst/openclaw-test", ...args], {
@@ -486,7 +634,12 @@ async function harnessLifecycle() {
   assert.ok(initialized.includes("node:26 npm install"));
   writeFileSync(
     join(root, "openclaw.json"),
-    JSON.stringify({ channels: { mock: {} }, agents: { entries: { main: {} } } }),
+    JSON.stringify({
+      channels: { mock: {} },
+      agents: { entries: { main: {} } },
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: exercise config secret expansion.
+      models: { providers: { local: { apiKey: "${HARNESS_PRIVATE_KEY}" } } },
+    }),
   );
   mkdirSync(join(root, "workspace"), { recursive: true });
   const emittedBuild = initialized.match(/3\. (bun --bun run env:build)/)[1];
@@ -502,6 +655,66 @@ async function harnessLifecycle() {
     status: 7,
     env: { ...env, FAKE_FAIL_UP: "7" },
   });
+  const configPaths = () =>
+    readRecords(env.FAKE_DOCKER_LOG)
+      .filter((call) => call.args?.includes("up"))
+      .map((call) => call.config);
+  harness("harness-warm-up", ["env", "up"]);
+  let previous = configPaths().at(-1);
+  assert.ok(existsSync(previous));
+  assert.equal(statSync(previous).mode & 0o777, 0o600);
+  assert.equal(statSync(dirname(previous)).mode & 0o777, 0o700);
+  assert.ok(previous.startsWith(join(process.env.HOME, ".local/state/openclaw-test/")));
+  assert.ok(readFileSync(previous, "utf8").includes("packed-private-key"));
+  for (const iteration of [1, 2]) {
+    const before = readRecords(env.FAKE_DOCKER_LOG).length;
+    harness(`harness-warm-run-${iteration}`, [
+      "run",
+      "--channel",
+      "mock",
+      "--model",
+      "offline",
+      "case",
+    ]);
+    assert.equal(existsSync(previous), false, "superseded warm config was not collected");
+    previous = configPaths().at(-1);
+    assert.ok(existsSync(previous), "mounted warm config was removed");
+    assert.equal(
+      readRecords(env.FAKE_DOCKER_LOG)
+        .slice(before)
+        .filter((call) => call.args?.at(-1) === "down").length,
+      0,
+    );
+  }
+  const mixedBefore = readRecords(env.FAKE_DOCKER_LOG).length;
+  harness("harness-mixed-warm-new", [
+    "run",
+    "--channel",
+    "mock",
+    "--model",
+    "offline",
+    "--parallel",
+    "2",
+    "first",
+    "second",
+  ]);
+  const mixedDowns = readRecords(env.FAKE_DOCKER_LOG)
+    .slice(mixedBefore)
+    .filter((call) => call.args?.at(-1) === "down");
+  assert.equal(mixedDowns.length, 1);
+  assert.ok(mixedDowns[0].args[mixedDowns[0].args.indexOf("-p") + 1].endsWith("-w2"));
+  previous = configPaths().at(-1);
+  assert.ok(existsSync(previous));
+  harness("harness-warm-down", ["env", "down"]);
+  assert.equal(existsSync(previous), false);
+  harness("harness-failing-down", ["run", "--channel", "mock", "--model", "offline", "case"], {
+    status: 9,
+    env: { ...env, FAKE_FAIL_DOWN: "9" },
+  });
+  previous = configPaths().at(-1);
+  assert.ok(existsSync(previous));
+  harness("harness-failing-down-recovery", ["env", "down"]);
+  assert.equal(existsSync(previous), false);
   check("harness-real-offline-imports", bun, [join(root, "runtime-helpers.mjs")], {
     runtime: "bun",
     contains: "SQLITE_ZSTD_OK",
@@ -513,6 +726,7 @@ async function harnessLifecycle() {
     "FAKE_RUNNING",
     143,
   );
+  harness("harness-env-signal-recovery", ["env", "down"]);
   for (const signal of ["SIGINT", "SIGTERM"]) {
     const before = readRecords(env.FAKE_DOCKER_LOG).length;
     await cancel(
@@ -537,7 +751,9 @@ async function harnessLifecycle() {
     const calls = readRecords(env.FAKE_DOCKER_LOG).slice(before);
     assert.equal(calls.filter((call) => call.args?.at(-1) === "down").length, 2);
     const config = calls.find((call) => call.args?.includes("run")).config;
-    assert.equal(existsSync(dirname(config)), false, "rendered config survived teardown");
+    assert.equal(existsSync(config), true, "cancelled teardown removed retained config");
+    harness(`harness-down-${signal}-recovery`, ["env", "down"]);
+    assert.equal(existsSync(config), false, "successful recovery retained unreferenced config");
   }
   await cancel("harness-bus", [entries["openclaw-test"], "bus"], env, "bus listening");
   for (const record of readRecords(join(root, "docker.jsonl"))) {
