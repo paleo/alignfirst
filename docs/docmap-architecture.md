@@ -50,7 +50,7 @@ An explicit `--root <value>` is threaded through **every** suggested command, no
 
 A project script is retained only when lifecycle metadata, its manifest entry, the actual CLI entry point and immediate-parent launch evidence agree. Custom names and npm's argument separator are preserved. Shell programs, stale ancestor metadata and fixed-subcommand scripts fall back safely. Lockfiles neither select the standalone runner nor fabricate a script. Bun-owned scripts running under Bun use `bun --bun run <script>`; ordinary `bun run` can still honor a Node shebang.
 
-`InvocationCommand` carries executable and argv separately from rendered `base`/`withArgs`. Counterpart package commands never reuse a self script. The public subpath loads independently of CLI startup and must be built before its consumers. AlignFirst injects its enclosing command for embedded docmap, including companion roots; that override wins over standalone detection.
+`InvocationCommand` carries executable and argv separately from rendered `base`/`withArgs`. Counterpart package commands never reuse a self script. Yarn 2+ uses `yarn dlx`; Yarn Classic and unknown Yarn versions fall back to `npx -y`. The detected Yarn major is retained separately from verified script ownership, so Classic self scripts remain usable. Template substitutions use callbacks to preserve literal dollar sequences in command text. The public subpath loads independently of CLI startup and must be built before its consumers. AlignFirst injects its enclosing command for embedded docmap, including companion roots; that override wins over standalone detection.
 
 ## CLI Flow
 

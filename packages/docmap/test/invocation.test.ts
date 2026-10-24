@@ -72,12 +72,44 @@ describe("package execution and actual runtime", () => {
     ["npm/12.2.0", "node", "npx -y @alignfirst/docmap"],
     ["bun/1.4.4", "node", "bunx @alignfirst/docmap"],
     ["pnpm/10", "node", "pnpm dlx @alignfirst/docmap"],
-    ["yarn/1.22.22", "node", "yarn dlx @alignfirst/docmap"],
+    ["yarn/1.22.22", "node", "npx -y @alignfirst/docmap"],
+    ["yarn/2.4.3", "node", "yarn dlx @alignfirst/docmap"],
+    ["yarn/4.0.0-rc.1", "node", "yarn dlx @alignfirst/docmap"],
+    ["yarn/unknown", "node", "npx -y @alignfirst/docmap"],
+    ["yarn/4.invalid", "node", "npx -y @alignfirst/docmap"],
+    ["yarn/1.22.22", "bun", "bunx --bun @alignfirst/docmap"],
   ] as const)("agent-only %s runtime %s", (agent, runtime, expected) => {
     const input = evidence({ npm_config_user_agent: agent });
     input.runtime = runtime;
     expect(invocationCommand(resolveInvocation(target, input)).base).toBe(expected);
   });
+
+  it.each([
+    ["yarn/1.22.22 npm/? node/v26.8.1", 1, "npx -y alignfirst"],
+    ["yarn/2.4.3 npm/?", 2, "yarn dlx alignfirst"],
+    ["yarn/4", 4, "yarn dlx alignfirst"],
+    ["yarn/unknown", undefined, "npx -y alignfirst"],
+    [undefined, undefined, "npx -y alignfirst"],
+  ] as const)(
+    "retains Yarn major %s for counterparts and version overrides",
+    (agent, major, runner) => {
+      const input = scriptEvidence("yarn", undefined);
+      input.env = {
+        ...input.env,
+        npm_config_user_agent: agent,
+        npm_execpath: "/tools/yarn/bin/yarn.js",
+      };
+      const invocation = resolveInvocation(target, input);
+      expect(invocation.manager).toBe("yarn");
+      expect(invocation.yarnMajor).toBe(major);
+      expect(invocation.launcher).toBe("projectScript");
+      expect(invocationCommand(invocation).base).toBe("yarn run docs");
+      const counterpart = packageCommand(invocation, other);
+      expect(counterpart.base).toBe(runner);
+      expect([counterpart.executable, ...counterpart.args]).toEqual(runner.split(" "));
+      expect(packageCommand(invocation, other, "alignfirst@1.2.3").base).toBe(`${runner}@1.2.3`);
+    },
+  );
 
   it("can identify npm from launcher metadata but never executes runtime shims", () => {
     const input = evidence({

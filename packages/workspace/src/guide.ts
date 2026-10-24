@@ -201,17 +201,17 @@ export function renderGuide(pm: PackageManagerCommands, layout: GuideLayout): st
   const template = readFileSync(new URL("../templates/guide.md", import.meta.url), "utf-8");
   let out = applySection(template, "DEV", layout.hasDevServer);
   for (const [name, rows] of Object.entries(commandBlocks(pm, layout))) {
-    out = out.replaceAll(`{{COMMANDS:${name}}}`, renderRows(rows));
+    out = out.replaceAll(`{{COMMANDS:${name}}}`, () => renderRows(rows));
   }
   return out
-    .replaceAll("{{SNIPPET:drive-dev}}", driveDevSnippet(pm))
-    .replaceAll("{{DEV_BASE}}", pm.dev.base)
-    .replaceAll("{{WS}}", pm.workspace.withArgs)
-    .replaceAll("{{DEV}}", pm.dev.withArgs)
-    .replaceAll("{{RUNTIME}}", pm.runtime)
-    .replaceAll("{{RUNTIME_DIR}}", layout.runtimeDir)
-    .replaceAll("{{REGISTRY_SUBDIR}}", REGISTRY_SUBDIR)
-    .replaceAll("{{LAYOUT:shared}}", renderSharedLayout(layout.sharedDirs))
+    .replaceAll("{{SNIPPET:drive-dev}}", () => driveDevSnippet(pm))
+    .replaceAll("{{DEV_BASE}}", () => pm.dev.base)
+    .replaceAll("{{WS}}", () => pm.workspace.withArgs)
+    .replaceAll("{{DEV}}", () => pm.dev.withArgs)
+    .replaceAll("{{RUNTIME}}", () => pm.runtime)
+    .replaceAll("{{RUNTIME_DIR}}", () => layout.runtimeDir)
+    .replaceAll("{{REGISTRY_SUBDIR}}", () => REGISTRY_SUBDIR)
+    .replaceAll("{{LAYOUT:shared}}", () => renderSharedLayout(layout.sharedDirs))
     .trimEnd();
 }
 

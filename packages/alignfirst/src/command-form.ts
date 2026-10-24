@@ -17,5 +17,5 @@ export function resolveCommandForm(
 }
 
 export function renderCommandForm(text: string, form: string): string {
-  return text.replaceAll(CMD_PLACEHOLDER, form);
+  return text.replaceAll(CMD_PLACEHOLDER, () => form);
 }

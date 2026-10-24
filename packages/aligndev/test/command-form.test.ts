@@ -52,6 +52,18 @@ describe("command forms", () => {
     ],
     [
       "node",
+      { npm_config_user_agent: "yarn/1.22.22" },
+      "npx -y aligndev",
+      ["npx", "-y", "alignfirst"],
+    ],
+    [
+      "node",
+      { npm_execpath: "/tools/yarn/bin/yarn.js" },
+      "npx -y aligndev",
+      ["npx", "-y", "alignfirst"],
+    ],
+    [
+      "node",
       { npm_config_user_agent: "yarn/4", npm_command: "dlx" },
       "yarn dlx aligndev",
       ["yarn", "dlx", "alignfirst"],
@@ -66,11 +78,11 @@ describe("command forms", () => {
     expect(guide).toContain(`${forms.alignfirst} guide <protocol>`);
   });
 
-  it.each(["npm", "bun"] as const)(
+  it.each(["npm", "bun", "yarn"] as const)(
     "retains verified %s scripts only for self and JSON-quotes background commands",
     (manager) => {
       const home = makeHome();
-      const name = 'dev"quoted\\path';
+      const name = "dev\"quoted\\path$&$`$'$$";
       const entryPoint = join(home, "entry.mjs");
       writeFileSync(entryPoint, "");
       const script = `node ${entryPoint}`;
@@ -78,7 +90,7 @@ describe("command forms", () => {
       writeFileSync(manifest, JSON.stringify({ scripts: { [name]: script, af: "alignfirst" } }));
       const env = {
         npm_config_user_agent: `${manager}/1`,
-        npm_command: manager === "npm" ? "run" : "run-script",
+        npm_command: manager === "yarn" ? undefined : manager === "npm" ? "run" : "run-script",
         npm_lifecycle_event: name,
         npm_lifecycle_script: script,
         npm_package_json: manifest,
@@ -93,13 +105,18 @@ describe("command forms", () => {
       };
       const forms = resolveCommandForms(env, evidence);
       expect(forms.invocation.launcher).toBe("projectScript");
+      const quotedName = `'${name.replaceAll("'", "'\\''")}'`;
       expect(forms.aligndev).toBe(
-        manager === "npm" ? `npm run '${name}' --` : `bun --bun run '${name}'`,
+        manager === "bun"
+          ? `bun --bun run ${quotedName}`
+          : `${manager} run ${quotedName}${manager === "npm" ? " --" : ""}`,
       );
       expect(forms.alignfirst).toBe(
-        manager === "npm" ? "npx -y alignfirst" : "bunx --bun alignfirst",
+        manager === "bun" ? "bunx --bun alignfirst" : "npx -y alignfirst",
       );
       const guide = renderCodeGuide("codingAgent", "pi", undefined, undefined, forms);
+      expect(guide).toContain(`${forms.aligndev} code status`);
+      expect(guide).not.toContain("{{");
       const row = guide.split("\n").find((line) => line.startsWith('{"action":"start"'));
       const parsed = JSON.parse(row ?? "");
       expect(parsed.command).toBe(

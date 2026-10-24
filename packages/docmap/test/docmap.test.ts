@@ -894,61 +894,69 @@ describe("invocation-aware CLI prefixes", () => {
     }
   });
 
-  it("retains a verified npm script and its forwarding separator", () => {
-    const cwd = mkdtempSync(join(tmpdir(), "docmap-script-"));
-    try {
-      const entryPoint = join(cwd, "docmap.mjs");
-      const manifest = join(cwd, "package.json");
-      const script = `node ${entryPoint}`;
-      writeFileSync(entryPoint, "");
-      writeFileSync(manifest, JSON.stringify({ scripts: { docs: script } }));
-      const evidence = {
-        runtime: "node" as const,
-        cwd,
-        entryPoint,
-        executable: process.execPath,
-        parentArgv: ["/bin/sh", "-c", script],
-        env: {
-          npm_config_user_agent: "npm/12",
-          npm_command: "run",
-          npm_lifecycle_event: "docs",
-          npm_lifecycle_script: script,
-          npm_package_json: manifest,
-        },
-      };
-      let output = "";
-      main({
-        argv: ["node", entryPoint, "--help"],
-        evidence,
-        cwd,
-        stdout: {
-          write: (s) => {
-            output += s;
+  it.each(["docs", "docs$&", "docs$'", "docs$`", "docs$$"])(
+    "retains verified npm script %s literally with its forwarding separator",
+    (name) => {
+      const cwd = mkdtempSync(join(tmpdir(), "docmap-script-"));
+      try {
+        const entryPoint = join(cwd, "docmap.mjs");
+        const manifest = join(cwd, "package.json");
+        const script = `node ${entryPoint}`;
+        writeFileSync(entryPoint, "");
+        writeFileSync(manifest, JSON.stringify({ scripts: { [name]: script } }));
+        const evidence = {
+          runtime: "node" as const,
+          cwd,
+          entryPoint,
+          executable: process.execPath,
+          parentArgv: ["/bin/sh", "-c", script],
+          env: {
+            npm_config_user_agent: "npm/12",
+            npm_command: "run",
+            npm_lifecycle_event: name,
+            npm_lifecycle_script: script,
+            npm_package_json: manifest,
           },
-        },
-      });
-      expect(output).toContain("npm run docs -- --guide");
-      output = "";
-      main({
-        argv: ["node", entryPoint, "--help"],
-        evidence: { ...evidence, runtime: "bun" },
-        cwd,
-        commands: {
-          base: "bunx --bun alignfirst docmap",
-          withArgs: "bunx --bun alignfirst docmap",
-        },
-        stdout: {
-          write: (s) => {
-            output += s;
+        };
+        const renderedName = name === "docs" ? name : `'${name.replaceAll("'", "'\\''")}'`;
+        let output = "";
+        for (const mode of ["--help", "--guide"]) {
+          output = "";
+          main({
+            argv: ["node", entryPoint, mode],
+            evidence,
+            cwd,
+            stdout: {
+              write: (s) => {
+                output += s;
+              },
+            },
+          });
+          expect(output).toContain(`npm run ${renderedName} -- --check`);
+          expect(output).not.toContain("{{");
+        }
+        output = "";
+        main({
+          argv: ["node", entryPoint, "--help"],
+          evidence: { ...evidence, runtime: "bun" },
+          cwd,
+          commands: {
+            base: "bunx --bun alignfirst docmap",
+            withArgs: "bunx --bun alignfirst docmap",
           },
-        },
-      });
-      expect(output).toContain("bunx --bun alignfirst docmap --guide");
-      expect(output).not.toContain("npm run");
-    } finally {
-      rmSync(cwd, { recursive: true, force: true });
-    }
-  });
+          stdout: {
+            write: (s) => {
+              output += s;
+            },
+          },
+        });
+        expect(output).toContain("bunx --bun alignfirst docmap --guide");
+        expect(output).not.toContain("npm run");
+      } finally {
+        rmSync(cwd, { recursive: true, force: true });
+      }
+    },
+  );
 });
 
 describe("package-manager prefix in help", () => {

@@ -4,6 +4,7 @@ import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:pa
 export interface Invocation {
   runtime: Runtime;
   manager?: PackageManager;
+  yarnMajor?: number;
   launcher: "direct" | "packageRunner" | "projectScript";
   target: InvocationTarget;
   script?: VerifiedScript;
@@ -67,6 +68,8 @@ export function resolveInvocation(target: InvocationTarget, evidence: LaunchEvid
   const invocation: Invocation = {
     runtime: evidence.runtime,
     manager,
+    yarnMajor:
+      manager === "yarn" ? identifyYarnMajor(evidence.env.npm_config_user_agent) : undefined,
     launcher: manager === undefined ? "direct" : "packageRunner",
     target,
   };
@@ -86,6 +89,13 @@ function identifyManager(env: LaunchEvidence["env"]): PackageManager | undefined
   if (/[/\\]npm-cli\.js$/.test(exec)) return "npm";
   if (/[/\\]pnpm\.(?:c?js|mjs)$/.test(exec)) return "pnpm";
   if (/[/\\]yarn(?:\.js|\.cjs)?$/.test(exec)) return "yarn";
+}
+
+function identifyYarnMajor(agent: string | undefined): number | undefined {
+  const version = agent?.match(/^yarn\/(\d+)(?:\.\d+){0,2}(?:[-+][\w.+-]+)?(?:\s|$)/);
+  if (version === undefined || version === null) return;
+  const major = Number(version[1]);
+  if (Number.isSafeInteger(major)) return major;
 }
 
 function isExplicitRunner(manager: PackageManager, env: LaunchEvidence["env"]): boolean {
@@ -271,7 +281,10 @@ export function packageCommand(
     case "pnpm":
       return createCommand("pnpm", ["dlx", spec]);
     case "yarn":
-      return createCommand("yarn", ["dlx", spec]);
+      // Classic has no dlx; unknown versions use the same compatible fallback.
+      return invocation.yarnMajor !== undefined && invocation.yarnMajor >= 2
+        ? createCommand("yarn", ["dlx", spec])
+        : createCommand("npx", ["-y", spec]);
     default:
       return packageSpec === undefined
         ? createCommand(target.binaryName)

@@ -42,7 +42,7 @@ export function renderGuideTemplate(
   };
   let text = renderBlocks(readTemplate(`guide/${name}`), active, name);
   for (const [key, value] of Object.entries(placeholders)) {
-    text = text.replaceAll(`{{${key}}}`, value);
+    text = text.replaceAll(`{{${key}}}`, () => value);
   }
   return text.trimEnd();
 }

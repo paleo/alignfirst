@@ -127,6 +127,13 @@ describe("command form", () => {
     ).toThrow("bunx --bun 'alignfirst@>=9 <10' docmap --root 'a'\\''b'");
   });
 
+  it.each(["$&", "$'", "$`", "$$"])("renders %s literally in command forms", (token) => {
+    const form = `npm run 'af${token}' --`;
+    expect(renderCommandForm("{{CMD}} guide; {{CMD}} ticket", form)).toBe(
+      `${form} guide; ${form} ticket`,
+    );
+  });
+
   it("renders every placeholder", () => {
     expect(renderCommandForm("{{CMD}} guide; {{CMD}} ticket", "alignfirst")).toBe(
       "alignfirst guide; alignfirst ticket",

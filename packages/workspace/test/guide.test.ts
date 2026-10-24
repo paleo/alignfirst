@@ -1,3 +1,4 @@
+import { scriptCommand } from "@alignfirst/docmap/invocation";
 import { describe, expect, it } from "vitest";
 
 import { type GuideLayout, renderGuide } from "../src/guide.js";
@@ -32,6 +33,24 @@ describe("renderGuide", () => {
     expect(guide).toContain("npm run dev -- up");
     // Bare foreground takes no forwarded args, so no separator.
     expect(guide).toMatch(/^npm run dev {2,}#/m);
+  });
+
+  it.each(["$&", "$'", "$`", "$$"])("renders %s literally in commands and layout", (token) => {
+    const workspace = scriptCommand("npm", `workspace${token}`);
+    const dev = scriptCommand("npm", `dev${token}`);
+    const runtimeDir = `.local-${token}`;
+    const sharedDir = `.shared-${token}`;
+    const guide = renderGuide(
+      { ...NPM, workspace, dev },
+      { ...LAYOUT, runtimeDir, sharedDirs: [sharedDir] },
+    );
+    expect(guide).toContain(`${workspace.withArgs} setup -c my-branch`);
+    expect(guide).toContain(`${dev.withArgs} up`);
+    expect(guide).toContain(`Ports and infrastructure arrive with the first \`${dev.base}\``);
+    expect(guide).toContain(`cd <worktree-dir> && ${dev.withArgs} up`);
+    expect(guide).toContain(`\`${runtimeDir}/\``);
+    expect(guide).toContain(`symlinked from the main worktree: \`${sharedDir}/\`.`);
+    expect(guide).not.toContain("{{");
   });
 
   it("renders pnpm commands without a separator", () => {

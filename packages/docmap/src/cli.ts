@@ -269,9 +269,9 @@ function renderHelp(pm: PackageManagerCommands, { full, showRootOption }: HelpOp
 function renderGuide(pm: PackageManagerCommands): string {
   const template = readFileSync(new URL("../templates/guide.md", import.meta.url), "utf-8");
   return template
-    .replaceAll("{{COMMANDS}}", renderCommands(guideCommands(pm)))
-    .replaceAll("{{PM_ARGS}}", pm.withArgs)
-    .replaceAll("{{PM}}", pm.base);
+    .replaceAll("{{COMMANDS}}", () => renderCommands(guideCommands(pm)))
+    .replaceAll("{{PM_ARGS}}", () => pm.withArgs)
+    .replaceAll("{{PM}}", () => pm.base);
 }
 
 interface ClassifiedTargets {
