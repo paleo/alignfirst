@@ -1,16 +1,7 @@
 import { spawnSync } from "node:child_process";
 import type { Invocation } from "@alignfirst/docmap/invocation";
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import {
   discoverScenarios,
   expandChannelSelection,
@@ -21,6 +12,7 @@ import {
 import { resolveSelectedModels, type SelectedModel } from "./models.js";
 import { cliCommand, resolveCliInvocation } from "./invocation.js";
 import { spawnHostProcess } from "./host-process.js";
+import { cleanupRuntimeConfigs, writeRuntimeConfig } from "./runtime-config.js";
 
 // Path-shaped vars from .env.local: resolved against the consumer's project dir so users
 // can write natural relative paths. Compose `include:` would otherwise resolve them
@@ -91,7 +83,7 @@ export async function envCommand(
   const parallelFlag = parseEnvArgs(sub, rest, failEnv);
   setupHostEnv(packageDir);
   setBaseTag(packageDir);
-  if (sub === "down") process.exit(sweepWorkerStacks());
+  if (sub === "down") process.exit(await sweepWorkerStacks());
   if (sub === "build") {
     ensureHostOutputDirs([]);
     ensureBaseImage(packageDir, { force: true });
@@ -112,7 +104,9 @@ export async function envCommand(
       ),
     ),
   );
-  process.exit(codes.find((code) => code !== 0) ?? 0);
+  const exitCode = combinedExitCode(codes);
+  if (exitCode === 0) cleanupRuntimeConfigs(process.env.OPENCLAW_TEST_PROJECT_DIR as string);
+  process.exit(exitCode);
 }
 
 export function buildConsumerImageArgs(composeArgs: string[]): string[] {
@@ -136,8 +130,8 @@ export async function runCommand(
     defaultEnv: readEnvVar("OPENCLAW_DEFAULT_TEST_MODEL"),
   });
   const canonicalPath = canonicalConfigPath();
-  // Each model's config is rendered once (its own temp file holding the expanded
-  // secret); worker loops hand the path to every spawn via per-spawn env.
+  // Each model gets one private config; mount-aware collection retains it for warm workers.
+  // Worker loops hand the path to every spawn via per-spawn env.
   const renderedConfigs = new Map<string, string>();
   const renderConfigPath = (m: SelectedModel): string => {
     const cached = renderedConfigs.get(m.id);
@@ -152,7 +146,7 @@ export async function runCommand(
   // them all so the lazy per-cell recreate boots them on the new image — and so
   // the auto-down at the end fires (wasRunningBefore is computed after the sweep).
   if (didBuild) {
-    const sweepCode = sweepWorkerStacks();
+    const sweepCode = await sweepWorkerStacks();
     if (sweepCode !== 0) process.exit(sweepCode);
   }
 
@@ -197,19 +191,22 @@ export async function runCommand(
     });
   } finally {
     const booted = workers.filter((worker) => !worker.wasRunningBefore);
-    try {
-      const codes = await Promise.all(
-        booted.map((worker) => execCompose([...worker.composeArgs, "down"])),
-      );
-      // A sibling's ordinary failure must not hide cancellation during parallel teardown.
-      teardownExit =
-        codes.find((code) => code === 130 || code === 143) ?? codes.find((code) => code !== 0) ?? 0;
-    } finally {
-      for (const path of renderedConfigs.values())
-        rmSync(dirname(path), { recursive: true, force: true });
+    const codes = await Promise.all(
+      booted.map((worker) => execCompose([...worker.composeArgs, "down"])),
+    );
+    teardownExit = combinedExitCode(codes);
+    if (teardownExit === 0) {
+      cleanupRuntimeConfigs(process.env.OPENCLAW_TEST_PROJECT_DIR as string);
     }
   }
   process.exit(matrixExit !== 0 ? matrixExit : teardownExit);
+}
+
+function combinedExitCode(codes: number[]): number {
+  // A sibling's ordinary failure must not hide cancellation.
+  return (
+    codes.find((code) => code === 130 || code === 143) ?? codes.find((code) => code !== 0) ?? 0
+  );
 }
 
 /** Flag wins over the env var; fallback 1. Both must parse to an integer ≥ 1. */
@@ -276,25 +273,30 @@ function refreshWorkerWorkspace(worker: WorkerContext): void {
 }
 
 /** Tear down every `<base>-w<N>` Compose project, whatever K was. Idempotent. */
-function sweepWorkerStacks(): number {
-  let exitCode = 0;
-  for (const name of listWorkerStackNames()) {
-    const code = execComposeSync([...composeBaseArgs(), "-p", name, "down"]);
-    if (code !== 0) exitCode = code;
-  }
+async function sweepWorkerStacks(): Promise<number> {
+  const names = listWorkerStackNames();
+  if (names === undefined) return 1;
+  const codes = await Promise.all(
+    names.map((name) => execCompose([...composeBaseArgs(), "-p", name, "down"])),
+  );
+  const exitCode = combinedExitCode(codes);
+  if (exitCode === 0) cleanupRuntimeConfigs(process.env.OPENCLAW_TEST_PROJECT_DIR as string);
   return exitCode;
 }
 
-function listWorkerStackNames(): string[] {
+function listWorkerStackNames(): string[] | undefined {
   const r = spawnSync("docker", ["compose", "ls", "--all", "--format", "json"], {
     encoding: "utf8",
   });
-  if (r.status !== 0) return [];
+  if (r.status !== 0) return;
   let projects: { Name?: string }[];
   try {
     projects = JSON.parse(r.stdout) as { Name?: string }[];
+    if (!Array.isArray(projects) || projects.some((project) => typeof project?.Name !== "string")) {
+      return;
+    }
   } catch {
-    return [];
+    return;
   }
   // The sanitized base contains no regex metacharacters (only [a-z0-9_-]).
   const pattern = new RegExp(`^${projectNameBase()}-w\\d+$`);
@@ -317,13 +319,13 @@ function ensureConsumerImage(composeArgs: string[]): void {
  * OpenClaw has no native env interpolation in its config, so the harness expands
  * `${VAR}` itself. Walk the canonical config, replace any string value of the
  * exact form `${VAR}` with the value of `VAR` (process.env wins over `.env.local`),
- * and write the rendered JSON to a run-scoped temp dir so the expanded secret is
+ * and write the rendered JSON to owned private state so the expanded secret is
  * never persisted to a committed or artifact path. Returns the rendered path; the
  * canonical file is never mutated and `process.env` is never repointed — callers
  * pass the path to worker spawns via per-spawn env.
  *
  * When a `model` is given, `agents.entries.main.model` is set to its full ref so
- * the gateway boots on the selected model. Rendered per model (own temp file).
+ * the gateway boots on the selected model. Rendered per model (own private file).
  *
  * A `${VAR}` resolving to empty drops its enclosing `models.providers.*` entry so
  * a defined-but-unused provider with no key can't trip OpenClaw boot validation.
@@ -338,10 +340,7 @@ function renderRuntimeConfig(canonicalPath: string, model?: SelectedModel): stri
     assertModelProviderPresent(model, droppedProviders);
     setMainAgentModel(rendered, model.ref);
   }
-  const dir = mkdtempSync(join(tmpdir(), "openclaw-test-config-"));
-  const renderedPath = join(dir, "openclaw.json");
-  writeFileSync(renderedPath, JSON.stringify(rendered, null, 2));
-  return renderedPath;
+  return writeRuntimeConfig(projectDir, rendered);
 }
 
 // A model's provider is the ref's first segment (`provider/model`); built-in

@@ -1,6 +1,14 @@
 import { spawn } from "node:child_process";
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 
 const args = process.argv.slice(2);
 const log = process.env.FAKE_DOCKER_LOG;
@@ -17,16 +25,63 @@ appendFileSync(
     gid: process.env.ASSISTANT_GID,
   })}\n`,
 );
-if (args[0] === "buildx") process.exit(0);
-if (args[0] === "image") process.exit(0);
-if (args.includes("ls")) {
-  console.log("[]");
+const stateDir = join(dirname(log), "docker-state");
+mkdirSync(stateDir, { recursive: true });
+const project = args[args.indexOf("-p") + 1];
+const statePath = join(stateDir, `${project}.json`);
+const containers = () =>
+  readdirSync(stateDir).map((name) => JSON.parse(readFileSync(join(stateDir, name), "utf8")));
+if (args[0] === "info") {
+  if (process.env.FAKE_FAIL_INFO !== undefined) process.exit(1);
+  console.log(process.env.FAKE_DAEMON_ID ?? "fake-daemon");
   process.exit(0);
 }
-if (args.includes("ps")) process.exit(0);
-if (args.includes("up") && process.env.FAKE_FAIL_UP !== undefined) {
-  console.error("fake recreate failure");
-  process.exit(Number(process.env.FAKE_FAIL_UP));
+if (args[0] === "buildx") process.exit(0);
+if (args[0] === "image") {
+  process.exit(process.env.FAKE_BASE_MISSING === "1" && args.at(-1).startsWith("paleo/") ? 1 : 0);
+}
+if (args[0] === "inspect") {
+  if (process.env.FAKE_FAIL_INSPECT !== undefined) process.exit(1);
+  if (process.env.FAKE_MALFORMED_INSPECT !== undefined) {
+    console.log('[{"Mounts":null}]');
+    process.exit(0);
+  }
+  const container = containers().find((entry) => entry.Id === args[1]);
+  if (!container) process.exit(1);
+  console.log(JSON.stringify([container]));
+  process.exit(0);
+}
+if (args.includes("ls")) {
+  if (process.env.FAKE_FAIL_LS !== undefined) process.exit(1);
+  console.log(JSON.stringify(containers().map((entry) => ({ Name: entry.project }))));
+  process.exit(0);
+}
+if (args.includes("ps")) {
+  if (process.env.FAKE_FAIL_PS !== undefined) process.exit(1);
+  if (args[0] === "ps")
+    console.log(
+      containers()
+        .map((entry) => entry.Id)
+        .join("\n"),
+    );
+  else if (existsSync(statePath) && JSON.parse(readFileSync(statePath, "utf8")).running) {
+    console.log("bus\ngateway");
+  }
+  process.exit(0);
+}
+if (args.includes("up")) {
+  writeFileSync(
+    statePath,
+    JSON.stringify({
+      Id: `${project}-gateway`,
+      project,
+      running: true,
+      Mounts: [{ Type: "bind", Source: process.env.OPENCLAW_CONFIG_PATH }],
+    }),
+  );
+}
+if (args.includes("down") && process.env.FAKE_REMOVE_BEFORE_DOWN !== undefined) {
+  rmSync(statePath, { force: true });
 }
 if (
   process.env.FAKE_HANG !== undefined &&
@@ -50,8 +105,13 @@ if (
   process.on("SIGTERM", () => {});
   worker.stdout.once("data", () => console.log("FAKE_RUNNING"));
   setInterval(() => {}, 1000);
+} else if (args.includes("up") && process.env.FAKE_FAIL_UP !== undefined) {
+  console.error("fake recreate failure");
+  process.exit(Number(process.env.FAKE_FAIL_UP));
 } else if (args.includes("down") && process.env.FAKE_FAIL_DOWN !== undefined) {
   process.exit(Number(process.env.FAKE_FAIL_DOWN));
+} else if (args.includes("down")) {
+  if (process.env.FAKE_KEEP_CONTAINERS === undefined) rmSync(statePath, { force: true });
 } else if (args.includes("run")) {
   const value = (flag) => args[args.indexOf(flag) + 1];
   const scenarioId = value("--scenario");

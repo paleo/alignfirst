@@ -7,11 +7,13 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const packageRoot = resolve(import.meta.dirname, "..");
 const cli = join(packageRoot, "bin", "cli.mjs");
@@ -21,6 +23,9 @@ const roots: string[] = [];
 const children: ChildProcess[] = [];
 
 if (bun !== undefined && !existsSync(bun)) throw new Error(`Missing BUN_BIN: ${bun}`);
+
+// Each lifecycle case starts several real CLIs, beyond the unit-test 5s default.
+vi.setConfig({ testTimeout: 30_000 });
 
 afterEach(async () => {
   for (const child of children.splice(0)) {
@@ -35,14 +40,11 @@ afterEach(async () => {
     }
   }
   for (const root of roots.splice(0)) {
-    for (const record of records({ log: join(root, "docker.jsonl") })) {
+    for (const record of records({ log: join(root, "project", "docker.jsonl") })) {
       for (const pid of [record.pid, record.worker]) {
         if (pid === undefined) continue;
         if (alive(pid)) process.kill(pid, "SIGKILL");
         await waitUntil(() => !alive(pid));
-      }
-      if (record.config?.startsWith(join(tmpdir(), "openclaw-test-config-"))) {
-        rmSync(dirname(record.config), { recursive: true, force: true });
       }
     }
     rmSync(root, { recursive: true, force: true });
@@ -125,7 +127,8 @@ describe.each(runtimes)("built harness with %s", (runtime) => {
     expect(up?.workspace).toBe(join(fixture.root, ".workers", "w1", "workspace"));
     expect(up?.config).toContain("openclaw-test-config-");
     expect(up?.uid).toBe(String(process.getuid?.() ?? 1000));
-    expect(calls.at(-1)?.args?.at(-1)).toBe("down");
+    expect(calls.some((call) => call.args?.at(-1) === "down")).toBe(true);
+    expect(existsSync(up?.config ?? "missing")).toBe(false);
   });
 
   it.each([1, 2])(
@@ -235,6 +238,7 @@ describe.each(runtimes)("built harness with %s", (runtime) => {
             env: {
               ...fixture.env,
               FAKE_HANG: "down",
+              FAKE_REMOVE_BEFORE_DOWN: "1",
               ...(mode === "partial" || mode === "mixed" ? { FAKE_HANG_WORKER: "2" } : {}),
               ...(mode === "mixed" ? { FAKE_FAIL_DOWN: "9" } : {}),
               ...(mode === "matrixFailure" ? { FAKE_FAIL_UP: "7" } : {}),
@@ -268,11 +272,131 @@ describe.each(runtimes)("built harness with %s", (runtime) => {
           mode === "matrixFailure" ? 7 : signal === "SIGINT" ? 130 : 143,
         );
         expect(calls.filter((call) => call.args?.at(-1) === "down")).toHaveLength(parallel);
-        for (const config of configs) expect(existsSync(dirname(config))).toBe(false);
+        for (const config of configs) expect(existsSync(config)).toBe(true);
+        expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
+        for (const config of configs) expect(existsSync(config)).toBe(false);
         for (const call of records(fixture)) {
           for (const pid of [call.pid, call.worker]) {
             if (pid !== undefined) await waitUntil(() => !alive(pid));
           }
+        }
+      }
+    },
+    40_000,
+  );
+
+  it.each(["SIGINT", "SIGTERM"] as const)(
+    "prioritizes %s over a failed sibling during parallel env up",
+    async (signal) => {
+      const fixture = consumer();
+      const child = spawn(runtime, [cli, "env", "up", "--parallel", "2"], {
+        cwd: fixture.root,
+        env: {
+          ...fixture.env,
+          FAKE_HANG: "up",
+          FAKE_HANG_WORKER: "2",
+          FAKE_FAIL_UP: "7",
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      children.push(child);
+      let output = "";
+      child.stdout?.on("data", (data) => {
+        output += data.toString();
+      });
+      child.stderr?.on("data", (data) => {
+        output += data.toString();
+      });
+      const closed = new Promise<void>((resolve) => child.once("close", () => resolve()));
+      await waitUntil(() => output.includes("FAKE_RUNNING"));
+      const ups = records(fixture).filter((call) => call.args?.includes("up"));
+      expect(ups).toHaveLength(2);
+      const failed = ups.find((call) => call.args?.includes("project-w1"));
+      expect(failed?.pid).toBeDefined();
+      await waitUntil(() => failed?.pid !== undefined && !alive(failed.pid));
+      expect(output).toContain("fake recreate failure");
+      child.kill(signal);
+      await waitUntil(() => child.exitCode !== null || child.signalCode !== null);
+      await closed;
+      expect(child.exitCode, output).toBe(signal === "SIGINT" ? 130 : 143);
+      for (const call of records(fixture)) {
+        for (const pid of [call.pid, call.worker]) {
+          if (pid !== undefined) await waitUntil(() => !alive(pid));
+        }
+      }
+      const config = lastConfigPath(fixture);
+      expect(existsSync(config)).toBe(true);
+      expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
+      expect(existsSync(config)).toBe(false);
+    },
+    20_000,
+  );
+
+  it.each(["SIGINT", "SIGTERM"] as const)(
+    "cancels %s during env down and rebuild sweeps without collecting warm configs",
+    async (signal) => {
+      for (const command of ["down", "rebuild"]) {
+        for (const mode of ["parallel", "mixed"]) {
+          const fixture = consumer();
+          expect(run(runtime, fixture, ["env", "up", "--parallel", "2"]).status).toBe(0);
+          const config = lastConfigPath(fixture);
+          const args =
+            command === "down"
+              ? ["env", "down"]
+              : ["run", "--channel", "mock", "--model", "offline", "case"];
+          const child = spawn(runtime, [cli, ...args], {
+            cwd: fixture.root,
+            env: {
+              ...fixture.env,
+              FAKE_HANG: "down",
+              // Remove every mount before cancellation to expose premature config collection.
+              FAKE_REMOVE_BEFORE_DOWN: "1",
+              ...(command === "rebuild" ? { FAKE_BASE_MISSING: "1" } : {}),
+              ...(mode === "mixed" ? { FAKE_HANG_WORKER: "2", FAKE_FAIL_DOWN: "9" } : {}),
+            },
+            stdio: ["ignore", "pipe", "pipe"],
+          });
+          children.push(child);
+          let output = "";
+          child.stdout?.on("data", (data) => {
+            output += data.toString();
+          });
+          child.stderr?.on("data", (data) => {
+            output += data.toString();
+          });
+          const closed = new Promise<void>((resolve) => child.once("close", () => resolve()));
+          const hanging = mode === "mixed" ? 1 : 2;
+          await waitUntil(() => output.split("FAKE_RUNNING").length - 1 === hanging);
+          const downs = records(fixture).filter((call) => call.args?.at(-1) === "down");
+          expect(downs).toHaveLength(2);
+          expect(downs.map((call) => call.args?.[call.args.indexOf("-p") + 1]).sort()).toEqual([
+            "project-w1",
+            "project-w2",
+          ]);
+          if (mode === "mixed") {
+            const failed = downs.find((call) => call.args?.includes("project-w1"));
+            expect(failed?.pid).toBeDefined();
+            await waitUntil(() => failed?.pid !== undefined && !alive(failed.pid));
+          }
+          expect(existsSync(config)).toBe(true);
+          child.kill(signal);
+          await waitUntil(() => child.exitCode !== null || child.signalCode !== null);
+          await closed;
+          expect(child.exitCode, `${command}/${mode}: ${output}`).toBe(
+            signal === "SIGINT" ? 130 : 143,
+          );
+          const calls = records(fixture);
+          expect(calls.filter((call) => call.worker !== undefined)).toHaveLength(hanging);
+          for (const call of calls) {
+            for (const pid of [call.pid, call.worker]) {
+              if (pid !== undefined) await waitUntil(() => !alive(pid));
+            }
+          }
+          expect(configPaths(fixture)).toEqual([config]);
+          expect(calls.some((call) => call.args?.includes("run"))).toBe(false);
+          expect(existsSync(config)).toBe(true);
+          expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
+          expect(existsSync(config)).toBe(false);
         }
       }
     },
@@ -285,10 +409,301 @@ describe.each(runtimes)("built harness with %s", (runtime) => {
       runtime,
       fixture,
       ["run", "--channel", "mock", "--model", "offline", "case"],
-      { FAKE_FAIL_DOWN: "9", ...(matrixExit === 7 ? { FAKE_FAIL_UP: "7" } : {}) },
+      {
+        FAKE_FAIL_DOWN: "9",
+        FAKE_REMOVE_BEFORE_DOWN: "1",
+        ...(matrixExit === 7 ? { FAKE_FAIL_UP: "7" } : {}),
+      },
     );
     expect(result.status, result.stderr).toBe(matrixExit === 0 ? 9 : matrixExit);
+    const config = configPaths(fixture).at(-1);
+    expect(config).toBeDefined();
+    expect(existsSync(config ?? "missing")).toBe(true);
+    expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
+    expect(existsSync(config ?? "missing")).toBe(false);
   });
+
+  it("keeps warm configs across repeated runs and collects superseded secrets", () => {
+    const fixture = consumer();
+    expect(run(runtime, fixture, ["env", "up"]).status).toBe(0);
+    const first = lastConfigPath(fixture);
+    expect(existsSync(first)).toBe(true);
+    expect(statSync(first).mode & 0o777).toBe(0o600);
+    expect(statSync(dirname(first)).mode & 0o777).toBe(0o700);
+    expect(statSync(dirname(dirname(first))).mode & 0o777).toBe(0o700);
+    expect(statSync(dirname(dirname(dirname(first)))).mode & 0o777).toBe(0o700);
+    expect(statSync(join(dirname(first), "owner.json")).mode & 0o777).toBe(0o600);
+    expect(first.startsWith(`${fixture.env.XDG_STATE_HOME}/openclaw-test/`)).toBe(true);
+    expect(readFileSync(first, "utf8")).toContain("private-test-secret");
+    expect(first.startsWith(fixture.root)).toBe(false);
+    const args = ["run", "--channel", "mock", "--model", "offline", "case"];
+    expect(run(runtime, fixture, args).status).toBe(0);
+    const second = lastConfigPath(fixture);
+    expect(second).not.toBe(first);
+    expect(existsSync(first)).toBe(false);
+    expect(existsSync(second)).toBe(true);
+    expect(run(runtime, fixture, args).status).toBe(0);
+    const third = lastConfigPath(fixture);
+    expect(existsSync(second)).toBe(false);
+    expect(existsSync(third)).toBe(true);
+    expect(records(fixture).filter((call) => call.args?.at(-1) === "down")).toHaveLength(0);
+    expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
+    expect(existsSync(third)).toBe(false);
+    for (const stamp of readdirSync(join(fixture.root, "artifacts"))) {
+      for (const file of readdirSync(join(fixture.root, "artifacts", stamp, "cells"))) {
+        expect(
+          readFileSync(join(fixture.root, "artifacts", stamp, "cells", file), "utf8"),
+        ).not.toContain("private-test-secret");
+      }
+    }
+  });
+
+  it.each([
+    { location: "XDG_STATE_HOME", uncertain: false },
+    { location: "HOME fallback", uncertain: false },
+    { location: "XDG_STATE_HOME", uncertain: true },
+    { location: "HOME fallback", uncertain: true },
+    { location: "symlinked ancestor", uncertain: false },
+  ])(
+    "discovers $location configs across TMPDIR changes (uncertain=$uncertain)",
+    ({ location, uncertain }) => {
+      const fixture = consumer();
+      if (location === "HOME fallback") fixture.env.XDG_STATE_HOME = "";
+      if (location === "symlinked ancestor") {
+        const physical = join(dirname(fixture.root), "physical-state");
+        const linked = join(dirname(fixture.root), "linked-parent");
+        mkdirSync(physical, { mode: 0o700 });
+        symlinkSync(physical, linked);
+        fixture.env.XDG_STATE_HOME = join(linked, "state");
+      }
+      const temps = ["up-tmp", "run-tmp", "down-tmp"].map((name) =>
+        join(dirname(fixture.root), name),
+      );
+      for (const temp of temps) mkdirSync(temp);
+      expect(run(runtime, fixture, ["env", "up"], { TMPDIR: temps[0] }).status).toBe(0);
+      const first = lastConfigPath(fixture);
+      rmSync(temps[0], { recursive: true });
+      expect(existsSync(first)).toBe(true);
+      const result = run(
+        runtime,
+        fixture,
+        ["run", "--channel", "mock", "--model", "offline", "case"],
+        { TMPDIR: temps[1], ...(uncertain ? { FAKE_FAIL_INSPECT: "1" } : {}) },
+      );
+      expect(result.status, result.stderr).toBe(0);
+      const second = lastConfigPath(fixture);
+      expect(second).not.toBe(first);
+      expect(dirname(dirname(first))).toBe(dirname(dirname(second)));
+      expect(existsSync(first)).toBe(uncertain);
+      expect(existsSync(second)).toBe(true);
+      expect(records(fixture).filter((call) => call.args?.at(-1) === "down")).toHaveLength(0);
+      rmSync(temps[1], { recursive: true });
+      expect(run(runtime, fixture, ["env", "down"], { TMPDIR: temps[2] }).status).toBe(0);
+      for (const config of configPaths(fixture)) expect(existsSync(config)).toBe(false);
+    },
+  );
+
+  it("joins and removes only new workers in a mixed warm/new run", () => {
+    const fixture = consumer();
+    expect(run(runtime, fixture, ["env", "up"]).status).toBe(0);
+    const result = run(runtime, fixture, [
+      "run",
+      "--channel",
+      "mock",
+      "--model",
+      "offline",
+      "--parallel",
+      "2",
+      "first",
+      "second",
+    ]);
+    expect(result.status, result.stderr).toBe(0);
+    const downs = records(fixture).filter((call) => call.args?.at(-1) === "down");
+    expect(downs).toHaveLength(1);
+    expect(downs[0]?.args?.[downs[0].args.indexOf("-p") + 1]).toMatch(/-w2$/);
+    const config = lastConfigPath(fixture);
+    expect(existsSync(config)).toBe(true);
+    expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
+    expect(existsSync(config)).toBe(false);
+  });
+
+  it.each(["FAKE_FAIL_PS", "FAKE_FAIL_INSPECT", "FAKE_MALFORMED_INSPECT"])(
+    "retains configs when mount discovery is uncertain (%s)",
+    (failure) => {
+      const fixture = consumer();
+      expect(run(runtime, fixture, ["env", "up"]).status).toBe(0);
+      const first = lastConfigPath(fixture);
+      expect(
+        run(runtime, fixture, ["run", "--channel", "mock", "--model", "offline", "case"], {
+          [failure]: "1",
+        }).status,
+      ).toBe(0);
+      expect(existsSync(first)).toBe(true);
+      expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
+      for (const path of configPaths(fixture)) expect(existsSync(path)).toBe(false);
+    },
+  );
+
+  it("retains stopped and external container references after successful down", () => {
+    const fixture = consumer();
+    expect(run(runtime, fixture, ["env", "up"]).status).toBe(0);
+    const config = lastConfigPath(fixture);
+    const stateDir = join(fixture.root, "docker-state");
+    const stateName = readdirSync(stateDir)[0];
+    if (stateName === undefined) throw new Error("Missing container state");
+    const stateFile = join(stateDir, stateName);
+    const state = JSON.parse(readFileSync(stateFile, "utf8"));
+    state.running = false;
+    writeFileSync(stateFile, JSON.stringify(state));
+    expect(run(runtime, fixture, ["env", "down"], { FAKE_KEEP_CONTAINERS: "1" }).status).toBe(0);
+    expect(existsSync(config)).toBe(true);
+    // A stopped unrelated container can also reference the config's parent directory.
+    writeFileSync(
+      join(stateDir, "external.json"),
+      JSON.stringify({
+        Id: "external",
+        project: "external",
+        running: false,
+        Mounts: [{ Type: "bind", Source: dirname(config) }],
+      }),
+    );
+    expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
+    expect(existsSync(config)).toBe(true);
+    rmSync(join(stateDir, "external.json"));
+    expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
+    expect(existsSync(config)).toBe(false);
+  });
+
+  it("sweeps warm configs on rebuild before creating and removing new workers", () => {
+    const fixture = consumer();
+    expect(run(runtime, fixture, ["env", "up", "--parallel", "2"]).status).toBe(0);
+    const old = lastConfigPath(fixture);
+    const result = run(
+      runtime,
+      fixture,
+      ["run", "--channel", "mock", "--model", "offline", "case"],
+      { FAKE_BASE_MISSING: "1" },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    const downs = records(fixture).filter((call) => call.args?.at(-1) === "down");
+    expect(downs).toHaveLength(3);
+    expect(existsSync(old)).toBe(false);
+    for (const path of configPaths(fixture)) expect(existsSync(path)).toBe(false);
+  });
+
+  it("retains secrets and aborts rebuild when the warm sweep fails", () => {
+    const fixture = consumer();
+    expect(run(runtime, fixture, ["env", "up"]).status).toBe(0);
+    const config = lastConfigPath(fixture);
+    const result = run(
+      runtime,
+      fixture,
+      ["run", "--channel", "mock", "--model", "offline", "case"],
+      { FAKE_BASE_MISSING: "1", FAKE_FAIL_DOWN: "9" },
+    );
+    expect(result.status).toBe(9);
+    expect(existsSync(config)).toBe(true);
+    expect(configPaths(fixture)).toEqual([config]);
+    expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
+    expect(existsSync(config)).toBe(false);
+  });
+
+  it("collects only configs with matching ownership", () => {
+    const fixture = consumer();
+    const sibling = consumer();
+    sibling.env.XDG_STATE_HOME = fixture.env.XDG_STATE_HOME;
+    expect(run(runtime, fixture, ["env", "up"]).status).toBe(0);
+    expect(run(runtime, sibling, ["env", "up"]).status).toBe(0);
+    const own = lastConfigPath(fixture);
+    const other = lastConfigPath(sibling);
+    expect(dirname(dirname(own))).not.toBe(dirname(dirname(other)));
+    writeFileSync(
+      join(dirname(own), "owner.json"),
+      JSON.stringify({
+        projectDir: sibling.root,
+        pid: 99999999,
+      }),
+    );
+    expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
+    expect(existsSync(own)).toBe(true);
+    expect(existsSync(other)).toBe(true);
+    expect(run(runtime, sibling, ["env", "down"]).status).toBe(0);
+    expect(existsSync(other)).toBe(false);
+  });
+
+  it("retains another live command's unmounted configs", () => {
+    const fixture = consumer();
+    expect(run(runtime, fixture, ["env", "up"]).status).toBe(0);
+    const config = lastConfigPath(fixture);
+    const ownerFile = join(dirname(config), "owner.json");
+    const owner = JSON.parse(readFileSync(ownerFile, "utf8"));
+    writeFileSync(ownerFile, JSON.stringify({ ...owner, pid: process.pid }));
+    expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
+    expect(existsSync(config)).toBe(true);
+    writeFileSync(ownerFile, JSON.stringify(owner));
+    expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
+    expect(existsSync(config)).toBe(false);
+  });
+
+  it("does not collect configs owned by a different Docker daemon", () => {
+    const fixture = consumer();
+    expect(run(runtime, fixture, ["env", "up"]).status).toBe(0);
+    const config = lastConfigPath(fixture);
+    expect(run(runtime, fixture, ["env", "down"], { FAKE_DAEMON_ID: "other" }).status).toBe(0);
+    expect(existsSync(config)).toBe(true);
+    expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
+    expect(existsSync(config)).toBe(false);
+  });
+
+  it("retains configs when project discovery or daemon identification fails", () => {
+    const fixture = consumer();
+    expect(run(runtime, fixture, ["env", "up"]).status).toBe(0);
+    const config = lastConfigPath(fixture);
+    expect(run(runtime, fixture, ["env", "down"], { FAKE_FAIL_LS: "1" }).status).toBe(1);
+    expect(existsSync(config)).toBe(true);
+    expect(run(runtime, fixture, ["env", "down"], { FAKE_FAIL_INFO: "1" }).status).toBe(0);
+    expect(existsSync(config)).toBe(true);
+    expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
+    expect(existsSync(config)).toBe(false);
+  });
+
+  it.each(["direct", "symlink"])("rejects %s state root inside the build context", (kind) => {
+    const fixture = consumer();
+    const privateState = join(fixture.root, "private-state");
+    mkdirSync(privateState);
+    let stateHome = privateState;
+    if (kind === "symlink") {
+      stateHome = join(dirname(fixture.root), "linked-state");
+      symlinkSync(privateState, stateHome);
+    }
+    const result = run(runtime, fixture, ["env", "up"], { XDG_STATE_HOME: stateHome });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("state root must be outside");
+    expect(readdirSync(privateState)).toEqual([]);
+  });
+
+  it.each(["relative", "symlink", "public", "writable"])(
+    "rejects an unsafe %s state directory",
+    (kind) => {
+      const fixture = consumer();
+      const stateHome = fixture.env.XDG_STATE_HOME;
+      const home = fixture.env.HOME;
+      if (stateHome === undefined || home === undefined) {
+        throw new Error("Missing isolated state home");
+      }
+      mkdirSync(stateHome, { recursive: true, mode: 0o700 });
+      const appRoot = join(stateHome, "openclaw-test");
+      if (kind === "symlink") symlinkSync(home, appRoot);
+      if (kind === "public") mkdirSync(appRoot, { mode: 0o755 });
+      if (kind === "writable") chmodSync(stateHome, 0o777);
+      const result = run(runtime, fixture, ["env", "up"], {
+        XDG_STATE_HOME: kind === "relative" ? "relative-state" : stateHome,
+      });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(kind === "relative" ? "must be absolute" : "unsafe");
+      expect(configPaths(fixture)).toEqual([]);
+    },
+  );
 
   it("imports offline runner/helpers and reads real SQLite plus zstd", () => {
     const result = spawnSync(
@@ -340,8 +755,12 @@ interface DockerRecord {
 }
 
 function consumer(): Consumer {
-  const root = mkdtempSync(join(tmpdir(), "harness-built-"));
-  roots.push(root);
+  const sandbox = mkdtempSync(join(tmpdir(), "harness-built-"));
+  roots.push(sandbox);
+  const root = join(sandbox, "project");
+  const home = join(sandbox, "home");
+  mkdirSync(root);
+  mkdirSync(home, { mode: 0o700 });
   const bin = join(root, "bin");
   mkdirSync(bin);
   const docker = join(bin, "docker");
@@ -353,18 +772,26 @@ function consumer(): Consumer {
   writeFileSync(join(root, "package.json"), "{}");
   writeFileSync(
     join(root, "openclaw.json"),
-    JSON.stringify({ channels: { mock: {} }, agents: { entries: { main: {} } } }),
+    JSON.stringify({
+      channels: { mock: {} },
+      agents: { entries: { main: {} } },
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: exercise config interpolation
+      testSecret: "${HARNESS_PRIVATE_TEST_KEY}",
+    }),
   );
   mkdirSync(join(root, "workspace"));
   const log = join(root, "docker.jsonl");
   writeFileSync(log, "");
   const env: NodeJS.ProcessEnv = {
     ...process.env,
+    HOME: home,
+    XDG_STATE_HOME: join(home, "state"),
     PATH: `${bin}${delimiter}${process.env.PATH}`,
     FAKE_DOCKER_LOG: log,
     OPENCLAW_WORKSPACE_DIR: join(root, "workspace"),
     OPENCLAW_TEST_PROJECT_DIR: root,
     OPENCLAW_TEST_MODELS: "local/offline",
+    HARNESS_PRIVATE_TEST_KEY: "private-test-secret",
   };
   for (const key of [
     "npm_config_user_agent",
@@ -390,6 +817,23 @@ function run(
     encoding: "utf8",
     timeout: 25_000,
   });
+}
+
+function lastConfigPath(fixture: Consumer): string {
+  const path = configPaths(fixture).at(-1);
+  if (path === undefined) throw new Error("Missing rendered config in Docker calls");
+  return path;
+}
+
+function configPaths(fixture: Consumer): string[] {
+  return [
+    ...new Set(
+      records(fixture)
+        .filter((call) => call.args?.includes("up"))
+        .map((call) => call.config)
+        .filter((path): path is string => path !== undefined),
+    ),
+  ];
 }
 
 function records(fixture: Pick<Consumer, "log">): DockerRecord[] {
