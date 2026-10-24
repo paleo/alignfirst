@@ -45,14 +45,16 @@ export async function main(options?: MainOptions): Promise<number> {
     { packageName: "alignfirst", binaryName: "alignfirst" },
     evidence,
   );
+  const invocationForm = invocationCommand(invocation);
   const ctx: CommandContext = {
     cwd: options?.cwd ?? process.cwd(),
     env,
     home: options?.home ?? env.HOME ?? env.USERPROFILE ?? homedir(),
     stdout: options?.stdout ?? process.stdout,
     stderr: options?.stderr ?? process.stderr,
-    form: invocationCommand(invocation).withArgs,
+    form: invocationForm.withArgs,
     invocation,
+    command: invocationForm,
     version: readPackageVersion(),
   };
   const [command, ...args] = argv.slice(2);

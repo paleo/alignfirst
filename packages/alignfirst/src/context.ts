@@ -1,4 +1,4 @@
-import type { Invocation } from "@alignfirst/docmap/invocation";
+import type { Invocation, InvocationCommand } from "@alignfirst/docmap/invocation";
 import type { ResolvedProjectConfig } from "./project-config.js";
 import type { ProjectLayout } from "./project-layout.js";
 
@@ -17,6 +17,7 @@ export interface CommandContext extends Streams {
   home: string;
   form: string;
   invocation?: Invocation;
+  command?: InvocationCommand;
   version: string;
   projectConfig?: ResolvedProjectConfig;
   layout?: ProjectLayout;
