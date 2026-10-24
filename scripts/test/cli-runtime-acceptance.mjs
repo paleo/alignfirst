@@ -513,6 +513,32 @@ async function harnessLifecycle() {
     "FAKE_RUNNING",
     143,
   );
+  for (const signal of ["SIGINT", "SIGTERM"]) {
+    const before = readRecords(env.FAKE_DOCKER_LOG).length;
+    await cancel(
+      `harness-down-${signal}`,
+      [
+        entries["openclaw-test"],
+        "run",
+        "--channel",
+        "mock",
+        "--model",
+        "offline",
+        "--parallel",
+        "2",
+        "first",
+        "second",
+      ],
+      { ...env, FAKE_HANG: "down", FAKE_HANG_WORKER: "2", FAKE_FAIL_DOWN: "9" },
+      "FAKE_RUNNING",
+      signal === "SIGINT" ? 130 : 143,
+      signal,
+    );
+    const calls = readRecords(env.FAKE_DOCKER_LOG).slice(before);
+    assert.equal(calls.filter((call) => call.args?.at(-1) === "down").length, 2);
+    const config = calls.find((call) => call.args?.includes("run")).config;
+    assert.equal(existsSync(dirname(config)), false, "rendered config survived teardown");
+  }
   await cancel("harness-bus", [entries["openclaw-test"], "bus"], env, "bus listening");
   for (const record of readRecords(join(root, "docker.jsonl"))) {
     for (const pid of [record.pid, record.worker])
@@ -520,7 +546,7 @@ async function harnessLifecycle() {
   }
 }
 
-async function cancel(label, args, extra, ready, expected) {
+async function cancel(label, args, extra, ready, expected, signal = "SIGTERM") {
   const child = spawn(bun, args, {
     cwd: root,
     env: { ...baseEnvironment, ...extra },
@@ -542,7 +568,7 @@ async function cancel(label, args, extra, ready, expected) {
   );
   try {
     await waitUntil(typeof ready === "function" ? ready : () => text.includes(ready));
-    child.kill("SIGTERM");
+    child.kill(signal);
     await waitUntil(() => didClose);
     const result = await closed;
     if (expected !== undefined) assert.equal(result.status, expected, text);

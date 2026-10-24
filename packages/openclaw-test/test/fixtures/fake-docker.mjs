@@ -28,19 +28,30 @@ if (args.includes("up") && process.env.FAKE_FAIL_UP !== undefined) {
   console.error("fake recreate failure");
   process.exit(Number(process.env.FAKE_FAIL_UP));
 }
-if (process.env.FAKE_HANG !== undefined && args.includes(process.env.FAKE_HANG)) {
+if (
+  process.env.FAKE_HANG !== undefined &&
+  args.includes(process.env.FAKE_HANG) &&
+  (process.env.FAKE_HANG_WORKER === undefined ||
+    args[args.indexOf("-p") + 1]?.endsWith(`-w${process.env.FAKE_HANG_WORKER}`))
+) {
   const worker = spawn(
     process.execPath,
-    ["-e", "process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"],
+    [
+      "-e",
+      "process.on('SIGINT',()=>{});process.on('SIGTERM',()=>{});console.log('READY');setInterval(()=>{},1000)",
+    ],
     {
-      stdio: "ignore",
+      stdio: ["ignore", "pipe", "inherit"],
     },
   );
   appendFileSync(log, `${JSON.stringify({ worker: worker.pid })}\n`);
   // Keep the parent alive too, so cancellation must escalate and join it.
+  process.on("SIGINT", () => {});
   process.on("SIGTERM", () => {});
-  console.log("FAKE_RUNNING");
+  worker.stdout.once("data", () => console.log("FAKE_RUNNING"));
   setInterval(() => {}, 1000);
+} else if (args.includes("down") && process.env.FAKE_FAIL_DOWN !== undefined) {
+  process.exit(Number(process.env.FAKE_FAIL_DOWN));
 } else if (args.includes("run")) {
   const value = (flag) => args[args.indexOf(flag) + 1];
   const scenarioId = value("--scenario");

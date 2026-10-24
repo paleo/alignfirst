@@ -173,7 +173,11 @@ describe.each(runtimes)("built harness with %s", (runtime) => {
           : ["env", "up"];
       const child = spawn(runtime, [cli, ...args], {
         cwd: fixture.root,
-        env: { ...fixture.env, FAKE_HANG: command === "run" ? "run" : "up" },
+        env: {
+          ...fixture.env,
+          FAKE_HANG: command === "run" ? "run" : "up",
+          FAKE_FAIL_DOWN: "9",
+        },
         stdio: ["ignore", "pipe", "pipe"],
       });
       children.push(child);
@@ -207,6 +211,86 @@ describe.each(runtimes)("built harness with %s", (runtime) => {
     },
     20_000,
   );
+
+  it.each(["SIGINT", "SIGTERM"] as const)(
+    "retains %s during final teardown and joins every owned worker",
+    async (signal) => {
+      for (const mode of ["serial", "parallel", "partial", "mixed", "matrixFailure"]) {
+        const fixture = consumer();
+        const parallel = mode === "serial" ? 1 : 2;
+        const child = spawn(
+          runtime,
+          [
+            cli,
+            "run",
+            "--channel",
+            "mock",
+            "--model",
+            "offline",
+            "--parallel",
+            String(parallel),
+            "first",
+            "second",
+          ],
+          {
+            cwd: fixture.root,
+            env: {
+              ...fixture.env,
+              FAKE_HANG: "down",
+              ...(mode === "partial" || mode === "mixed" ? { FAKE_HANG_WORKER: "2" } : {}),
+              ...(mode === "mixed" ? { FAKE_FAIL_DOWN: "9" } : {}),
+              ...(mode === "matrixFailure" ? { FAKE_FAIL_UP: "7" } : {}),
+            },
+            stdio: ["ignore", "pipe", "pipe"],
+          },
+        );
+        children.push(child);
+        let output = "";
+        child.stdout?.on("data", (data) => {
+          output += data.toString();
+        });
+        child.stderr?.on("data", (data) => {
+          output += data.toString();
+        });
+        const closed = new Promise<void>((resolve) => child.once("close", () => resolve()));
+        const hanging = mode === "partial" || mode === "mixed" ? 1 : parallel;
+        await waitUntil(() => output.split("FAKE_RUNNING").length - 1 === hanging);
+        const calls = records(fixture);
+        const configs = new Set(
+          calls
+            .map((call) => call.config)
+            .filter((path): path is string => path?.includes("openclaw-test-config-") === true),
+        );
+        expect(configs.size).toBe(1);
+        for (const config of configs) expect(existsSync(config)).toBe(true);
+        child.kill(signal);
+        await waitUntil(() => child.exitCode !== null || child.signalCode !== null);
+        await closed;
+        expect(child.exitCode, `${mode}: ${output}`).toBe(
+          mode === "matrixFailure" ? 7 : signal === "SIGINT" ? 130 : 143,
+        );
+        expect(calls.filter((call) => call.args?.at(-1) === "down")).toHaveLength(parallel);
+        for (const config of configs) expect(existsSync(dirname(config))).toBe(false);
+        for (const call of records(fixture)) {
+          for (const pid of [call.pid, call.worker]) {
+            if (pid !== undefined) await waitUntil(() => !alive(pid));
+          }
+        }
+      }
+    },
+    40_000,
+  );
+
+  it.each([0, 7])("preserves matrix exit %i across a failing teardown", (matrixExit) => {
+    const fixture = consumer();
+    const result = run(
+      runtime,
+      fixture,
+      ["run", "--channel", "mock", "--model", "offline", "case"],
+      { FAKE_FAIL_DOWN: "9", ...(matrixExit === 7 ? { FAKE_FAIL_UP: "7" } : {}) },
+    );
+    expect(result.status, result.stderr).toBe(matrixExit === 0 ? 9 : matrixExit);
+  });
 
   it("imports offline runner/helpers and reads real SQLite plus zstd", () => {
     const result = spawnSync(

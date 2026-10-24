@@ -176,6 +176,7 @@ export async function runCommand(
   mkdirSync(resultsDir, { recursive: true });
 
   let matrixExit: number;
+  let teardownExit = 0;
   try {
     matrixExit = await runMatrix({
       scenarios,
@@ -197,13 +198,18 @@ export async function runCommand(
   } finally {
     const booted = workers.filter((worker) => !worker.wasRunningBefore);
     try {
-      await Promise.all(booted.map((worker) => execCompose([...worker.composeArgs, "down"])));
+      const codes = await Promise.all(
+        booted.map((worker) => execCompose([...worker.composeArgs, "down"])),
+      );
+      // A sibling's ordinary failure must not hide cancellation during parallel teardown.
+      teardownExit =
+        codes.find((code) => code === 130 || code === 143) ?? codes.find((code) => code !== 0) ?? 0;
     } finally {
       for (const path of renderedConfigs.values())
         rmSync(dirname(path), { recursive: true, force: true });
     }
   }
-  process.exit(matrixExit);
+  process.exit(matrixExit !== 0 ? matrixExit : teardownExit);
 }
 
 /** Flag wins over the env var; fallback 1. Both must parse to an integer ≥ 1. */
