@@ -22,7 +22,7 @@ function readOrCreateMachineId(path: string): string {
     if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
   }
   mkdirSync(dirname(path), { recursive: true });
-  const tmp = `${path}.${process.pid}.tmp`;
+  const tmp = `${path}.${randomUUID()}.tmp`;
   try {
     writeFileSync(tmp, randomUUID());
     publishMachineId(tmp, path);

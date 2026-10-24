@@ -3,6 +3,9 @@ import { readdirSync, readFileSync } from "node:fs";
 
 const GRACE_MS = 5_000;
 const REAP_MS = 2_000;
+const VANISHED_CODES = ["ENOENT", "ESRCH"];
+// Under hidepid, other users' processes are unreadable; the scan skips them, as ps does.
+const HIDDEN_CODES = [...VANISHED_CODES, "EPERM", "EACCES"];
 
 export interface ManagedProcess {
   child: ChildProcessWithoutNullStreams;
@@ -28,7 +31,7 @@ export interface LaunchOptions {
   inputError: (error: Error) => void;
 }
 
-interface Target {
+export interface Target {
   pid: number;
   ppid: number;
   group: number;
@@ -175,13 +178,13 @@ function linuxProcessTable(): Target[] {
     .filter((name) => /^\d+$/.test(name))
     .flatMap((name) => {
       const pid = Number(name);
-      const fields = readStatFields(pid);
+      const fields = readStatFields(pid, HIDDEN_CODES);
       return fields ? [linuxTarget(pid, fields)] : [];
     });
 }
 
-// The fields after the command name, or undefined when the process has vanished.
-function readStatFields(pid: number): string[] | undefined {
+// The fields after the command name, or undefined when the read fails with a skipped code.
+function readStatFields(pid: number, skippedCodes: string[]): string[] | undefined {
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
     return stat.slice(stat.lastIndexOf(")") + 2).split(" ");
@@ -189,7 +192,8 @@ function readStatFields(pid: number): string[] | undefined {
     if (
       error instanceof Error &&
       "code" in error &&
-      (error.code === "ENOENT" || error.code === "ESRCH")
+      typeof error.code === "string" &&
+      skippedCodes.includes(error.code)
     )
       return;
     throw error;
@@ -229,22 +233,24 @@ async function psProcessTable(): Promise<Target[]> {
   return output
     .split("\n")
     .filter((line) => line.trim() !== "")
-    .map((line) => {
-      const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$/.exec(line);
-      if (!match) throw new Error("Invalid process query record.");
-      const [, rawPid, rawParent, rawGroup, state, started] = match;
-      const pid = Number(rawPid);
-      const ppid = Number(rawParent);
-      const group = Number(rawGroup);
-      if (![pid, ppid, group].every(Number.isSafeInteger) || pid < 1 || ppid < 0 || group < 0) {
-        throw new Error("Unsafe process query record.");
-      }
-      return { pid, ppid, group, identity: started, zombie: state.startsWith("Z") };
-    });
+    .map(psTarget);
+}
+
+export function psTarget(line: string): Target {
+  const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$/.exec(line);
+  if (!match) throw new Error("Invalid process query record.");
+  const [, rawPid, rawParent, rawGroup, state, started] = match;
+  const pid = Number(rawPid);
+  const ppid = Number(rawParent);
+  const group = Number(rawGroup);
+  if (![pid, ppid, group].every(Number.isSafeInteger) || pid < 1 || ppid < 0 || group < 0) {
+    throw new Error("Unsafe process query record.");
+  }
+  return { pid, ppid, group, identity: started, zombie: state.startsWith("Z") };
 }
 
 function linuxIdentity(pid: number): string | undefined {
-  const fields = readStatFields(pid);
+  const fields = readStatFields(pid, VANISHED_CODES);
   return fields && statIdentity(fields);
 }
 
