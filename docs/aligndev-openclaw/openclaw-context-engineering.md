@@ -70,6 +70,47 @@ The channel turn that calls `thread_handoff start` relies on that tag: its start
 
 The plugin's nudge is an unmentioned group message, so its reply run is optional. It ends on `HEARTBEAT_OK` when it has nothing to report. On 2026.9.5 the deterministic gateway suite established this token on both surfaces: six `NO_REPLY` probes invoked isolated finalization, while six `HEARTBEAT_OK` probes produced neither a finalizer nor an outbound reply. Disabling block streaming did not avoid the `NO_REPLY` defect. Other turns with nothing to report stay on `NO_REPLY`.
 
+## Webchat surface
+
+The Control UI, the desktop apps and the mobile apps are clients of one gateway surface, `webchat`. The facts below were probed on the harness gateway at 2026.10.5 with Terra (side-20, 2026-10-24), through the gateway methods the apps use. Raw captures are under `.local/side-20/F4/`.
+
+### Facts
+
+- **Turn metadata.** A human turn carries `channel`, `provider` and `surface` `webchat`, `chat_type: "direct"`, and no `chat_id`, `topic_id` or `conversation_label`. `session_status` reports `Route context` with `channel: "webchat"` and `to: <session key>`. The transcript stores no inbound metadata: the user message records only `provenance.kind: "external_user"` and the `gateway-client` transport.
+- **Session keys.** Home is `agent:<agentId>:main`. `sessions.create` returns `agent:<agentId>:dashboard:<uuid>`, with `parentSessionKey: "agent:main:main"` on the entry.
+- **Chained wake.** A background `exec` of `sleep 5; openclaw system event --text <text> --mode now --session-key <KEY>` wakes the conversation, and the reply lands in its transcript. The command prints `ok`, so OpenClaw's native exec completion runs first: a user message `Exec completed (<id>, code 0) :: ok` with `provenance.kind: "internal_system"`. The system event then runs as a heartbeat turn: user message `[OpenClaw heartbeat poll]`, event text in the runtime context as `System: [<time>] <text>`. That turn waits until the session is idle; in the probe it started 12 seconds after the command exited, 1 second after the completion turn ended. Its prompt ends with `If nothing needs attention, reply NO_REPLY.`
+- **Working directory.** A conversation created with `cwd` and `worktree: true` gets `entry.sessionRoot` and `entry.spawnedCwd` set to the checkout, `<stateDir>/worktrees/<fingerprint>/<name>`, on branch `openclaw/<name>` from the freshly fetched `origin/main`. A conversation without `cwd` runs `exec` in `~/.openclaw/workspace`.
+- **Not rerun live.** The `exec` environment (`OPENCLAW_CHANNEL_CONTEXT`, no session key), the bootstrap load in a worktree conversation, the creator-only rename through the `sessions` tool, the `message` tool on `webchat`, and the required reply on a direct turn. Between 2026.10.2 and 2026.10.5, `source-reply-delivery-mode.ts` and `silent-reply-policy.ts` changed by refactoring only.
+
+### Gateway contract
+
+The harness runs `openclaw gateway call <method> --params '<json>' --json` inside the gateway container. A `cwd` outside the agent workspaces requires `operator.admin`; the CLI's first attempt fails `FORBIDDEN` in the gateway log, then the call succeeds with that scope.
+
+- **`sessions.create`** — params `label?`, `cwd?` (absolute gateway path), `worktree?`, `worktreeName?` (`^[a-z0-9][a-z0-9-]{0,63}$`), `worktreeBaseRef?`, `message?`. Without `message`, it returns after the worktree is ready (about 1.2 seconds on the fixture). Response: `ok`, `key`, `sessionId`, `entry`, `runStarted`, `publicRead`, `resolved: { modelProvider, model }`, and `worktree: { id, path, branch }` when one was created. `entry.worktree` is `{ id, branch, repoRoot, canonicalWorkspaceDir }`; the checkout path is in the top-level `worktree.path` and in `entry.sessionRoot`.
+- **`chat.send`** — params `sessionKey`, `message`, `idempotencyKey` (required), `timeoutMs?`. It returns at run start: `{ runId, status: "started", messageSeq? }`, with `runId` equal to the idempotency key.
+- **`chat.history`** — params `sessionKey`, `limit?`. Response: `sessionKey`, `sessionId`, `messages`, `activity`, `hasMore`, `totalMessages`, `pendingInputs`, `deltaCursor`, `defaults`, `sessionInfo`, and `inFlightRun` while a run is active; `sessionInfo.status` is `running` or `done`. A message has `role` (`user`, `assistant`, `toolResult`, `system`), `content`, `timestamp` (epoch milliseconds) and `__openclaw.seq`. User content is a string. Assistant content is an array of `thinking`, `toolCall`, `text` and `image` blocks, and an assistant message carries `__openclaw.runId` and `stopReason` (`toolUse` or `stop`). History hides the heartbeat poll message, so `runId` delimits turns.
+- **Attachments.** A final reply's `MEDIA:<path>` line leaves the text and becomes an `image` block: `{ type, artifactId, url, openUrl, alt, mimeType, width, height, sizeBytes }`, with `url` under `/api/chat/media/outgoing/<session key>/…`. The transcript keeps the text in `content`, the path in `openclawDelivery.mediaUrls` and the image block in `openclawDisplayContent`. Paths in the agent workspace and in a project's `.local` both attached.
+- **`sessions.reset`** — params `key`, `expectedSessionId?`, `reason?`. It resets in place: the `sessionId` stays, and history restarts with a `system` message `Reset` (`__openclaw.kind: "reset"`).
+- **Archive** — `sessions.patch` with `{ key, archived: true, expectedSessionId }`; without `expectedSessionId` it fails `INVALID_REQUEST`. The entry gains `archivedAt` and `archiveReason: "manual"`. The response returns before the background cleanup of the checkout.
+
+### Managed-worktree ownership
+
+OpenClaw removes a session's checkout after archiving, or after 7 idle days, only while HEAD is on the recorded `openclaw/<name>` branch. Switching the checkout to a ticket branch keeps it: `openclaw worktrees list --json` marks the record `gcProtection: "branch-moved"`, and `openclaw worktrees gc` defers it with that reason. From then on AlignDev's workspace rules apply. `workspace setup` without a branch adopts the checkout under its directory name.
+
+After `workspace remove` deletes the checkout, archiving succeeds and the next cleanup pass retires the orphan record: it leaves `worktrees list`, with no snapshot. The `openclaw/<name>` branch stays in the project repository in both cases. Capacity eviction (`worktreeMaxCount`, default 4096) can still purge a `branch-moved` checkout.
+
+### Verification checks
+
+| Check | Result |
+| --- | --- |
+| 1. `webchat` metadata, dashboard key from `session_status`, chained wake of that session | PASS |
+| 2. A moved branch survives archiving and `openclaw worktrees gc` | PASS |
+| 3. `workspace setup` without a branch adopts the checkout, status `ready`, `.plans` and `.local` linked | PASS |
+| 4. A `MEDIA:` line becomes an attachment | PASS |
+| 5. Archiving after `workspace remove` deleted the checkout fails nothing | PASS |
+
+No fallback applies: the app adopts managed worktrees in place, attaches screenshots through `MEDIA:` lines, and the post-merge removal may remove the conversation's own worktree.
+
 ## Background model runs disabled by the harness and the seed
 
 Three defaults can perform background learning or model work: the memory-core dreaming sweep (daily, rewrites `MEMORY.md`), Skill Workshop learning (`skills.workshop.autonomous.mode` defaults to `auto`) and the pre-compaction memory flush (`agents.defaults.compaction.memoryFlush`, writes `memory/YYYY-MM-DD.md`). Since 2026.10.5, Workshop's help describes saving procedures after substantial work and archiving skills unused for 30 days; `off` disables learning, and `propose` is retired. `memory-core` owns the `memory` plugin slot and loads regardless of `plugins.allow`; `plugins.slots.memory: "none"` removes it along with the `memory_search`/`memory_get` tools. The harness config and the deployment seed set the same opt-outs, plus `update.checkOnStart: false` (the startup update check is also an anonymous version ping).
