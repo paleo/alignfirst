@@ -5,7 +5,7 @@ description: >-
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.52.2"
+  version: "0.53.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -59,11 +59,19 @@ Use the skill list in your context to check availability for the current agent:
 
 - `aligndev`: the coding-agent assistant's playbook.
 - `alignfirst`: recognition of protocols named in prose.
+- `paseo-alignfirst-workspace`: recommended for Paseo users; explains how to use AlignFirst workspaces with Paseo.
 - Command skills: `alspec`, `alplan`, `al`, `almerge`, `alreview`, `aldescription`, `alcatchup`, `alcatchupaad`, and `alcatchupspec`.
 
 Report which are available and propose installing the missing ones globally for the current agent. A name absent from the list is unavailable in this session; it does not prove the skill is absent on disk. If the host exposes no skill list, report availability as unknown. This check needs no filesystem scan, installer command, or `doctor` run.
 
 For approved installations, follow [AlignFirst skills setup](references/alignfirst-skills-setup.md#install-the-skills) or [the global `aligndev` skill procedure](references/coding-agent-assistant.md#3-install-the-skill-globally). Installing global skills alone does not configure the project or install Pi tools. The assistant-preparation route still skips command-skill installation unless the user separately requests those shortcuts.
+
+For Paseo users, install `paseo-alignfirst-workspace` globally with approval. Replace `<agent>` with the current agent's installer target (`claude-code`, `codex`, or `pi`):
+
+```sh
+npx -y skills add https://github.com/paleo/alignfirst --global --yes \
+  --agent <agent> --skill paseo-alignfirst-workspace </dev/null
+```
 
 ### Project Tooling
 
