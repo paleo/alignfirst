@@ -1,5 +1,5 @@
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 const GRACE_MS = 5_000;
 const REAP_MS = 2_000;
@@ -166,6 +166,53 @@ async function refreshTargets(
 }
 
 async function processTable(): Promise<Target[]> {
+  if (process.platform === "linux") return linuxProcessTable();
+  return psProcessTable();
+}
+
+function linuxProcessTable(): Target[] {
+  return readdirSync("/proc")
+    .filter((name) => /^\d+$/.test(name))
+    .flatMap((name) => {
+      const pid = Number(name);
+      const fields = readStatFields(pid);
+      return fields ? [linuxTarget(pid, fields)] : [];
+    });
+}
+
+// The fields after the command name, or undefined when the process has vanished.
+function readStatFields(pid: number): string[] | undefined {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    return stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error.code === "ENOENT" || error.code === "ESRCH")
+    )
+      return;
+    throw error;
+  }
+}
+
+function linuxTarget(pid: number, fields: string[]): Target {
+  const [state, rawParent, rawGroup] = fields;
+  const ppid = Number(rawParent);
+  const group = Number(rawGroup);
+  if (![pid, ppid, group].every(Number.isSafeInteger) || pid < 1 || ppid < 0 || group < 0) {
+    throw new Error("Invalid /proc stat.");
+  }
+  return { pid, ppid, group, identity: statIdentity(fields), zombie: state === "Z" };
+}
+
+function statIdentity(fields: string[]): string {
+  const identity = fields[19];
+  if (identity === undefined || !/^\d+$/.test(identity)) throw new Error("Invalid /proc stat.");
+  return identity;
+}
+
+async function psProcessTable(): Promise<Target[]> {
   const output = await new Promise<string>((resolve, reject) => {
     execFile(
       "/bin/ps",
@@ -182,7 +229,7 @@ async function processTable(): Promise<Target[]> {
   return output
     .split("\n")
     .filter((line) => line.trim() !== "")
-    .flatMap((line) => {
+    .map((line) => {
       const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$/.exec(line);
       if (!match) throw new Error("Invalid process query record.");
       const [, rawPid, rawParent, rawGroup, state, started] = match;
@@ -192,27 +239,13 @@ async function processTable(): Promise<Target[]> {
       if (![pid, ppid, group].every(Number.isSafeInteger) || pid < 1 || ppid < 0 || group < 0) {
         throw new Error("Unsafe process query record.");
       }
-      const identity = process.platform === "linux" ? linuxIdentity(pid) : started;
-      if (identity === undefined) return [];
-      return [{ pid, ppid, group, identity, zombie: state.startsWith("Z") }];
+      return { pid, ppid, group, identity: started, zombie: state.startsWith("Z") };
     });
 }
 
 function linuxIdentity(pid: number): string | undefined {
-  try {
-    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-    const identity = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
-    if (identity === undefined || !/^\d+$/.test(identity)) throw new Error("Invalid /proc stat.");
-    return identity;
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      "code" in error &&
-      (error.code === "ENOENT" || error.code === "ESRCH")
-    )
-      return;
-    throw error;
-  }
+  const fields = readStatFields(pid);
+  return fields && statIdentity(fields);
 }
 
 function signalTargets(targets: Map<number, Target>, signal: NodeJS.Signals): void {

@@ -1,11 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TranscriptContext } from "@earendil-works/pi-ai";
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { launchManaged, type ManagedProcess } from "../src/process-tree.js";
-import { gate, host, jobFrom, waitFor, waitJob } from "./host-fixture.js";
+import { gate, host, jobFrom, readPidFile, waitFor, waitJob } from "./host-fixture.js";
 
 const waitCommand = "while [ ! -f release ]; do sleep 0.02; done; printf 'PRIVATE-LOG'; exit 0";
 
@@ -502,8 +502,7 @@ describe.skipIf(process.platform !== "linux")("actual runtime process retirement
             command: `exec '${process.execPath}' -e 'require("fs").writeFileSync("pid", String(process.pid)); setInterval(()=>{}, 1000)'`,
           }),
         );
-        await waitFor(() => existsSync(join(h.cwd, "pid")));
-        const pid = Number(readFileSync(join(h.cwd, "pid"), "utf8"));
+        const pid = await readPidFile(join(h.cwd, "pid"));
         expect(pid).toBe(processes[0].child.pid);
         if (operation === "new") await h.runtime.newSession();
         else if (operation === "resume") await h.runtime.switchSession(original);
@@ -644,7 +643,12 @@ function processFields(pid: number): string[] | undefined {
     const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
     return stat.slice(stat.lastIndexOf(")") + 2).split(" ");
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error.code === "ENOENT" || error.code === "ESRCH")
+    )
+      return;
     throw error;
   }
 }

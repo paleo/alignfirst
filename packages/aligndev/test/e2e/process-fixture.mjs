@@ -238,15 +238,18 @@ async function checkSessionIdentity() {
             }),
           );
           let output = "";
+          let stderr = "";
           child.stdout.on("data", (chunk) => {
             output += chunk;
           });
-          child.stderr.resume();
+          child.stderr.on("data", (chunk) => {
+            stderr += chunk;
+          });
           child.on("error", reject);
           child.on("close", (code) =>
             code === 0
               ? resolve(output.trim())
-              : reject(new Error(`machine-id fixture exited ${code}`)),
+              : reject(new Error(`machine-id fixture exited ${code}: ${stderr}`)),
           );
         }),
     ),

@@ -5,7 +5,14 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { launchManaged } from "../src/process-tree.js";
-import { type FixturePid, isLive, records, waitFor } from "./process-tree-helpers.js";
+import {
+  type FixturePid,
+  isLive,
+  records,
+  toolStarted,
+  jsonEvents,
+  waitFor,
+} from "./process-tree-helpers.js";
 
 vi.mock("node:fs", async (original) => {
   const fs = await original<typeof FileSystem>();
@@ -142,6 +149,7 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
     mkdirSync(config);
     writeFileSync(join(config, "settings.json"), JSON.stringify({ extensions: [provider] }));
     let diagnostics = "";
+    let output = "";
     const managed = launchManaged({
       command: process.execPath,
       args: [
@@ -176,7 +184,9 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
         SUBAGENT_PARENT_SCOPE: "user",
         SUBAGENT_FIXTURE_COMMAND: `'${process.execPath}' '${fixture}' '${dir}' grouped`,
       },
-      stdout: () => {},
+      stdout: (chunk) => {
+        output += chunk.toString();
+      },
       stderr(chunk) {
         diagnostics += chunk.toString();
       },
@@ -186,7 +196,16 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
     let timer: NodeJS.Timeout | undefined;
     try {
       await managed.spawned;
-      await waitFor(() => records(dir).length >= 6).catch((error) => {
+      await waitFor(
+        () => toolStarted(output, "subagent"),
+        () => jsonEvents(output).length,
+      ).catch((error) => {
+        throw new Error(`${error.message}\n${diagnostics}`);
+      });
+      await waitFor(
+        () => records(dir).length >= 6,
+        () => records(dir).length,
+      ).catch((error) => {
         throw new Error(`${error.message}\n${diagnostics}`);
       });
       const started = Date.now();

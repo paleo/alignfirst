@@ -35,15 +35,47 @@ export function isLive(record: FixturePid): boolean {
     const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
     return fields[19] === record.identity && fields[0] !== "Z";
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error.code === "ENOENT" || error.code === "ESRCH")
+    )
+      return false;
     throw error;
   }
 }
 
-export async function waitFor(check: () => boolean): Promise<void> {
-  const deadline = Date.now() + 3_000;
+// A progress increase resets the deadline, so the budget bounds one stage.
+export async function waitFor(check: () => boolean, progress?: () => number): Promise<void> {
+  let reached = progress?.() ?? 0;
+  let deadline = Date.now() + 3_000;
   while (!check()) {
+    const current = progress?.() ?? reached;
+    if (current > reached) {
+      reached = current;
+      deadline = Date.now() + 3_000;
+    }
     if (Date.now() > deadline) throw new Error("Fixture synchronization timed out.");
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
+}
+
+// The complete lines of Pi's JSON-mode output.
+export function jsonEvents(output: string): unknown[] {
+  return output
+    .slice(0, output.lastIndexOf("\n") + 1)
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => JSON.parse(line));
+}
+
+export function toolStarted(output: string, toolName: string): boolean {
+  return jsonEvents(output).some(
+    (event) =>
+      isRecord(event) && event.type === "tool_execution_start" && event.toolName === toolName,
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }

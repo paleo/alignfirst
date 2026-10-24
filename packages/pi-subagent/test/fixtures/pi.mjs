@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 
 if (process.argv.includes("--epipe")) {
   process.stdin.destroy();
@@ -29,7 +29,9 @@ process.stdin.on("end", () => {
       ].map((key) => [key, process.env[key]]),
     ),
   };
-  writeFileSync(`capture-${process.pid}.json`, JSON.stringify(capture));
+  // Readers count "capture-" files, so the temp name must not match until the content is complete.
+  writeFileSync(`.capture-${process.pid}.json.tmp`, JSON.stringify(capture));
+  renameSync(`.capture-${process.pid}.json.tmp`, `capture-${process.pid}.json`);
   const task = input.slice("Task:\n".length, -"\nEnd of task.".length);
   if (task === "startup-error") {
     process.stderr.write("No API key found for fixture.\n");

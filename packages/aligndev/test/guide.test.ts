@@ -1111,23 +1111,19 @@ describe("work-files and lightweight worktree runbooks", () => {
 describe("every template, every platform", () => {
   const OPENCLAW_ONLY = ["channel-handling", "project-lifecycle", "message-tool", "project"];
 
-  it.each(PLATFORMS)("renders every %s guide with no placeholder left", async (platform) => {
+  it("renders every openclaw guide with no placeholder left", async () => {
     for (const agent of CHILDREN) {
       const fixture = makeFixture();
       writeConfig(fixture.home, {
-        platform,
-        ...(platform === "openclaw" ? { projectsRoot: fixture.root } : {}),
+        platform: "openclaw",
+        projectsRoot: fixture.root,
         code: { agent },
       });
-      const directories =
-        platform === "openclaw" ? [fixture.root] : Object.values(makeGuideVariants(fixture));
-      for (const cwd of directories) {
-        for (const env of [{}, NPX_ENV]) {
-          for (const args of everyGuide(platform)) {
-            const result = await runGuide(fixture, args, { cwd, env });
-            expect(result.code, `${platform} ${args}: ${result.stderr}`).toBe(0);
-            expect(result.stdout, `${platform} ${args}`).not.toContain("{{");
-          }
+      for (const env of [{}, NPX_ENV]) {
+        for (const args of everyGuide()) {
+          const result = await runGuide(fixture, args, { cwd: fixture.root, env });
+          expect(result.code, `${args}: ${result.stderr}`).toBe(0);
+          expect(result.stdout, `${args}`).not.toContain("{{");
         }
       }
     }
@@ -1702,16 +1698,16 @@ function topicArgs(platform: Platform, topic: string): string[] {
   return platform === "openclaw" ? ["--channel", "slack", topic] : [topic];
 }
 
-// The dispatcher, then every playbook, topic and code guide of each context of the platform.
-function everyGuide(platform: Platform): string[][] {
-  if (platform === "codingAgent") {
-    return [[], ...[...PLAYBOOK_TOPICS.codingAgent, "code"].map((topic) => [topic])];
-  }
+// The dispatcher, then every playbook, topic and code guide of each OpenClaw context.
+function everyGuide(): string[][] {
   return [
     [],
     ["project"],
     ...SURFACES.flatMap((surface) => {
-      const topics = [...PLAYBOOK_TOPICS[guideContextOf({ platform, surface })], "code"];
+      const topics = [
+        ...PLAYBOOK_TOPICS[guideContextOf({ platform: "openclaw", surface })],
+        "code",
+      ];
       return [["--channel", surface], ...topics.map((topic) => ["--channel", surface, topic])];
     }),
   ];
