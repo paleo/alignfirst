@@ -169,8 +169,11 @@ async function fixture() {
     mode: 0o755,
   });
   vi.stubEnv("PATH", `${bin}:${process.env.PATH}`);
-  for (const key of ["npm_config_user_agent", "NODE_OPTIONS", "NODE_PATH"])
-    vi.stubEnv(key, undefined);
+  // Model a direct CLI launch, not the npm lifecycle running this suite.
+  for (const key of Object.keys(process.env)) {
+    if (key.startsWith("npm_")) vi.stubEnv(key, undefined);
+  }
+  for (const key of ["NODE_OPTIONS", "NODE_PATH"]) vi.stubEnv(key, undefined);
   vi.stubEnv("GIT_CONFIG_GLOBAL", join(h.cwd, "gitconfig"));
   writeFileSync(join(h.cwd, "gitconfig"), "");
   writeJson(join(home, ".alignfirst/aligndev.settings.json"), {
