@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { main } from "../src/cli.js";
 import { resolveSkillRoots } from "../src/skills.js";
 import {
   git,
@@ -22,6 +23,31 @@ afterEach(() => {
 });
 
 describe("doctor command", () => {
+  it.each([
+    ["node", "npm", "npx -y"],
+    ["node", "bun", "bunx"],
+    ["bun", "bun", "bunx --bun"],
+  ] as const)(
+    "renders the external Skills update through %s/%s",
+    async (runtime, manager, runner) => {
+      const home = temp();
+      installSkill(join(home, ".agents", "skills"), "alignfirst", "3.0.0");
+      const stdout = makeSink();
+      const env = { npm_config_user_agent: `${manager}/1`, npm_command: "exec", PATH: "" };
+      expect(
+        await main({
+          argv: ["runtime", "alignfirst", "doctor"],
+          cwd: home,
+          home,
+          env,
+          evidence: { runtime, env, cwd: home, executable: "/runtime" },
+          stdout,
+          stderr: makeSink(),
+        }),
+      ).toBe(0);
+      expect(stdout.text()).toContain(`update: ${runner} skills update --global --yes`);
+    },
+  );
   it("reports a profile without a companion and warns about unmatched profile keys", async () => {
     const { root, home, project } = makeCompanionProject({});
     dirs.push(root);

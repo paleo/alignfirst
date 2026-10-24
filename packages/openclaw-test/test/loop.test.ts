@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { type CellResult, cellLeafName } from "../src/cell-result.js";
 import {
+  countCells,
   expandChannelSelection,
   type MatrixOptions,
   runMatrix,
@@ -34,9 +35,13 @@ describe("expandChannelSelection", () => {
     ]);
   });
 
-  it("expands 'all' to the configured channels, alphabetically", () => {
+  it("expands 'all' to the configured channels and webchat, alphabetically", () => {
     const reversed = makeConfig(["slack-mock", "discord-mock"]);
-    expect(expandChannelSelection("all", reversed)).toEqual(["discord-mock", "slack-mock"]);
+    expect(expandChannelSelection("all", reversed)).toEqual([
+      "discord-mock",
+      "slack-mock",
+      "webchat",
+    ]);
   });
 
   it("dedupes repeated ids, order preserved", () => {
@@ -46,8 +51,14 @@ describe("expandChannelSelection", () => {
     ]);
   });
 
-  it("throws on unknown id", () => {
-    expect(() => expandChannelSelection("nope", cfg)).toThrow(/unknown channel/);
+  it("throws on unknown id, listing webchat among the allowed ids", () => {
+    expect(() => expandChannelSelection("nope", cfg)).toThrow(
+      "unknown channel(s): nope — allowed: discord-mock, slack-mock, webchat",
+    );
+  });
+
+  it("accepts the webchat surface", () => {
+    expect(expandChannelSelection("webchat", cfg)).toEqual(["webchat"]);
   });
 });
 
@@ -78,6 +89,7 @@ function makeOpts(
     models: [{ id: "m", ref: "p/m" }],
     renderConfigPath: (m) => `/cfg/${m.id}.json`,
     iterations: 1,
+    scenarioSurfaces: new Map(),
     maxFailures: 1,
     stopOnFail: false,
     reuseStack: false,
@@ -176,6 +188,79 @@ function runnerOrder(calls: CallLog[], format: (argv: string[]) => string): stri
 function recreateCount(calls: CallLog[]): number {
   return calls.filter((c) => c.kind === "recreate").length;
 }
+
+describe("runMatrix scenario surfaces", () => {
+  const channels = ["discord-mock", "slack-mock", "webchat"];
+  const pairs = (argv: string[]) =>
+    `${argvFlag(argv, "--scenario")}|${argvFlag(argv, "--channel")}`;
+
+  it("runs a scenario on its declared surfaces and one without on the channels only", async () => {
+    const fake = setupFake({});
+    const exit = await runMatrix(
+      makeOpts(fake, {
+        scenarios: ["A01", "A26"],
+        channels,
+        scenarioSurfaces: new Map([
+          ["A01", undefined],
+          ["A26", ["webchat"]],
+        ]),
+      }),
+    );
+    expect(exit).toBe(0);
+    expect(runnerOrder(fake.calls, pairs)).toEqual([
+      "A01|discord-mock",
+      "A01|slack-mock",
+      "A26|webchat",
+    ]);
+  });
+
+  it("rejects a selection that leaves a scenario no cell, before any spawn", async () => {
+    const fake = setupFake({});
+    const options = makeOpts(fake, {
+      scenarios: ["A01", "A26"],
+      channels: ["discord-mock", "slack-mock"],
+      scenarioSurfaces: new Map([["A26", ["webchat"]]]),
+    });
+    await expect(runMatrix(options)).rejects.toThrow(
+      "scenario A26 supports webchat; selected channels: discord-mock, slack-mock",
+    );
+    expect(fake.calls).toEqual([]);
+  });
+
+  it("counts only the supported cells", () => {
+    expect(
+      countCells({
+        scenarios: ["A01", "A26"],
+        channels,
+        models: [{ id: "m", ref: "p/m" }],
+        iterations: 2,
+        scenarioSurfaces: new Map([["A26", ["webchat"]]]),
+      }),
+    ).toBe(6);
+  });
+});
+
+describe("runMatrix worker failures", () => {
+  it("drains sibling workers and removes signal handlers before rejecting", async () => {
+    const fake = setupFake({});
+    let siblingFinished = false;
+    const before = process.listenerCount("SIGTERM");
+    const options = makeOpts(fake, {
+      scenarios: ["S1", "S2", "S3"],
+      workers: makeWorkers(2),
+      spawnRunner: async (request) => {
+        if (argvFlag(request.argv, "--scenario") === "S1") throw new Error("worker failed");
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        siblingFinished = true;
+        return fake.spawnRunner(request);
+      },
+    });
+    await expect(runMatrix(options)).rejects.toThrow("worker failed");
+    expect(siblingFinished).toBe(true);
+    expect(process.listenerCount("SIGTERM")).toBe(before);
+    expect(runnerOrder(fake.calls, (argv) => argvFlag(argv, "--scenario"))).toEqual(["S2"]);
+  });
+});
 
 describe("runMatrix, pool of 1", () => {
   it("runs cells in expansion order: scenarios → channels → iterations", async () => {

@@ -19,7 +19,33 @@ export function gitNetwork(streams: Streams, dir: string, args: string[]): Promi
   return spawnGit(streams, dir, [...HTTP_STALL_OPTIONS, ...args]);
 }
 
-function spawnGit(streams: Streams, dir: string, args: string[]): Promise<void> {
+async function spawnGit(streams: Streams, dir: string, args: string[]): Promise<void> {
+  const code = await spawnGitWithStreams(streams, dir, args);
+  if (code !== 0) throw gitFailure(args);
+}
+
+export async function gitQuiet(dir: string, args: string[]): Promise<string | undefined> {
+  let stderr = "";
+  const code = await spawnGitWithStreams(
+    {
+      stdout: { write() {} },
+      stderr: {
+        write: (text) => {
+          stderr += text;
+        },
+      },
+    },
+    dir,
+    args,
+  );
+  if (code !== 0) return stderr.trim();
+}
+
+function spawnGitWithStreams(
+  streams: Streams,
+  dir: string,
+  args: string[],
+): Promise<number | null> {
   return new Promise((resolve, reject) => {
     const child = spawn("git", ["-C", dir, ...args], {
       stdio: ["ignore", "pipe", "pipe"],
@@ -30,7 +56,7 @@ function spawnGit(streams: Streams, dir: string, args: string[]): Promise<void> 
     child.stdout.on("data", (text: string) => streams.stdout.write(text));
     child.stderr.on("data", (text: string) => streams.stderr.write(text));
     child.once("error", (error) => reject(gitFailure(args, error.message)));
-    child.once("close", (code) => (code === 0 ? resolve() : reject(gitFailure(args))));
+    child.once("close", resolve);
   });
 }
 

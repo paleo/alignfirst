@@ -18,6 +18,7 @@
     "test": "npm run test --workspaces --if-present",
     "test:integration": "npm run test:integration --workspaces --if-present",
     "test:coding-profiles": "node scripts/coding-profiles-smoke.mjs",
+    "test:cli-runtimes": "node scripts/cli-runtimes.mjs",
     "test:deployment-templates": "node --test scripts/test/*.test.mjs",
     "changeset": "changeset",
     "ci:version": "changeset version && npm i",

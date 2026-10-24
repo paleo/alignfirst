@@ -53,7 +53,13 @@ afterEach(async () => {
         }
       }
     }
-    for (const pid of finalizers) await waitForExit(pid);
+    for (const fixture of ownedFixtures) {
+      const log = join(fixture.repo, "finalize-pids.jsonl");
+      if (existsSync(log)) {
+        finalizers.push(...readFileSync(log, "utf-8").trim().split("\n").map(Number));
+      }
+    }
+    for (const pid of new Set(finalizers)) await waitForExit(pid);
   } finally {
     for (const pid of sleepers.splice(0)) {
       if (isAlive(pid)) process.kill(pid, "SIGKILL");

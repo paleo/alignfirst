@@ -5,7 +5,13 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { gitNetwork, nonInteractiveEnv, optionalRepositoryId, git as runGit } from "../src/git.js";
+import {
+  gitNetwork,
+  gitQuiet,
+  nonInteractiveEnv,
+  optionalRepositoryId,
+  git as runGit,
+} from "../src/git.js";
 import { configureGit, git, makeSink, makeTempDir, runMain } from "./helpers.js";
 
 const dirs: string[] = [];
@@ -51,6 +57,32 @@ describe("git failures", () => {
     ).rejects.toThrow("git rebase failed. See the git output above.");
     // Git 2.39 prints "No rebase in progress?".
     expect(stderr.text()).toMatch(/no rebase in progress/i);
+  });
+
+  it("captures quiet failures and streams neither successful nor failed output", async () => {
+    const dir = makeFixture();
+    git(dir, "init", "--quiet");
+    git(dir, "commit", "--quiet", "--allow-empty", "-m", "base");
+    const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    try {
+      await expect(gitQuiet(dir, ["log", "--oneline"])).resolves.toBeUndefined();
+      const failure = await gitQuiet(dir, ["rebase", "--continue"]);
+      expect(failure).toMatch(/no rebase in progress/i);
+      expect(failure).toBe(failure?.trim());
+      expect(stdout).not.toHaveBeenCalled();
+      expect(stderr).not.toHaveBeenCalled();
+    } finally {
+      stdout.mockRestore();
+      stderr.mockRestore();
+    }
+  });
+
+  it("rejects a quiet spawn error", async () => {
+    const dir = makeFixture();
+    vi.stubEnv("PATH", dir);
+    await expect(gitQuiet(dir, ["status"])).rejects.toThrow("git status failed:");
+    await expect(gitQuiet(dir, ["status"])).rejects.toThrow("ENOENT");
   });
 
   it("streams output beyond the synchronous child-process buffer limit", async () => {

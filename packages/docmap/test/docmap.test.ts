@@ -1,4 +1,6 @@
-import { relative, resolve } from "node:path";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { main, type PackageManagerCommands } from "../src/cli.js";
@@ -838,6 +840,125 @@ describe("extractFallbackTitle", () => {
   });
 });
 
+describe("invocation-aware CLI prefixes", () => {
+  it.each([
+    ["node", {}, "docmap"],
+    ["bun", {}, "bunx --bun @alignfirst/docmap"],
+    [
+      "node",
+      { npm_config_user_agent: "bun/1.4.4", npm_command: "exec" },
+      "bunx @alignfirst/docmap",
+    ],
+    [
+      "bun",
+      { npm_config_user_agent: "bun/1.4.4", npm_command: "exec" },
+      "bunx --bun @alignfirst/docmap",
+    ],
+    [
+      "node",
+      { npm_config_user_agent: "npm/12", npm_command: "exec", npm_lifecycle_event: "npx" },
+      "npx -y @alignfirst/docmap",
+    ],
+    [
+      "node",
+      { npm_config_user_agent: "pnpm/10", npm_command: "dlx" },
+      "pnpm dlx @alignfirst/docmap",
+    ],
+    [
+      "node",
+      { npm_config_user_agent: "yarn/4", npm_command: "dlx" },
+      "yarn dlx @alignfirst/docmap",
+    ],
+  ] as const)("uses real %s evidence %j over conflicting lockfiles", (runtime, env, prefix) => {
+    const cwd = mkdtempSync(join(tmpdir(), "docmap-invocation-"));
+    try {
+      for (const lock of ["package-lock.json", "bun.lock", "yarn.lock", "pnpm-lock.yaml"])
+        writeFileSync(join(cwd, lock), "");
+      for (const mode of ["--help", "--guide"]) {
+        let output = "";
+        main({
+          argv: ["runtime", "docmap", mode, "--root", "docs' quoted\\path"],
+          cwd,
+          evidence: { runtime, env, cwd, executable: "/runtime" },
+          stdout: {
+            write: (s) => {
+              output += s;
+            },
+          },
+        });
+        expect(output).toContain(`${prefix} --root 'docs'\\'' quoted\\path'`);
+        expect(output).not.toContain("npm run docmap");
+      }
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["docs", "docs$&", "docs$'", "docs$`", "docs$$"])(
+    "retains verified npm script %s literally with its forwarding separator",
+    (name) => {
+      const cwd = mkdtempSync(join(tmpdir(), "docmap-script-"));
+      try {
+        const entryPoint = join(cwd, "docmap.mjs");
+        const manifest = join(cwd, "package.json");
+        const script = `node ${entryPoint}`;
+        writeFileSync(entryPoint, "");
+        writeFileSync(manifest, JSON.stringify({ scripts: { [name]: script } }));
+        const evidence = {
+          runtime: "node" as const,
+          cwd,
+          entryPoint,
+          executable: process.execPath,
+          parentArgv: ["/bin/sh", "-c", script],
+          env: {
+            npm_config_user_agent: "npm/12",
+            npm_command: "run",
+            npm_lifecycle_event: name,
+            npm_lifecycle_script: script,
+            npm_package_json: manifest,
+          },
+        };
+        const renderedName = name === "docs" ? name : `'${name.replaceAll("'", "'\\''")}'`;
+        let output = "";
+        for (const mode of ["--help", "--guide"]) {
+          output = "";
+          main({
+            argv: ["node", entryPoint, mode],
+            evidence,
+            cwd,
+            stdout: {
+              write: (s) => {
+                output += s;
+              },
+            },
+          });
+          expect(output).toContain(`npm run ${renderedName} -- --check`);
+          expect(output).not.toContain("{{");
+        }
+        output = "";
+        main({
+          argv: ["node", entryPoint, "--help"],
+          evidence: { ...evidence, runtime: "bun" },
+          cwd,
+          commands: {
+            base: "bunx --bun alignfirst docmap",
+            withArgs: "bunx --bun alignfirst docmap",
+          },
+          stdout: {
+            write: (s) => {
+              output += s;
+            },
+          },
+        });
+        expect(output).toContain("bunx --bun alignfirst docmap --guide");
+        expect(output).not.toContain("npm run");
+      } finally {
+        rmSync(cwd, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
 describe("package-manager prefix in help", () => {
   // Walk from "/" so no lockfile is found and detection falls through to the invocation-based
   // fallback. `--help` returns before any listing, so no `--root` is needed (and omitting it keeps
@@ -855,7 +976,7 @@ describe("package-manager prefix in help", () => {
 
   it("keeps the npx suggestion when launched through npx, even if installed globally", () => {
     const out = help("npm/10.0.0 node/v24.0.0 linux x64 workspaces/false");
-    expect(out).toContain("npx @alignfirst/docmap --guide");
+    expect(out).toContain("npx -y @alignfirst/docmap --guide");
   });
 
   it("suggests pnpm dlx under a pnpm runner", () => {
@@ -866,13 +987,14 @@ describe("package-manager prefix in help", () => {
     expect(help("bun/1.1.0 npm/? node/v24.0.0")).toContain("bunx @alignfirst/docmap");
   });
 
-  it("suggests the npm run script when launched via npm inside a lockfile'd project", () => {
+  it("keeps the explicit runner inside a lockfile'd project", () => {
     const out = invoke(
       ["node", "docmap", "--help"],
       process.cwd(),
       "npm/10.0.0 node/v24.0.0 linux x64",
     ).stdout;
-    expect(out).toContain("npm run docmap");
+    expect(out).toContain("npx -y @alignfirst/docmap");
+    expect(out).not.toContain("npm run docmap");
   });
 
   it("suggests the bare binary even inside a lockfile'd project when run as a global binary", () => {

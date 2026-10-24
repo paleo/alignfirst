@@ -155,7 +155,13 @@ for (const overlay of Object.keys(agents)) {
           assert.equal(inventory.configDir, fixture.nativeDir);
           const redirected = spawnSync(
             process.execPath,
-            [join(repository, "packages/aligndev/bin/aligndev.mjs"), "guide", "code"],
+            [
+              join(repository, "packages/aligndev/bin/aligndev.mjs"),
+              "guide",
+              "code",
+              "--channel",
+              "app",
+            ],
             options(fixture),
           );
           assert.notEqual(redirected.status, 0);
@@ -444,6 +450,8 @@ test("inventory and real CLI reject duplicate invalid agents without leaking val
           join(repository, "packages/aligndev/bin/aligndev.mjs"),
           "guide",
           "code",
+          "--channel",
+          "app",
           "--profile",
           selected,
         ],
@@ -535,6 +543,8 @@ test("inventory and real CLI ignore stale settings on stderr without rewriting i
         join(repository, "packages/aligndev/bin/aligndev.mjs"),
         "guide",
         "code",
+        "--channel",
+        "app",
         "--profile",
         selected,
       ],
@@ -624,6 +634,8 @@ test("inventory and real CLI still reject malformed recognized fields alongside 
           join(repository, "packages/aligndev/bin/aligndev.mjs"),
           "guide",
           "code",
+          "--channel",
+          "app",
           "--profile",
           fixture.settings.code.profile,
         ],
@@ -705,6 +717,8 @@ function validateProfiles(fixture) {
       join(repository, "packages/aligndev/bin/aligndev.mjs"),
       "guide",
       "code",
+      "--channel",
+      "app",
       "--profile",
       name,
     ]);

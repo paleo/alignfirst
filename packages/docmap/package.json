@@ -27,6 +27,7 @@
   },
   "exports": {
     ".": "./dist/cli.js",
+    "./invocation": "./dist/invocation.js",
     "./package.json": "./package.json"
   },
   "files": [
@@ -43,6 +44,7 @@
     "clear": "rimraf dist/*",
     "lint": "biome check",
     "test": "vitest run",
+    "test:invocation": "node ../../scripts/invocation-probe.mjs",
     "docmap": "node bin/docmap.mjs"
   },
   "devDependencies": {

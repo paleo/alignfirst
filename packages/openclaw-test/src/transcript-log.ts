@@ -13,6 +13,14 @@ import type { AgentToolCall } from "./report.js";
 const DUMP_SCRIPT = "/opt/openclaw-test/src/dist/transcript-dump.js";
 const BUS_URL = process.env.OPENCLAW_TEST_BUS_URL ?? "http://bus:43123";
 
+/** Which sessions belong to a cell: the conversation's, its bus threads', and exact session keys. */
+export interface TranscriptScope {
+  conversationId: string;
+  startedAtIso: string;
+  /** Selected by exact key, such as the webchat sessions the driver touched. */
+  sessionKeys?: readonly string[];
+}
+
 export interface TranscriptSnapshot {
   /** Agent stores found in the gateway. 0 means no store yet — or none at all. */
   databases: number;
@@ -37,11 +45,8 @@ interface ToolResultBlock {
   content?: unknown;
 }
 
-/** The transcripts of the conversation and its bus-owned thread sessions. */
-export async function fetchTranscriptSnapshot(opts: {
-  conversationId: string;
-  startedAtIso: string;
-}): Promise<TranscriptSnapshot> {
+/** The transcripts of the conversation, its bus-owned thread sessions and the scope's session keys. */
+export async function fetchTranscriptSnapshot(opts: TranscriptScope): Promise<TranscriptSnapshot> {
   const outPath = `${IPC_DIR}/${randomUUID()}.transcript.json`;
   try {
     const { threads } = await getQaBusState(BUS_URL);
@@ -49,8 +54,17 @@ export async function fetchTranscriptSnapshot(opts: {
     const threadIds = threads
       .filter((thread) => thread.conversationId.toLowerCase() === conversationId)
       .map((thread) => thread.id);
+    const sessionKeyFlags = (opts.sessionKeys ?? []).flatMap((key) => ["--session-key", key]);
     const result = await execInGateway(
-      ["node", DUMP_SCRIPT, opts.startedAtIso, opts.conversationId, outPath, ...threadIds],
+      [
+        "node",
+        DUMP_SCRIPT,
+        opts.startedAtIso,
+        opts.conversationId,
+        outPath,
+        ...threadIds,
+        ...sessionKeyFlags,
+      ],
       // A whole conversation can take a while to serialize; the default 30s
       // exec timeout is too tight for long cells.
       { timeoutMs: 60_000 },
@@ -81,13 +95,13 @@ export async function fetchTranscriptSnapshot(opts: {
  * landed. A conversation spans multiple OpenClaw sessions (e.g. Discord's
  * channel session plus a per-thread session).
  */
-export async function waitForTranscriptQuiescence(opts: {
-  conversationId: string;
-  startedAtIso: string;
-  maxWaitMs?: number;
-  pollMs?: number;
-  settleMs?: number;
-}): Promise<void> {
+export async function waitForTranscriptQuiescence(
+  opts: TranscriptScope & {
+    maxWaitMs?: number;
+    pollMs?: number;
+    settleMs?: number;
+  },
+): Promise<void> {
   const maxWaitMs = opts.maxWaitMs ?? 60_000;
   const pollMs = opts.pollMs ?? 1_000;
   const settleMs = opts.settleMs ?? 4_000;
@@ -156,10 +170,7 @@ function assistantCostTotal(msg: Record<string, unknown>): number | undefined {
 }
 
 /** One-shot fetch + aggregation of the conversation's agent tool calls. */
-export async function parseAgentToolCalls(opts: {
-  conversationId: string;
-  startedAtIso: string;
-}): Promise<AgentToolCall[]> {
+export async function parseAgentToolCalls(opts: TranscriptScope): Promise<AgentToolCall[]> {
   const { sessions } = await fetchTranscriptSnapshot(opts);
   return aggregateAgentToolCalls(sessions);
 }

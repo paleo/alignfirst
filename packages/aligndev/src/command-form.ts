@@ -1,16 +1,39 @@
-// How printed commands name the two CLIs: the global commands, or their `npx` form when aligndev runs
-// through a package manager. The variable is inherited, so the processes aligndev spawns agree. The rule
-// mirrors `resolveCommandForm` in the alignfirst package.
+import {
+  type Invocation,
+  type InvocationCommand,
+  type LaunchEvidence,
+  invocationCommand,
+  packageCommand,
+  readLaunchEvidence,
+  resolveInvocation,
+} from "@alignfirst/docmap/invocation";
+
 export interface CommandForms {
-  viaNpx: boolean;
+  invocation: Invocation;
+  self: InvocationCommand;
+  counterpart: InvocationCommand;
   aligndev: string;
   alignfirst: string;
 }
 
-export function resolveCommandForms(env: NodeJS.ProcessEnv): CommandForms {
-  const userAgent = env.npm_config_user_agent;
-  const viaNpx = userAgent !== undefined && userAgent !== "";
-  return viaNpx
-    ? { viaNpx, aligndev: "npx -y aligndev", alignfirst: "npx -y alignfirst" }
-    : { viaNpx, aligndev: "aligndev", alignfirst: "alignfirst" };
+export function resolveCommandForms(
+  env: NodeJS.ProcessEnv,
+  evidence: LaunchEvidence = { ...readLaunchEvidence(), env },
+): CommandForms {
+  const invocation = resolveInvocation(
+    { packageName: "aligndev", binaryName: "aligndev" },
+    evidence,
+  );
+  const self = invocationCommand(invocation);
+  const counterpart = packageCommand(invocation, {
+    packageName: "alignfirst",
+    binaryName: "alignfirst",
+  });
+  return {
+    invocation,
+    self,
+    counterpart,
+    aligndev: self.withArgs,
+    alignfirst: counterpart.withArgs,
+  };
 }

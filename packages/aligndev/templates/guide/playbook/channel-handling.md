@@ -1,8 +1,13 @@
 # Channel handling
 
-If conversation metadata contains `topic_id`, you are already in a thread. Run `{{ALIGNDEV}} guide working-session` and continue there before any lookup or thread creation.
+If conversation metadata contains `topic_id`, you are already in a thread. Run `{{GUIDE}} working-session` and continue there before any lookup or thread creation.
 
-Otherwise, you are in a channel (Slack) or channel/DM (Discord). Triage the message. Ordinary conversation stays in the channel; project work opens and activates a thread. The work itself happens in the thread session.
+{{#slack}}
+Otherwise, you are in a channel (Slack). Triage the message. Ordinary conversation stays in the channel; project work opens and activates a thread. The work itself happens in the thread session.
+{{/slack}}
+{{#discord}}
+Otherwise, you are in a channel/DM (Discord). Triage the message. Ordinary conversation stays in the channel; project work opens and activates a thread. The work itself happens in the thread session.
+{{/discord}}
 
 ## Project lookup
 
@@ -12,20 +17,7 @@ Retain the complete result; reuse it while it remains sufficient, and refresh it
 
 If `{{ALIGNDEV}} project list --json` fails, report the error and end the turn. Do not route against a partial or remembered inventory.
 
-Resolve PROJECT and PROJECT_PATH from that result:
-
-- **PROJECT** — the selected main-worktree directory name.
-- **PROJECT_PATH** — its canonical absolute main-worktree path.
-- Only a project in the `projects` list supplies PROJECT_PATH. A name that appears only under a directory's `others` is a directory that is not a git repository, so not a project: report it and ask for a usable project path. For project removal, the listed project's path is PROJECT_PATH.
-- A mentioned name with one listed match supplies both values. A name counts as mentioned wherever it appears, including inside a resource URL's path (a repository URL naming the project, for instance).
-- A mentioned name with several listed matches supplies PROJECT but leaves PROJECT_PATH unresolved. Ask the user to select one of the matching canonical paths.
-- A mentioned name with no listed match supplies the proposed PROJECT but leaves PROJECT_PATH unresolved.
-- With no mentioned project, infer both values only when the list contains exactly one project. Zero or several projects leave both values unresolved.
-- A request spanning several projects retains every resolved PROJECT and PROJECT_PATH pair. The request establishes this scope; several inventory candidates leave a single-project request unresolved.
-- A request to create an absent named project is project-lifecycle intent. Keep the proposed name as PROJECT and leave PROJECT_PATH absent for the lifecycle procedure to establish.
-- A request to clone a repository whose name matches no inventory entry is also project-lifecycle intent. The repository name is the proposed PROJECT; PROJECT_PATH stays absent.
-
-Never reconstruct PROJECT_PATH from PROJECT.
+Resolve PROJECT and PROJECT_PATH from that result with the playbook's rules, "Resolving a project from the inventory".
 
 ## Interpreting requests
 
@@ -54,6 +46,7 @@ A value the user did not supply and the lookup did not resolve stays missing. St
 
 ### Step 2 — Open the thread
 
+{{#discord}}
 **Discord** — name the thread `<TICKET_ID> - <PROJECT> - <1-to-5-word description>`, describing the TASK. Drop a leading segment you do not have: `<PROJECT> - <description>` without a ticket, `<description>` alone without a project. Several projects: join them with `+`. Then call the `message` tool with:
 
 - `action`: `"thread-create"`
@@ -63,8 +56,10 @@ A value the user did not supply and the lookup did not resolve stays missing. St
 - `channel`: `<channel>`
 
 Pass no `message`: content on `thread-create` would post ahead of the starter. The tool returns the thread's `chat_id` — that is the THREAD_ID. Post the Step 3 starter into the thread: call `message` with `action: "thread-reply"`, `threadId` set to the bare THREAD_ID, `message` set to the starter, and `channel` set to the current surface. Pass no `target`.
-
+{{/discord}}
+{{#slack}}
 **Slack** — Slack threads have no name. Call `message` with `action: "send"`, `target` set to the raw current `chat_id`, `threadId` set to the triggering message timestamp, `message` set to the Step 3 starter, and `channel` set to the current surface. The bare root timestamp is the THREAD_ID. Slack has no `thread-create`, `thread-reply`, or rename action.
+{{/slack}}
 
 ### Step 3 — The starter message, then end the turn
 

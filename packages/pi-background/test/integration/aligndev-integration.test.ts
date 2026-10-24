@@ -1,18 +1,10 @@
 import { execFileSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { host, jobFrom, waitFor, waitJob } from "../host-fixture.js";
+import { host, jobFrom, readPidFile, waitJob } from "../host-fixture.js";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const packedRoot = mkdtempSync(join(tmpdir(), "pi-background-integration-pack-"));
@@ -133,8 +125,7 @@ describe("real AlignDev CLI through manifest-loaded background in public Pi runt
           .find((entry) => entry.type === "message" && entry.message.role === "user");
         if (!session || !target) throw new Error("Missing persisted fixture");
         const job = await h.launch("cancel", h.project);
-        await waitFor(() => existsSync(`${job.gate}.pid`));
-        const pid = Number(readFileSync(`${job.gate}.pid`, "utf8"));
+        const pid = await readPidFile(`${job.gate}.pid`);
         if (operation === "stop")
           expect(jobFrom(await h.call({ action: "stop", id: job.id })).status).toBe("cancelled");
         else if (operation === "reload") await h.runtime.session.reload();
@@ -169,8 +160,11 @@ async function fixture() {
     mode: 0o755,
   });
   vi.stubEnv("PATH", `${bin}:${process.env.PATH}`);
-  for (const key of ["npm_config_user_agent", "NODE_OPTIONS", "NODE_PATH"])
-    vi.stubEnv(key, undefined);
+  // Model a direct CLI launch, not the npm lifecycle running this suite.
+  for (const key of Object.keys(process.env)) {
+    if (key.startsWith("npm_")) vi.stubEnv(key, undefined);
+  }
+  for (const key of ["NODE_OPTIONS", "NODE_PATH"]) vi.stubEnv(key, undefined);
   vi.stubEnv("GIT_CONFIG_GLOBAL", join(h.cwd, "gitconfig"));
   writeFileSync(join(h.cwd, "gitconfig"), "");
   writeJson(join(home, ".alignfirst/aligndev.settings.json"), {

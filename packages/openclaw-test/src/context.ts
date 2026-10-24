@@ -7,6 +7,7 @@ import {
   type QaBusMessage,
   type QaBusPollResult,
 } from "@alignfirst/openclaw-channel-mock-core";
+import { AssertionError } from "./assertion-error.js";
 import { judgeCostUsd } from "./cost.js";
 import { execInGateway, type ExecInGatewayOptions, type ExecInGatewayResult } from "./exec-rpc.js";
 import {
@@ -36,7 +37,13 @@ import type {
   ScenarioLogNote,
   ScenarioResult,
 } from "./report.js";
-import { parseAgentToolCalls } from "./transcript-log.js";
+import { parseAgentToolCalls, type TranscriptScope } from "./transcript-log.js";
+import {
+  createUnavailableWebchatDriver,
+  createWebchatDriver,
+  WEBCHAT_SURFACE,
+  type WebchatDriver,
+} from "./webchat.js";
 
 const BUS_URL = process.env.OPENCLAW_TEST_BUS_URL ?? "http://bus:43123";
 
@@ -100,6 +107,10 @@ export interface ScenarioContext {
   markScenarioAsEnded(reason?: string): void;
   log(message: string): void;
   log(opts: { attachTo: ActionEntry; label?: string; extra?: unknown }): void;
+  /** The app driver; its calls throw when the cell's surface is not `webchat`. */
+  readonly webchat: WebchatDriver;
+  // On the `webchat` surface, the bus-backed members (`sendInbound`, `createThread`, `poll`,
+  // `waitForOutbound`, `expectNoOutbound`) throw.
   sendInbound(input: SendInboundInput): Promise<SendInboundResult>;
   /**
    * Seed a thread the bot did not open, as a human creating one on the surface. Returns its id,
@@ -208,6 +219,8 @@ export interface ScenarioInternals {
   getMockHandlers(): Map<string, CliMockHandler>;
   peekEntries(): { entries: ReportEntry[] };
   isScenarioEnded(): boolean;
+  /** The session keys `ctx.webchat` touched, for transcript capture. */
+  sessionKeys(): readonly string[];
 }
 
 export interface SendInboundInput {
@@ -224,13 +237,6 @@ export interface CreateThreadInput {
   title: string;
   /** The surface user who opened it. Defaults to the bot, so a human thread must name one. */
   createdBy?: string;
-}
-
-export class AssertionError extends Error {
-  constructor(msg: string) {
-    super(msg);
-    this.name = "AssertionError";
-  }
 }
 
 export function createContext(params: {
@@ -310,6 +316,33 @@ export function createContext(params: {
     }
   };
 
+  const sessionKeys = new Set<string>();
+  const onWebchat = channel === WEBCHAT_SURFACE;
+  const webchat = onWebchat
+    ? createWebchatDriver({ execInGateway, emit, nextEntrySeqTs, setCurrentEntry, sessionKeys })
+    : createUnavailableWebchatDriver();
+  const busMembers: BusMembers = {
+    sendInbound: (input) => sendInbound({ emit, nextEntrySeqTs }, accountId, conversationId, input),
+    createThread: (input) => createThread(accountId, conversationId, input),
+    poll: (opts) => poll(accountId, opts),
+    waitForOutbound: (predicate, opts) =>
+      waitForOutbound(
+        {
+          accountId,
+          awaitEntry: (id) => awaitOutboundEntry(id),
+          getLastCliMock: () => lastCliMock,
+        },
+        predicate,
+        opts,
+      ),
+    expectNoOutbound: (predicate, opts) => expectNoOutbound(accountId, predicate, opts),
+  };
+  const transcriptScope = (): TranscriptScope => ({
+    conversationId,
+    startedAtIso,
+    sessionKeys: [...sessionKeys],
+  });
+
   const ctx: ScenarioContext = {
     channel,
     conversationId,
@@ -341,20 +374,8 @@ export function createContext(params: {
       arg.attachTo.scenarioLog = note;
       emitAugment(arg.attachTo.entrySeq, { kind: "scenarioLog", scenarioLog: note });
     }) as ScenarioContext["log"],
-    sendInbound: (input) => sendInbound({ emit, nextEntrySeqTs }, accountId, conversationId, input),
-    createThread: (input) => createThread(accountId, conversationId, input),
-    poll: (opts) => poll(accountId, opts),
-    waitForOutbound: (predicate, opts) =>
-      waitForOutbound(
-        {
-          accountId,
-          awaitEntry: (id) => awaitOutboundEntry(id),
-          getLastCliMock: () => lastCliMock,
-        },
-        predicate,
-        opts,
-      ),
-    expectNoOutbound: (predicate, opts) => expectNoOutbound(accountId, predicate, opts),
+    webchat,
+    ...(onWebchat ? unavailableBusMembers() : busMembers),
     assertRegex: (actual, pattern, label) =>
       assertRegex({ getCurrentEntry: () => currentEntry, emitAugment }, actual, pattern, label),
     assertEqual: (actual, expected, label) =>
@@ -369,11 +390,11 @@ export function createContext(params: {
     execInGateway: (argv, opts) => execInGateway(argv, opts),
     waitForAgentToolCall: (predicate, opts) =>
       waitForAgentToolCall(
-        { conversationId, startedAtIso, getCurrentEntry: () => currentEntry, emitAugment },
+        { transcriptScope, getCurrentEntry: () => currentEntry, emitAugment },
         predicate,
         opts,
       ),
-    getAgentToolCalls: () => parseAgentToolCalls({ conversationId, startedAtIso }),
+    getAgentToolCalls: () => parseAgentToolCalls(transcriptScope()),
   };
 
   const internals: ScenarioInternals = {
@@ -386,6 +407,7 @@ export function createContext(params: {
     getMockHandlers: () => mockHandlers,
     peekEntries: () => ({ entries }),
     isScenarioEnded: () => scenarioEnded,
+    sessionKeys: () => [...sessionKeys],
   };
 
   function awaitOutboundEntry(messageId: string): Promise<OutboundReceivedEntry> {
@@ -397,6 +419,24 @@ export function createContext(params: {
   }
 
   return { ctx, internals };
+}
+
+type BusMembers = Pick<
+  ScenarioContext,
+  "sendInbound" | "createThread" | "poll" | "waitForOutbound" | "expectNoOutbound"
+>;
+
+function unavailableBusMembers(): BusMembers {
+  const unavailable = (member: string) => (): never => {
+    throw new Error(`${member} is not available on the webchat surface`);
+  };
+  return {
+    sendInbound: unavailable("sendInbound"),
+    createThread: unavailable("createThread"),
+    poll: unavailable("poll"),
+    waitForOutbound: unavailable("waitForOutbound"),
+    expectNoOutbound: unavailable("expectNoOutbound"),
+  };
 }
 
 interface EmitDeps {
@@ -712,8 +752,8 @@ async function expectNoOutbound(
 }
 
 interface WaitForToolCallDeps extends AttachDeps {
-  conversationId: string;
-  startedAtIso: string;
+  /** Read per poll, so session keys added mid-scenario count. */
+  transcriptScope: () => TranscriptScope;
 }
 
 async function waitForAgentToolCall(
@@ -728,10 +768,7 @@ async function waitForAgentToolCall(
   const deadline = Date.now() + timeoutMs;
   let calls: AgentToolCall[] = [];
   while (Date.now() < deadline) {
-    calls = await parseAgentToolCalls({
-      conversationId: deps.conversationId,
-      startedAtIso: deps.startedAtIso,
-    });
+    calls = await parseAgentToolCalls(deps.transcriptScope());
     const match = calls.find(predicate);
     if (match) {
       pushAssertion(deps, deps.getCurrentEntry(), { label: opts.label, ok: true });

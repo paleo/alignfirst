@@ -1,9 +1,16 @@
 import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import {
+  createCommand,
+  type Invocation,
+  type Runtime,
+  scriptCommand,
+} from "@alignfirst/docmap/invocation";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startBus } from "./bus.js";
 import { envCommand, runCommand } from "./env-cli.js";
 import { main as runnerMain } from "./runner.js";
+import { cliCommand, resolveCliInvocation } from "./invocation.js";
 
 // `dist/cli.js` ships under `<package>/dist/`; one level up from its dir is the package root.
 const PACKAGE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -15,17 +22,20 @@ const INIT_SCRIPTS: Record<string, string> = {
   e2e: "openclaw-test run",
 };
 
-export async function dispatch(argv: string[]): Promise<void> {
+export async function dispatch(
+  argv: string[],
+  invocation: Invocation = resolveCliInvocation(),
+): Promise<void> {
   const [cmd, ...rest] = argv;
   switch (cmd) {
     case "init":
-      await initCommand(rest[0]);
+      await initCommand(rest[0], invocation);
       return;
     case "env":
-      await envCommand(PACKAGE_DIR, rest);
+      await envCommand(PACKAGE_DIR, rest, invocation);
       return;
     case "run":
-      await runCommand(PACKAGE_DIR, rest);
+      await runCommand(PACKAGE_DIR, rest, invocation);
       return;
     case "bus":
       startBus();
@@ -34,12 +44,15 @@ export async function dispatch(argv: string[]): Promise<void> {
       await runnerMain(rest);
       return;
     default:
-      usage();
+      usage(invocation);
   }
 }
 
-async function initCommand(targetDirRaw: string | undefined): Promise<void> {
-  if (!targetDirRaw) usage();
+async function initCommand(
+  targetDirRaw: string | undefined,
+  invocation: Invocation,
+): Promise<void> {
+  if (!targetDirRaw) usage(invocation);
   const target = resolve(process.cwd(), targetDirRaw);
   const templatesDir = join(PACKAGE_DIR, "templates");
   await mkdir(target, { recursive: true });
@@ -48,18 +61,18 @@ async function initCommand(targetDirRaw: string | undefined): Promise<void> {
     await copyFile(join(templatesDir, name), join(target, name));
     console.log(`copied ${name} -> ${join(target, name)}`);
   }
-  await addScriptsToPackageJson(target);
-  printNextSteps();
+  await addScriptsToPackageJson(target, invocation);
+  printNextSteps(target, invocation);
 }
 
-async function addScriptsToPackageJson(target: string): Promise<void> {
+async function addScriptsToPackageJson(target: string, invocation: Invocation): Promise<void> {
   const pkgPath = join(target, "package.json");
   let raw: string;
   try {
     raw = await readFile(pkgPath, "utf8");
   } catch {
     console.log(
-      "no package.json found — run `npm init`, then add the scripts manually (see README)",
+      `no package.json found — run \`${invocation.runtime === "bun" ? "bun" : (invocation.manager ?? "npm")} init\`, then add the scripts manually (see README)`,
     );
     return;
   }
@@ -72,7 +85,7 @@ async function addScriptsToPackageJson(target: string): Promise<void> {
     );
     return;
   }
-  const added = addInitScripts(pkg);
+  const added = addInitScripts(pkg, invocation.runtime);
   if (added.length === 0) {
     console.log("package.json scripts already present");
     return;
@@ -85,31 +98,46 @@ export interface PackageJsonScripts {
   scripts?: Record<string, string>;
 }
 
-export function addInitScripts(pkg: PackageJsonScripts): string[] {
+export function addInitScripts(pkg: PackageJsonScripts, runtime: Runtime = "node"): string[] {
   pkg.scripts ??= {};
   const scripts = pkg.scripts;
   const added: string[] = [];
   for (const [name, command] of Object.entries(INIT_SCRIPTS)) {
     if (scripts[name] !== undefined) continue;
-    scripts[name] = command;
+    scripts[name] =
+      runtime === "bun"
+        ? command.replace("openclaw-test", "bun ./node_modules/.bin/openclaw-test")
+        : command;
     added.push(name);
   }
   return added;
 }
 
-function printNextSteps(): void {
+function printNextSteps(target: string, invocation: Invocation): void {
+  const dependencies =
+    "@alignfirst/openclaw-test @alignfirst/openclaw-channel-mock-core" +
+    " @alignfirst/openclaw-discord-mock @alignfirst/openclaw-slack-mock openclaw";
+  // The consumer image intentionally uses npm ci, even on a Bun-only host.
+  const install =
+    invocation.runtime === "bun"
+      ? `docker run --rm --user "$(id -u):$(id -g)" -e npm_config_cache=/tmp/npm-cache -v "$PWD:/app" -w /app node:26 npm install -D ${dependencies}`
+      : `npm i -D ${dependencies}`;
+  const build = scriptCommand(invocation.manager ?? "npm", "env:build", {
+    runtime: invocation.runtime,
+  }).base;
   console.log(
-    "\nNext steps:\n" +
-      "  1. npm i -D @alignfirst/openclaw-test @alignfirst/openclaw-channel-mock-core" +
-      " @alignfirst/openclaw-discord-mock @alignfirst/openclaw-slack-mock openclaw\n" +
+    "\nNext steps (in the target directory):\n" +
+      `  cd ${createCommand(target).base}\n` +
+      `  1. ${install}\n` +
+      "     This prepares package-lock.json for the Node/npm consumer image.\n" +
       "  2. cp .env.local.example .env.local   # then fill it in\n" +
-      "  3. npm run env:build",
+      `  3. ${build}`,
   );
 }
 
-function usage(): never {
+function usage(invocation: Invocation): never {
   console.error(
-    "usage: openclaw-test <init|env|run|bus|runner> [args]\n\n" +
+    `usage: ${cliCommand(invocation)} <init|env|run|bus|runner> [args]\n\n` +
       "  init <target-dir>      copy templates into target dir\n" +
       "  env <build|up|down>    drive the Compose stack (host-side)\n" +
       "  run [flags] [...]      run scenarios against the stack (host-side)\n" +

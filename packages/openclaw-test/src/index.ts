@@ -40,3 +40,11 @@ export type {
   ScenarioReport,
   ScenarioResult,
 } from "./report.js";
+export {
+  type CreateConversationInput,
+  type CreatedConversation,
+  WEBCHAT_SURFACE,
+  type WaitForReplyOptions,
+  type WebchatDriver,
+  type WebchatReply,
+} from "./webchat.js";

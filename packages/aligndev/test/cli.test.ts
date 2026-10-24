@@ -18,6 +18,7 @@ afterEach(() => {
 async function run(
   args: string[],
   config?: object,
+  env: NodeJS.ProcessEnv = {},
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   const home = mkdtempSync(join(tmpdir(), "aligndev-cli-"));
   homes.push(home);
@@ -27,7 +28,7 @@ async function run(
   const code = await main({
     argv: ["node", "aligndev", ...args],
     cwd: home,
-    env: { HOME: home },
+    env: { HOME: home, ...env },
     alignfirstCommand: [process.execPath, ALIGNFIRST_BIN],
     home,
     stdout,
@@ -52,6 +53,43 @@ describe("aligndev", () => {
       expect(result.stdout).not.toContain("aligndev plans");
       expect(result.stdout).toContain("~/.alignfirst/aligndev.settings.json");
     }
+  });
+
+  it.each([false, true])(
+    "prints setup help without a repository or valid coding settings (npx=%s)",
+    async (viaNpx) => {
+      const env = viaNpx
+        ? {
+            npm_config_user_agent: "npm/11.19.0 node/v26.8.1 linux x64",
+            npm_command: "exec",
+            npm_lifecycle_event: "npx",
+          }
+        : {};
+      const command = viaNpx ? "npx -y aligndev" : "aligndev";
+      for (const args of [
+        ["worktree", "--help"],
+        ["worktree", "setup", "--help"],
+        ["worktree", "setup", "-h"],
+      ]) {
+        const result = await run(args, { code: { agent: "invalid" } }, env);
+        expect(result.code, result.stderr).toBe(0);
+        expect(result.stderr).toBe("");
+        expect(result.stdout).toContain(`${command} worktree setup [<path>] [--json]`);
+        expect(result.stdout).toContain(`${command} worktree setup`);
+        expect(result.stdout).toMatch(/current.*root|root.*current/i);
+        expect(result.stdout).toMatch(/exact.*root/i);
+        expect(result.stdout).toMatch(/idempotent|retri|retry/i);
+        expect(result.stdout).toMatch(/Git and work files only/);
+        expect(result.stdout).not.toContain(`${command} worktree teardown`);
+      }
+    },
+  );
+
+  it("rejects teardown rather than treating it as a lightweight lifecycle hook", async () => {
+    const result = await run(["worktree", "teardown"]);
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("Unknown worktree command: teardown");
   });
 
   it("prints the package version", async () => {
@@ -97,12 +135,15 @@ describe("aligndev", () => {
     const worktree = await run(["worktree", "--help"]);
     expect(worktree.code).toBe(0);
     expect(worktree.stdout).toContain("aligndev worktree add <path> <branch> [--json]");
+    expect(worktree.stdout).toContain("aligndev worktree setup [<path>] [--json]");
 
     const guide = await run(["guide", "--help"], {
       platform: "openclaw",
       code: { agent: "claude" },
     });
     expect(guide.code).toBe(0);
-    expect(guide.stdout).toContain("aligndev guide [<topic>] [--root <path>]");
+    expect(guide.stdout).toContain(
+      "aligndev guide [--channel <slack|discord|app>] [<topic>] [--root <path>]",
+    );
   });
 });

@@ -952,9 +952,7 @@ function renderHelp(
       : `${agent === "pi" ? "Pi native selectors (including provider/model:thinking)" : "Claude model values"} pass through unchanged.`;
   const modelPolicy =
     models === undefined ? "Any nonblank pi-native selector" : `One of ${models.join(", ")}`;
-  const requires = forms.viaNpx
-    ? "Requires: the alignfirst CLI, run through npx, for the project layout, side tickets and the\ndelegated protocols."
-    : "Requires: the alignfirst CLI on PATH (npm install -g alignfirst), for the project layout, side\ntickets and the delegated protocols.";
+  const requires = `Requires: the AlignFirst CLI through \`${forms.alignfirst}\`, for the project layout, side\ntickets and the delegated protocols.`;
   return `aligndev code — run a coding agent through AlignFirst protocols.
 
 Usage:
@@ -1053,6 +1051,6 @@ Coding runs can be very long. The host owns background execution and completion 
 verify its capability before launch, use --quiet, and never detach the command. On completion,
 retrieve status --result with the exact session-file path or a unique per-run --meta key.
 
-Run \`${aligndev} guide code\` for the full delegation guide.
+See the \`code\` topic of \`${aligndev} guide\` for the full delegation guide.
 `;
 }

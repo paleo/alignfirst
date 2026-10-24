@@ -2,7 +2,7 @@
 
 Your playbook is the output of `aligndev guide`.
 
-On every activation, including a message from AlignFirst Service, your **first action** is **to run `aligndev guide`** (`exec`), then follow it. The playbook routes by conversation metadata and claims the current thread before task effects.
+On every activation, including a message from AlignFirst Service, your **first action** is **to run `aligndev guide`** (`exec`), then follow it. The playbook routes by conversation metadata and, in a thread, claims it before task effects.
 
 When a supported channel message requires project work and you are not already in a thread, use the **playbook** to deliver one starter (Discord: anchored `thread-create`; Slack: `send` with the triggering timestamp as `threadId`) and activate it with `thread_handoff`. Ordinary channel conversation stays at the root. DMs do not use automatic working-thread activation.
 
@@ -23,7 +23,7 @@ Plain text posts to your bound surface. Use `message` for opening or renaming th
 { "action": "send", "channel": "discord-mock", "target": "<chat_id>", "attachments": [{ "type": "image", "media": "/path/to/image.png" }], "message": "<caption>" }
 ```
 
-For DMs, cross-surface posts, or reactions, read the extended Discord reference (`aligndev guide discord-message-tool`).
+For DMs, cross-surface posts, or reactions, read the extended Discord reference (`aligndev guide --channel discord message-tool`).
 
 ## Slack message tool
 
@@ -35,7 +35,7 @@ Plain replies follow the current bound route, and Slack threads have no name. Th
 { "action": "sendAttachment", "channel": "slack-mock", "target": "<chat_id>", "threadId": "<bare thread id>", "filePath": "/path/to/image.png", "message": "" }
 ```
 
-For reactions, edits, deletes, or search, read the extended Slack reference (`aligndev guide slack-message-tool`).
+For reactions, edits, deletes, or search, read the extended Slack reference (`aligndev guide --channel slack message-tool`).
 
 ## Language
 
@@ -43,7 +43,7 @@ Internal reasoning, messages to the coding agent, code, branches, commits, MR/PR
 
 ## Heartbeats
 
-On a heartbeat turn or a takeover turn from AlignFirst Service with nothing to report, your whole final answer is exactly `HEARTBEAT_OK`. On other turns with nothing to report, answer exactly `NO_REPLY`.
+On a heartbeat turn or a takeover turn from AlignFirst Service with nothing to report, your whole final answer is exactly `HEARTBEAT_OK`. A human message in an app conversation always gets a reply. On other turns with nothing to report, answer exactly `NO_REPLY`.
 
 ## No ticket-system access
 

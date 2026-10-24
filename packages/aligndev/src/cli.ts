@@ -1,3 +1,4 @@
+import { type LaunchEvidence, readLaunchEvidence } from "@alignfirst/docmap/invocation";
 import { homedir } from "node:os";
 
 import { runCode } from "./code/code-cli.js";
@@ -14,6 +15,7 @@ import { runWorktree } from "./worktree/worktree-cli.js";
 
 export interface MainOptions {
   argv?: string[];
+  evidence?: LaunchEvidence;
   stdout?: Output;
   stderr?: Output;
   cwd?: string;
@@ -79,9 +81,12 @@ function renderHelp(aligndev: string): string {
     ],
     [
       `${aligndev} worktree <command> [<options>]`,
-      "Create, list and safely remove lightweight Git worktrees.",
+      "Create or prepare lightweight Git worktrees; list and safely remove them.",
     ],
-    [`${aligndev} guide [<topic>]`, "Print the assistant's playbook and guides."],
+    [
+      `${aligndev} guide [--channel <surface>] [<topic>]`,
+      "Print the assistant's playbook and guides.",
+    ],
     [`${aligndev} -h, --help`],
     [`${aligndev} -v, --version`],
   ]);
@@ -111,7 +116,12 @@ function renderUsageRows(rows: [command: string, description?: string][]): strin
 
 function resolveContext(options: MainOptions | undefined): CliContext {
   const env = options?.env ?? process.env;
-  const forms = resolveCommandForms(env);
+  const evidence = options?.evidence ?? {
+    ...readLaunchEvidence(),
+    env,
+    cwd: options?.cwd ?? process.cwd(),
+  };
+  const forms = resolveCommandForms(env, evidence);
   return {
     cwd: options?.cwd ?? process.cwd(),
     env,
@@ -119,7 +129,10 @@ function resolveContext(options: MainOptions | undefined): CliContext {
     stdout: options?.stdout ?? process.stdout,
     stderr: options?.stderr ?? process.stderr,
     forms,
-    alignfirstCommand: options?.alignfirstCommand ?? forms.alignfirst.split(" "),
+    alignfirstCommand: options?.alignfirstCommand ?? [
+      forms.counterpart.executable,
+      ...forms.counterpart.args,
+    ],
     modelResolver: options?.modelResolver ?? createExecutableModelResolver(),
     quotaReader: options?.quotaReader ?? readQuota,
   };

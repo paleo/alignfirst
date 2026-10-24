@@ -307,7 +307,7 @@ function applyResolution(
   return [...removed, ...writes.map(({ path }) => path)];
 }
 
-function assertRegularPath(repoDir: string, path: string): void {
+export function assertRegularPath(repoDir: string, path: string): void {
   const stat = lstatSync(join(repoDir, path), { throwIfNoEntry: false });
   if (stat && !stat.isFile())
     throw new CliError(`Cannot automatically replace ${path}. Resolve the rebase manually.`);

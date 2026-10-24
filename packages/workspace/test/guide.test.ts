@@ -1,14 +1,19 @@
+import { scriptCommand } from "@alignfirst/docmap/invocation";
 import { describe, expect, it } from "vitest";
 
 import { type GuideLayout, renderGuide } from "../src/guide.js";
 import type { PackageManagerCommands } from "../src/package-manager.js";
 
 const NPM: PackageManagerCommands = {
+  install: "npm install",
+  runtime: "node",
   workspace: { base: "npm run workspace", withArgs: "npm run workspace --" },
   dev: { base: "npm run dev", withArgs: "npm run dev --" },
 };
 
 const PNPM: PackageManagerCommands = {
+  install: "pnpm i",
+  runtime: "node",
   workspace: { base: "pnpm workspace", withArgs: "pnpm workspace" },
   dev: { base: "pnpm dev", withArgs: "pnpm dev" },
 };
@@ -28,6 +33,24 @@ describe("renderGuide", () => {
     expect(guide).toContain("npm run dev -- up");
     // Bare foreground takes no forwarded args, so no separator.
     expect(guide).toMatch(/^npm run dev {2,}#/m);
+  });
+
+  it.each(["$&", "$'", "$`", "$$"])("renders %s literally in commands and layout", (token) => {
+    const workspace = scriptCommand("npm", `workspace${token}`);
+    const dev = scriptCommand("npm", `dev${token}`);
+    const runtimeDir = `.local-${token}`;
+    const sharedDir = `.shared-${token}`;
+    const guide = renderGuide(
+      { ...NPM, workspace, dev },
+      { ...LAYOUT, runtimeDir, sharedDirs: [sharedDir] },
+    );
+    expect(guide).toContain(`${workspace.withArgs} setup -c my-branch`);
+    expect(guide).toContain(`${dev.withArgs} up`);
+    expect(guide).toContain(`Ports and infrastructure arrive with the first \`${dev.base}\``);
+    expect(guide).toContain(`cd <worktree-dir> && ${dev.withArgs} up`);
+    expect(guide).toContain(`\`${runtimeDir}/\``);
+    expect(guide).toContain(`symlinked from the main worktree: \`${sharedDir}/\`.`);
+    expect(guide).not.toContain("{{");
   });
 
   it("renders pnpm commands without a separator", () => {
@@ -110,6 +133,8 @@ describe("renderGuide", () => {
 
   it.each(["yarn run", "bun run"])("renders %s install hooks", (prefix) => {
     const pm = {
+      install: `${prefix.split(" ")[0]} install`,
+      runtime: "node",
       workspace: { base: `${prefix} workspace`, withArgs: `${prefix} workspace` },
       dev: { base: `${prefix} dev`, withArgs: `${prefix} dev` },
     };

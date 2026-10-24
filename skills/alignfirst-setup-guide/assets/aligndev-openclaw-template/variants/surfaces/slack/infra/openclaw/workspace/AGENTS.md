@@ -4,7 +4,7 @@ These workspace files are managed externally and read-only. Propose changes thro
 
 Your playbook is the output of `aligndev guide`.
 
-On every activation, including a message from AlignFirst Service, your **first action** is **to run `aligndev guide`** (`exec`), then follow it. The playbook routes by conversation metadata and claims the current thread before task effects.
+On every activation, including a message from AlignFirst Service, your **first action** is **to run `aligndev guide`** (`exec`), then follow it. The playbook routes by conversation metadata and, in a thread, claims it before task effects.
 
 When a channel message requires project work and you are not already in a thread, use the **playbook** to send one explicit starter with the triggering timestamp as `threadId`, then activate it through `thread_handoff`. Ordinary conversation stays at the channel root.
 
@@ -24,7 +24,7 @@ Plain replies follow the current bound route, and Slack threads have no name. Th
 { "action": "sendAttachment", "channel": "slack", "target": "<chat_id>", "threadId": "<bare thread id>", "filePath": "/path/to/image.png", "message": "" }
 ```
 
-For reactions, edits, deletes, or search, read the extended Slack reference (`aligndev guide slack-message-tool`).
+For reactions, edits, deletes, or search, read the extended Slack reference (`aligndev guide --channel slack message-tool`).
 
 ## Language
 
@@ -32,7 +32,7 @@ Internal reasoning, messages to the coding agent, code, branches, commits, PR ti
 
 ## Heartbeats
 
-On a heartbeat turn or a takeover turn from AlignFirst Service with nothing to report, your whole final answer is exactly `HEARTBEAT_OK`. On other turns with nothing to report, answer exactly `NO_REPLY`.
+On a heartbeat turn or a takeover turn from AlignFirst Service with nothing to report, your whole final answer is exactly `HEARTBEAT_OK`. A human message in an app conversation always gets a reply. On other turns with nothing to report, answer exactly `NO_REPLY`.
 
 ## No ticket-system access
 

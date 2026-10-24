@@ -42,8 +42,7 @@ describe("alignfirst CLI", () => {
     const guarded = await runMain(["ticket", "78"], { cwd });
     expect(guarded.stderr).toBe(
       `alignfirst ${packageVersion} is installed; this project requires >=1.0.0.\n` +
-        'Run a matching version:  npx -y alignfirst@">=1.0.0" ticket 78\n' +
-        'Or install it globally:  npm install -g alignfirst@">=1.0.0"\n',
+        "Run a matching version:  npx -y 'alignfirst@>=1.0.0' ticket 78\n",
     );
     expect((await runMain(["--help"], { cwd })).code).toBe(0);
     expect((await runMain(["--version"], { cwd })).code).toBe(0);

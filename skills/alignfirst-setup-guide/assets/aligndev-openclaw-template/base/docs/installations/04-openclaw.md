@@ -46,6 +46,7 @@ cp infra/openclaw/.env.example infra/openclaw/.env && chmod 600 infra/openclaw/.
 - `RUNTIME_API_KEY` — when the provider authenticates by key; leave empty for an interactive login (step 10).
 - `GATEWAY_AUTH_TOKEN` — `openssl rand -hex 32` on a fresh install; on an existing server, the current value (the `.env.example` comment shows how to read it back).
 - `GATEWAY_DASHBOARD_ORIGIN` — keep the default for the SSH tunnel.
+- `GATEWAY_TAILSCALE_SERVE` — leave empty; [use-the-apps.md](../operations/use-the-apps.md) turns it on.
 - `CONTEXT7_API_KEY` — from the Context7 dashboard.
 - The channel tokens and IDs — from the platform part of [07-channel.md](07-channel.md).
 
@@ -278,6 +279,8 @@ The bearer token grants the pairing scope on first connect, so the browser is pa
 sudo -i -u {{SERVICE_USER}} -- openclaw devices list
 sudo -i -u {{SERVICE_USER}} -- openclaw devices approve <request-id>
 ```
+
+The desktop apps reach the gateway through the same tunnel, and the mobile apps through Tailscale Serve, set up after the smoke test: [use-the-apps.md](../operations/use-the-apps.md).
 
 ## 12. Reboot check
 

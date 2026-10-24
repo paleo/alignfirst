@@ -48,7 +48,11 @@ async function continueRebase(streams: Streams, repoDir: string): Promise<void> 
   } catch (error) {
     const stopped = findStoppedRebase(repoDir);
     if (stopped?.conflictedFiles.length) return;
-    if (stopped && gitSucceeds(repoDir, "diff", "--cached", "--quiet")) {
+    if (
+      stopped &&
+      gitSucceeds(repoDir, "diff", "--cached", "--quiet") &&
+      gitSucceeds(repoDir, "diff", "--quiet")
+    ) {
       await git(streams, repoDir, "rebase", "--skip");
       return;
     }

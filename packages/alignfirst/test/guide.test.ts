@@ -62,6 +62,15 @@ describe("guide command", () => {
     expect(overview.stdout).not.toContain("# Ticket Directory and Work Files");
   });
 
+  it("plans single and multiple plans in a selected cycle", async () => {
+    const result = await runMain(["guide", "plan"], { cwd: temp() });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(result.stdout).toContain("alignfirst ticket <id> --cycle <letter> --next plan.md");
+    expect(result.stdout).toContain(
+      "alignfirst ticket <id> --cycle <letter> --next main-plan.md --next plan-api.md --next plan-ui.md",
+    );
+  });
+
   it("rejects invalid protocol selections", async () => {
     const cwd = temp();
     const overviewOnly = await runMain(["guide", "overview", "--protocol-only"], { cwd });
@@ -155,7 +164,11 @@ describe("guide command", () => {
   it("renders the npm command form", async () => {
     const result = await runMain(["guide"], {
       cwd: temp(),
-      env: { npm_config_user_agent: "npm/11.0.0 node/v22.0.0" },
+      env: {
+        npm_config_user_agent: "npm/11.0.0 node/v22.0.0",
+        npm_command: "exec",
+        npm_lifecycle_event: "npx",
+      },
     });
     expect(result.stdout).toContain("npx -y alignfirst guide spec");
   });

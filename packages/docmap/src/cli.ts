@@ -1,5 +1,11 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { relative, resolve } from "node:path";
+import {
+  type LaunchEvidence,
+  invocationCommand,
+  readLaunchEvidence,
+  resolveInvocation,
+} from "./invocation.js";
 import {
   checkAll,
   collectAllFiles,
@@ -26,6 +32,7 @@ export interface MainOptions {
   stderr?: { write(s: string): void };
   cwd?: string;
   userAgent?: string;
+  evidence?: LaunchEvidence;
   commands?: PackageManagerCommands;
 }
 
@@ -34,7 +41,12 @@ export function main(options?: MainOptions): number {
   const stdout = options?.stdout ?? process.stdout;
   const stderr = options?.stderr ?? process.stderr;
   const cwd = options?.cwd ?? process.cwd();
-  const userAgent = options?.userAgent ?? process.env.npm_config_user_agent ?? "";
+  const evidence = options?.evidence ?? {
+    ...readLaunchEvidence(),
+    cwd,
+    env:
+      options?.userAgent === undefined ? process.env : { npm_config_user_agent: options.userAgent },
+  };
 
   const { paths, unknownFlags, recursive, root, check, help, guide, search, version } =
     parseArgs(argv);
@@ -47,7 +59,7 @@ export function main(options?: MainOptions): number {
 
   // Fold an explicit `--root` into every suggested command so each one is copy-pasteable against the
   // same custom root; `showRootOption` then drops the now-redundant `--root <path>` help row.
-  const pm = commandsWithRoot(options?.commands ?? detectPackageManager(cwd, userAgent), root);
+  const pm = commandsWithRoot(options?.commands ?? detectPackageManager(evidence), root);
   const showRootOption = root === undefined;
 
   // Mode precedence (each prints only its own output, then returns): version → help → guide →
@@ -257,9 +269,9 @@ function renderHelp(pm: PackageManagerCommands, { full, showRootOption }: HelpOp
 function renderGuide(pm: PackageManagerCommands): string {
   const template = readFileSync(new URL("../templates/guide.md", import.meta.url), "utf-8");
   return template
-    .replaceAll("{{COMMANDS}}", renderCommands(guideCommands(pm)))
-    .replaceAll("{{PM_ARGS}}", pm.withArgs)
-    .replaceAll("{{PM}}", pm.base);
+    .replaceAll("{{COMMANDS}}", () => renderCommands(guideCommands(pm)))
+    .replaceAll("{{PM_ARGS}}", () => pm.withArgs)
+    .replaceAll("{{PM}}", () => pm.base);
 }
 
 interface ClassifiedTargets {
@@ -388,42 +400,8 @@ function shellQuoteArg(value: string): string {
   return /^[\w./-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-function detectPackageManager(cwd: string, userAgent: string): PackageManagerCommands {
-  // We read the actual invocation, not the environment. `npm_config_user_agent` is set by every
-  // package-manager-mediated launch (`npm run`, `pnpm`, npx/dlx/bunx) and empty for a bare global
-  // binary. An empty agent therefore means the user ran the global `docmap` directly — so bare
-  // `docmap` is the command that just worked, and the only one we can guarantee works here. We
-  // suggest it even inside a project with a lockfile: a nearby lockfile does not imply a `docmap`
-  // script, and `npm run docmap` would then be a dead command. A user who wants the project's
-  // pinned version runs `npm run docmap` themselves, which sets the agent and takes the walk below.
-  if (userAgent === "") return sameCommand("docmap");
-
-  let dir = cwd;
-  while (true) {
-    if (existsSync(join(dir, "package-lock.json")))
-      return { base: "npm run docmap", withArgs: "npm run docmap --" };
-    if (existsSync(join(dir, "pnpm-lock.yaml"))) return sameCommand("pnpm docmap");
-    if (existsSync(join(dir, "yarn.lock"))) return sameCommand("yarn docmap");
-    if (existsSync(join(dir, "bun.lockb")) || existsSync(join(dir, "bun.lock")))
-      return sameCommand("bun run docmap");
-    const parent = dirname(dir);
-    if (parent === dir) return runnerCommand(userAgent);
-    dir = parent;
-  }
-}
-
-// A package manager launched us (agent is set) but no lockfile was found: docmap is not wired as a
-// project script, so suggest the manager's package-runner form, defaulting to npx (every Node
-// install ships it). A global install invoked through `npx @alignfirst/docmap` lands here too and
-// correctly keeps the npx suggestion.
-function runnerCommand(userAgent: string): PackageManagerCommands {
-  if (userAgent.startsWith("pnpm")) return sameCommand("pnpm dlx @alignfirst/docmap");
-  if (userAgent.startsWith("yarn")) return sameCommand("yarn dlx @alignfirst/docmap");
-  if (userAgent.startsWith("bun")) return sameCommand("bunx @alignfirst/docmap");
-  return sameCommand("npx @alignfirst/docmap");
-}
-
-// Only npm needs a `--` separator before forwarded args; every other manager passes them verbatim.
-function sameCommand(command: string): PackageManagerCommands {
-  return { base: command, withArgs: command };
+function detectPackageManager(evidence: LaunchEvidence): PackageManagerCommands {
+  return invocationCommand(
+    resolveInvocation({ packageName: "@alignfirst/docmap", binaryName: "docmap" }, evidence),
+  );
 }

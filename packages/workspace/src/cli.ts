@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { ConfigError } from "./errors.js";
+import { devCmd, packageManagerCommands, wsCmd } from "./package-manager.js";
 
 export type WorkspaceCommand =
   | {
@@ -79,7 +80,7 @@ function parseSubcommand(subcommand: string, tokens: string[]): ParsedWorkspaceA
     case "__finalize":
       return parseFinalize(tokens);
     default:
-      throw new ConfigError(`Unknown command "${subcommand}". Run \`workspace --help\`.`);
+      throw new ConfigError(`Unknown command "${subcommand}". Run \`${wsCmd("--help")}\`.`);
   }
 }
 
@@ -260,7 +261,7 @@ export function printWorkspaceHelp(): void {
 
 export function renderWorkspaceHelp(): string {
   return [
-    "Usage: workspace <command> [options]",
+    `Usage: ${packageManagerCommands().workspace.withArgs} <command> [options]`,
     "",
     "Manage workspaces: a git worktree plus its own dev setup (config files, and optionally",
     "ports, database, dev server).",
@@ -354,7 +355,7 @@ function parseDevSubcommand(subcommand: string, tokens: string[]): DevCommand {
     case "setup":
       return parseDevSetup(tokens);
     default:
-      throw new ConfigError(`Unknown command "${subcommand}". Run \`dev --help\`.`);
+      throw new ConfigError(`Unknown command "${subcommand}". Run \`${devCmd("--help")}\`.`);
   }
 }
 
@@ -459,12 +460,12 @@ export function printDevHelp(): void {
 
 export function renderDevHelp(): string {
   return [
-    "Usage: dev [command] [options]",
+    `Usage: ${packageManagerCommands().dev.withArgs} [command] [options]`,
     "",
     "Start, stop, or list dev-server processes for worktree-based environments.",
     "",
     "Commands:",
-    "  dev               Start in the foreground, streaming logs from startup; CTRL+C stops it.",
+    `  ${packageManagerCommands().dev.base}               Start in the foreground, streaming logs from startup; CTRL+C stops it.`,
     "                    If one is already running here, attach to its logs instead.",
     "  dev up            Start in the background and return once ready.",
     "  dev restart       Stop this worktree's dev-server if running, then start in the background.",
@@ -483,5 +484,7 @@ export function renderDevHelp(): string {
     "Options (dev setup):",
     "  --force        Provision the infrastructure again (the setup hook must be idempotent).",
     "  --reset-ports  Allocate this workspace's ports again. Refused while its dev-server runs.",
-  ].join("\n");
+  ]
+    .map((line) => line.replace(/^ {2}dev(?=\s)/, `  ${packageManagerCommands().dev.withArgs}`))
+    .join("\n");
 }

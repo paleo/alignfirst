@@ -22,11 +22,14 @@ import {
 import { layoutOf } from "../project-layout.js";
 
 const USAGE = `Usage:
-  {{FORM}} ticket [<id>] [--next [<filename>]] [--new-cycle] [--json] [--dry-run]
-  {{FORM}} ticket --side [--next [<filename>]] [--new-cycle] [--json] [--dry-run]
+  {{FORM}} ticket [<id>] [--next [<filename>]] [--new-cycle | --cycle <letter>] [--json] [--dry-run]
+  {{FORM}} ticket --side [--next [<filename>]] [--new-cycle | --cycle <letter>] [--json] [--dry-run]
   {{FORM}} ticket [<id>] --catchup
 
 --next may repeat, each occurrence with a filename: the names are numbered in order.
+--cycle <letter> numbers the next file within that cycle (one uppercase letter, A-Z);
+a cycle with no file yet starts at 1. Without --cycle or --new-cycle, --next continues
+the latest cycle.
 
 --catchup prints the ticket's Markdown files, plans excluded, summaries included.
 Files over 64 KiB are listed without content. Above 30 KiB of output, only the entry
@@ -38,6 +41,7 @@ interface TicketOptions {
   branch?: string;
   next?: NextRequest;
   newCycle: boolean;
+  cycle?: string;
   json: boolean;
   dryRun: boolean;
   side: boolean;
@@ -85,7 +89,7 @@ export function runTicket(ctx: CommandContext, args: string[]): number {
 }
 
 function renderUsage(ctx: CommandContext): string {
-  return USAGE.replaceAll("{{FORM}}", ctx.form);
+  return USAGE.replaceAll("{{FORM}}", () => ctx.form);
 }
 
 function parseTicketArgs(
@@ -100,6 +104,7 @@ function parseTicketArgs(
       options: {
         next: { type: "boolean" },
         "new-cycle": { type: "boolean", default: false },
+        cycle: { type: "string" },
         json: { type: "boolean", default: false },
         "dry-run": { type: "boolean", default: false },
         side: { type: "boolean", default: false },
@@ -119,6 +124,13 @@ function parseTicketArgs(
     throw new CliError(`A ticket id cannot be combined with --side.\n\n${usage}`);
   if (values["new-cycle"] && values.next === undefined)
     throw new CliError(`--new-cycle requires --next.\n\n${usage}`);
+  if (values.cycle !== undefined) {
+    if (!/^[A-Z]$/.test(values.cycle))
+      throw new CliError(`--cycle must be a single uppercase letter (A-Z).\n\n${usage}`);
+    if (values.next === undefined) throw new CliError(`--cycle requires --next.\n\n${usage}`);
+    if (values["new-cycle"])
+      throw new CliError(`--cycle cannot be combined with --new-cycle.\n\n${usage}`);
+  }
   if (
     values.catchup &&
     (values.side || values.next !== undefined || values.json || values["dry-run"])
@@ -133,6 +145,7 @@ function parseTicketArgs(
     ...resolution,
     next,
     newCycle: values["new-cycle"],
+    cycle: values.cycle,
     json: values.json,
     dryRun: values["dry-run"],
     side: values.side,
@@ -240,7 +253,7 @@ function writeNextReport(
   request: NextRequest,
 ): void {
   const names = result.entries.map((entry) => entry.name);
-  const { cycleLetter, fileNumber } = nextFilePosition(names, options.newCycle);
+  const { cycleLetter, fileNumber } = nextFilePosition(names, options.newCycle, options.cycle);
   const fileName = (filename: string, offset: number) =>
     `${cycleLetter}${fileNumber + offset}-${filename}`;
   const report = {

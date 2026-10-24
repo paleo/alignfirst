@@ -19,8 +19,8 @@ Pin a value only when a stated policy requires it, and record the policy in the 
 ## Sources
 
 - `infra/openclaw/.env` — every deployment value and secret the seed reads (gitignored; `.env.example` documents each variable).
-- `infra/openclaw/seed/common.sh` — the baseline: model, memory opt-outs, heartbeat, skill allowlist, tools, updates, thread sessions, identity, gateway, plugin allowlist. Also the helpers every module calls.
-- `infra/openclaw/seed/surface.sh` — the channel plugin, its credentials as SecretRefs, the allowlisted channel.
+- `infra/openclaw/seed/common.sh` — the baseline: model, memory opt-outs, heartbeat, skill allowlist, tools, updates, thread sessions, identity, gateway, plugin allowlist. The gateway serves the mobile apps through Tailscale Serve when `GATEWAY_TAILSCALE_SERVE` is on, and the operator approves every device that comes through it: a tailnet identity grants no access. Also the helpers every module calls.
+- `infra/openclaw/seed/surface.sh` — the channel plugin, its credentials as SecretRefs, the allowlisted channel. On Discord, each DM sender gets a session apart from the apps' Home.
 - `infra/openclaw/seed/coding-agent.sh` — the delegated coding agent's global instructions (merged into its instruction file).
 - `infra/openclaw/environment.d/` — non-secret variables for the gateway and login shells (`common.conf`; `runtime.conf` is generated).
 - `infra/openclaw/aligndev.settings.json` — platform, projects root, `code.profile` and complete `code.profiles` definitions. The seed installs it at `~/.alignfirst/aligndev.settings.json`. Each Claude/Codex profile's `skipPermissions` passes its native bypass flag for unattended runs; it has no effect on Pi. Its `unset` removes inherited API-key routes. Its required `configDir` pins native routing: null unsets the agent's directory variable; a string sets its resolved explicit path. A default-directory string remains distinct from null.

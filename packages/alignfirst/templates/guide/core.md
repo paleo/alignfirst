@@ -18,7 +18,9 @@ Files use `{CYCLE_LETTER}{FILE_NUMBER}-{FILE_TYPE}.md`. FILE_PREFIX combines the
 
 Immediately before creating each file, run `{{TICKET_CMD}} --next <filename>` with the extension included. It returns TICKET_DIR, CYCLE_LETTER, FILE_NUMBER, and FILE_NAME. Append FILE_NAME to TICKET_DIR exactly as printed to get the file path.
 
-With no filename, `{{TICKET_CMD}} --next` returns FILE_PREFIX instead of FILE_NAME. To name several files at once, repeat `--next <filename>` once per file: the command returns FILE_NAMES, numbered in that order. Add `--new-cycle` to any form when the protocol or user calls for a new cycle.
+With no filename, `{{TICKET_CMD}} --next` returns FILE_PREFIX instead of FILE_NAME. To name several files at once, repeat `--next <filename>` once per file: the command returns FILE_NAMES, numbered in that order.
+
+By default `--next` continues the latest cycle. `--cycle <letter>`, with one uppercase letter, continues that cycle instead and starts at 1 when it has no file yet. `--new-cycle` opens a new cycle when the protocol or user calls for one. Pass at most one of the two.
 
 No form reserves a number. Write the named file or files before requesting another filename. With `--json`, the same information uses the same field names.
 

@@ -4,8 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
-import { launchManaged } from "../src/process-tree.js";
-import { type FixturePid, isLive, records, waitFor } from "./process-tree-helpers.js";
+import { launchManaged, psTarget } from "../src/process-tree.js";
+import {
+  type FixturePid,
+  isLive,
+  records,
+  toolStarted,
+  jsonEvents,
+  waitFor,
+} from "./process-tree-helpers.js";
 
 vi.mock("node:fs", async (original) => {
   const fs = await original<typeof FileSystem>();
@@ -142,6 +149,7 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
     mkdirSync(config);
     writeFileSync(join(config, "settings.json"), JSON.stringify({ extensions: [provider] }));
     let diagnostics = "";
+    let output = "";
     const managed = launchManaged({
       command: process.execPath,
       args: [
@@ -176,7 +184,9 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
         SUBAGENT_PARENT_SCOPE: "user",
         SUBAGENT_FIXTURE_COMMAND: `'${process.execPath}' '${fixture}' '${dir}' grouped`,
       },
-      stdout: () => {},
+      stdout: (chunk) => {
+        output += chunk.toString();
+      },
       stderr(chunk) {
         diagnostics += chunk.toString();
       },
@@ -186,7 +196,16 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
     let timer: NodeJS.Timeout | undefined;
     try {
       await managed.spawned;
-      await waitFor(() => records(dir).length >= 6).catch((error) => {
+      await waitFor(
+        () => toolStarted(output, "subagent"),
+        () => jsonEvents(output).length,
+      ).catch((error) => {
+        throw new Error(`${error.message}\n${diagnostics}`);
+      });
+      await waitFor(
+        () => records(dir).length >= 6,
+        () => records(dir).length,
+      ).catch((error) => {
         throw new Error(`${error.message}\n${diagnostics}`);
       });
       const started = Date.now();
@@ -277,16 +296,62 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
       try {
         await managed.spawned;
         await waitFor(() => records(dir).length === 2);
-        vi.mocked(readFileSync).mockImplementationOnce(() => {
-          throw Object.assign(new Error("inspection denied"), { code });
+        const original = vi.mocked(readFileSync).getMockImplementation();
+        if (!original) throw new Error("Missing filesystem implementation.");
+        let leaderReads = 0;
+        // The first read is the table scan; the second is the identity check before SIGTERM.
+        vi.mocked(readFileSync).mockImplementation((...args) => {
+          if (String(args[0]) === `/proc/${managed.child.pid}/stat` && ++leaderReads === 2) {
+            throw Object.assign(new Error("inspection denied"), { code });
+          }
+          return original(...args);
         });
         const failed = managed.stop();
         expect(managed.stop()).toBe(failed);
         await expect(failed).rejects.toThrow("inspection denied");
+        vi.mocked(readFileSync).mockImplementation(original);
         expect(records(dir).some(isLive)).toBe(true);
         const retry = managed.stop();
         expect(retry).not.toBe(failed);
         await retry;
+        expect(records(dir).filter(isLive)).toEqual([]);
+      } finally {
+        for (const record of records(dir)) if (isLive(record)) process.kill(record.pid, "SIGKILL");
+        await managed.stop(Date.now()).catch(() => {});
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+    12_000,
+  );
+
+  it.each(["EPERM", "EACCES"])(
+    "skips an unrelated process whose stat fails with %s",
+    async (code) => {
+      const dir = mkdtempSync(join(tmpdir(), "pi-subagent-hidden-"));
+      const managed = launchManaged({
+        command: process.execPath,
+        args: [fixture, dir, "cooperative"],
+        cwd: dir,
+        stdout: () => {},
+        stderr: () => {},
+        inputError: () => {},
+      });
+      try {
+        await managed.spawned;
+        await waitFor(() => records(dir).length === 2);
+        const original = vi.mocked(readFileSync).getMockImplementation();
+        if (!original) throw new Error("Missing filesystem implementation.");
+        vi.mocked(readFileSync).mockImplementation((...args) => {
+          if (String(args[0]) === "/proc/1/stat") {
+            throw Object.assign(new Error("hidden process"), { code });
+          }
+          return original(...args);
+        });
+        try {
+          await managed.stop();
+        } finally {
+          vi.mocked(readFileSync).mockImplementation(original);
+        }
         expect(records(dir).filter(isLive)).toEqual([]);
       } finally {
         for (const record of records(dir)) if (isLive(record)) process.kill(record.pid, "SIGKILL");
@@ -327,5 +392,25 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
     expect(await managed.spawned).toBeInstanceOf(Error);
     expect((await managed.exited).code).toBeNull();
     await managed.stop();
+  });
+});
+
+describe("macOS process query parsing", () => {
+  it("reads a live record and keeps the start time as identity", () => {
+    expect(psTarget("  412     1   412 Ss   Sat Oct 24 23:50:21 2026")).toEqual({
+      pid: 412,
+      ppid: 1,
+      group: 412,
+      identity: "Sat Oct 24 23:50:21 2026",
+      zombie: false,
+    });
+  });
+
+  it("marks a zombie record", () => {
+    expect(psTarget("  913   412   412 Z+   Sat Oct 24 23:51:02 2026").zombie).toBe(true);
+  });
+
+  it("rejects a malformed record", () => {
+    expect(() => psTarget("  913   412 Z+")).toThrow("Invalid process query record.");
   });
 });

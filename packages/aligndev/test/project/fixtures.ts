@@ -76,6 +76,11 @@ export async function runAligndev(
   // running the tests would be detected as the selected agent.
   const {
     npm_config_user_agent: _userAgent,
+    npm_execpath: _npmExecpath,
+    npm_command: _npmCommand,
+    npm_lifecycle_event: _npmEvent,
+    npm_lifecycle_script: _npmScript,
+    npm_package_json: _npmManifest,
     CLAUDECODE: _claude,
     CODEX_THREAD_ID: _codex,
     PI_CODING_AGENT: _pi,

@@ -1,3 +1,4 @@
+import { createCommand, renderCommand } from "@alignfirst/docmap/invocation";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, relative } from "node:path";
@@ -27,7 +28,9 @@ describe("readProjectReport", () => {
     expect(result).toMatchObject({ error: expect.stringContaining(tooOld) });
     if (!("error" in result)) throw new Error("expected report failure");
     expect(result.error.startsWith(tooOld)).toBe(true);
-    expect(result.error).toContain(`alignfirst: \`${command.join(" ")}\``);
+    expect(result.error).toContain(
+      `alignfirst: \`${renderCommand(createCommand(command[0], command.slice(1)))}\``,
+    );
   });
 
   it.each([null, { profile: "work" }, { profile: " Work " }])(
