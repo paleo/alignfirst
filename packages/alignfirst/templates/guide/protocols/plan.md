@@ -106,13 +106,13 @@ Example:
 For every plan, single or specialized, add a final step named "Write a Handover Document" with this content:
 
 ```markdown
-Write a **handover document** for your teammates. List every file you updated, then summarize the changes very concisely. Keep only what helps a teammate understand what is new; leave out the obvious. When there is nothing to explain, explain nothing. Create its path by replacing the final `.md` in `{PLAN_FILE_PATH}` with `.summary.md`, then write the handover there. Ignore lint errors (formatting issues) in this file. At the end, give the path of this handover file to the user.
+Write a **handover document** for your teammates. List every file you updated, then summarize the changes very concisely. Keep only what helps a teammate understand what is new; leave out the obvious. When there is nothing to explain, explain nothing. Create and write the file `{HANDOVER_FILE_PATH}`. Ignore lint errors (formatting issues) in this file. At the end, give the path of this handover file to the user.
 ```
 
 Note:
 
 - This is a regular step, numbered like the others. A plan with 5 steps gets this one as step 6.
-- Replace "{PLAN_FILE_PATH}" with the complete plan file path, such as `.plans/123/A2-plan-backend.md`. Its handover path is `.plans/123/A2-plan-backend.summary.md`.
+- Replace "{HANDOVER_FILE_PATH}" with the complete handover file path: the plan file path with `.summary.md` in place of the final `.md`. The plan `.plans/123/A2-plan-backend.md` gets `.plans/123/A2-plan-backend.summary.md`.
 
 ### 3.5 Common Footer for All Plans
 
@@ -184,7 +184,7 @@ Write a **main plan handover document**. This document:
 1. References each specialized plan's handover file
 2. For each referenced handover, states "Completed" when the plan was executed successfully, and details any issue encountered otherwise
 
-Keep this handover very short. Do not combine or repeat the content of individual handovers. Create its path by replacing the final `.md` in `{PLAN_FILE_PATH}` with `.summary.md`, then write the handover there. Ignore lint errors (formatting issues) in this file.
+Keep this handover very short. Do not combine or repeat the content of individual handovers. Create and write the file `{HANDOVER_FILE_PATH}`. Ignore lint errors (formatting issues) in this file.
 
 ---
 
@@ -195,7 +195,7 @@ Do not use external search tools (Context7, web search, documentation fetching) 
 
 Note:
 
-- Replace "{PLAN_FILE_PATH}" with the complete plan file path, such as `.plans/123/A2-main-plan.md`. Its handover path is `.plans/123/A2-main-plan.summary.md`.
+- Replace "{HANDOVER_FILE_PATH}" with the complete handover file path: the main plan file path with `.summary.md` in place of the final `.md`. The main plan `.plans/123/A2-main-plan.md` gets `.plans/123/A2-main-plan.summary.md`.
 
 ## Phase 5. Writing
 
