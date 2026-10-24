@@ -62,6 +62,15 @@ describe("guide command", () => {
     expect(overview.stdout).not.toContain("# Ticket Directory and Work Files");
   });
 
+  it("plans single and multiple plans in a selected cycle", async () => {
+    const result = await runMain(["guide", "plan"], { cwd: temp() });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(result.stdout).toContain("alignfirst ticket <id> --cycle <letter> --next plan.md");
+    expect(result.stdout).toContain(
+      "alignfirst ticket <id> --cycle <letter> --next main-plan.md --next plan-api.md --next plan-ui.md",
+    );
+  });
+
   it("rejects invalid protocol selections", async () => {
     const cwd = temp();
     const overviewOnly = await runMain(["guide", "overview", "--protocol-only"], { cwd });

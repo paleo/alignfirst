@@ -199,9 +199,11 @@ Note:
 
 ## Phase 5. Writing
 
-Continue the current cycle. Request the file names with `{{TICKET_CMD}} --next`, then write every file it named before requesting anything else. Append each name to TICKET_DIR to get its path. Never overwrite an existing file.
+Plan in the spec's cycle unless the user requests another: pass the CYCLE_LETTER of the spec filename as `--cycle <letter>`. Without a cycle prefix on the spec filename, omit `--cycle`.
 
-**Single plan**: run `{{TICKET_CMD}} --next plan.md`.
+Request the file names as below, then write every file the command named before requesting anything else. Append each name to TICKET_DIR to get its path. Never overwrite an existing file.
+
+**Single plan**: run `{{TICKET_CMD}} --cycle <letter> --next plan.md`.
 
 - Plan: `{TICKET_DIR}{CYCLE_LETTER}{FILE_NUMBER}-plan.md`, e.g. `.plans/123/A2-plan.md`
 - Handover: `.plans/123/A2-plan.summary.md`
@@ -209,7 +211,7 @@ Continue the current cycle. Request the file names with `{{TICKET_CMD}} --next`,
 **Multiple plans**: run one command with a `--next` per file, the main plan first, then the specialized plans in the order the main plan lists them. The command returns all the names, numbered in that order, so the main plan can reference the specialized plans exactly. Example:
 
 ```
-{{TICKET_CMD}} --next main-plan.md --next plan-api.md --next plan-ui.md
+{{TICKET_CMD}} --cycle <letter> --next main-plan.md --next plan-api.md --next plan-ui.md
 ```
 
 - Main plan: `{TICKET_DIR}{CYCLE_LETTER}{FILE_NUMBER}-main-plan.md`, e.g. `.plans/123/A2-main-plan.md`

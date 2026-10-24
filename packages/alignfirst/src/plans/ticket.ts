@@ -124,22 +124,28 @@ export interface NextFilePosition {
   fileNumber: number;
 }
 
-export function nextFilePosition(entries: readonly string[], newCycle: boolean): NextFilePosition {
+export function nextFilePosition(
+  entries: readonly string[],
+  newCycle: boolean,
+  selectedCycle?: string,
+): NextFilePosition {
   const prefixes = entries.flatMap((entry) => {
     const match = FILE_PREFIX.exec(entry);
     return match ? [{ cycle: match[1], number: Number(match[2]) }] : [];
   });
-  if (prefixes.length === 0) return { cycleLetter: "A", fileNumber: 1 };
+  if (prefixes.length === 0) return { cycleLetter: selectedCycle ?? "A", fileNumber: 1 };
   const highestCycle = prefixes.reduce(
     (highest, prefix) => (prefix.cycle > highest ? prefix.cycle : highest),
     "A",
   );
   if (newCycle)
     return { cycleLetter: String.fromCharCode(highestCycle.charCodeAt(0) + 1), fileNumber: 1 };
+  const cycleLetter = selectedCycle ?? highestCycle;
   const highestNumber = Math.max(
-    ...prefixes.filter(({ cycle }) => cycle === highestCycle).map(({ number }) => number),
+    0,
+    ...prefixes.filter(({ cycle }) => cycle === cycleLetter).map(({ number }) => number),
   );
-  return { cycleLetter: highestCycle, fileNumber: highestNumber + 1 };
+  return { cycleLetter, fileNumber: highestNumber + 1 };
 }
 
 export function listEntries(dir: string): TicketEntry[] {
