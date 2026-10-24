@@ -95,7 +95,8 @@ async function readSession(ctx: ScenarioContext, stdout: string): Promise<Sessio
   if (relativePath === undefined) {
     throw new Error(`aligndev code output has no session-file path: ${JSON.stringify(stdout)}`);
   }
-  const path = `${PROJECT_DIR}/${relativePath}`;
+  // The run has ended: its `<stamp>.running.md` file was renamed to `<stamp>.md`.
+  const path = `${PROJECT_DIR}/${relativePath.replace(/\.running\.md$/, ".md")}`;
   const read = await ctx.execInGateway(["sed", "-n", "1,160p", path]);
   if (read.exitCode !== 0) throw new Error(`failed to read ${path}: ${read.stderr}`);
   const marker = "\n---- Result ----\n";
