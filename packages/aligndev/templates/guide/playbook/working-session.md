@@ -108,7 +108,7 @@ Home is the app's default conversation. An actionable message gets one reply her
 Open a new conversation for this request, on the agent workspace or on the {PROJECT} folder.
 ```
 
-Without a listed project, end the line at "on the agent workspace". Home does no project work and sets up no workspace: no ticket, no workspace setup, no `{{ALIGNDEV}} code`.
+With a listed project, keep both places in the line. Without one, end the line at "on the agent workspace". Home does no project work and sets up no workspace: no ticket, no workspace setup, no `{{ALIGNDEV}} code`.
 
 Answer ordinary conversation here directly, as a colleague.
 {{/app}}

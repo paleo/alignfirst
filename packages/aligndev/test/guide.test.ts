@@ -794,6 +794,7 @@ describe("app conversations", () => {
     expect(home).toContain(
       "Open a new conversation for this request, on the agent workspace or on the {PROJECT} folder.",
     );
+    expect(home).toContain("With a listed project, keep both places in the line.");
     expect(home).toContain("Home does no project work and sets up no workspace");
     expect(home.indexOf("An actionable message")).toBeLessThan(
       home.indexOf("Answer ordinary conversation"),
