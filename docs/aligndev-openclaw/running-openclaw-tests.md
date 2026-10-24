@@ -233,6 +233,23 @@ Actual native Pi 1.3.0 with Terra read and wrote parent-verified nonce markers t
 
 A separate native Codex 0.162.1/Terra probe used verified `--sandbox workspace-write` with no bypass. Worktree writes passed, but shared project `.plans` and `.local` writes returned `Errno 30` (read-only filesystem). The prepared-companion control passed through the existing narrow `--add-dir <companion>` grant; shared `.local` and outside-root writes remained denied. Shared Codex work-file access remains a limitation; no permission remedy or broad main-repository grant was introduced. Native Codex saved disposable-project trust records; read-only comparison confirmed the companion control changed no sandbox, approval or profile value. Native evidence, exact argv, marker verification, cleanup and limitations are in `.local/side-29/C2/native/evidence.md`.
 
+### side-20 acceptance — 2026-10-24
+
+The app conversations and the per-surface guide renders were validated with Terra and Haiku through OpenRouter, `CODING_AGENT=codex`, one iteration each:
+
+| Case | Result | Artifact run under `aligndev-openclaw-tests/artifacts/` |
+| --- | --- | --- |
+| A26 app conversation from Home, webchat | Passed | `2026-10-24T20-09-56-815Z` |
+| A27 managed-worktree conversation, webchat | Passed | `2026-10-24T19-46-21-010Z` |
+| A01, A08, A23, Slack and Discord | Passed (6 cells) | `2026-10-24T20-09-56-815Z` |
+| A09 code-agent contract, Slack | Failed, then passed after the fix | `2026-10-24T20-21-28-946Z`, `2026-10-24T20-23-35-480Z` |
+
+Two earlier A26 runs answered Home with the project folder alone, dropping the agent workspace. The Home section now asks to keep both places when a project is listed; the rerun named both. A27 never writes in Home and was not rerun after that edit.
+
+A09 read the `.running.md` path that `aligndev code` prints, but a run that has ended renames its file to `<stamp>.md`. The scenario now reads the completed file. The defect came from `main`, not from this change.
+
+Pi and Claude children, the other scenarios and repeated iterations were not run. Offline suites, typechecks, lint, the integration suites and the deployment-template tests passed.
+
 ## Offline helper checks
 
 From the repository root, using Node 26:
