@@ -8,7 +8,7 @@ import { resolveCommandForms } from "../../src/command-form.js";
 import { type PlansContext, validateEffectivePlans } from "../../src/project/plans.js";
 
 const dirs: string[] = [];
-const PREPARE = "See `aligndev guide work-files-setup` for authorized preparation.";
+const PREPARE = "See the `work-files-setup` topic of `aligndev guide` for authorized preparation.";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -101,7 +101,7 @@ describe("validateEffectivePlans", () => {
     });
     expect(() => validateEffectivePlans(fixture.ctx)).toThrow("alignfirst is not installed");
     expect(() => validateEffectivePlans(fixture.ctx)).toThrow(
-      "See `npx -y aligndev guide work-files-setup` for authorized preparation.",
+      "See the `work-files-setup` topic of `npx -y aligndev guide` for authorized preparation.",
     );
   });
 });

@@ -342,7 +342,7 @@ describe("worktree add", () => {
       "Untrack and ignore these work files in their containing worktree",
     );
     expect(result.stderr).toContain("plans setup <clone-dir>");
-    expect(result.stderr).toContain("guide work-files-setup");
+    expect(result.stderr).toContain("the `work-files-setup` topic of `aligndev guide`");
     expect(result.stdout).toBe("");
     expect(existsSync(destination)).toBe(false);
     expect(execGit(repo, "branch", "--list", "ticket")).toBe("");
@@ -1422,7 +1422,7 @@ describe("coding launch gate", () => {
       );
       expect(result.code).toBe(1);
       expect(result.stderr).toContain("tracked");
-      expect(result.stderr).toContain("guide work-files-setup");
+      expect(result.stderr).toContain("the `work-files-setup` topic of `aligndev guide`");
       expect(readFileSync(file, "utf8")).toBe(contents);
       expect(existsSync(join(repo, ".plans", "123"))).toBe(false);
       const status = await runAligndev(fixture, ["code", "status", file, "--result"], {

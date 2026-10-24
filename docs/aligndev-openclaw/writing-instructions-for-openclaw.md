@@ -61,7 +61,7 @@ Cross-references cite step numbers, as in "Step 5 of `{{GUIDE}} project-workspac
 
 ### `codingAgent` prose
 
-The `codingAgent` assistant runs in the project's repository, and the user talks to it in the session's conversation. Its prose names no OpenClaw tool, surface or sentinel: no thread, channel, `message`, `exec`, `thread_handoff`, `HEARTBEAT_OK` or `NO_REPLY`. It never mentions `aligndev project` or the project inventory either.
+The `codingAgent` assistant runs in the project's repository, and the user talks to it in the session's conversation. Its prose names no OpenClaw tool, surface or sentinel: no thread, channel, `message`, `exec`, `thread_handoff`, `HEARTBEAT_OK` or `NO_REPLY`. It never mentions `aligndev project` or the project inventory either. A `{{#conversation}}` block is `codingAgent` prose too, since the app conversation reuses it; app-only facts go in `{{#app}}`.
 
 ### Placeholders
 

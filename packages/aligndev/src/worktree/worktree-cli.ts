@@ -140,8 +140,8 @@ at their listed path. Bare and nonstandard Git layouts are unsupported.
 
 Add and setup share usable untracked main-worktree .plans and optional .local through symlinks, with local
 Git exclusions. Companion plans are used directly. Tracked .local stays branch-local with a warning.
-Missing or project-tracked effective plans require separately authorized preparation:
-  ${command} guide work-files-setup
+Missing or project-tracked effective plans require separately authorized preparation: see the
+work-files-setup topic of ${command} guide.
 Neither command registers a companion, migrates files, installs, builds or starts application processes.
 Readiness covers Git and work files only; follow repository preparation and shutdown separately.
 Setup without a path discovers the current Git worktree root, including from a nested directory.

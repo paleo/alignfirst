@@ -29,7 +29,12 @@ Under OpenClaw, background it through the `exec` tool:
 
   `{{ALIGNDEV}} code <command> <options> ; openclaw system event --text "aligndev code run finished — read its session file and report to the user" --mode now --session-key <KEY>`
 
+{{#thread}}
   Chain with `;` (never `&&`) so a failed run wakes you too, and keep the `;` on the same line as the `{{ALIGNDEV}} code` command: a line that starts with `;` is a shell syntax error, the wake command never runs, and the run's completion is lost. The wake may reach you as a bare heartbeat with the text dropped, and OpenClaw's own `Exec completed` notice may lag behind it. Never wait for either text.
+{{/thread}}
+{{#app}}
+  Chain with `;` (never `&&`) so a failed run wakes you too, and keep the `;` on the same line as the `{{ALIGNDEV}} code` command: a line that starts with `;` is a shell syntax error, the wake command never runs, and the run's completion is lost. The wake may reach you as a bare heartbeat with the text dropped. Never wait for its text.
+{{/app}}
 - Pass `background: true` and `timeoutSeconds: 0` (no kill timer). Never rely on the auto-yield or a finite timeout.
 - For a run launched without `--ticket` or `--no-ticket`, pass `--meta <KEY>` with this session's key. `{{ALIGNDEV}} code status --meta <KEY>` then finds its result among concurrent runs in the shared main worktree.
 - Set the exec `workdir` to the project root as an **absolute** path (`~` is not expanded there), or `cd` into the project inside the command itself.
@@ -42,6 +47,10 @@ As soon as the run is backgrounded, tell the user — in the user's language —
 ## After a background run completes
 
 The chained wake fires when the backgrounded `{{ALIGNDEV}} code` exits. This session receives a heartbeat, often as a plain heartbeat poll with no message text. A run counts as pending while it is running **and until its outcome is reported**.
+{{#app}}
+
+In this conversation, the run's exit brings two turns, about ten seconds apart: OpenClaw's `Exec completed` notice, then the chained wake as a heartbeat. Both are completion wakes. The first finds the run pending and reports it; the second finds it reported.
+{{/app}}
 
 **First, decide whether this heartbeat needs a report.** A heartbeat is a completion wake only while a run is pending. Once you have reported the outcome, later heartbeats for that run need nothing. End them with exactly `HEARTBEAT_OK`, alone.
 

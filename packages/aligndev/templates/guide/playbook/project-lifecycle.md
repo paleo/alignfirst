@@ -21,8 +21,18 @@ Creation has a hard user-input gate. Before any filesystem, Git, port-allocation
 1. Settle the stack, allowed parent directory, project name, and port requirements with the user. Use the `{{ALIGNDEV}} guide project` output to constrain the choices.
 2. Create the main-worktree directory under the selected allowed parent. Initialize its Git repository on `main`.
 3. Once the directory contains its `.git` directory, retain the canonical path as PROJECT_PATH. When the project declares ports, run `{{ALIGNDEV}} project free-ports --root <selected parent directory> --size <port names × concurrent workspaces> [--range <code>]` and retain the block; preparation through the setup guide writes it into `.alignfirst.json`. The selected parent's marker owns its port range. Report that `.alignfirst.json` was written and name the block.
+{{#thread}}
 4. Complete `{{GUIDE}} work-files-setup` with the approved bootstrap scope, then run `{{ALIGNFIRST}} sync`. With an external ticket, run `{{ALIGNFIRST}} ticket {TICKET_ID} --next request.md` and append FILE_NAME to TICKET_DIR, exactly as printed, to get the path. Otherwise run `{{ALIGNFIRST}} ticket --side`; TICKET_ID is the reported `side-N`, and the path is `{TICKET_DIR}A1-request.md`. Write the complete creation request there from the starter and every later human message that supplied the gate's values. Record the project name, selected parent, stack, port requirements, and requested stopping point; never copy only the starter's task line. Then run `{{ALIGNFIRST}} sync`. You choose the identifier and write the request; the agent does neither. A later plans setup migrates this content when it replaces the directory with a symlink.
+{{/thread}}
+{{#app}}
+4. Complete `{{GUIDE}} work-files-setup` with the approved bootstrap scope, then run `{{ALIGNFIRST}} sync`. With an external ticket, run `{{ALIGNFIRST}} ticket {TICKET_ID} --next request.md` and append FILE_NAME to TICKET_DIR, exactly as printed, to get the path. Otherwise run `{{ALIGNFIRST}} ticket --side`; TICKET_ID is the reported `side-N`, and the path is `{TICKET_DIR}A1-request.md`. Write the complete creation request there from this conversation, every human message that supplied the gate's values included. Record the project name, selected parent, stack, port requirements, and requested stopping point. Then run `{{ALIGNFIRST}} sync`. You choose the identifier and write the request; the agent does neither. A later plans setup migrates this content when it replaces the directory with a symlink.
+{{/app}}
+{{#thread}}
 5. Before delegating the bootstrap, run `{{GUIDE}} code`. On a takeover turn, apply the pre-delegation race checkpoint in the playbook (`{{GUIDE}}`) immediately before `{{ALIGNDEV}} code new`. Then bootstrap directly from PROJECT_PATH through `{{ALIGNDEV}} code new --message`, with no protocol. Explicitly instruct it to use `alignfirst-setup-guide` and prepare the repository for an assistant. It must run `{{ALIGNDEV}} project doctor` after writing `.alignfirst.json` and before workspace setup, stopping on an unhealthy inventory. The workspace system is optional. When the project installs it, include `.local/` as a gitignored shared directory in its mechanism; otherwise the project uses `{{ALIGNDEV}} worktree` and documents its install/build/test preparation. Follow the selected stack and the host-specific guide.
+{{/thread}}
+{{#app}}
+5. Before delegating the bootstrap, run `{{GUIDE}} code`. Then bootstrap directly from PROJECT_PATH through `{{ALIGNDEV}} code new --message`, with no protocol. Explicitly instruct it to use `alignfirst-setup-guide` and prepare the repository for an assistant. It must run `{{ALIGNDEV}} project doctor` after writing `.alignfirst.json` and before workspace setup, stopping on an unhealthy inventory. The workspace system is optional. When the project installs it, include `.local/` as a gitignored shared directory in its mechanism; otherwise the project uses `{{ALIGNDEV}} worktree` and documents its install/build/test preparation. Follow the selected stack and the host-specific guide.
+{{/app}}
 6. Verify the project through the setup guide, run `{{ALIGNFIRST}} sync`, and make its initial commit on `main` in PROJECT_PATH. Do not ask for confirmation before committing.
 7. When a remote destination is known from the request, environment, or host instructions, configure it when needed and push `main`. Do not ask for confirmation before pushing. When no destination is known, or the user requested a local-only project, leave the committed project local and report that no remote was configured.
 8. After that commit and push when applicable, return to the normal working-session flow. Every subsequent branch change uses a linked project workspace.
@@ -90,7 +100,12 @@ The preparation targets the project's companion directory. It writes nothing in 
 
 ## Remove a project
 
+{{#thread}}
 Removal requires the listed PROJECT_PATH selected before the thread opened or supplied by the user.
+{{/thread}}
+{{#app}}
+Removal requires the listed PROJECT_PATH supplied by the user.
+{{/app}}
 
 1. Run and read `{{ALIGNDEV}} guide project`, then refresh `{{ALIGNDEV}} project list --json` and resolve the listed project at PROJECT_PATH. Run `{{ALIGNDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH, and its companion directory when it reports one. Read DEVELOPERS_PATH, then run and read the project workspace guide it names, if any.
 2. List every linked worktree with its exact absolute path, through the project's workspace list or, without workspace tooling, `{{ALIGNDEV}} worktree list --json` from PROJECT_PATH. Add the exact PROJECT_PATH for the main worktree. Check every worktree, the main one included, for staged, unstaged, or untracked unignored changes. A dirty worktree stops the removal before anything is unregistered or deleted, and so does a missing or locked registration until it is resolved.

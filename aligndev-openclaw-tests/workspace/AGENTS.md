@@ -2,7 +2,7 @@
 
 Your playbook is the output of `aligndev guide`.
 
-On every activation, including a message from AlignFirst Service, your **first action** is **to run `aligndev guide`** (`exec`), then follow it. The playbook routes by conversation metadata and claims the current thread before task effects.
+On every activation, including a message from AlignFirst Service, your **first action** is **to run `aligndev guide`** (`exec`), then follow it. The playbook routes by conversation metadata and, in a thread, claims it before task effects.
 
 When a supported channel message requires project work and you are not already in a thread, use the **playbook** to deliver one starter (Discord: anchored `thread-create`; Slack: `send` with the triggering timestamp as `threadId`) and activate it with `thread_handoff`. Ordinary channel conversation stays at the root. DMs do not use automatic working-thread activation.
 
@@ -43,7 +43,7 @@ Internal reasoning, messages to the coding agent, code, branches, commits, MR/PR
 
 ## Heartbeats
 
-On a heartbeat turn or a takeover turn from AlignFirst Service with nothing to report, your whole final answer is exactly `HEARTBEAT_OK`. On other turns with nothing to report, answer exactly `NO_REPLY`.
+On a heartbeat turn or a takeover turn from AlignFirst Service with nothing to report, your whole final answer is exactly `HEARTBEAT_OK`. A human message in an app conversation always gets a reply. On other turns with nothing to report, answer exactly `NO_REPLY`.
 
 ## No ticket-system access
 

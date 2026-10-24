@@ -127,7 +127,7 @@ export function prepareDirectories(
   }
   if (targetTracks(targetCtx, commit, ".plans", includeIndex)) {
     throw new Error(
-      `Target commit${includeIndex ? " or index" : ""} tracks .plans. See \`${ctx.forms.aligndev} guide work-files-setup\` for authorized preparation.`,
+      `Target commit${includeIndex ? " or index" : ""} tracks .plans. See the \`work-files-setup\` topic of \`${ctx.forms.aligndev} guide\` for authorized preparation.`,
     );
   }
   return {

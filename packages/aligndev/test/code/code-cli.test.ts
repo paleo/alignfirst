@@ -1476,7 +1476,7 @@ describe("companion projects", () => {
       `No .plans/ directory at ${plans} (companion).\n` +
         `Local work files:  mkdir -p ${plans}\n` +
         "Team work files:   alignfirst plans setup <clone-dir>\n" +
-        "See `aligndev guide work-files-setup` for authorized preparation.\n",
+        "See the `work-files-setup` topic of `aligndev guide` for authorized preparation.\n",
     );
 
     mkdirSync(plans, { recursive: true });

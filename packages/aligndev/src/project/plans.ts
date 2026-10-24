@@ -41,7 +41,7 @@ export function validateEffectivePlans(ctx: PlansContext): string {
     return value.plans.target;
   } catch (error) {
     throw new Error(
-      `${errorMessage(error)}\nSee \`${ctx.forms.aligndev} guide work-files-setup\` for authorized preparation.`,
+      `${errorMessage(error)}\nSee the \`work-files-setup\` topic of \`${ctx.forms.aligndev} guide\` for authorized preparation.`,
     );
   }
 }

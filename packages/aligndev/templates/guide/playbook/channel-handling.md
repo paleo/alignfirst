@@ -17,20 +17,7 @@ Retain the complete result; reuse it while it remains sufficient, and refresh it
 
 If `{{ALIGNDEV}} project list --json` fails, report the error and end the turn. Do not route against a partial or remembered inventory.
 
-Resolve PROJECT and PROJECT_PATH from that result:
-
-- **PROJECT** — the selected main-worktree directory name.
-- **PROJECT_PATH** — its canonical absolute main-worktree path.
-- Only a project in the `projects` list supplies PROJECT_PATH. A name that appears only under a directory's `others` is a directory that is not a git repository, so not a project: report it and ask for a usable project path. For project removal, the listed project's path is PROJECT_PATH.
-- A mentioned name with one listed match supplies both values. A name counts as mentioned wherever it appears, including inside a resource URL's path (a repository URL naming the project, for instance).
-- A mentioned name with several listed matches supplies PROJECT but leaves PROJECT_PATH unresolved. Ask the user to select one of the matching canonical paths.
-- A mentioned name with no listed match supplies the proposed PROJECT but leaves PROJECT_PATH unresolved.
-- With no mentioned project, infer both values only when the list contains exactly one project. Zero or several projects leave both values unresolved.
-- A request spanning several projects retains every resolved PROJECT and PROJECT_PATH pair. The request establishes this scope; several inventory candidates leave a single-project request unresolved.
-- A request to create an absent named project is project-lifecycle intent. Keep the proposed name as PROJECT and leave PROJECT_PATH absent for the lifecycle procedure to establish.
-- A request to clone a repository whose name matches no inventory entry is also project-lifecycle intent. The repository name is the proposed PROJECT; PROJECT_PATH stays absent.
-
-Never reconstruct PROJECT_PATH from PROJECT.
+Resolve PROJECT and PROJECT_PATH from that result with the playbook's rules, "Resolving a project from the inventory".
 
 ## Interpreting requests
 

@@ -1,11 +1,11 @@
 # Runbook: Project workspace setup
 
-{{#openclaw}}
+{{#thread}}
 The setup phase of a working session: get the workspace ready before handling the user's request. You're in a thread session, so your plain-text replies are your delivery — but only the message that **ends your turn** is guaranteed to post; mid-turn lines may never leave the transcript. The message you end the setup turn with must carry everything the user needs: the `[WORKSPACE]` banner (Step 4) and what you did or launched. Never call `message` `send`/`thread-reply` targeting your own thread: it posts everything twice.
-{{/openclaw}}
-{{#codingAgent}}
+{{/thread}}
+{{#conversation}}
 The setup phase of a working session: decide the workplace and get it ready before handling the user's request. The message you end the setup turn with carries the `[WORKSPACE]` banner (Step 4) and what you did or launched, or the question Step 2 or Step 5 asks the user.
-{{/codingAgent}}
+{{/conversation}}
 
 {{#openclaw}}
 ## Prerequisites — run both now, before Step 1
@@ -34,53 +34,65 @@ The setup phase of a working session: decide the workplace and get it ready befo
 You need:
 
 - **PROJECT** — The main-worktree directory name shown to the user.
-{{#openclaw}}
+{{#thread}}
 - **PROJECT_PATH** — The canonical absolute main-worktree path recorded in the thread starter.
-{{/openclaw}}
-{{#codingAgent}}
+{{/thread}}
+{{#conversation}}
 - **PROJECT_PATH** — The canonical absolute main-worktree path resolved by Step 1 of `{{GUIDE}} working-session`.
 - **The workplace and the default branch** — The session's worktree, its branch, and the project's default branch, retained by the same step.
-{{/codingAgent}}
+{{/conversation}}
 - **TICKET_ID** — The external ticket ID or the side ticket `side-N` reserved by the working session.
 
 If PROJECT, PROJECT_PATH, or TICKET_ID is missing, do not proceed. Do not guess or reconstruct these values. Ask the user.
 
-{{#openclaw}}
+{{#thread}}
 ## Step 2 — Post the setup signal
 
 Setting up a workspace takes a while, so tell the user it started before you start it. One short line, in their language, and nothing else — the thread's starter already states the known project, ticket and task, so restating them here just repeats a message they can see.
-{{/openclaw}}
-{{#codingAgent}}
+{{/thread}}
+{{#conversation}}
 ## Step 2 — Decide the workplace
 
 The workplace is the first case that matches:
 
 1. **The user's request or instructions name the place** — a directory, a branch, a workspace: work there. For a directory, apply Step 4's existing-workplace preparation, post its banner and go to Step 5. For a branch, Step 4 finds or attaches that branch rather than choosing another ticket branch.
 2. **The session's branch carries TICKET_ID** — work in place. Skip the setup signal and branch selection: apply Step 4's existing-workplace preparation, post the `[WORKSPACE]` banner with the session's worktree and branch, then go to Step 5.
-3. **The session's branch is long-lived** — the default branch, or a name such as `main`, `master`, `develop`, `release` or `production`: open or create the ticket's workspace in Step 4, without asking.
-4. **Any other branch**, one carrying another ticket's ID included — end the turn on one message asking where to work. On the answer, "here" means the session's worktree as it is, handled as in case 2; a branch or a directory the user names falls under case 1.
+3. **The session's worktree is a fresh harness worktree** — a linked worktree (its `git rev-parse --git-common-dir` is not its own `.git`) with a clean tree, on a branch that carries no ticket ID or on a detached HEAD, with no commit beyond the default branch: after `git fetch`, `git rev-list --count origin/<default>..HEAD` is `0`. OpenClaw (branch `openclaw/<name>`), Claude Code, Codex and Paseo create such worktrees. Work in place on the ticket branch, without asking. First run Step 4's two checks for TICKET_ID. A status request never creates a branch: with no ticket branch, it ends as sub-path 3 of Step 4 does. Otherwise:
+   - The ticket branch has a registered workspace: use that workspace, as sub-path 1 of Step 4. The fresh worktree stays unused.
+   - The ticket branch exists without a workspace: run `git switch <branch>` in the session's worktree.
+   - No ticket branch: run `git switch -c {TICKET_ID}/{1-3-words} origin/<default>` in the session's worktree.
+
+   After a switch, skip the setup signal: apply Step 4's existing-workplace preparation, post the `[WORKSPACE]` banner with the session's worktree and its new branch, then go to Step 5.
+4. **The session's branch is long-lived, or there is no session workplace** — the default branch, a name such as `main`, `master`, `develop`, `release` or `production`, or a conversation that started outside the project: open or create the ticket's workspace in Step 4, without asking.
+5. **Any other branch**, one carrying another ticket's ID included — end the turn on one message asking where to work. On the answer, "here" means the session's worktree as it is, handled as in case 2; a branch or a directory the user names falls under case 1.
+
+**Registration in place.** Working in place (cases 2 and 3, and "here" in case 5) in a linked worktree that the project's tooling does not list starts with its registration, run in the foreground before the `[WORKSPACE]` banner. With workspace tooling, run its documented adoption command in that worktree: `workspace setup` without a branch for the AlignFirst workspace system, after the project's install when its wrapper needs one. Without tooling, run `{{ALIGNDEV}} worktree setup --json` in that worktree: it shares the work files and reports readiness for Git and work files only. Neither runs on the main worktree. The banner reports the state the registration returns.
+{{#app}}
+
+**An OpenClaw managed worktree.** A conversation created with a worktree runs in a checkout on branch `openclaw/<name>`, adopted by case 3. Switching it to the ticket branch takes it off `openclaw/<name>`, so OpenClaw retains it and never removes it, even when the conversation is archived or idle. From then on, the workspace rules apply to it like any other workspace, teardown and post-merge removal included. After `workspace remove` or `{{ALIGNDEV}} worktree remove` deletes it, OpenClaw marks its record removed.
+{{/app}}
 
 ## Step 3 — Post the setup signal
 
 Post the signal only when Step 2 opens or creates a workspace.
 
 Setting up a workspace takes a while, so tell the user it started before you start it. One short line, in their language, and nothing else — the user already knows the project, ticket and task, so restating them here just repeats what they have seen.
-{{/codingAgent}}
+{{/conversation}}
 
 Vary the wording: "Je prépare le workspace", "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch". No questions, no waiting.
 
-{{#openclaw}}
+{{#thread}}
 On some surfaces this line never posts (mid-turn text — see the delivery note at the top). Write it anyway, and count on the end-of-turn message, not on it, for anything the user must see.
-{{/openclaw}}
+{{/thread}}
 
-{{#openclaw}}
+{{#thread}}
 When the task changed with the message that woke you — a ticket that just arrived in a conversation thread, a scope the user just corrected — add a one-line restatement of what you're now working on. That line is the thread's durable record of the new task, the way the starter was for the original one.
-{{/openclaw}}
-{{#codingAgent}}
+{{/thread}}
+{{#conversation}}
 When the task changed with the user's latest message — a ticket that just arrived, a scope the user just corrected — add a one-line restatement of what you're now working on. That line is the conversation's record of the new task.
-{{/codingAgent}}
+{{/conversation}}
 
-{{#openclaw}}
+{{#thread}}
 ## Step 3 — Name the thread (Discord-only)
 
 {{#discord}}
@@ -90,18 +102,18 @@ Discord renames a thread through a post, so make the setup signal carry it: send
 
 That single call is the whole exception. The post right after it, and every one that follows, is plain text again; with nothing to rename, the tool never targets your own thread.
 {{/discord}}
-{{/openclaw}}
+{{/thread}}
 
-{{#openclaw}}
+{{#thread}}
 ## Step 4 — Set up the project workspace (worktree and branch)
-{{/openclaw}}
-{{#codingAgent}}
+{{/thread}}
+{{#conversation}}
 ## Step 4 — Set up the workspace (worktree and branch)
-{{/codingAgent}}
+{{/conversation}}
 
-{{#openclaw}}
+{{#thread}}
 When the user named a directory, or a recorded workplace's branch already carries TICKET_ID, retain that workplace: apply the existing-workplace preparation below, post its banner and go to Step 5. When the user named a branch, find or attach it below rather than choosing another ticket branch.
-{{/openclaw}}
+{{/thread}}
 
 The project has workspace tooling when its developer guide documents one, whatever the implementation. Use it when present; otherwise use `{{ALIGNDEV}} worktree list/add/setup/remove`. Never bypass it with raw `git worktree add`/`remove`/`prune` or directory deletion. An external tool owning Git creation and deletion is a separate case; adopt its selected worktree through the applicable setup tooling.
 
@@ -124,24 +136,28 @@ With workspace tooling, delegate the setup through its documented commands. With
 
 The command refuses an occupied path, a dangling symlink included, a branch checked out elsewhere, an ambiguous remote branch, and missing or project-tracked plans. Relay the refusal instead of working around it: reuse the path it reports for an occupied branch, ask the user about an ambiguous remote, run `{{GUIDE}} work-files-setup` for plans and retry; never force a second checkout or invent another path. It returns once the worktree and its work files are ready. Report its warnings, such as a tracked `.local` that stays branch-local, and on a late failure relay its recovery instructions and delete nothing.
 
-{{#openclaw}}
+{{#thread}}
 {{#slack}}
 The moment you have the linked workspace path — attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose, and **include it again in the message you end the turn with**: the early post may not deliver on every surface, the final message always does. Run the selected setup command in the foreground (no `background` option) and report the state it returns. Run subsequent Git commands and `{{ALIGNDEV}} code` from that linked workspace, never PROJECT_PATH, unless the user explicitly chose in-place work.
 {{/slack}}
 {{#discord}}
 The moment you have the linked workspace path — attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose, and **include it again in the message you end the turn with**: the early post may not deliver on every surface, the final message always does (on Discord the Step 3 rename post also delivers). Run the selected setup command in the foreground (no `background` option) and report the state it returns. Run subsequent Git commands and `{{ALIGNDEV}} code` from that linked workspace, never PROJECT_PATH, unless the user explicitly chose in-place work.
 {{/discord}}
-{{/openclaw}}
-{{#codingAgent}}
+{{/thread}}
+{{#conversation}}
 The moment you have the workplace — in place, attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose. Run the selected setup command in the foreground and report the state it returns. Run subsequent Git commands and `{{ALIGNDEV}} code` from the workplace.
-{{/codingAgent}}
+{{/conversation}}
+{{#app}}
 
-{{#openclaw}}
+End the setup turn on a message that carries the banner: text written earlier in the turn may never reach the user.
+{{/app}}
+
+{{#thread}}
 Bold the values with your surface's markers rather than literal `**`, and translate the labels to the user's language:
-{{/openclaw}}
-{{#codingAgent}}
+{{/thread}}
+{{#conversation}}
 Bold the values in Markdown, and translate the labels to the user's language:
-{{/codingAgent}}
+{{/conversation}}
 
 ```text
 [WORKSPACE] **{PROJECT}** — Ticket: `{TICKET_ID}`
@@ -153,16 +169,16 @@ Status: {running | ready | failed}
 
 The lines below the tag report the workspace: after `Status:`, add what the setup output gives that the user can act on. For a worktree prepared by `{{ALIGNDEV}} worktree add` or `setup`, say that `ready` covers the worktree and work files only, and delegate the repository's documented install/build/test preparation separately before coding needs it.
 
-{{#openclaw}}
+{{#thread}}
 ## Step 5 — Sync an existing branch on takeover (sub-paths 1 & 2)
-{{/openclaw}}
-{{#codingAgent}}
+{{/thread}}
+{{#conversation}}
 ## Step 5 — Sync an existing branch
-{{/codingAgent}}
+{{/conversation}}
 
-{{#codingAgent}}
+{{#conversation}}
 In place on an existing branch, fetch first. A fast-forward of the branch onto its remote counterpart or onto the base branch, on a clean tree, is the only sync done without asking: do it, then report it in one line. Anything else — uncommitted changes, a remote branch that does not fast-forward, a base-branch catch-up that needs a merge commit — ends the turn on one message stating what will happen ("I'll commit your changes as WIP and merge `main`, OK?"). The list below runs on the user's yes. In a workspace you opened or created, the list runs directly.
-{{/codingAgent}}
+{{/conversation}}
 
 Skip on sub-path 3 (no branch — nothing to sync). If Step 4 was skipped, select and fetch the base ref as described there. Once the workspace is set up, bring the branch up to date *before* inspecting, working, or reporting a status — a teammate may have pushed since you last synced, and a report off a stale branch is wrong. In order:
 
@@ -183,21 +199,21 @@ The `[WORKSPACE]` banner answers "is the env ready", not "where does the work st
 - **Repo/workflow metadata**, which you may gather directly: `git log`/`status`/branch state, `gh` PR/issue state, the `.plans/` listing.
 - **The ticket's AlignFirst artifacts** via `{{ALIGNDEV}} code new --ticket <id> --catchup`, run from the worktree: the agent loads the ticket history and returns a synthesis.
 
-{{#openclaw}}
+{{#thread}}
 Combine them into the report and post it in the thread; use `--catchup` whenever the ticket history matters. Add `--protocol aad` or `--protocol spec` to continue with that protocol in the same `{{ALIGNDEV}} code` call. What you must **not** do is browse the source to describe how the code works — that's a delegation to the agent, not part of a status report.
-{{/openclaw}}
-{{#codingAgent}}
+{{/thread}}
+{{#conversation}}
 Combine them into the report and post it in the conversation; use `--catchup` whenever the ticket history matters. Add `--protocol aad` or `--protocol spec` to continue with that protocol in the same `{{ALIGNDEV}} code` call. What you must **not** do is browse the source to describe how the code works — that's a delegation to the agent, not part of a status report.
-{{/codingAgent}}
+{{/conversation}}
 
 ## Step 7 — Start the work
 
-{{#openclaw}}
+{{#thread}}
 The workspace is ready. Before a coding delegation, apply the takeover-turn race checkpoint in the playbook (`{{GUIDE}}`). Then announce what you're about to do in one line and do it. The user's request is the go-ahead; asking them to confirm it again wastes a turn.
-{{/openclaw}}
-{{#codingAgent}}
+{{/thread}}
+{{#conversation}}
 The workspace is ready. Announce what you're about to do in one line and do it. The user's request is the go-ahead; asking them to confirm it again wastes a turn.
-{{/codingAgent}}
+{{/conversation}}
 
 {{#openclaw}}
 When the work is an `{{ALIGNDEV}} code` run, launch it as the delegation guide describes: background `exec` with `timeoutSeconds: 0`, then end the turn on the acknowledgement. Call nothing on the `{{ALIGNDEV}} code` session before the chained turn wakes you, whatever the `exec` acknowledgement suggests.
