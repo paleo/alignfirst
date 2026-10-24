@@ -13,7 +13,7 @@ Run `{{ALIGNDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` 
 {{/openclaw}}
 {{#codingAgent}}
 {{#hasGuide}}
-Read DEVELOPERS_PATH, retained by Step 1 of `{{ALIGNDEV}} guide working-session`, and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
+Read DEVELOPERS_PATH, retained by Step 1 of `{{GUIDE}} working-session`, and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
 {{/hasGuide}}
 {{#noGuide}}
 Run `{{ALIGNFIRST}} context` from PROJECT_PATH.
@@ -48,10 +48,10 @@ Retain `git rev-parse --short HEAD`, the revision the answer comes from. Report 
 
 ## Step 3 — Delegate
 
-Delegation creates session files under the work files, so complete `{{ALIGNDEV}} guide work-files-setup` from PROJECT_PATH first.
+Delegation creates session files under the work files, so complete `{{GUIDE}} work-files-setup` from PROJECT_PATH first.
 
 {{#openclaw}}
-Apply the takeover-turn checkpoint in the playbook (`{{ALIGNDEV}} guide`), then run `{{ALIGNDEV}} code new --message` from the selected worktree, without `--protocol`, `--ticket`, or `--no-ticket`.
+Apply the takeover-turn checkpoint in the playbook (`{{GUIDE}}`), then run `{{ALIGNDEV}} code new --message` from the selected worktree, without `--protocol`, `--ticket`, or `--no-ticket`.
 {{/openclaw}}
 {{#codingAgent}}
 Run `{{ALIGNDEV}} code new --message` from the selected worktree, without `--protocol`, `--ticket`, or `--no-ticket`.

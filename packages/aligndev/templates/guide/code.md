@@ -9,7 +9,7 @@ Run a coding agent through AlignFirst protocols with `{{ALIGNDEV}} code`. It wra
 
 **Never implement, investigate, or modify the codebase yourself. Your role is to delegate and guide the agent.**
 
-Run `{{ALIGNDEV}} code` from the root of the selected worktree, so the agent works in the right repository. The project must have usable `.plans/`, in the repository or in its companion directory: `{{ALIGNFIRST}} plans check` verifies it, and `{{ALIGNDEV}} guide work-files-setup` prepares it.
+Run `{{ALIGNDEV}} code` from the root of the selected worktree, so the agent works in the right repository. The project must have usable `.plans/`, in the repository or in its companion directory: `{{ALIGNFIRST}} plans check` verifies it, and `{{GUIDE}} work-files-setup` prepares it.
 
 {{ALIGNFIRST_SETUP}}
 
@@ -54,7 +54,7 @@ Any heartbeat received while an `{{ALIGNDEV}} code` run is **still pending** ent
 
    For a consultation, answer it directly from the findings; include a failure or uncertainty when relevant. The coding-run template above is for change reports.
 
-   The report is the plain text that ends the turn, on Slack and Discord alike. It must be the turn's **final message**: text written between tool calls may never post. Never follow it with `NO_REPLY`, `HEARTBEAT_OK`, a duplicate message-tool post, or another tool call.
+   The report is the plain text that ends the turn. It must be the turn's **final message**: text written between tool calls may never post. Never follow it with `NO_REPLY`, `HEARTBEAT_OK`, a duplicate message-tool post, or another tool call.
 3. **Don't reconstruct what happened.** Verifying the result is what your operating instructions prescribe; re-deriving the run's story is not: no re-running the agent, no fetch/merge, no `git` archaeology to double-check its account — the session file is authoritative for that.
 
 Reporting the run is not calling the work done: the report relays the agent's claim plus what you verified. When your verification finds a failing check, the report says so, and the fix is new work — a fresh run with its own completion wake; the wake you were answering is discharged by your report.

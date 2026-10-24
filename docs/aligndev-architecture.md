@@ -21,10 +21,10 @@ read_when:
 | `src/cli.ts` | Entry point: dispatches commands and loads settings; creates command-scoped model discovery. |
 | `src/config.ts` | `~/.alignfirst/aligndev.settings.json`: tolerant settings, reference validation, effective selection and child environment. |
 | `src/code/` | `aligndev code`: arguments, prompt, run, session file, adapters, models, quota. |
-| `src/guide/` | `aligndev guide`: topics, the template renderer, and the project's guide file (`guide-file.ts`). |
+| `src/guide/` | `aligndev guide [--channel <surface>]`: topics by context, the template renderer, and the project's guide file (`guide-file.ts`). |
 | `src/project/` | `aligndev project`: discovery, markers, status, port allocation; AlignFirst report parsing and work-files gate calls. |
 | `src/worktree/` | Git-backed worktree inventory, add/setup preparation, directory policy and non-force removal. |
-| `templates/guide/` | The playbook and guides, rendered per platform. |
+| `templates/guide/` | The dispatcher, the playbook and the guides, rendered per platform and surface. |
 
 Templates use `{{ALIGNDEV}}`, `{{ALIGNFIRST}}` placeholders for rendered command forms. `src/command-form.ts` resolves invocation once through `@alignfirst/docmap/invocation`, separating launcher (`direct`, `packageRunner`, `projectScript`) from actual runtime (`node`, `bun`). Explicit runner evidence wins over lockfiles; a project script requires manifest, entry-point and immediate-parent agreement. User-agent metadata alone does not prove either a script or a runtime.
 
@@ -32,12 +32,18 @@ Under npm/npx, counterpart commands use `npx -y alignfirst`; under Bun runtime t
 
 `src/alignfirst-cli.ts` spawns the structured executable and fixed argv plus operation arguments, never split rendered text. This covers config reports, plans checks, ticket open/reservation/catchup, companion context and diagnostic `--version` probes. Missing/outdated-report diagnostics describe the selected runner, explicit Bun runtime when applicable, and direct executable resolution. Delegated prompts use the same counterpart selection; the native coding agent keeps its own executable policy and prerequisites.
 
-Variants sit in blocks, each marker alone on its line:
+A render has a platform, a surface under `openclaw` (`--channel slack|discord|app`), and a guide-file condition under `codingAgent`. Without a topic, `aligndev guide` prints the dispatcher, the only `openclaw` render without a surface. `--channel` alone prints the surface's playbook. The entry topics, `working-session` and `channel-handling`, print the playbook first. The topics are keyed by context: `thread` (Slack and Discord), `app`, `codingAgent`. `{{GUIDE}}` renders as `aligndev guide --channel <surface>` or `aligndev guide`, so every later guide call keeps the surface.
+
+Variants sit in blocks, each marker alone on its line. A block names a fact, and a line is kept when every block around it holds:
 
 - A platform block, `{{#openclaw}}` or `{{#codingAgent}}`, sits at the top level.
-- A condition block, `{{#developers}}`, `{{#readme}}`, `{{#noGuide}}` or `{{#hasGuide}}` (both guide files), sits directly inside a `{{#codingAgent}}` block and holds text only.
+- A surface block, `{{#slack}}`, `{{#discord}}` or `{{#app}}`, and `{{#thread}}` never sit inside a `{{#codingAgent}}` block.
+- `{{#conversation}}` sits anywhere.
+- A condition block, `{{#developers}}`, `{{#readme}}`, `{{#noGuide}}` or `{{#hasGuide}}` (both guide files), sits inside a `{{#codingAgent}}` block, at any depth.
 
-The condition names the project's guide file for the assistant. Under `codingAgent`, `aligndev guide` resolves it once per call, before rendering a playbook topic: it runs `alignfirst config --json` in PROJECT_PATH, the main worktree of the working directory, and a report error fails the command. `DEVELOPERS.md` at its reported location gives `developers`; otherwise `README.md` at the root of PROJECT_PATH gives `readme`; otherwise, outside git included, `noGuide`. Ordinary OpenClaw playbooks read no report. The `code` topic reads the report in the actual cwd for project profile selection, independently of the main-worktree guide-file policy.
+`thread` and `conversation` are derived: `thread` holds on Slack and Discord, `conversation` on `app` and under `codingAgent`.
+
+The condition names the project's guide file for the assistant. Under `codingAgent`, `aligndev guide` resolves it once per playbook-topic call: it runs `alignfirst config --json` in PROJECT_PATH, the main worktree of the working directory, and a report error fails the command. `DEVELOPERS.md` at its reported location gives `developers`; otherwise `README.md` at the root of PROJECT_PATH gives `readme`; otherwise, outside git included, `noGuide`. Ordinary OpenClaw playbooks read no report. The `code` topic reads the report in the actual cwd for project profile selection, independently of the main-worktree guide-file policy.
 
 ## Running the Agent
 
@@ -139,7 +145,7 @@ The finished worktree must pass `alignfirst plans check --json`, including linke
 
 `src/project/plans.ts` runs `alignfirst plans check --json` and returns `plans.target`. AlignFirst refuses project-tracked effective plans through both logical and resolved paths. From a linked worktree, it requires the same real target and `in` as the main worktree. Separate work-files repositories remain supported; an unused tracked project copy does not block companion plans. New/resumed coding launches apply this gate before stale-session reconciliation, ticket/session writes or model discovery. Historical status, help and inventory remain readable. The playbook's work-files runbook calls `alignfirst plans check`.
 
-The playbook selects documented project workspace tooling first, including non-Node implementations. Without it, the assistant directly orchestrates lightweight list/add/setup/remove, then delegates from the selected path. `guide work-files-setup` is the sole separately authorized companion-preparation recipe and runs before ticket reservation or request capture. The CLI never writes the companion registry or provisions missing plans.
+The playbook selects documented project workspace tooling first, including non-Node implementations. Without it, the assistant directly orchestrates lightweight list/add/setup/remove, then delegates from the selected path. The `work-files-setup` guide topic is the sole separately authorized companion-preparation recipe and runs before ticket reservation or request capture. The CLI never writes the companion registry or provisions missing plans.
 
 Readiness covers Git and work files only. Install/build/test preparation follows repository commands separately; add/setup manages no ports, environment seeding, infrastructure or application processes. A shared symlink grants no sandbox permissions. Companion access retains existing handling; missing access must be surfaced without silently changing permission policy.
 

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { runAlignfirst } from "../src/alignfirst-cli.js";
 import { resolveCommandForms } from "../src/command-form.js";
-import { PLATFORMS } from "../src/config.js";
+import { PLATFORMS, type Platform } from "../src/config.js";
 import type { CompanionReport, ProjectReport } from "../src/project/layout.js";
 import { ALIGNFIRST_BIN, writeRegistry, writeSettings } from "./helpers.js";
 import {
@@ -57,16 +57,20 @@ describe("explicit companion-only onboarding", () => {
       writeSettings(fixture.home, { platform: "openclaw", projectsRoot: fixture.root });
       const env = viaNpx ? NPX_ENV : {};
       const forms = resolveCommandForms(env);
-      const result = await runAligndev(fixture, ["guide", "project-lifecycle"], { env });
+      const result = await runAligndev(
+        fixture,
+        ["guide", "--channel", "slack", "project-lifecycle"],
+        { env },
+      );
       expect(result.code, result.stderr).toBe(0);
       expect(result.stdout).not.toContain("{{");
       const route = result.stdout
         .split("### Prepare through the companion\n")[1]
         .split("\n## Remove a project")[0];
       const register = route.indexOf(`${forms.alignfirst} companion register`);
-      const select = route.indexOf(`${forms.aligndev} guide work-files-setup`);
+      const select = route.indexOf(`${forms.aligndev} guide --channel slack work-files-setup`);
       const verify = route.indexOf(`${forms.alignfirst} config --json`);
-      const delegate = route.indexOf(`${forms.aligndev} guide code`);
+      const delegate = route.indexOf(`${forms.aligndev} guide --channel slack code`);
       expect(register).toBeGreaterThan(0);
       expect(select).toBeGreaterThan(register);
       expect(verify).toBeGreaterThan(select);
@@ -90,7 +94,7 @@ describe("explicit companion-only onboarding", () => {
       writeSettings(fixture.home, { platform, projectsRoot: fixture.root });
       const env = viaNpx ? NPX_ENV : {};
       const forms = resolveCommandForms(env);
-      const result = await runAligndev(fixture, ["guide", "work-files-setup"], { cwd: repo, env });
+      const result = await runAligndev(fixture, workFilesSetupArgs(platform), { cwd: repo, env });
       expect(result.code, result.stderr).toBe(0);
       expect(result.stdout).not.toContain("{{");
       const explicitEntry = result.stdout.indexOf("For explicit companion-only onboarding");
@@ -179,7 +183,7 @@ describe("explicit companion-only onboarding", () => {
       const excludeBefore = readFileSync(join(repo, ".git", "info", "exclude"), "utf8");
       const worktreesBefore = execGit(repo, "worktree", "list", "--porcelain");
       const headBefore = execGit(repo, "rev-parse", "HEAD");
-      const guide = await runAligndev(fixture, ["guide", "work-files-setup"], { cwd: repo });
+      const guide = await runAligndev(fixture, workFilesSetupArgs(platform), { cwd: repo });
       expect(guide.code, guide.stderr).toBe(0);
       expect(guide.stdout).toContain("start at section 3 under the onboarding authorization");
 
@@ -282,4 +286,10 @@ function snapshot(root: string): Record<string, string> {
     }
   }
   return files;
+}
+
+function workFilesSetupArgs(platform: Platform): string[] {
+  return platform === "openclaw"
+    ? ["guide", "--channel", "slack", "work-files-setup"]
+    : ["guide", "work-files-setup"];
 }

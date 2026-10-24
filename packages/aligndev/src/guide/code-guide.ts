@@ -1,10 +1,10 @@
 import type { CodingAgent } from "../code/coding-agent.js";
 import type { CommandForms } from "../command-form.js";
-import { CONFIG_DIRECTORY_VARIABLES, type Platform } from "../config.js";
-import { renderGuideTemplate } from "./render-template.js";
+import { CONFIG_DIRECTORY_VARIABLES } from "../config.js";
+import { type ActiveBlocks, renderGuideTemplate } from "./render-template.js";
 
 export function renderCodeGuide(
-  platform: Platform,
+  active: ActiveBlocks,
   agent: CodingAgent,
   models: readonly string[] | undefined,
   defaultModel: string | undefined,
@@ -12,7 +12,7 @@ export function renderCodeGuide(
   profile: string | null = null,
   nativeStorage = `${CONFIG_DIRECTORY_VARIABLES[agent]}: inherited/default native storage`,
 ): string {
-  return renderGuideTemplate("code.md", { platform }, forms, {
+  return renderGuideTemplate("code.md", active, forms, {
     AGENT: agent,
     PROFILE: profile ?? "(built-in)",
     NATIVE_CONFIG: nativeStorage,

@@ -15,17 +15,17 @@ The setup phase of a working session: decide the workplace and get it ready befo
 {{/codingAgent}}
 
 {{#openclaw}}
-- `{{ALIGNDEV}} guide code` (`exec`) — the delegation manual. Required every time you run this procedure, status requests included; do not skip it because no coding seems planned.
+- `{{GUIDE}} code` (`exec`) — the delegation manual. Required every time you run this procedure, status requests included; do not skip it because no coding seems planned.
 {{/openclaw}}
 {{#codingAgent}}
-- `{{ALIGNDEV}} guide code` — the delegation manual. Required every time you run this procedure, status requests included; do not skip it because no coding seems planned.
+- `{{GUIDE}} code` — the delegation manual. Required every time you run this procedure, status requests included; do not skip it because no coding seems planned.
 {{/codingAgent}}
 {{#openclaw}}
 - run `{{ALIGNDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH, then read that file when it exists — how to create a worktree or a branch.
 {{/openclaw}}
 {{#codingAgent}}
 {{#hasGuide}}
-- Read DEVELOPERS_PATH, retained by Step 1 of `{{ALIGNDEV}} guide working-session` — whether the project has workspace tooling, and how to create a worktree or a branch.
+- Read DEVELOPERS_PATH, retained by Step 1 of `{{GUIDE}} working-session` — whether the project has workspace tooling, and how to create a worktree or a branch.
 {{/hasGuide}}
 {{/codingAgent}}
 
@@ -38,7 +38,7 @@ You need:
 - **PROJECT_PATH** — The canonical absolute main-worktree path recorded in the thread starter.
 {{/openclaw}}
 {{#codingAgent}}
-- **PROJECT_PATH** — The canonical absolute main-worktree path resolved by Step 1 of `{{ALIGNDEV}} guide working-session`.
+- **PROJECT_PATH** — The canonical absolute main-worktree path resolved by Step 1 of `{{GUIDE}} working-session`.
 - **The workplace and the default branch** — The session's worktree, its branch, and the project's default branch, retained by the same step.
 {{/codingAgent}}
 - **TICKET_ID** — The external ticket ID or the side ticket `side-N` reserved by the working session.
@@ -83,11 +83,13 @@ When the task changed with the user's latest message — a ticket that just arri
 {{#openclaw}}
 ## Step 3 — Name the thread (Discord-only)
 
+{{#discord}}
 Rename the thread whenever its name doesn't match what you now know. Format: `<TICKET_ID> - <PROJECT> - <1-to-5-word description>`, the description covering the task. A ticket that just arrived, a project that was unknown when the thread opened, a task that turned out to be something else — each one calls for the rename.
 
 Discord renames a thread through a post, so make the setup signal carry it: send that line with `message` `action: "send"`, passing the current thread's complete `chat_id` as `target`, the new name as `threadName`, and the line itself as `message`. Don't also write the line as plain text; that posts it twice. The post does not end the turn: Step 4 follows in the same turn, and the turn ends on the banner.
 
 That single call is the whole exception. The post right after it, and every one that follows, is plain text again; with nothing to rename, the tool never targets your own thread.
+{{/discord}}
 {{/openclaw}}
 
 {{#openclaw}}
@@ -103,7 +105,7 @@ When the user named a directory, or a recorded workplace's branch already carrie
 
 The project has workspace tooling when its developer guide documents one, whatever the implementation. Use it when present; otherwise use `{{ALIGNDEV}} worktree list/add/setup/remove`. Never bypass it with raw `git worktree add`/`remove`/`prune` or directory deletion. An external tool owning Git creation and deletion is a separate case; adopt its selected worktree through the applicable setup tooling.
 
-**Existing-workplace preparation:** follow the project's documented readiness/setup procedure when it has tooling. Otherwise run `{{ALIGNDEV}} worktree setup <exact-worktree-root> --json` yourself before reporting readiness or delegating. Registration alone does not prove readiness, including for externally created worktrees. Setup keeps the selected path and branch without creating or switching branches. Without a path, it discovers the current root even from nested cwd; an explicit path resolves relative to the caller and must name an exact registered root of the same repository. Conflicts remain untouched. Repair the reported problem and retry the idempotent setup to complete partial preparation. Relay failures and delete nothing; plans provisioning or migration requires the separate authorization in `{{ALIGNDEV}} guide work-files-setup`.
+**Existing-workplace preparation:** follow the project's documented readiness/setup procedure when it has tooling. Otherwise run `{{ALIGNDEV}} worktree setup <exact-worktree-root> --json` yourself before reporting readiness or delegating. Registration alone does not prove readiness, including for externally created worktrees. Setup keeps the selected path and branch without creating or switching branches. Without a path, it discovers the current root even from nested cwd; an explicit path resolves relative to the caller and must name an exact registered root of the same repository. Conflicts remain untouched. Repair the reported problem and retry the idempotent setup to complete partial preparation. Relay failures and delete nothing; plans provisioning or migration requires the separate authorization in `{{GUIDE}} work-files-setup`.
 
 First, select the base ref from the project or user instructions, otherwise use the base branch's configured upstream. Use the local base ref when the repository has no remote; ask when the choice is unclear. Fetch its remote from PROJECT_PATH with `git fetch --prune <remote>` when applicable, and retain the selected base ref for creation and synchronization. Then check what already exists for the explicitly selected branch, or otherwise for {TICKET_ID} — two checks, both required:
 
@@ -120,10 +122,15 @@ Whenever a branch exists, you work from its workspace — a status request inclu
 
 With workspace tooling, delegate the setup through its documented commands. Without it, run `{{ALIGNDEV}} worktree add` yourself, before any coding delegation, on an absolute sibling path derived from PROJECT and the branch (branch slashes become dashes): `{{ALIGNDEV}} worktree add <path> <existing-branch> --json` for sub-path 2, `{{ALIGNDEV}} worktree add <path> -b <new-branch> <explicit-base-ref> --json` for sub-path 3.
 
-The command refuses an occupied path, a dangling symlink included, a branch checked out elsewhere, an ambiguous remote branch, and missing or project-tracked plans. Relay the refusal instead of working around it: reuse the path it reports for an occupied branch, ask the user about an ambiguous remote, run `{{ALIGNDEV}} guide work-files-setup` for plans and retry; never force a second checkout or invent another path. It returns once the worktree and its work files are ready. Report its warnings, such as a tracked `.local` that stays branch-local, and on a late failure relay its recovery instructions and delete nothing.
+The command refuses an occupied path, a dangling symlink included, a branch checked out elsewhere, an ambiguous remote branch, and missing or project-tracked plans. Relay the refusal instead of working around it: reuse the path it reports for an occupied branch, ask the user about an ambiguous remote, run `{{GUIDE}} work-files-setup` for plans and retry; never force a second checkout or invent another path. It returns once the worktree and its work files are ready. Report its warnings, such as a tracked `.local` that stays branch-local, and on a late failure relay its recovery instructions and delete nothing.
 
 {{#openclaw}}
+{{#slack}}
+The moment you have the linked workspace path — attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose, and **include it again in the message you end the turn with**: the early post may not deliver on every surface, the final message always does. Run the selected setup command in the foreground (no `background` option) and report the state it returns. Run subsequent Git commands and `{{ALIGNDEV}} code` from that linked workspace, never PROJECT_PATH, unless the user explicitly chose in-place work.
+{{/slack}}
+{{#discord}}
 The moment you have the linked workspace path — attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose, and **include it again in the message you end the turn with**: the early post may not deliver on every surface, the final message always does (on Discord the Step 3 rename post also delivers). Run the selected setup command in the foreground (no `background` option) and report the state it returns. Run subsequent Git commands and `{{ALIGNDEV}} code` from that linked workspace, never PROJECT_PATH, unless the user explicitly chose in-place work.
+{{/discord}}
 {{/openclaw}}
 {{#codingAgent}}
 The moment you have the workplace — in place, attached (sub-path 1) or freshly set up (2, 3) — post the `[WORKSPACE]` banner, before any `git` inspection or prose. Run the selected setup command in the foreground and report the state it returns. Run subsequent Git commands and `{{ALIGNDEV}} code` from the workplace.
@@ -186,7 +193,7 @@ Combine them into the report and post it in the conversation; use `--catchup` wh
 ## Step 7 — Start the work
 
 {{#openclaw}}
-The workspace is ready. Before a coding delegation, apply the takeover-turn race checkpoint in the playbook (`{{ALIGNDEV}} guide`). Then announce what you're about to do in one line and do it. The user's request is the go-ahead; asking them to confirm it again wastes a turn.
+The workspace is ready. Before a coding delegation, apply the takeover-turn race checkpoint in the playbook (`{{GUIDE}}`). Then announce what you're about to do in one line and do it. The user's request is the go-ahead; asking them to confirm it again wastes a turn.
 {{/openclaw}}
 {{#codingAgent}}
 The workspace is ready. Announce what you're about to do in one line and do it. The user's request is the go-ahead; asking them to confirm it again wastes a turn.

@@ -83,7 +83,10 @@ function renderHelp(aligndev: string): string {
       `${aligndev} worktree <command> [<options>]`,
       "Create or prepare lightweight Git worktrees; list and safely remove them.",
     ],
-    [`${aligndev} guide [<topic>]`, "Print the assistant's playbook and guides."],
+    [
+      `${aligndev} guide [--channel <surface>] [<topic>]`,
+      "Print the assistant's playbook and guides.",
+    ],
     [`${aligndev} -h, --help`],
     [`${aligndev} -v, --version`],
   ]);

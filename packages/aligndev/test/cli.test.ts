@@ -142,6 +142,8 @@ describe("aligndev", () => {
       code: { agent: "claude" },
     });
     expect(guide.code).toBe(0);
-    expect(guide.stdout).toContain("aligndev guide [<topic>] [--root <path>]");
+    expect(guide.stdout).toContain(
+      "aligndev guide [--channel <slack|discord|app>] [<topic>] [--root <path>]",
+    );
   });
 });

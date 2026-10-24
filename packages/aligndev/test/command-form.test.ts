@@ -72,7 +72,7 @@ describe("command forms", () => {
     const forms = resolveCommandForms(env, { runtime, env, cwd: "/tmp", executable: "/runtime" });
     expect(forms.aligndev).toBe(self);
     expect([forms.counterpart.executable, ...forms.counterpart.args]).toEqual(counterpart);
-    const guide = renderCodeGuide("codingAgent", "pi", undefined, undefined, forms);
+    const guide = renderCodeGuide({ platform: "codingAgent" }, "pi", undefined, undefined, forms);
     const row = guide.split("\n").find((line) => line.startsWith('{"action":"start"'));
     expect(JSON.parse(row ?? "").command).toContain(`${self} code new`);
     expect(guide).toContain(`${forms.alignfirst} guide <protocol>`);
@@ -114,7 +114,7 @@ describe("command forms", () => {
       expect(forms.alignfirst).toBe(
         manager === "bun" ? "bunx --bun alignfirst" : "npx -y alignfirst",
       );
-      const guide = renderCodeGuide("codingAgent", "pi", undefined, undefined, forms);
+      const guide = renderCodeGuide({ platform: "codingAgent" }, "pi", undefined, undefined, forms);
       expect(guide).toContain(`${forms.aligndev} code status`);
       expect(guide).not.toContain("{{");
       const row = guide.split("\n").find((line) => line.startsWith('{"action":"start"'));

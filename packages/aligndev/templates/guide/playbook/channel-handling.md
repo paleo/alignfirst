@@ -1,8 +1,13 @@
 # Channel handling
 
-If conversation metadata contains `topic_id`, you are already in a thread. Run `{{ALIGNDEV}} guide working-session` and continue there before any lookup or thread creation.
+If conversation metadata contains `topic_id`, you are already in a thread. Run `{{GUIDE}} working-session` and continue there before any lookup or thread creation.
 
-Otherwise, you are in a channel (Slack) or channel/DM (Discord). Triage the message. Ordinary conversation stays in the channel; project work opens and activates a thread. The work itself happens in the thread session.
+{{#slack}}
+Otherwise, you are in a channel (Slack). Triage the message. Ordinary conversation stays in the channel; project work opens and activates a thread. The work itself happens in the thread session.
+{{/slack}}
+{{#discord}}
+Otherwise, you are in a channel/DM (Discord). Triage the message. Ordinary conversation stays in the channel; project work opens and activates a thread. The work itself happens in the thread session.
+{{/discord}}
 
 ## Project lookup
 
@@ -54,6 +59,7 @@ A value the user did not supply and the lookup did not resolve stays missing. St
 
 ### Step 2 — Open the thread
 
+{{#discord}}
 **Discord** — name the thread `<TICKET_ID> - <PROJECT> - <1-to-5-word description>`, describing the TASK. Drop a leading segment you do not have: `<PROJECT> - <description>` without a ticket, `<description>` alone without a project. Several projects: join them with `+`. Then call the `message` tool with:
 
 - `action`: `"thread-create"`
@@ -63,8 +69,10 @@ A value the user did not supply and the lookup did not resolve stays missing. St
 - `channel`: `<channel>`
 
 Pass no `message`: content on `thread-create` would post ahead of the starter. The tool returns the thread's `chat_id` — that is the THREAD_ID. Post the Step 3 starter into the thread: call `message` with `action: "thread-reply"`, `threadId` set to the bare THREAD_ID, `message` set to the starter, and `channel` set to the current surface. Pass no `target`.
-
+{{/discord}}
+{{#slack}}
 **Slack** — Slack threads have no name. Call `message` with `action: "send"`, `target` set to the raw current `chat_id`, `threadId` set to the triggering message timestamp, `message` set to the Step 3 starter, and `channel` set to the current surface. The bare root timestamp is the THREAD_ID. Slack has no `thread-create`, `thread-reply`, or rename action.
+{{/slack}}
 
 ### Step 3 — The starter message, then end the turn
 

@@ -16,8 +16,10 @@ The [`@alignfirst/service-openclaw-plugin`](../../packages/service-openclaw-plug
    every activation. The workspace carries no playbook copy.
 2. **Operating-instructions playbook** — the `aligndev guide` topics, rendered from
    [`packages/aligndev/templates/guide/playbook/`](../../packages/aligndev/templates/guide/playbook/).
-   The dispatcher (`aligndev guide`) routes thread sessions to `aligndev guide working-session` and
-   channel/DM sessions to `aligndev guide channel-handling`. The other topics own the runbooks for
+   The dispatcher (`aligndev guide`) routes thread sessions to
+   `aligndev guide --channel <surface> working-session` and channel/DM sessions to
+   `aligndev guide --channel <surface> channel-handling`; both print the surface's playbook first.
+   The other topics own the runbooks for
    project workspace setup, project lifecycle and consultations, and the `message` tool per
    surface.
    Project discovery comes from `aligndev guide project`; the delegation procedure comes from
@@ -33,12 +35,13 @@ The [`@alignfirst/service-openclaw-plugin`](../../packages/service-openclaw-plug
 ```text
 user message
   → workspace AGENTS.md (auto-loaded)                                       layer 1
-  → aligndev guide (read first)                                                layer 2  ← procedural dispatcher
-  → aligndev guide working-session | channel-handling                          layer 2
-  → aligndev guide project-lifecycle (create/onboard/remove)                   layer 2
-  → aligndev guide consultation (question, advice, brainstorming)              layer 2
-  → aligndev guide project-workspace-setup (if the thread gets its workspace)  layer 2
-  → aligndev guide code (delegation manual, read last), then delegate via aligndev code
+  → aligndev guide (read first)                                    layer 2  ← procedural dispatcher
+  → aligndev guide --channel <surface> working-session | channel-handling
+                     (the surface's playbook, then the topic)      layer 2
+  → … project-lifecycle (create/onboard/remove)                    layer 2
+  → … consultation (question, advice, brainstorming)               layer 2
+  → … project-workspace-setup (if the thread gets its workspace)   layer 2
+  → … code (delegation manual, read last), then delegate via aligndev code
 ```
 
 Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 is pulled in by explicit `aligndev guide` commands run through `exec`. The dispatcher is read **first** and is purely procedural; the `aligndev guide code` output is read **last**, at delegation — keeping its protocol vocabulary out of the early user-facing acks (see [writing-instructions-for-openclaw.md](./writing-instructions-for-openclaw.md)). The guide also carries the completion procedure for backgrounded runs, so it sits in the delegating session's transcript when the completion turn arrives. How that turn is started is OpenClaw's business, not the plugin's; see [openclaw-plugin.md](./openclaw-plugin.md).
