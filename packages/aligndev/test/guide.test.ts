@@ -641,14 +641,14 @@ describe("aligndev guide --channel", () => {
     }
   });
 
-  it("requires --channel with every openclaw topic but project", async () => {
+  it("requires --channel with every openclaw playbook topic and rejects it with project", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, OPENCLAW_CONFIG);
-    for (const topic of ["working-session", "message-tool", "code"]) {
+    for (const topic of ["working-session", "message-tool"]) {
       const result = await runGuide(fixture, [topic]);
       expect(result.code, topic).toBe(1);
       expect(result.stderr).toBe(
-        "Error: --channel is required with a topic on the openclaw platform.\n",
+        "Error: --channel is required with a playbook topic on the openclaw platform.\n",
       );
     }
     const project = await runGuide(fixture, ["--channel", "slack", "project"]);
@@ -1559,6 +1559,17 @@ describe("aligndev guide code", () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toMatch(/^# AlignFirst Delegation Guide \(OpenClaw\)\n/);
     expect(result.stdout).not.toContain("{{");
+  });
+
+  it("renders the app surface when OpenClaw gets no --channel", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, OPENCLAW_CONFIG);
+    const result = await runGuide(fixture, ["code"]);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe((await runGuide(fixture, ["--channel", "app", "code"])).stdout);
+    expect(result.stdout).not.toBe(
+      (await runGuide(fixture, ["--channel", "slack", "code"])).stdout,
+    );
   });
 });
 

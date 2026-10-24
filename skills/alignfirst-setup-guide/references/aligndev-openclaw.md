@@ -148,7 +148,7 @@ node -e 'for (const f of process.argv.slice(1)) JSON.parse(require("fs").readFil
 npm run validate
 ```
 
-Both `rg` searches must be empty. On the service host, validate the inventory with `node infra/openclaw/deployment-profiles.mjs infra/openclaw/aligndev.settings.json /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json`. The seed then validates every installed profile through an explicit `aligndev guide code --profile <name> --channel app`, independent of the seed cwd's project selection. All provisioned profiles are available to the service account: the editable project registry selects routes, not account authorization. Add a search for every collected value that is not a token (the VPS IP, the work-files repository URL, every secret): none may appear in the rendered tree.
+Both `rg` searches must be empty. On the service host, validate the inventory with `node infra/openclaw/deployment-profiles.mjs infra/openclaw/aligndev.settings.json /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json`. The seed then validates every installed profile through an explicit `aligndev guide code --profile <name>`, independent of the seed cwd's project selection. All provisioned profiles are available to the service account: the editable project registry selects routes, not account authorization. Add a search for every collected value that is not a token (the VPS IP, the work-files repository URL, every secret): none may appear in the rendered tree.
 
 ## Deployment Lifecycle
 

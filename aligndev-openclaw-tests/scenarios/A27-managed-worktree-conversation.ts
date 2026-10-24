@@ -17,7 +17,6 @@ import { waitForThreadSettlement } from "./_lib/thread-settlement.ts";
 export const surfaces: readonly string[] = ["webchat"];
 
 const TICKET_ID = "ABC-0271";
-const WORKTREE_NAME = "a27-export";
 const REQUEST =
   `Nouvelle fonctionnalité : passer le bouton d'export en gras. Ticket ${TICKET_ID}. ` +
   "Prépare le workspace, mais ne lance aucun travail de code pour l'instant.";
@@ -33,15 +32,16 @@ export default async function managedWorktreeConversation(ctx: ScenarioContext):
   const codingAgent = setupCodingAgentMock(ctx);
   setupGhMock(ctx);
 
+  // OpenClaw keeps a worktree name per repository across fixture resets: a reused stack needs a new one.
+  const worktreeName = ctx.conversationId.toLowerCase();
   const created = await ctx.webchat.createConversation({
-    label: "A27",
     cwd: NIMBUS_PROJECT_PATH,
-    worktree: { name: WORKTREE_NAME },
+    worktree: { name: worktreeName },
   });
   if (created.worktree === undefined) throw new Error("sessions.create returned no worktree");
   const { sessionKey } = created;
   const worktreePath = created.worktree.path;
-  ctx.assertEqual(created.worktree.branch, `openclaw/${WORKTREE_NAME}`, "managed worktree branch");
+  ctx.assertEqual(created.worktree.branch, `openclaw/${worktreeName}`, "managed worktree branch");
 
   await ctx.webchat.send(sessionKey, REQUEST);
   const branch = await waitForTicketBranch(ctx, worktreePath, 240_000);

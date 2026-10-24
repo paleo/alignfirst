@@ -6,6 +6,7 @@ import { createWebchatDriver, type WebchatDriver } from "../src/webchat.js";
 
 const CONVERSATION_KEY = "agent:main:dashboard:62f03d49-7ab3-47e7-9b97-f35bda1ed919";
 const HOME_KEY = "agent:main:main";
+const SEND_RUN_ID = "run-send-1";
 
 // Shapes recorded on OpenClaw 2026.10.5 (plan F4 of side-20).
 const CREATE_RESPONSE = {
@@ -32,6 +33,7 @@ interface FakeGateway {
   entries: ReportEntry[];
   currentEntry(): ActionEntry | undefined;
   sessionKeys: Set<string>;
+  sendResponse: Record<string, unknown>;
   driver: WebchatDriver;
 }
 
@@ -75,11 +77,19 @@ describe("webchat driver", () => {
     });
     expect(entry).toMatchObject({
       kind: "inboundSent",
-      messageId: send?.params.idempotencyKey,
+      messageId: SEND_RUN_ID,
       text: "Fix ABC-0261 in nimbus.",
       senderId: "operator",
     });
     expect(gateway.entries).toEqual([entry]);
+  });
+
+  it("falls back to the idempotency key when chat.send returns no run id", async () => {
+    const gateway = createFakeGateway();
+    delete gateway.sendResponse.runId;
+    const entry = await gateway.driver.send(CONVERSATION_KEY, "go");
+    const send = gateway.calls.find((call) => call.method === "chat.send");
+    expect(entry.messageId).toBe(send?.params.idempotencyKey);
   });
 
   it("returns the first matching new reply and ignores replies already consumed", async () => {
@@ -222,13 +232,18 @@ function createFakeGateway(): FakeGateway {
   const sessionKeys = new Set<string>();
   let current: ActionEntry | undefined;
   let entrySeq = 0;
+  const sendResponse: Record<string, unknown> = {
+    runId: SEND_RUN_ID,
+    status: "started",
+    messageSeq: 1,
+  };
   const handlers: Record<string, (params: Record<string, unknown>) => unknown> = {
     "sessions.create": (params) => {
       if (params.cwd === "/nowhere") throw new Error("INVALID_REQUEST cwd does not exist");
       return CREATE_RESPONSE;
     },
     "sessions.reset": () => ({ ok: true, key: HOME_KEY }),
-    "chat.send": (params) => ({ runId: params.idempotencyKey, status: "started", messageSeq: 1 }),
+    "chat.send": () => sendResponse,
     "chat.history": (params) => ({
       sessionKey: params.sessionKey,
       messages: histories.get(params.sessionKey as string),
@@ -258,7 +273,15 @@ function createFakeGateway(): FakeGateway {
     },
     sessionKeys,
   });
-  return { calls, histories, entries, currentEntry: () => current, sessionKeys, driver };
+  return {
+    calls,
+    histories,
+    entries,
+    currentEntry: () => current,
+    sessionKeys,
+    sendResponse,
+    driver,
+  };
 }
 
 function resetMessage(): unknown {

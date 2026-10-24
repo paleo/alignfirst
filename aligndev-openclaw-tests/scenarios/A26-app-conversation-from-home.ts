@@ -75,7 +75,7 @@ async function expectHomeRedirect(ctx: ScenarioContext): Promise<void> {
 }
 
 async function runNewConversation(ctx: ScenarioContext): Promise<void> {
-  const { sessionKey } = await ctx.webchat.createConversation({ label: "A26" });
+  const { sessionKey } = await ctx.webchat.createConversation();
   const notBefore = new Date().toISOString();
   await ctx.webchat.send(sessionKey, REQUEST);
 

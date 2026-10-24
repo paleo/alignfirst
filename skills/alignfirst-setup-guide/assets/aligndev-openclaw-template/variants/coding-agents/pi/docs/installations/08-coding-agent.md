@@ -184,7 +184,7 @@ A changed or unrecognized `engines.node` range requires review rather than an au
 
 These are host-side procedures, not claims about the offline template checks:
 
-- Run `aligndev guide code --profile service-pi --channel app`; confirm the selected store/model and credential readiness without revealing secrets.
+- Run `aligndev guide code --profile service-pi`; confirm the selected store/model and credential readiness without revealing secrets.
 - Run the runtime checker directly and through the private gateway procedure in the base runbooks with `CODING_AGENT=pi`. Pi must resolve to `/opt/{{SERVICE_USER}}/bin/pi`; its no-model runtime probe must retain the project child runtime.
 - Verify an approved parent and a future worktree inherit the saved decision after restart. Confirm duplicate subagent tools are absent and existing user profiles remain intact.
 - As the real service UID, verify managed resources cannot be rewritten, unlinked or replaced, including through their parents; confirm authentication locks/renewal and ordinary session/cache writes still work.

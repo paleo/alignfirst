@@ -31,7 +31,7 @@ A project absent from the listing has no `.alignfirst.json` or sits outside a ma
 ## Delegation
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- aligndev guide code --channel app
+sudo -i -u {{SERVICE_USER}} -- aligndev guide code
 sudo -i -u {{SERVICE_USER}} -- \
   openclaw config get models.providers.{{RUNTIME_PROVIDER}}.agentRuntime --json
 # Expected: {"id":"openclaw"}
@@ -51,7 +51,7 @@ sudo -H -u {{SERVICE_USER}} /usr/bin/node \
   /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
   /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json \
   /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
-sudo -i -u {{SERVICE_USER}} -- aligndev guide code --profile <profile> --channel app
+sudo -i -u {{SERVICE_USER}} -- aligndev guide code --profile <profile>
 ```
 
 Deployment requires explicit `code.profile`; singleton counts and per-agent `default: true` flags do not replace it. Duplicate true flags for one agent fail even with a named selection. Unknown or obsolete keys warn on stderr and are ignored, without rewriting settings. Retired direct launch fields and `code.defaultProfiles` have no effect; convert them manually, preserving profile names. Recognized invalid fields and deployment safety violations still fail. A registry-selected profile overrides the global selection; an explicit `--profile` overrides both. Run `alignfirst config --json` from the real project to inspect routing. A resume under another account must find the same native conversation there; no automatic migration occurs. Pi also requires its recorded real cwd.

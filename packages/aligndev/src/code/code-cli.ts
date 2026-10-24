@@ -1051,6 +1051,6 @@ Coding runs can be very long. The host owns background execution and completion 
 verify its capability before launch, use --quiet, and never detach the command. On completion,
 retrieve status --result with the exact session-file path or a unique per-run --meta key.
 
-Run \`${aligndev} guide code\` for the full delegation guide.
+See the \`code\` topic of \`${aligndev} guide\` for the full delegation guide.
 `;
 }

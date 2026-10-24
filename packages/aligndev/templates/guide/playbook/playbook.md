@@ -153,7 +153,12 @@ Coding runs are long. Run `{{ALIGNDEV}} code` in the background, as the delegati
 ## Ephemeral artifacts
 
 {{#openclaw}}
+{{#thread}}
 - Put screenshots, downloads, OCR/PDF scratch, temporary conversions, and other non-project artifacts under `~/.openclaw/workspace/scratch/`. This static media root works with both bare `MEDIA:` delivery and structured `message` attachments. Files persist across reboots until an administrator prunes them.
+{{/thread}}
+{{#app}}
+- Put screenshots, downloads, OCR/PDF scratch, temporary conversions, and other non-project artifacts under `~/.openclaw/workspace/scratch/`. This static media root works with bare `MEDIA:` delivery. Files persist across reboots until an administrator prunes them.
+{{/app}}
 - A gitignored `.local/` directory in a project can be used as a scratch space too.
 - `/tmp/` is fine only for files you don't care about losing.
 {{/openclaw}}

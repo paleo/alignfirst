@@ -88,8 +88,8 @@ function renderUsage(forms: CommandForms): string {
   ${forms.aligndev} guide --help
 
 Without a topic, prints the dispatcher; with --channel alone, the surface's playbook. On the openclaw
-platform, every topic but project requires --channel. The working-session and channel-handling
-topics print after the playbook.
+platform, every playbook topic requires --channel, code defaults to --channel app, and project
+rejects it. The working-session and channel-handling topics print after the playbook.
 
 Topics:
   code        The delegation guide for \`${forms.aligndev} code\`.
@@ -113,7 +113,7 @@ function renderTopic(args: GuideArgs, config: LoadedConfig, ctx: ProjectsCallerC
     const name = channel === undefined ? PLAYBOOK_DISPATCHER : PLAYBOOK;
     return renderPlaybookTemplate(name, active, config, ctx.forms);
   }
-  if (topic === "code") return renderCodeTopic(active, config, ctx, args.profile);
+  if (topic === "code") return renderCodeTopic(withCodeSurface(active), config, ctx, args.profile);
   return renderPlaybookTopic(topic, active, config, ctx);
 }
 
@@ -130,9 +130,15 @@ function assertChannelUse({ topic, channel }: GuideArgs, config: LoadedConfig): 
     }
     return;
   }
-  if (topic !== undefined && channel === undefined) {
-    throw new Error("Error: --channel is required with a topic on the openclaw platform.");
+  if (topic !== undefined && topic !== "code" && channel === undefined) {
+    throw new Error("Error: --channel is required with a playbook topic on the openclaw platform.");
   }
+}
+
+// Operators validate profiles through `guide code` outside any session; the app surface serves them.
+function withCodeSurface(active: ActiveBlocks): ActiveBlocks {
+  if (active.platform !== "openclaw" || active.surface !== undefined) return active;
+  return { ...active, surface: "app" };
 }
 
 function renderCodeTopic(

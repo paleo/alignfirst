@@ -138,7 +138,7 @@ For multiple accounts and independent quota sources:
 
 The Pi targets illustrate native shorthand; availability depends on Pi's catalog and account. Exact provider-qualified IDs pin a model. Provider-qualified fuzzy selectors and thinking suffixes pass unchanged to Pi, which owns their resolution. AlignDev neither guesses providers nor implements newest-family ordering.
 
-- `platform` — `codingAgent` (default), or `openclaw`. On `openclaw`, `aligndev guide` takes `--channel <slack|discord|app>` with every topic but `project`: a Slack or Discord thread and an app conversation are separate contexts, each with its own topics.
+- `platform` — `codingAgent` (default), or `openclaw`. On `openclaw`, `aligndev guide` takes `--channel <slack|discord|app>`: a Slack or Discord thread and an app conversation are separate contexts, each with its own topics. Every playbook topic requires it, `code` defaults to `app`, and `project` rejects it.
 - `projectsRoot` — projects directory, required by the OpenClaw playbook. `~/` uses the configured home; relative paths resolve against the settings directory.
 - `code.profile` — global named child profile, independent of the parent host.
 - `code.profiles` — complete profiles, with required `agent` (`claude`, `codex`, `pi`). Names and references are exact, nonblank strings. Profiles have no inheritance or merging.

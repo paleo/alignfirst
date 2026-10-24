@@ -48,7 +48,7 @@ sudo -H -u {{SERVICE_USER}} bash -l <<'EOS'
 set -eo pipefail
 jq -r '.code.profiles | keys[]' "$HOME/.alignfirst/aligndev.settings.json" |
   while IFS= read -r profile; do
-    aligndev guide code --profile "$profile" --channel app
+    aligndev guide code --profile "$profile"
   done
 EOS
 ```

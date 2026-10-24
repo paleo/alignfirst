@@ -36,7 +36,9 @@ The gateway runs Serve as `{{SERVICE_USER}}`, which has no sudo. Make that accou
 sudo tailscale set --operator={{SERVICE_USER}}
 ```
 
-Operator access also lets the service account change this node's Funnel routes, which are public. Keep Funnel off for the server: the tailnet policy grants it no `funnel` node attribute. When the policy restricts access, allow the team's devices to reach the server on TCP 443; `gateway/stable-https-url.md` § 2 gives the grant and ACL forms.
+Operator access covers this node's whole Tailscale state, and the assistant's `exec` runs as that account. It can serve any loopback port to the tailnet, such as a project's dev server, past the server's default-deny firewall. It can also take the node off the tailnet with `tailscale down`, and change its Funnel routes, which are public. The opt-in accepts this exposure. Keep Funnel off for the server: the tailnet policy grants it no `funnel` node attribute.
+
+When the policy restricts access, allow the team's devices to reach the server on TCP 443; `gateway/stable-https-url.md` § 2 gives the grant and ACL forms.
 
 Set `GATEWAY_TAILSCALE_SERVE=on` in the checkout's `infra/openclaw/.env`, then re-seed through [configure-assistant.md](configure-assistant.md). The seed sets `gateway.tailscale.mode serve` and `gateway.auth.allowTailscale false`, so a tailnet identity alone grants no access. The Serve origin is a `.ts.net` host, which the Control UI accepts as a private same-origin load without a `gateway.controlUi.allowedOrigins` entry.
 

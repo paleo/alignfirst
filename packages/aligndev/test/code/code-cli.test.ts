@@ -124,7 +124,7 @@ describe("coding-agent selection", () => {
     expect(stdout.text()).toContain("code.profile          Global named profile");
     expect(stdout.text()).toContain("(selected: codex)");
     expect(stdout.text()).toContain("astra, sol, terra, luna");
-    expect(stdout.text()).toContain("aligndev guide code");
+    expect(stdout.text()).toContain("See the `code` topic of `aligndev guide`");
     expect(stdout.text()).toContain("--quiet");
     expect(stdout.text()).toContain("--result");
     expect(stdout.text()).toContain("host owns background execution and completion delivery");
