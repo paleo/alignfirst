@@ -167,7 +167,7 @@ Both are required. Without `openclaw.setupEntry`, the loader registers the plugi
 
 Discovery is wired through `plugins.load.paths` in `openclaw.json`, pointing at the package directory inside the image (`/opt/openclaw-test/src/node_modules/@alignfirst/openclaw-{discord,slack}-mock`). Both plugins must be statically enabled via `plugins.entries["<id>"].enabled = true` — auto-enable for non-bundled (`origin: "config"`) plugins is timing-sensitive against `canStartConfiguredChannelPlugin`: the auto-enable mutation can fire after plan resolution checks `explicitlyEnabled`. Static `enabled: true` makes the check deterministic.
 
-Both channels register together on every gateway boot. The runner selects which to drive per scenario. The runner accepts any channel id declared in `openclaw.json`'s `channels` block — pass `--channel <id>`, a comma-separated list `--channel id1,id2`, or `--channel all` to fan out across every declared channel.
+Both channels register together on every gateway boot. The runner selects which to drive per scenario. The runner accepts any channel id declared in `openclaw.json`'s `channels` block, plus the reserved `webchat` surface — pass `--channel <id>`, a comma-separated list `--channel id1,id2`, or `--channel all` to fan out across all of them.
 
 `createChannelMockPlugin` in `channel-mock-core` takes `{ channelId, label, surface, autoThread, getRuntime }`. The two wrappers are ten-line modules that bind these knobs:
 
@@ -188,6 +188,20 @@ Discord renames an existing thread through `send` with `threadName`, targeting t
 
 Each `openclaw.plugin.json` declares a minimal `channelConfigs.<id>.schema` (`type: "object"`, `additionalProperties: true`) to silence the gateway's `channel plugin manifest declares <id> without channelConfigs metadata` warning. The static schema is intentionally permissive — the runtime plugin owns the real config schema via `buildChannelMockConfigSchema`. `label` / `selectionLabel` / `docsPath` / `blurb` still come from the runtime plugin.
 
+## Webchat surface
+
+`webchat` is the surface of the OpenClaw apps: the web Control UI, the desktop apps and the mobile apps. It is a reserved `--channel` id, included in `all`, and no channel plugin serves it. A `webchat` cell drives the gateway methods the apps use through `ctx.webchat` (`src/webchat.ts`). The bus-backed members of the context throw on that surface.
+
+**Transport.** Each driver call runs `openclaw gateway call <method> --params '<json>' --json` in the gateway container, through the exec RPC. The harness gateway has `gateway.auth.mode: "none"`. A `cwd` outside the agent workspaces needs `operator.admin`; the CLI retries with that scope by itself, after a `FORBIDDEN` line in the gateway log.
+
+**Conversations.** `createConversation` calls `sessions.create` without a message. The call then returns once a managed worktree is ready, and its result carries the checkout path and the `openclaw/<name>` branch. The checkout exists in the gateway container only; a scenario reads it through `execInGateway`. Home is `agent:main:main`. The driver resets it with `sessions.reset` before its first send in the cell; the reset keeps the session ID and leaves a `Reset` system message in the history.
+
+**Replies.** `chat.send` returns at run start. Before sending, `send` records the highest history `seq` of the session, so only later replies count. `waitForReply` polls `chat.history` every 2 seconds. A reply is an assistant message with `stopReason: "stop"` and text, read as its joined text blocks; the gateway already hides silent replies from the history. Each new reply the driver reads becomes an `outboundReceived` entry once, and a match moves the session's cursor past it. A reply no wait read stays out of the report and appears in `transcripts.json` only.
+
+**Transcripts.** The context collects every session key the driver touched. The runner passes them to the dump as `--session-key` flags, and the store selects those sessions by whole key: as a segment, `agent:main:main` would select every `agent:main:*` session. Quiescence, cost and `waitForAgentToolCall` thus see the app turns.
+
+**Scenario surfaces.** A scenario declares its surfaces with `export const surfaces: readonly string[] = ["webchat"];`. The host reads that line with a regular expression and never runs the module, so the array holds string literals only. Without the export, a scenario supports every configured channel and not `webchat`. The cell expansion skips the unsupported pairs, and a scenario left with no cell fails the run before any spawn.
+
 ## What the harness cannot show
 
 Facts established on ticket 80 about the limits of the mocks and the runner. Each one produced a result that looked green or red for the wrong reason.
@@ -199,6 +213,7 @@ Facts established on ticket 80 about the limits of the mocks and the runner. Eac
 - **The scripted provider proves nothing about a model.** The deterministic plugin suite establishes delivery and persistence paths. Whether a conversation model follows the playbook is a separate question, answered only by model runs.
 - **A scenario cannot see a turn end.** The context exposes tool calls and outbounds, never a turn's final `NO_REPLY` or `HEARTBEAT_OK`. Silence is asserted through a fixed quiet window, and a turn slower than the window passes the check vacuously.
 - **No gateway restart inside a cell.** The runner recreates the stack per cell, so persistence across a restart belongs to the deterministic suite, with SIGKILL, preserved WAL/SHM files and a real process restart.
+- **Attachment-only app replies.** The webchat driver reads a reply's text blocks. A reply that carries only an image is invisible to `waitForReply` and `expectNoReply`.
 - **No Chromium in the image.** The `browser` tool loads and fails at use time.
 - **Cost is partial.** The `openai` provider carries no pricing in `openclaw.json`, so Terra's agent cost always reads `$0`; only its judge cost is real.
 - **The 30-second mock run hides harm.** Sonnet ran ninety-six `alcode` executions in one day in the foreground with a 60-second timeout. Against a real coding agent those runs would be killed; against the mock they pass.
@@ -273,7 +288,7 @@ Scenario verdict is reported as `result: ScenarioResult` (a discriminated union)
 - `{ verdict: "fail", cause: "failedEntry", entrySeq, message }` — failure landed on an action entry; details live on the entry with the matching `entrySeq` (find it via `entries.find(e => e.entrySeq === N)`, not by array index).
 - `{ verdict: "fail", cause: "error", source, errorName, message, stack? }` — failure with no associated entry (timeout before any agent action, runner error, etc.).
 
-Entry kinds: `scenarioLog` · `inboundSent` · `outboundReceived` · `cliMock` · `agentToolCall`. Each entry is one action; assertions, scenario-log notes, and failures live as nested fields (`assertions: AssertionRecord[]`, `scenarioLog: ScenarioLogNote`, `failure: ScenarioFailure`) on the action entry they describe. `outboundReceived` captures every bus outbound for the conversation, not only the ones the scenario explicitly awaits. `agentToolCall` lives only in `report.json`.
+Entry kinds: `scenarioLog` · `inboundSent` · `outboundReceived` · `cliMock` · `agentToolCall`. Each entry is one action; assertions, scenario-log notes, and failures live as nested fields (`assertions: AssertionRecord[]`, `scenarioLog: ScenarioLogNote`, `failure: ScenarioFailure`) on the action entry they describe. `outboundReceived` captures every bus outbound for the conversation, not only the ones the scenario explicitly awaits; on `webchat`, it captures every reply the driver read. `agentToolCall` lives only in `report.json`.
 
 Scenarios bind judges and attached logs to a specific action entry via `attachTo`:
 
@@ -291,7 +306,7 @@ OpenClaw (2026.8+) persists each session's transcript as SQLite rows in the gate
 
 Heartbeat user messages are normalized to `[OpenClaw heartbeat poll]`; inspect provider payloads to establish the live prompt, as explained in [OpenClaw Context Engineering](./openclaw-context-engineering.md#heartbeat-cron-scratch-and-prompt).
 
-The store lives outside the shared mounts and dies with the per-cell stack recreation, so the runner extracts a conversation's session transcripts through the exec-watcher RPC: `transcript-dump.js` (in this package's dist, mounted into the gateway) queries the store with `node:sqlite` (session keys matched on the conversation ID and its bus-owned thread IDs) and writes the result as JSON into the shared IPC volume (stdout would hit the watcher's 1 MiB cap). The runner saves the fetched transcripts as `transcripts.json` in the cell's artifact dir for post-mortems.
+The store lives outside the shared mounts and dies with the per-cell stack recreation, so the runner extracts a conversation's session transcripts through the exec-watcher RPC: `transcript-dump.js` (in this package's dist, mounted into the gateway) queries the store with `node:sqlite` (session keys matched on the conversation ID and its bus-owned thread IDs, or whole against the webchat driver's keys) and writes the result as JSON into the shared IPC volume (stdout would hit the watcher's 1 MiB cap). The runner saves the fetched transcripts as `transcripts.json` in the cell's artifact dir for post-mortems.
 
 A conversation spans **multiple sessions** — Discord's channel session plus a per-thread session (the thread session is where the real work happens), and any subagent sessions — each with its own transcript. Before computing cost, the runner waits for the transcripts to go **quiescent** (`waitForTranscriptQuiescence`): no new message across a settle window AND no session whose last message leaves a turn open (a tool result, or an assistant stop for tool use), bounded by a max wait. The transcript is appended per message, so the settle window alone would return between two tool calls of one turn; the open-turn gate holds until the turn-final assistant message — the one carrying its usage — has landed.
 

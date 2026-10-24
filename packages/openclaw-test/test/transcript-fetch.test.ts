@@ -60,4 +60,40 @@ describe("fetchTranscriptSnapshot", () => {
       expect(rmSync).toHaveBeenCalledWith(outPath, { force: true });
     },
   );
+
+  it("passes each session key as a --session-key flag after the thread ids", async () => {
+    vi.mocked(getQaBusState).mockResolvedValue({
+      cursor: 0,
+      conversations: [],
+      messages: [],
+      events: [],
+      threads: [
+        {
+          id: "thread-1",
+          conversationId: "c-1",
+          accountId: "default",
+          title: "Work",
+          createdAt: 0,
+          createdBy: "agent",
+        },
+      ],
+    });
+    vi.mocked(execInGateway).mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ databases: 1, sessions: [] }));
+
+    await fetchTranscriptSnapshot({
+      conversationId: "c-1",
+      startedAtIso: "2026-10-24T10:00:00.000Z",
+      sessionKeys: ["agent:main:main", "agent:main:dashboard:x"],
+    });
+
+    const argv = vi.mocked(execInGateway).mock.calls[0]?.[0];
+    expect(argv?.slice(5)).toEqual([
+      "thread-1",
+      "--session-key",
+      "agent:main:main",
+      "--session-key",
+      "agent:main:dashboard:x",
+    ]);
+  });
 });

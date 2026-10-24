@@ -12,6 +12,7 @@ export function readConversationSessions(
   sinceMs: number,
   conversationId: string,
   threadIds: string[],
+  sessionKeys: string[] = [],
 ): DumpedSession[] {
   let db: DatabaseSync;
   try {
@@ -22,14 +23,22 @@ export function readConversationSessions(
   try {
     db.exec("PRAGMA busy_timeout = 2000;");
     const wanted = conversationId.toLowerCase();
+    const exactKeys = new Set(sessionKeys.map((key) => key.toLowerCase()));
     const nodes = db.prepare("SELECT session_key, current_session_id FROM session_nodes").all() as {
       session_key: string;
       current_session_id: string;
     }[];
     const sessions: DumpedSession[] = [];
     for (const node of nodes) {
-      const segments = node.session_key.toLowerCase().split(":");
-      if (!segments.includes(wanted) && !threadIds.some((id) => segments.includes(id))) continue;
+      const key = node.session_key.toLowerCase();
+      // Session keys match whole: as segments, `agent:main:main` would select every
+      // `agent:main:*` session.
+      const segments = key.split(":");
+      const selected =
+        exactKeys.has(key) ||
+        segments.includes(wanted) ||
+        threadIds.some((id) => segments.includes(id));
+      if (!selected) continue;
       sessions.push({
         sessionKey: node.session_key,
         sessionId: node.current_session_id,

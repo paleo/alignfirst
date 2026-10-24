@@ -3,8 +3,11 @@ import type { Invocation } from "@alignfirst/docmap/invocation";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import {
+  type CellSelection,
+  countCells,
   discoverScenarios,
   expandChannelSelection,
+  readScenarioSurfaces,
   runMatrix,
   type WorkerContext,
   workerSpawnEnv,
@@ -32,6 +35,11 @@ const RUN_USAGE = `usage: openclaw-test run --channel <id|id,id,…|all> [<scena
                                    [--parallel K] [--stop-on-fail] [--reuse-stack]
 
   Scenario selection is required: either a positional list or --all (mutually exclusive).
+  --channel <id|id,id,…|all>
+                      a channel of openclaw.json, or "webchat", the OpenClaw apps' surface
+                      (no channel plugin); "all" selects them all. A scenario runs on the
+                      surfaces its "export const surfaces" lists, by default on every channel
+                      except webchat; unsupported pairs are skipped.
   --model <id|id,id,…|all>
                       select the agent model(s): a bare id (e.g. claude-sonnet-5), a
                       comma list of bare ids, or "all". Defaults to OPENCLAW_DEFAULT_TEST_MODEL.
@@ -130,6 +138,19 @@ export async function runCommand(
     defaultEnv: readEnvVar("OPENCLAW_DEFAULT_TEST_MODEL"),
   });
   const canonicalPath = canonicalConfigPath();
+  const scenariosDir = process.env.OPENCLAW_TEST_SCENARIOS_DIR as string;
+  // `--all` is alphabetical (discoverScenarios sorts); an explicit list keeps CLI
+  // order, deduped.
+  const scenarios = args.all ? discoverScenarios(scenariosDir) : [...new Set(args.positionals)];
+  const channels = expandChannelSelection(args.channel, canonicalPath);
+  const cellSelection: CellSelection = {
+    scenarios,
+    channels,
+    models,
+    iterations: args.iterations,
+    scenarioSurfaces: readScenarioSurfaces(scenariosDir, scenarios),
+  };
+  const cellCount = countCells(cellSelection);
   // Each model gets one private config; mount-aware collection retains it for warm workers.
   // Worker loops hand the path to every spawn via per-spawn env.
   const renderedConfigs = new Map<string, string>();
@@ -150,15 +171,7 @@ export async function runCommand(
     if (sweepCode !== 0) process.exit(sweepCode);
   }
 
-  const scenariosDir = process.env.OPENCLAW_TEST_SCENARIOS_DIR as string;
   const artifactsDir = process.env.OPENCLAW_TEST_ARTIFACTS_DIR as string;
-
-  // `--all` is alphabetical (discoverScenarios sorts); an explicit list keeps CLI
-  // order, deduped.
-  const scenarios = args.all ? discoverScenarios(scenariosDir) : [...new Set(args.positionals)];
-  const channels = expandChannelSelection(args.channel, canonicalPath);
-
-  const cellCount = models.length * scenarios.length * channels.length * args.iterations;
   const workers = buildWorkerContexts(Math.min(parallel, cellCount));
   ensureHostOutputDirs(workers);
   ensureConsumerImage(workerComposeArgs(1));
@@ -173,11 +186,8 @@ export async function runCommand(
   let teardownExit = 0;
   try {
     matrixExit = await runMatrix({
-      scenarios,
-      channels,
-      models,
+      ...cellSelection,
       renderConfigPath,
-      iterations: args.iterations,
       maxFailures: args.maxFailures,
       stopOnFail: args.stopOnFail,
       reuseStack: args.reuseStack,

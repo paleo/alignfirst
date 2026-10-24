@@ -780,6 +780,10 @@ function consumer(): Consumer {
     }),
   );
   mkdirSync(join(root, "workspace"));
+  mkdirSync(join(root, "scenarios"));
+  for (const scenario of ["case", "first", "second"]) {
+    writeFileSync(join(root, "scenarios", `${scenario}.ts`), "export default async () => {};\n");
+  }
   const log = join(root, "docker.jsonl");
   writeFileSync(log, "");
   const env: NodeJS.ProcessEnv = {

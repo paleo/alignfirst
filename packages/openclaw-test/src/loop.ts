@@ -6,14 +6,23 @@ import { judgeCostUsd } from "./cost.js";
 import type { SelectedModel } from "./models.js";
 import { printSummary, printTotalCost } from "./summary.js";
 import { spawnHostProcess } from "./host-process.js";
+import { WEBCHAT_SURFACE } from "./webchat.js";
 
+// A top-level `surfaces` export, in any form, and the one form the host can read without running it.
+const SURFACES_EXPORT = /^export\s+(?:(?:const|let|var)\s+surfaces\b|\{[^}]*\bsurfaces\b)/m;
+const SURFACES_LITERAL =
+  /^export const surfaces(?:\s*:\s*readonly string\[\])?\s*=\s*\[([^\]]*)\](?:\s+as const)?\s*;?\s*$/m;
+const STRING_LITERAL = /^(?:"([^"\\]*)"|'([^'\\]*)')$/;
+
+/** Ids of the `channels` of `openclaw.json`, plus the reserved `webchat` surface. */
 export function expandChannelSelection(raw: string, openclawConfigPath: string): string[] {
   if (!raw) throw new Error("run: --channel expects a non-empty value");
   const cfg = JSON.parse(readFileSync(openclawConfigPath, "utf8")) as {
     channels?: Record<string, unknown>;
   };
-  const allowed = Object.keys(cfg.channels ?? {});
-  if (allowed.length === 0) throw new Error(`no channels declared in ${openclawConfigPath}`);
+  const configured = Object.keys(cfg.channels ?? {});
+  if (configured.length === 0) throw new Error(`no channels declared in ${openclawConfigPath}`);
+  const allowed = [...configured, WEBCHAT_SURFACE];
   if (raw === "all") return [...allowed].sort();
   const ids = raw
     .split(",")
@@ -36,16 +45,63 @@ export function discoverScenarios(scenariosDir: string): string[] {
     .sort();
 }
 
-export interface MatrixOptions {
+/**
+ * Reads each scenario's `export const surfaces = ["…"];` from its source text; no module runs on
+ * the host. A scenario without the export maps to `undefined`.
+ */
+export function readScenarioSurfaces(
+  scenariosDir: string,
+  scenarios: string[],
+): Map<string, readonly string[] | undefined> {
+  const surfaces = new Map<string, readonly string[] | undefined>();
+  for (const scenario of scenarios) {
+    const path = join(scenariosDir, `${scenario}.ts`);
+    surfaces.set(scenario, parseSurfacesExport(path, readFileSync(path, "utf8")));
+  }
+  return surfaces;
+}
+
+function parseSurfacesExport(path: string, source: string): string[] | undefined {
+  if (!SURFACES_EXPORT.test(source)) return;
+  const list = SURFACES_LITERAL.exec(source)?.[1];
+  if (list === undefined) throw invalidSurfacesError(path);
+  const surfaces: string[] = [];
+  for (const item of list.split(",")) {
+    const trimmed = item.trim();
+    if (trimmed.length === 0) continue;
+    const literal = STRING_LITERAL.exec(trimmed);
+    if (!literal) throw invalidSurfacesError(path);
+    surfaces.push(literal[1] ?? literal[2]);
+  }
+  return surfaces;
+}
+
+function invalidSurfacesError(path: string): Error {
+  return new Error(
+    `${path}: declare surfaces as an array of string literals, for example: export const surfaces: readonly string[] = ["webchat"];`,
+  );
+}
+
+/** The number of cells a selection expands to; throws when a scenario keeps none. */
+export function countCells(selection: CellSelection): number {
+  return expandCells(selection).length;
+}
+
+export interface CellSelection {
   scenarios: string[];
   channels: string[];
   models: SelectedModel[];
+  iterations: number;
+  /** Per scenario, its `surfaces` export; without one, every selected channel except `webchat`. */
+  scenarioSurfaces: ReadonlyMap<string, readonly string[] | undefined>;
+}
+
+export interface MatrixOptions extends CellSelection {
   /**
    * Renders the chosen model's ref into a run-scoped config and returns its path
    * (memoized per model). Worker loops hand it to every spawn via per-spawn env.
    */
   renderConfigPath: (model: SelectedModel) => string;
-  iterations: number;
   maxFailures: number;
   /** Stop dispatching at the first failing cell; in-flight cells drain. */
   stopOnFail: boolean;
@@ -195,13 +251,17 @@ interface WorkerLoopContext {
   iterationWidth: number;
 }
 
-/** Full expansion in `model × scenario × channel × iteration` nesting order. */
-function expandCells(opts: MatrixOptions): Cell[] {
+/**
+ * Full expansion in `model × scenario × channel × iteration` nesting order, without the
+ * channels a scenario does not support.
+ */
+function expandCells(selection: CellSelection): Cell[] {
+  const channelsByScenario = selectScenarioChannels(selection);
   const cells: Cell[] = [];
-  for (const model of opts.models) {
-    for (const scenario of opts.scenarios) {
-      for (const channel of opts.channels) {
-        for (let iter = 1; iter <= opts.iterations; ++iter) {
+  for (const model of selection.models) {
+    for (const scenario of selection.scenarios) {
+      for (const channel of channelsByScenario.get(scenario) ?? []) {
+        for (let iter = 1; iter <= selection.iterations; ++iter) {
           cells.push({
             index: cells.length,
             model,
@@ -215,6 +275,24 @@ function expandCells(opts: MatrixOptions): Cell[] {
     }
   }
   return cells;
+}
+
+function selectScenarioChannels(selection: CellSelection): Map<string, string[]> {
+  const channelsByScenario = new Map<string, string[]>();
+  for (const scenario of selection.scenarios) {
+    const surfaces = selection.scenarioSurfaces.get(scenario);
+    const channels = selection.channels.filter((channel) =>
+      surfaces ? surfaces.includes(channel) : channel !== WEBCHAT_SURFACE,
+    );
+    if (channels.length === 0) {
+      const supported = surfaces ? surfaces.join(", ") : `every channel except ${WEBCHAT_SURFACE}`;
+      throw new Error(
+        `scenario ${scenario} supports ${supported}; selected channels: ${selection.channels.join(", ")}`,
+      );
+    }
+    channelsByScenario.set(scenario, channels);
+  }
+  return channelsByScenario;
 }
 
 async function workerLoop(ctx: WorkerLoopContext, worker: WorkerContext): Promise<void> {

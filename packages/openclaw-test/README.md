@@ -1,6 +1,6 @@
 # @alignfirst/openclaw-test
 
-Dockerised regression-test harness for OpenClaw workspaces. Drives the agent through two synthetic channels (`discord-mock`, `slack-mock`) and asserts the results.
+Dockerised regression-test harness for OpenClaw workspaces. Drives the agent through two synthetic channels (`discord-mock`, `slack-mock`) or the OpenClaw apps' `webchat` surface, and asserts the results.
 
 Pair with [`@alignfirst/openclaw-channel-mock-core`](https://www.npmjs.com/package/@alignfirst/openclaw-channel-mock-core), [`@alignfirst/openclaw-discord-mock`](https://www.npmjs.com/package/@alignfirst/openclaw-discord-mock), [`@alignfirst/openclaw-slack-mock`](https://www.npmjs.com/package/@alignfirst/openclaw-slack-mock).
 
@@ -58,7 +58,7 @@ See `.env.local.example` for the optional overrides (paths, raw stream log).
 
 ## Scenarios
 
-Drop scenarios under `scenarios/<id>.ts`: each default-exports `async (ctx: ScenarioContext) => void`. They are loaded by Node's built-in TypeScript stripping: no `enum`, `namespace`, decorators, ctor parameter properties. Shared helpers must go under subdirectories (e.g. `scenarios/_lib/`).
+Drop scenarios under `scenarios/<id>.ts`: each default-exports `async (ctx: ScenarioContext) => void`. A scenario that drives the apps declares its surfaces with `export const surfaces: readonly string[] = ["webchat"];`. The host reads that line without running the module, so the array must hold string literals. Without the export, a scenario runs on every configured channel and not on `webchat`. They are loaded by Node's built-in TypeScript stripping: no `enum`, `namespace`, decorators, ctor parameter properties. Shared helpers must go under subdirectories (e.g. `scenarios/_lib/`).
 
 Project fixtures and their reset logic are consumer concerns — ship a reset script in your consumer image and invoke it via `ctx.execInGateway(...)`.
 
@@ -66,6 +66,7 @@ Project fixtures and their reset logic are consumer concerns — ship a reset sc
 
 - `channel`, `conversationId`, `accountId` — per-task isolation; never hard-code a conversation id.
 - `busUrl` — the bus the gateway talks to, for direct bus calls such as `failNextQaBusOperation`.
+- `webchat` — the app driver, on the `webchat` surface only: `homeKey`, `createConversation({ label?, cwd?, worktree? })`, `send(sessionKey, text)`, `waitForReply(sessionKey, predicate, { timeoutMs? })`, `expectNoReply(sessionKey, { withinMs })`. The bus members below throw on that surface.
 - `sendInbound(input)` — push an inbound message on the bus.
 - `createThread(input)` — seed a thread the bot did not open, as a surface user creating one; returns its id for `sendInbound`.
 - `waitForOutbound(predicate, opts)` — await a matching outbound; fails fast on unmatched outbounds or mock-CLI silence.
@@ -85,9 +86,10 @@ Examples: [aligndev-openclaw-tests/scenarios](https://github.com/paleo/alignfirs
 ```sh
 npm run env:build                                                  # build base + consumer image
 npm run env:up                                                     # (optional) keep bus + gateway warm across iterative runs
-npm run e2e -- --channel all <scenario>                             # one scenario, both channels
-npm run e2e -- --channel all --all                                  # every scenario, both channels
+npm run e2e -- --channel all <scenario>                             # one scenario, every surface it supports
+npm run e2e -- --channel all --all                                  # every scenario, every surface it supports
 npm run e2e -- --channel discord-mock <scenario>                    # restrict to one channel
+npm run e2e -- --channel webchat <scenario>                         # the apps' surface
 npm run e2e -- --channel all --model qwen3.8-flash <scenario>        # pick a model by bare id
 npm run e2e -- --channel all --model claude-sonnet-5,qwen3.8-flash <s>  # a comma list of bare ids
 npm run e2e -- --channel all --model all <scenario>                 # run every model in OPENCLAW_TEST_MODELS
@@ -102,7 +104,7 @@ npm run env:down                                                   # tear down a
 
 Rebuild (`npm run env:build`) after editing `openclaw.json` or the `Dockerfile`, or after bumping any `@alignfirst/openclaw-*` dependency.
 
-Cells run serially per worker stack. Exit 0 iff every pair passes. Artifacts land under `artifacts/<runStamp>/` — see the [architecture doc](https://github.com/paleo/alignfirst/blob/main/docs/aligndev-openclaw/openclaw-test-architecture.md).
+The run skips the (scenario, surface) pairs a scenario does not support, and fails before any cell when a scenario keeps none. Cells run serially per worker stack. Exit 0 iff every pair passes. Artifacts land under `artifacts/<runStamp>/` — see the [architecture doc](https://github.com/paleo/alignfirst/blob/main/docs/aligndev-openclaw/openclaw-test-architecture.md).
 
 ### Parallel runs
 
@@ -120,6 +122,8 @@ Each worker gets its own gateway logs dir (`.gateway-logs/w<i>/`) and a private 
 - `slack-mock` — Slack-shaped surface with `send`, `react`, `read`, `edit`, `delete`, `reactions`,
   and `search`. It supports `replyToMode: "off" | "all"`; fake thread creation/rename actions stay
   disabled.
+
+- `webchat` — the surface of the OpenClaw apps, reserved and included in `all`. No channel plugin serves it: `ctx.webchat` calls the gateway methods the apps use (`sessions.create`, `chat.send`, `chat.history`, `sessions.reset`) through `openclaw gateway call` in the gateway container. The gateway needs `gateway.auth.mode: "none"` or an operator token in that container.
 
 Assert on `conversation.id` / `threadId`, not envelope formatting.
 
