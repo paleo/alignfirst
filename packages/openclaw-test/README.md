@@ -12,12 +12,14 @@ For internals (topology, Dockerfile pair, mocked-CLI shim, channel plugin mechan
 npm i -D @alignfirst/openclaw-test @alignfirst/openclaw-channel-mock-core @alignfirst/openclaw-discord-mock @alignfirst/openclaw-slack-mock openclaw
 ```
 
-Requires Docker Compose.
+Requires Docker Compose. The host CLI supports the Node versions in `engines.node` or Bun 1.4.4, the tested Bun baseline. Its eager OpenClaw dependency graph uses APIs absent from older Bun releases; Bun 1.3.3 is incompatible.
+
+Published bins retain Node shebangs, so ordinary `bunx @alignfirst/openclaw-test` normally runs Node when it is installed. Bun-only hosts should use `bunx --bun @alignfirst/openclaw-test` (`bun x --bun` is equivalent). Direct `bun <installed-entry.mjs>` and project scripts launched with `bun --bun run <script>` also preserve Bun. This covers the host CLI, not Docker, OpenClaw or native coding agents running under Bun. Containers retain Node 26 and npm.
 
 ## Init
 
 ```sh
-npx @alignfirst/openclaw-test init <project-dir>
+npx -y @alignfirst/openclaw-test init <project-dir>
 ```
 
 Adds the four `package.json` scripts (`env:build`, `env:up`, `env:down`, `e2e`) if missing, and drops four files:
@@ -26,6 +28,8 @@ Adds the four `package.json` scripts (`env:build`, `env:up`, `env:down`, `e2e`) 
 - `.env.local.example` — copy to `.env.local` and fill in; its comments document every variable.
 - `docker-compose.yml` — thin overlay that `include:`s the base stack from `node_modules/`.
 - `Dockerfile` — consumer-owned; its comments document the common customizations (system tools, mock-CLI symlinks, fixtures, reset scripts).
+
+For a Bun host, run `bunx --bun @alignfirst/openclaw-test init <project-dir>`. New scripts explicitly run the installed local entry through Bun; existing scripts remain unchanged. Follow init's UID/GID-matched Docker Node/npm preparation command to create the consumer's `package-lock.json`, then use `bun --bun run env:build`. A Bun lockfile alone does not satisfy the generated Dockerfile's `npm ci` contract.
 
 ## Configure
 

@@ -18,6 +18,12 @@ In your `AGENTS.md` or `CLAUDE.md` file:
 At the start of the session, before any investigation or code exploration, run `npx -y alignfirst docmap`. Then read the documentation relevant to the task.
 ```
 
+### CLI runtimes
+
+Use Node.js 22.11 or later with `npx -y @alignfirst/docmap`, or Bun with `bunx --bun @alignfirst/docmap` (`bun x --bun` is equivalent). Bun 1.4.4 is the tested baseline; compatibility with every older release is not promised. Published bins retain Node shebangs, so ordinary `bunx @alignfirst/docmap` normally runs Node when it is installed. Bun-only hosts should explicitly select `--bun`.
+
+Direct `bun <installed-entry.mjs>` and transparent project scripts launched with `bun --bun run <script>` preserve Bun in suggested commands. npm scripts retain their `--` argument separator. An explicit runner wins over project lockfiles; a lockfile alone never implies a docmap script. Embedded `alignfirst docmap` follows its enclosing AlignFirst invocation.
+
 ### Bootstrapping a docs/ directory (optional)
 
 To bootstrap a `docs/` directory, wire docmap into a project, and migrate existing docs or skills, install the `alignfirst-setup-guide` skill temporarily and let an agent drive the setup:

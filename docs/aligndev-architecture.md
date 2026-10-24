@@ -26,7 +26,13 @@ read_when:
 | `src/worktree/` | Lightweight Git-backed worktree inventory, add, directory policy and non-force removal. |
 | `templates/guide/` | The playbook and guides, rendered per platform. |
 
-Templates use `{{ALIGNDEV}}`, `{{ALIGNFIRST}}` placeholders for the command forms. Under `npx`, both commands print as `npx -y …`. Variants sit in blocks, each marker alone on its line:
+Templates use `{{ALIGNDEV}}`, `{{ALIGNFIRST}}` placeholders for rendered command forms. `src/command-form.ts` resolves invocation once through `@alignfirst/docmap/invocation`, separating launcher (`direct`, `packageRunner`, `projectScript`) from actual runtime (`node`, `bun`). Explicit runner evidence wins over lockfiles; a project script requires manifest, entry-point and immediate-parent agreement. User-agent metadata alone does not prove either a script or a runtime.
+
+Under npm/npx, counterpart commands use `npx -y alignfirst`; under Bun runtime they use `bunx --bun alignfirst`. Verified scripts are retained only for self follow-ups. Direct Bun entry launches also produce explicit Bun package-runner commands. Published bins keep Node shebangs, so ordinary `bunx` normally uses Node when it is installed. No automatic runtime re-execution occurs.
+
+`src/alignfirst-cli.ts` spawns the structured executable and fixed argv plus operation arguments, never split rendered text. This covers config reports, plans checks, ticket open/reservation/catchup, companion context and diagnostic `--version` probes. Missing/outdated-report diagnostics describe the selected runner, explicit Bun runtime when applicable, and direct executable resolution. Delegated prompts use the same counterpart selection; the native coding agent keeps its own executable policy and prerequisites.
+
+Variants sit in blocks, each marker alone on its line:
 
 - A platform block, `{{#openclaw}}` or `{{#codingAgent}}`, sits at the top level.
 - A condition block, `{{#developers}}`, `{{#readme}}`, `{{#noGuide}}` or `{{#hasGuide}}` (both guide files), sits directly inside a `{{#codingAgent}}` block and holds text only.

@@ -78,10 +78,14 @@ Then ask your session to work with aligndev.
 
 ### Requirements
 
-- Node.js 22.11 or later. The assistant runs `aligndev` through `npx`, so there is nothing to install.
+- Node.js 22.11 or later with `npx -y aligndev`, or Bun with `bunx --bun aligndev` (`bun x --bun` is equivalent). Bun 1.4.4 is the tested CLI baseline; compatibility with every older release is not promised.
 - The selected child installed and authenticated under the same effective environment and cwd as the child. Apply the profile's `unset/env/configDir`, including HOME, PATH and credential routing, before using `claude` then `/login`, `codex login`, or `pi` then `/login <provider>` (or configured provider credentials). A bare login in another shell may select another account. Pi requires Node.js 22.19 or later; the Pi adapter and extensions target Pi 1.3.0.
 - For Pi, select a usable native model, preferably `provider/model` (optional thinking suffix). Authenticate in the same account/configuration used by the child; never expose credential values in diagnostics.
 - Linux or macOS, or Windows through WSL.
+
+Published bins retain Node shebangs. Ordinary `bunx aligndev` normally runs Node when it is installed; Bun-only hosts should explicitly select `--bun`. Direct `bun <installed-entry.mjs>` and transparent project scripts launched with `bun --bun run <script>` preserve Bun in follow-up commands and internal AlignFirst calls. npm scripts retain their `--` argument separator.
+
+Bun support covers this CLI, not its selected coding agent, Docker or an OpenClaw deployment. Those tools keep their own runtime, installation and authentication requirements; selecting Bun for AlignDev never forces the coding agent to use Bun.
 
 ## Configuration
 

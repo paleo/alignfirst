@@ -31,12 +31,18 @@ Then, in your project, ask your agent:
 Use your *alignfirst-setup-guide* skill. Set up *workspaces* in this project.
 ```
 
-The agent reads the skill, adapts the reference scripts to your stack, installs `@alignfirst/workspace` as a dev dependency, and wires the npm/pnpm/yarn scripts. After that, you can uninstall the skill, it won't be used by your project anymore.
+The agent reads the skill, adapts the reference scripts to your stack, installs `@alignfirst/workspace` as a dev dependency, and wires the npm/pnpm/yarn/Bun scripts. After that, you can uninstall the skill, it won't be used by your project anymore.
 
 Setup writes one or two wrapper scripts on these entry points:
 
 - `runWorkspace(config)` — worktree lifecycle (setup / teardown / remove).
 - `runDevServer(config)` (optional) — ports, run files and infrastructure (`dev setup`), dev-server start (foreground or background) / stop / list.
+
+### CLI runtimes
+
+The same kernel and thin wrappers run on Node.js 22.11 or later or Bun. Bun 1.4.4 is the tested baseline; compatibility with every older release is not promised. For Bun consumers, set scripts such as `"workspace": "bun scripts/workspace.mjs"` and launch `bun --bun run workspace setup`. Direct `bun scripts/workspace.mjs` works too. Finalizers, configured dev-wrapper calls and bootstrap guidance retain the selected runtime.
+
+Verified scripts take precedence over lockfiles. npm scripts need `--` before forwarded arguments (`npm run workspace -- setup`); Bun scripts use `bun --bun run workspace setup`. The package has no published bin: it runs through your configured wrappers. Installation/build callbacks, Git, Docker and application servers retain their own prerequisites and commands.
 
 ### Migration from the old `slots.json` registry
 

@@ -14,6 +14,12 @@ read_when:
 
 For the consumer-facing blueprint — concepts, config fields, the CLI surface, and how to adapt the system to a repository — see the [workspace setup blueprint](../skills/alignfirst-setup-guide/references/workspace-setup.md). This document covers package internals and edge-case behavior that don't belong in that guide.
 
+## Invocation and runtime
+
+The binless package runs through configured thin wrappers on Node or Bun. `src/package-manager.ts` uses `@alignfirst/docmap/invocation` to separate explicit launcher evidence, verified scripts and actual runtime. Explicit manager evidence wins over the workspace's lockfile fallback. Verified custom script names are retained only for their owning wrapper; inherited workspace lifecycle metadata cannot become the dev script. Bun-owned scripts use `bun --bun run`; a direct Bun wrapper uses the exact runtime executable and wrapper path instead of inventing a package-runner bin.
+
+Detached finalization, configured dev-wrapper calls and removal re-execution use `process.execPath`, preserving Node or Bun, including executable paths containing spaces. Guide bootstrap commands quote that same runtime. Project install/build callbacks and external tools keep their configured commands; selecting Bun for the kernel does not rewrite a real npm build callback.
+
 ## Setup modes
 
 `workspace setup` synchronously creates or adopts a Git worktree, then runs `finalizeWorkspace` (install, build) in a **detached child** that streams to `<runtimeDir>/logs/workspace-setup.log`. Ordinary setup waits for the child.
@@ -31,7 +37,7 @@ The child is spawned as `__finalize` with no target argument and `cwd` set to th
 
 `setup --full` adds the dev step. It is refused up front when the config declares no `devServerScript`.
 
-After `finalizeWorkspace` succeeds, the finalize child reports the progress label `Dev setup` and runs `node <devServerScript> setup --from-finalize` in the worktree, its output in the setup log. The entry is still `pending` at that point; the internal `--from-finalize` flag makes the readiness check of `dev setup` accept it.
+After `finalizeWorkspace` succeeds, the finalize child reports the progress label `Dev setup` and runs `<selected-runtime> <devServerScript> setup --from-finalize` in the worktree, its output in the setup log. The entry is still `pending` at that point; the internal `--from-finalize` flag makes the readiness check of `dev setup` accept it.
 
 The child then marks the workspace `ready` whatever the outcome. `ready` means the workspace's own setup succeeded; the dev side is tracked by `devSetupAt` and `devSetupFailure`, and the next `dev setup` or start retries it. The dev-server records its own failures. When it exits non-zero without a record newer than the step's start (it could not run, or stopped at its readiness check or earlier), the child records `dev setup exited with code <n>`.
 
@@ -49,7 +55,7 @@ Git refs are hierarchical: `refs/heads/test` cannot coexist with anything under 
 
 ## Foreground self-exit
 
-A foreground `dev` ([`runForeground`](../packages/workspace/src/dev-server.ts)) runs the same start pipeline as `dev up`, but the servers are spawned **detached** (each in its own process group) and only their **child PIDs** are registered in `dev-servers.json`. The foreground Node parent itself is never in the registry — so nothing else can find it to signal it.
+A foreground `dev` ([`runForeground`](../packages/workspace/src/dev-server.ts)) runs the same start pipeline as `dev up`, but the servers are spawned **detached** (each in its own process group) and only their **child PIDs** are registered in `dev-servers.json`. The foreground CLI parent itself is never in the registry — so nothing else can find it to signal it.
 
 Logs stream from the **first byte**: tailing starts via an `onSpawned` hook fired right after the spawn loop, *before* the readiness wait, so a slow startup (build, `docker compose up`) is visible live rather than appearing only once ready. Because the log is streamed in full, a startup failure skips the redundant 30-line tail (`handleStartupFailure` with `includeTail: false`) and prints only the error reason and the full-log path.
 
@@ -225,7 +231,7 @@ Healing splits by destructiveness:
 - **Automatic (safe bookkeeping).** `workspace list` drops the `workspaces.json` (and matching `dev-servers.json`) entry for any orphan with **no live dev-server PIDs**, unless its status is `failed` — same harmless pruning as the existing dead-PID sweep. It runs **no** teardown (no `stopProcessGroup`, no `purgeInfrastructure`): `list` stays free of process- and infrastructure-side effects. Failed orphans and those whose dev-server is still running are left in place and surfaced with a `workspace prune` hint.
 - **Explicit (active heal).** `workspace prune` stops every orphan's live spawn PIDs (`stopProcessGroup`), runs `purgeInfrastructure` for each (see below), drops both registry entries, then runs `git worktree prune` to clear git's stale admin files.
 
-`workspace remove` against an already-deleted worktree dir takes the same direct-kill path (shared `killRecordedDevServer` helper): it can't shell out to `node <devServerScript> down` (the worktree and its `dev-server.mjs` are gone), so it kills the recorded spawn PIDs, runs `purgeInfrastructure`, drops both registry entries, and runs `git worktree prune` — same full cleanup as `workspace prune`.
+`workspace remove` against an already-deleted worktree dir takes the same direct-kill path (shared `killRecordedDevServer` helper): it can't re-execute `<selected-runtime> <devServerScript> down` (the worktree and its `dev-server.mjs` are gone), so it kills the recorded spawn PIDs, runs `purgeInfrastructure`, drops both registry entries, and runs `git worktree prune` — same full cleanup as `workspace prune`.
 
 **Tearing down an orphan's infrastructure.** The kernel skips wrapper re-execution when the target directory is gone. It kills recorded PIDs and invokes the caller's loaded `config.purgeInfrastructure`; invoke cleanup through a surviving wrapper, usually the main worktree's. Orphan teardown leaves Git's stale registration for the external owner; explicit prune can clear it later. The hook receives `PurgeContext` (`worktree`, `mainWorktree`, `name`, `purgeData`, `verbose`), with `ctx.worktree` pointing at the now-missing dir.
 

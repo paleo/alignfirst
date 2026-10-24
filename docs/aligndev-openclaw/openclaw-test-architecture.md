@@ -24,6 +24,16 @@ Four generic packages drive automated regression tests against an OpenClaw works
 
 The two wrappers exist side-by-side in one gateway and share a single bus. The runner picks which channel(s) to drive per scenario; `accountId = channelId` keeps per-channel bus state segregated.
 
+## Host runtime and build boundary
+
+The host CLI resolves launcher and runtime once through `@alignfirst/docmap/invocation`, then threads structured commands into init, usage and env/run recovery. Published bins keep Node shebangs. Ordinary `bunx` normally honors them when Node is installed; Bun-only hosts explicitly use `bunx --bun @alignfirst/openclaw-test`. Direct Bun entries and Bun-owned scripts preserve Bun, including generated `bun --bun run` follow-ups. No runtime auto-reexecution occurs.
+
+Bun 1.4.4 is the tested host baseline. Startup eagerly imports the installed OpenClaw dependency graph; launcher metadata compatibility alone is insufficient. Bun 1.3.3 lacks APIs used by that graph and by SQLite helpers. This support does not certify Docker, the OpenClaw gateway or native coding agents under Bun.
+
+Bun init writes new scripts that explicitly invoke the installed local entry through Bun, preserving existing scripts. It prints a caller-owned, UID/GID-matched Docker Node/npm preparation command to produce the consumer's npm lockfile before image builds. The generated Dockerfile still requires `package-lock.json` and `npm ci`; a Bun lockfile alone is insufficient. Containers retain Node 26, npm and Node-based scenario loading. Repository builds and standalone vendoring also remain npm operations.
+
+Host Docker supervision waits for process close, drains captured output, forwards handled signals to owned Unix process groups and escalates after a grace period. A rejected matrix worker stops dispatch and joins siblings before rejection. Run-scoped rendered config and owned stacks are cleaned in `finally`; external/unowned stacks remain outside that ownership.
+
 ## Service topology
 
 Three Compose services. All three are built from the **same image** — only the `command` differs.
