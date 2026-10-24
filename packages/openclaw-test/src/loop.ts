@@ -1,10 +1,11 @@
-import { type ChildProcess, spawn } from "node:child_process";
-import { closeSync, openSync, readdirSync, readFileSync } from "node:fs";
+import type { ChildProcess } from "node:child_process";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type CellResult, cellLeafName, readCellResult } from "./cell-result.js";
 import { judgeCostUsd } from "./cost.js";
 import type { SelectedModel } from "./models.js";
 import { printSummary, printTotalCost } from "./summary.js";
+import { spawnHostProcess } from "./host-process.js";
 
 export function expandChannelSelection(raw: string, openclawConfigPath: string): string[] {
   if (!raw) throw new Error("run: --channel expects a non-empty value");
@@ -117,8 +118,8 @@ export async function runMatrix(opts: MatrixOptions): Promise<number> {
   const ctx: WorkerLoopContext = {
     opts,
     state,
-    spawnRunner: opts.spawnRunner ?? defaultSpawn,
-    spawnRecreate: opts.spawnRecreate ?? defaultSpawn,
+    spawnRunner: opts.spawnRunner ?? spawnHostProcess,
+    spawnRecreate: opts.spawnRecreate ?? spawnHostProcess,
     readResult: opts.readResult ?? readCellResult,
     iterationWidth: opts.iterations > 1 ? String(opts.iterations).length : 0,
   };
@@ -126,12 +127,24 @@ export async function runMatrix(opts: MatrixOptions): Promise<number> {
   const onSignal = (sig: NodeJS.Signals) => {
     state.stopped = true;
     state.signalled = true;
+    state.exitCode = sig === "SIGINT" ? 130 : 143;
     for (const child of state.liveChildren) child.kill(sig);
   };
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);
   try {
-    await Promise.all(opts.workers.map((worker) => workerLoop(ctx, worker)));
+    const settled = await Promise.allSettled(
+      opts.workers.map(async (worker) => {
+        try {
+          await workerLoop(ctx, worker);
+        } catch (error) {
+          state.stopped = true;
+          throw error;
+        }
+      }),
+    );
+    const failed = settled.find((result) => result.status === "rejected");
+    if (failed?.status === "rejected") throw failed.reason;
   } finally {
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
@@ -362,7 +375,7 @@ async function spawnTracked(
     ...req,
     onChild: (child) => {
       state.liveChildren.add(child);
-      child.on("exit", () => state.liveChildren.delete(child));
+      child.on("close", () => state.liveChildren.delete(child));
     },
   });
 }
@@ -372,34 +385,6 @@ function formatCellDone(workerIndex: number, leaf: string, r: CellResult): strin
   const judgeCost = r.judgeUsages.reduce((sum, u) => sum + judgeCostUsd(u), 0);
   const cost = r.agentCostUsd + judgeCost;
   return `[w${workerIndex}] ${leaf} ${verdict} (${Math.round(r.durationMs / 1000)}s, $${cost.toFixed(4)})`;
-}
-
-function defaultSpawn(req: SpawnRequest): Promise<number> {
-  return new Promise((resolve) => {
-    const env = req.env ? { ...process.env, ...req.env } : process.env;
-    const logFd = req.logFile === undefined ? undefined : openSync(req.logFile, "a");
-    const child = spawn(req.command, req.argv, {
-      env,
-      stdio: logFd === undefined ? "inherit" : ["ignore", logFd, logFd],
-    });
-    // The child holds dups of the fd; safe to close ours right away.
-    if (logFd !== undefined) closeSync(logFd);
-    req.onChild?.(child);
-    child.on("exit", (code, signal) => {
-      if (signal) resolve(128 + signalNumber(signal));
-      else resolve(code ?? 1);
-    });
-    child.on("error", (err) => {
-      console.error(err.message);
-      resolve(1);
-    });
-  });
-}
-
-function signalNumber(signal: NodeJS.Signals): number {
-  if (signal === "SIGINT") return 2;
-  if (signal === "SIGTERM") return 15;
-  return 1;
 }
 
 function synthesizeFailedResult(params: {

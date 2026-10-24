@@ -177,6 +177,28 @@ function recreateCount(calls: CallLog[]): number {
   return calls.filter((c) => c.kind === "recreate").length;
 }
 
+describe("runMatrix worker failures", () => {
+  it("drains sibling workers and removes signal handlers before rejecting", async () => {
+    const fake = setupFake({});
+    let siblingFinished = false;
+    const before = process.listenerCount("SIGTERM");
+    const options = makeOpts(fake, {
+      scenarios: ["S1", "S2", "S3"],
+      workers: makeWorkers(2),
+      spawnRunner: async (request) => {
+        if (argvFlag(request.argv, "--scenario") === "S1") throw new Error("worker failed");
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        siblingFinished = true;
+        return fake.spawnRunner(request);
+      },
+    });
+    await expect(runMatrix(options)).rejects.toThrow("worker failed");
+    expect(siblingFinished).toBe(true);
+    expect(process.listenerCount("SIGTERM")).toBe(before);
+    expect(runnerOrder(fake.calls, (argv) => argvFlag(argv, "--scenario"))).toEqual(["S2"]);
+  });
+});
+
 describe("runMatrix, pool of 1", () => {
   it("runs cells in expansion order: scenarios → channels → iterations", async () => {
     const fake = setupFake({});

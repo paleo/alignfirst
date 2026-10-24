@@ -1,4 +1,5 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
+import type { Invocation } from "@alignfirst/docmap/invocation";
 import {
   cpSync,
   existsSync,
@@ -9,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import {
   discoverScenarios,
   expandChannelSelection,
@@ -18,6 +19,8 @@ import {
   workerSpawnEnv,
 } from "./loop.js";
 import { resolveSelectedModels, type SelectedModel } from "./models.js";
+import { cliCommand, resolveCliInvocation } from "./invocation.js";
+import { spawnHostProcess } from "./host-process.js";
 
 // Path-shaped vars from .env.local: resolved against the consumer's project dir so users
 // can write natural relative paths. Compose `include:` would otherwise resolve them
@@ -75,10 +78,17 @@ const ENV_USAGE = `usage: openclaw-test env <build|up|down>
                       OPENCLAW_TEST_PARALLEL, fallback 1).
   down                tear down every <base>-w* worker stack, whatever K was.`;
 
-export async function envCommand(packageDir: string, argv: string[]): Promise<never> {
+export async function envCommand(
+  packageDir: string,
+  argv: string[],
+  invocation: Invocation = resolveCliInvocation(),
+): Promise<never> {
+  const failEnv: UsageFailure = usageFailure(
+    ENV_USAGE.replaceAll("openclaw-test", cliCommand(invocation)),
+  );
   const [sub, ...rest] = argv;
   if (sub !== "build" && sub !== "up" && sub !== "down") failEnv();
-  const parallelFlag = parseEnvArgs(sub, rest);
+  const parallelFlag = parseEnvArgs(sub, rest, failEnv);
   setupHostEnv(packageDir);
   setBaseTag(packageDir);
   if (sub === "down") process.exit(sweepWorkerStacks());
@@ -109,8 +119,15 @@ export function buildConsumerImageArgs(composeArgs: string[]): string[] {
   return [...composeArgs, "build", "bus"];
 }
 
-export async function runCommand(packageDir: string, argv: string[]): Promise<never> {
-  const args = parseRunArgs(argv);
+export async function runCommand(
+  packageDir: string,
+  argv: string[],
+  invocation: Invocation = resolveCliInvocation(),
+): Promise<never> {
+  const failRun: UsageFailure = usageFailure(
+    RUN_USAGE.replaceAll("openclaw-test", cliCommand(invocation)),
+  );
+  const args = parseRunArgs(argv, failRun);
   setupHostEnv(packageDir);
   const parallel = resolveParallel(args.parallel, readEnvVar("OPENCLAW_TEST_PARALLEL"));
   const models = resolveSelectedModels({
@@ -158,26 +175,34 @@ export async function runCommand(packageDir: string, argv: string[]): Promise<ne
   const runnerResultsDir = `/opt/openclaw-test/artifacts/${baseStamp}/cells`;
   mkdirSync(resultsDir, { recursive: true });
 
-  const matrixExit = await runMatrix({
-    scenarios,
-    channels,
-    models,
-    renderConfigPath,
-    iterations: args.iterations,
-    maxFailures: args.maxFailures,
-    stopOnFail: args.stopOnFail,
-    reuseStack: args.reuseStack,
-    parallel: workers.length,
-    workers,
-    refreshWorkspace: refreshWorkerWorkspace,
-    artifactsDir: resolve(artifactsDir, baseStamp),
-    resultsDir,
-    runnerResultsDir,
-    baseStamp,
-  });
-
-  const booted = workers.filter((worker) => !worker.wasRunningBefore);
-  await Promise.all(booted.map((worker) => execCompose([...worker.composeArgs, "down"])));
+  let matrixExit: number;
+  try {
+    matrixExit = await runMatrix({
+      scenarios,
+      channels,
+      models,
+      renderConfigPath,
+      iterations: args.iterations,
+      maxFailures: args.maxFailures,
+      stopOnFail: args.stopOnFail,
+      reuseStack: args.reuseStack,
+      parallel: workers.length,
+      workers,
+      refreshWorkspace: refreshWorkerWorkspace,
+      artifactsDir: resolve(artifactsDir, baseStamp),
+      resultsDir,
+      runnerResultsDir,
+      baseStamp,
+    });
+  } finally {
+    const booted = workers.filter((worker) => !worker.wasRunningBefore);
+    try {
+      await Promise.all(booted.map((worker) => execCompose([...worker.composeArgs, "down"])));
+    } finally {
+      for (const path of renderedConfigs.values())
+        rmSync(dirname(path), { recursive: true, force: true });
+    }
+  }
   process.exit(matrixExit);
 }
 
@@ -613,17 +638,7 @@ function execComposeSync(args: string[]): number {
 }
 
 function execCompose(args: string[], env?: Record<string, string>): Promise<number> {
-  return new Promise((resolveExit) => {
-    const child = spawn("docker", args, {
-      stdio: "inherit",
-      env: env ? { ...process.env, ...env } : process.env,
-    });
-    child.on("exit", (code) => resolveExit(code ?? 1));
-    child.on("error", (err) => {
-      console.error(err.message);
-      resolveExit(1);
-    });
-  });
+  return spawnHostProcess({ command: "docker", argv: args, env });
 }
 
 interface RunArgs {
@@ -638,14 +653,16 @@ interface RunArgs {
   positionals: string[];
 }
 
-function requireFlagValue(flag: string, raw: string | undefined): string {
+type UsageFailure = (msg?: string) => never;
+
+function requireFlagValue(flag: string, raw: string | undefined, failRun: UsageFailure): string {
   if (raw === undefined || raw.startsWith("--")) {
     failRun(`error: ${flag} expects a value`);
   }
   return raw;
 }
 
-function parseIntFlag(flag: string, raw: string, min: number): number {
+function parseIntFlag(flag: string, raw: string, min: number, failRun: UsageFailure): number {
   const n = Number(raw);
   if (!Number.isInteger(n) || n < min) {
     failRun(`error: ${flag} expects an integer >= ${min}, got ${JSON.stringify(raw)}`);
@@ -653,7 +670,7 @@ function parseIntFlag(flag: string, raw: string, min: number): number {
   return n;
 }
 
-function parseRunArgs(argv: string[]): RunArgs {
+function parseRunArgs(argv: string[], failRun: UsageFailure): RunArgs {
   let channel: string | undefined;
   let model: string | undefined;
   let iterations = 1;
@@ -670,18 +687,19 @@ function parseRunArgs(argv: string[]): RunArgs {
     else if (a === "--all") all = true;
     else if (a === "--reuse-stack") reuseStack = true;
     else if (a === "--stop-on-fail") stopOnFail = true;
-    else if (a === "--channel") channel = requireFlagValue("--channel", argv[++i]);
+    else if (a === "--channel") channel = requireFlagValue("--channel", argv[++i], failRun);
     else if (a?.startsWith("--channel=")) channel = a.slice("--channel=".length);
-    else if (a === "--model") model = requireFlagValue("--model", argv[++i]);
+    else if (a === "--model") model = requireFlagValue("--model", argv[++i], failRun);
     else if (a?.startsWith("--model=")) model = a.slice("--model=".length);
-    else if (a === "--iterations") iterations = parseIntFlag("--iterations", argv[++i] ?? "", 1);
+    else if (a === "--iterations")
+      iterations = parseIntFlag("--iterations", argv[++i] ?? "", 1, failRun);
     else if (a?.startsWith("--iterations="))
-      iterations = parseIntFlag("--iterations", a.slice("--iterations=".length), 1);
+      iterations = parseIntFlag("--iterations", a.slice("--iterations=".length), 1, failRun);
     else if (a === "--max-failures")
-      maxFailures = parseIntFlag("--max-failures", argv[++i] ?? "", 0);
+      maxFailures = parseIntFlag("--max-failures", argv[++i] ?? "", 0, failRun);
     else if (a?.startsWith("--max-failures="))
-      maxFailures = parseIntFlag("--max-failures", a.slice("--max-failures=".length), 0);
-    else if (a === "--parallel") parallel = requireFlagValue("--parallel", argv[++i]);
+      maxFailures = parseIntFlag("--max-failures", a.slice("--max-failures=".length), 0, failRun);
+    else if (a === "--parallel") parallel = requireFlagValue("--parallel", argv[++i], failRun);
     else if (a?.startsWith("--parallel=")) parallel = a.slice("--parallel=".length);
     else if (a?.startsWith("--")) failRun(`error: unknown flag ${a}`);
     else if (a) positionals.push(a);
@@ -706,14 +724,20 @@ function parseRunArgs(argv: string[]): RunArgs {
   };
 }
 
-function failRun(msg?: string): never {
-  if (msg) console.error(msg);
-  console.error(RUN_USAGE);
-  process.exit(1);
+function usageFailure(usage: string): UsageFailure {
+  return (msg) => {
+    if (msg !== undefined) console.error(msg);
+    console.error(usage);
+    process.exit(1);
+  };
 }
 
 /** Returns the raw `--parallel` value; only `env up` accepts it. */
-function parseEnvArgs(sub: EnvSubcommand, rest: string[]): string | undefined {
+function parseEnvArgs(
+  sub: EnvSubcommand,
+  rest: string[],
+  failEnv: UsageFailure,
+): string | undefined {
   let parallel: string | undefined;
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
@@ -728,10 +752,4 @@ function parseEnvArgs(sub: EnvSubcommand, rest: string[]): string | undefined {
     failEnv("error: --parallel is only valid on 'env up'");
   }
   return parallel;
-}
-
-function failEnv(msg?: string): never {
-  if (msg) console.error(msg);
-  console.error(ENV_USAGE);
-  process.exit(1);
 }
