@@ -7,6 +7,8 @@ import type { WorkspaceEntry } from "../src/workspaces.js";
 const NOW = Date.parse("2026-05-17T00:00:00.000Z");
 
 const PM: PackageManagerCommands = {
+  install: "npm install",
+  runtime: "node",
   workspace: { base: "npm run workspace", withArgs: "npm run workspace --" },
   dev: { base: "npm run dev", withArgs: "npm run dev --" },
 };

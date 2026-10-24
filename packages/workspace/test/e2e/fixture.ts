@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync, type SpawnSyncReturns } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -9,7 +9,18 @@ import type { WorkspacesRegistry } from "../../src/workspaces.js";
 /** Repo root of `@alignfirst/workspace`, resolved from this file's location. */
 export const packageRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
-// The fixture's `workspace.mjs` is a plain `node` subprocess, so it imports the *built* package.
+export const cliExecutable = process.env.WORKSPACE_CLI_EXECUTABLE ?? process.execPath;
+if (!existsSync(cliExecutable)) throw new Error(`Missing workspace CLI runtime: ${cliExecutable}`);
+const runtimeProbe = spawnSync(
+  cliExecutable,
+  ["-p", "JSON.stringify({bun:process.versions.bun,executable:process.execPath})"],
+  { encoding: "utf8" },
+);
+if (runtimeProbe.status !== 0)
+  throw new Error(`Workspace CLI runtime failed: ${runtimeProbe.stderr}`);
+export const cliRuntime: { bun?: string; executable: string } = JSON.parse(runtimeProbe.stdout);
+
+// CLI children import the built package under the selected runtime.
 const distIndexUrl = pathToFileURL(join(packageRoot, "dist", "index.js")).href;
 
 /** The fixture dev-server's port range, and the port it excludes. */
@@ -132,6 +143,7 @@ while (process.env.E2E_READY_BARRIER !== undefined && !existsSync(process.env.E2
   if (Date.now() > deadline) throw new Error("e2e readiness barrier timed out");
   await new Promise((resolve) => setTimeout(resolve, 25));
 }
+if (process.env.E2E_RESIST_TERM === "1") process.on("SIGTERM", () => {});
 console.log("FIXTURE_READY");
 setInterval(() => {}, 1000);
 `;
@@ -267,10 +279,10 @@ export function runCli(
   env?: Record<string, string>,
   cwd: string = repo,
 ): SpawnSyncReturns<string> {
-  return spawnSync(process.execPath, [join(repo, "scripts", "workspace.mjs"), ...args], {
+  return spawnSync(cliExecutable, [join(repo, "scripts", "workspace.mjs"), ...args], {
     cwd,
     encoding: "utf-8",
-    env: { ...process.env, ...env },
+    env: { ...process.env, E2E_FINALIZE_PID_LOG: "1", ...env },
     stdio: "pipe",
     timeout: 60_000,
   });
@@ -283,7 +295,7 @@ export function runDev(
   env?: Record<string, string>,
   cwd: string = worktree,
 ): SpawnSyncReturns<string> {
-  return spawnSync(process.execPath, [join(worktree, "scripts", "dev-server.mjs"), ...args], {
+  return spawnSync(cliExecutable, [join(worktree, "scripts", "dev-server.mjs"), ...args], {
     cwd,
     encoding: "utf-8",
     env: { ...process.env, ...env },

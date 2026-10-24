@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { type PackageManagerCommands, detectPackageManager } from "./package-manager.js";
+import { type PackageManagerCommands, packageManagerCommands } from "./package-manager.js";
 import { REGISTRY_SUBDIR } from "./workspaces.js";
 
 // One combined operating guide for the `workspace` and `dev` scripts, printed by `workspace
@@ -105,13 +105,13 @@ function commandBlocks(
     ],
     hooks: [
       {
-        command: `${installCommand(pm)} && ${ws} setup`,
+        command: `${pm.install} && ${ws} setup`,
         comment: "post-creation: install, then adopt the current worktree",
       },
       ...(layout.hasDevServer
         ? [
             {
-              command: `${installCommand(pm)} && ${ws} setup --full`,
+              command: `${pm.install} && ${ws} setup --full`,
               comment: "also provision dev infrastructure",
             },
           ]
@@ -179,11 +179,6 @@ function commandBlocks(
   };
 }
 
-function installCommand(pm: PackageManagerCommands): string {
-  const manager = pm.workspace.base.split(" ")[0];
-  return manager === "pnpm" ? "pnpm i" : `${manager} install`;
-}
-
 function driveDevSnippet(pm: PackageManagerCommands): string {
   const dev = pm.dev.withArgs;
   return renderSnippet([
@@ -213,6 +208,7 @@ export function renderGuide(pm: PackageManagerCommands, layout: GuideLayout): st
     .replaceAll("{{DEV_BASE}}", pm.dev.base)
     .replaceAll("{{WS}}", pm.workspace.withArgs)
     .replaceAll("{{DEV}}", pm.dev.withArgs)
+    .replaceAll("{{RUNTIME}}", pm.runtime)
     .replaceAll("{{RUNTIME_DIR}}", layout.runtimeDir)
     .replaceAll("{{REGISTRY_SUBDIR}}", REGISTRY_SUBDIR)
     .replaceAll("{{LAYOUT:shared}}", renderSharedLayout(layout.sharedDirs))
@@ -230,6 +226,9 @@ function applySection(text: string, name: string, present: boolean): string {
   );
 }
 
-export function printGuide(layout: GuideLayout, cwd: string = process.cwd()): void {
-  console.log(renderGuide(detectPackageManager(cwd), layout));
+export function printGuide(
+  layout: GuideLayout,
+  commands: PackageManagerCommands = packageManagerCommands(),
+): void {
+  console.log(renderGuide(commands, layout));
 }

@@ -55,7 +55,7 @@ When seeding must precede installation, or local dependencies are missing after 
 ```sh
 common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
 main_worktree=$(dirname "$common_dir")
-node "$main_worktree/<path-to>/workspace.mjs" setup
+{{RUNTIME}} "$main_worktree/<path-to>/workspace.mjs" setup
 ```
 
 Replace `<path-to>` with this project's wrapper location and apply its runtime selection. The main wrapper needs usable installed dependencies/build output. This fallback runs the **main worktree's recipe** against the target, rather than the new branch's recipe.

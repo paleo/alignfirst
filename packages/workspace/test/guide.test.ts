@@ -4,11 +4,15 @@ import { type GuideLayout, renderGuide } from "../src/guide.js";
 import type { PackageManagerCommands } from "../src/package-manager.js";
 
 const NPM: PackageManagerCommands = {
+  install: "npm install",
+  runtime: "node",
   workspace: { base: "npm run workspace", withArgs: "npm run workspace --" },
   dev: { base: "npm run dev", withArgs: "npm run dev --" },
 };
 
 const PNPM: PackageManagerCommands = {
+  install: "pnpm i",
+  runtime: "node",
   workspace: { base: "pnpm workspace", withArgs: "pnpm workspace" },
   dev: { base: "pnpm dev", withArgs: "pnpm dev" },
 };
@@ -110,6 +114,8 @@ describe("renderGuide", () => {
 
   it.each(["yarn run", "bun run"])("renders %s install hooks", (prefix) => {
     const pm = {
+      install: `${prefix.split(" ")[0]} install`,
+      runtime: "node",
       workspace: { base: `${prefix} workspace`, withArgs: `${prefix} workspace` },
       dev: { base: `${prefix} dev`, withArgs: `${prefix} dev` },
     };

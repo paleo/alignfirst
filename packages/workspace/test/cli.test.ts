@@ -296,7 +296,7 @@ describe("renderWorkspaceHelp", () => {
 describe("renderDevHelp", () => {
   it("documents `dev setup` and its public options, not the internal one", () => {
     const help = renderDevHelp();
-    expect(help).toContain("dev setup [--force] [--reset-ports]");
+    expect(help).toContain("npm run dev -- setup [--force] [--reset-ports]");
     expect(help).toContain("--reset-ports");
     expect(help).not.toContain("--from-finalize");
   });
