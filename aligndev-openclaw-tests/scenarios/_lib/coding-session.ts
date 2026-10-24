@@ -11,7 +11,7 @@ import { EXTERNAL_PROJECT_PARENT, PRIMARY_PROJECT_PARENT } from "./project-fixtu
 // framing the judge handles reliably); interleaved narration simply judges false and is skipped rather
 // than failing the run. `waitForBackgroundStartedAck` / `waitForFinalWorkflowCompletionReport` below own this.
 
-const STARTED_ACK_RUBRIC =
+export const STARTED_ACK_RUBRIC =
   "This is a single message an assistant posted in a chat thread after a user asked it to run a coding " +
   "task. PASS if the message tells the user the coding work has been kicked off / launched and is now " +
   "running (in the background), OR promises to report back when it is done. Both a present-tense launch " +
@@ -22,7 +22,7 @@ const STARTED_ACK_RUBRIC =
   "first', 'OK, branch is clean'), a bare [WORKSPACE] setup banner with no launch statement, or a " +
   "claim that the work is already FINISHED.";
 
-const FINAL_WORKFLOW_COMPLETION_RUBRIC =
+export const FINAL_WORKFLOW_COMPLETION_RUBRIC =
   "This is a single message an assistant posted in a chat thread after implementing a coding " +
   "task whose requested scope includes tests and local verification. PASS only if it reports that " +
   "the implementation, tests, and local verification are all complete and gives their outcome. " +

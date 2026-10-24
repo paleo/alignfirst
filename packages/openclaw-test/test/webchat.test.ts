@@ -169,6 +169,28 @@ describe("webchat driver", () => {
       "gateway call sessions.create failed (exit 1): INVALID_REQUEST cwd does not exist",
     );
   });
+
+  it("raises the RPC timeout and reports a transport error printed on stdout", async () => {
+    const argvs: string[][] = [];
+    const driver = createWebchatDriver({
+      execInGateway: async (argv) => {
+        argvs.push(argv);
+        const stdout = JSON.stringify({
+          ok: false,
+          error: { type: "gateway_transport_error", kind: "timeout" },
+        });
+        return { exitCode: 1, stdout, stderr: "" };
+      },
+      emit: (entry) => entry,
+      nextEntrySeqTs: () => ({ entrySeq: 0, ts: new Date().toISOString() }),
+      setCurrentEntry: (entry) => entry,
+      sessionKeys: new Set<string>(),
+    });
+    await expect(driver.send(HOME_KEY, "hi")).rejects.toThrow(
+      'gateway call sessions.reset failed (exit 1): {"ok":false,"error":{"type":"gateway_transport_error"',
+    );
+    expect(argvs[0]?.slice(-2)).toEqual(["--timeout", "45000"]);
+  });
 });
 
 describe("context surfaces", () => {

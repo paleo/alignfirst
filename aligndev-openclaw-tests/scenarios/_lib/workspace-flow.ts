@@ -9,7 +9,7 @@ import type { Step } from "./types.ts";
 // also the workspace name) plus the branch and a bootstrap-status keyword. These
 // are language-invariant tokens, asserted deterministically when the agent posts
 // the block.
-const bootstrapStatusRe =
+export const bootstrapStatusRe =
   /(?:\b(?:ready|running|in[\s-]?progress|failed|ok|prêt|prête|en cours)|échou)/i;
 
 export interface WorkspaceFlowOptions {

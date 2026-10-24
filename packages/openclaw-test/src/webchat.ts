@@ -12,6 +12,8 @@ export const WEBCHAT_SURFACE = "webchat";
 const HOME_KEY = "agent:main:main";
 const OPERATOR_SENDER_ID = "operator";
 const GATEWAY_CALL_TIMEOUT_MS = 60_000;
+// The CLI's 10 s default is too short for the first call on a freshly started gateway.
+const GATEWAY_RPC_TIMEOUT_MS = 45_000;
 const HISTORY_POLL_MS = 2_000;
 const HISTORY_LIMIT = 200;
 const HISTORY_TOOL_RESULT_MAX_CHARS = 200;
@@ -133,13 +135,23 @@ async function gatewayCall(
   params: Record<string, unknown>,
 ): Promise<unknown> {
   const result = await deps.execInGateway(
-    ["openclaw", "gateway", "call", method, "--params", JSON.stringify(params), "--json"],
+    [
+      "openclaw",
+      "gateway",
+      "call",
+      method,
+      "--params",
+      JSON.stringify(params),
+      "--json",
+      "--timeout",
+      String(GATEWAY_RPC_TIMEOUT_MS),
+    ],
     { timeoutMs: GATEWAY_CALL_TIMEOUT_MS },
   );
   if (result.exitCode !== 0) {
-    throw new Error(
-      `gateway call ${method} failed (exit ${result.exitCode}): ${result.stderr.trim()}`,
-    );
+    // With `--json`, the CLI prints its transport errors on stdout.
+    const output = result.stderr.trim() || truncate(result.stdout.trim());
+    throw new Error(`gateway call ${method} failed (exit ${result.exitCode}): ${output}`);
   }
   try {
     return JSON.parse(result.stdout);
