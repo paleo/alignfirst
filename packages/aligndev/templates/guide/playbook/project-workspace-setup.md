@@ -55,8 +55,8 @@ Setting up a workspace takes a while, so tell the user it started before you sta
 
 The workplace is the first case that matches:
 
-1. **The user's request or instructions name the place** — a directory, a branch, a workspace: work there. For a directory, post its banner and go to Step 5. For a branch, Step 4 finds or attaches that branch rather than choosing another ticket branch.
-2. **The session's branch carries TICKET_ID** — work in place. Skip Steps 3 and 4: post the `[WORKSPACE]` banner (format in Step 4) with the session's worktree and branch and `Status: ready`, then go to Step 5.
+1. **The user's request or instructions name the place** — a directory, a branch, a workspace: work there. For a directory, apply Step 4's existing-workplace preparation, post its banner and go to Step 5. For a branch, Step 4 finds or attaches that branch rather than choosing another ticket branch.
+2. **The session's branch carries TICKET_ID** — work in place. Skip the setup signal and branch selection: apply Step 4's existing-workplace preparation, post the `[WORKSPACE]` banner with the session's worktree and branch, then go to Step 5.
 3. **The session's branch is long-lived** — the default branch, or a name such as `main`, `master`, `develop`, `release` or `production`: open or create the ticket's workspace in Step 4, without asking.
 4. **Any other branch**, one carrying another ticket's ID included — end the turn on one message asking where to work. On the answer, "here" means the session's worktree as it is, handled as in case 2; a branch or a directory the user names falls under case 1.
 
@@ -98,10 +98,12 @@ That single call is the whole exception. The post right after it, and every one 
 {{/codingAgent}}
 
 {{#openclaw}}
-When the user named a directory, or a recorded workplace's branch already carries TICKET_ID, use that worktree as it is: post its banner and go to Step 5. When the user named a branch, find or attach it below rather than choosing another ticket branch.
+When the user named a directory, or a recorded workplace's branch already carries TICKET_ID, retain that workplace: apply the existing-workplace preparation below, post its banner and go to Step 5. When the user named a branch, find or attach it below rather than choosing another ticket branch.
 {{/openclaw}}
 
-The project has workspace tooling when its developer guide documents one, whatever the implementation. Use it when present; otherwise use `{{ALIGNDEV}} worktree list/add/remove`. Never bypass it with raw `git worktree add`/`remove`/`prune` or directory deletion.
+The project has workspace tooling when its developer guide documents one, whatever the implementation. Use it when present; otherwise use `{{ALIGNDEV}} worktree list/add/setup/remove`. Never bypass it with raw `git worktree add`/`remove`/`prune` or directory deletion. An external tool owning Git creation and deletion is a separate case; adopt its selected worktree through the applicable setup tooling.
+
+**Existing-workplace preparation:** follow the project's documented readiness/setup procedure when it has tooling. Otherwise run `{{ALIGNDEV}} worktree setup <exact-worktree-root> --json` yourself before reporting readiness or delegating. Registration alone does not prove readiness, including for externally created worktrees. Setup keeps the selected path and branch without creating or switching branches. Without a path, it discovers the current root even from nested cwd; an explicit path resolves relative to the caller and must name an exact registered root of the same repository. Conflicts remain untouched. Repair the reported problem and retry the idempotent setup to complete partial preparation. Relay failures and delete nothing; plans provisioning or migration requires the separate authorization in `{{ALIGNDEV}} guide work-files-setup`.
 
 First, select the base ref from the project or user instructions, otherwise use the base branch's configured upstream. Use the local base ref when the repository has no remote; ask when the choice is unclear. Fetch its remote from PROJECT_PATH with `git fetch --prune <remote>` when applicable, and retain the selected base ref for creation and synchronization. Then check what already exists for the explicitly selected branch, or otherwise for {TICKET_ID} — two checks, both required:
 
@@ -112,7 +114,7 @@ Never assume the branch is new; `git worktree list` alone does not answer the br
 
 Whenever a branch exists, you work from its workspace — a status request included. "Status" means: set up the workspace, report its state (the banner below), sync the branch (Step 5), then report the work content (Step 6) — never `git log` from the main dir. Pick one sub-path:
 
-1. **Branch + workspace already registered** → use it (no setup needed).
+1. **Branch + workspace already registered** → retain it and apply existing-workplace preparation above.
 2. **Branch exists (local or remote), no workspace** → set up a workspace on the existing branch (don't create a new branch).
 3. **No branch** → for a status request, end the turn on a message reporting that no workspace or code work exists, with any request, spec, and summary files listed by the ticket preflight; create nothing. Any other request is new-work intent: name a new branch `{TICKET_ID}/{1-3-words}`, deriving the short description from the request. Start it from the selected base ref. Creating from that ref requires no checkout or clean main worktree.
 
@@ -142,7 +144,7 @@ Branch: `{branch}`
 Status: {running | ready | failed}
 ```
 
-The lines below the tag report the workspace: after `Status:`, add what the setup output gives that the user can act on. For a worktree from `{{ALIGNDEV}} worktree add`, say that `ready` covers the worktree and work files only, and delegate the repository's documented install/build/test preparation separately before coding needs it.
+The lines below the tag report the workspace: after `Status:`, add what the setup output gives that the user can act on. For a worktree prepared by `{{ALIGNDEV}} worktree add` or `setup`, say that `ready` covers the worktree and work files only, and delegate the repository's documented install/build/test preparation separately before coding needs it.
 
 {{#openclaw}}
 ## Step 5 — Sync an existing branch on takeover (sub-paths 1 & 2)

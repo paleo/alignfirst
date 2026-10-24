@@ -678,7 +678,13 @@ describe("work-files and lightweight worktree runbooks", () => {
       );
       for (const text of [
         "You run",
-        `${forms.aligndev} worktree list/add/remove`,
+        `${forms.aligndev} worktree list/add/setup/remove`,
+        "External tools may own Git creation and deletion",
+        "rather than creating another branch",
+        "repair reported conflicts and retry after partial preparation",
+        "repository preparation and shutdown remain separate",
+        "no lightweight teardown command or pre-deletion hook",
+        "When an external tool owns deletion, follow its lifecycle",
         "A branch worked on in place stays checked out",
         "needs no coding launch or work-files preparation",
         "only when that PR/MR is merged",
@@ -702,6 +708,16 @@ describe("work-files and lightweight worktree runbooks", () => {
         `${forms.aligndev} worktree list --json`,
         `${forms.aligndev} worktree add <path> <existing-branch> --json`,
         `${forms.aligndev} worktree add <path> -b <new-branch> <explicit-base-ref> --json`,
+        `${forms.aligndev} worktree setup <exact-worktree-root> --json`,
+        "Registration alone does not prove readiness",
+        "including for externally created worktrees",
+        "without creating or switching branches",
+        "current root even from nested cwd",
+        "exact registered root of the same repository",
+        "Conflicts remain untouched",
+        "retry the idempotent setup to complete partial preparation",
+        "follow the project's documented readiness/setup procedure when it has tooling",
+        "An external tool owning Git creation and deletion is a separate case",
         `run \`${forms.aligndev} worktree add\` yourself`,
         "absolute sibling path",
         "a dangling symlink included",
@@ -723,6 +739,9 @@ describe("work-files and lightweight worktree runbooks", () => {
       ])
         expect(setup, text).toContain(text);
       expect(setup).not.toContain("origin/<base>");
+      expect(setup).not.toContain("no setup needed");
+      expect(setup).not.toContain(`${forms.aligndev} worktree teardown`);
+      expect(working).not.toContain(`${forms.aligndev} worktree teardown`);
       if (platform === "codingAgent") {
         expect(working).toContain("default branch identified by the project's instructions");
         expect(working).not.toContain("refs/remotes/origin/HEAD");

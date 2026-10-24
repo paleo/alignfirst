@@ -189,6 +189,81 @@ describe("built worktree CLI lifecycle", () => {
     },
     15_000,
   );
+  it.each(["local", "companion"])(
+    "adopts externally owned worktrees idempotently with %s plans",
+    (mode) => {
+      const { home, repo, destination, plans, sessions, env } = makeFixture(mode);
+      const local = join(repo, ".local");
+      mkdirSync(local);
+      writeFileSync(join(local, "shared.txt"), "Shared local bytes.\n");
+      writeFileSync(join(plans, "shared.md"), "Shared plan bytes.\n");
+      const registry = join(home, ".alignfirst", "companions", "registry.json");
+      const registryBefore = existsSync(registry) ? readFileSync(registry, "utf8") : undefined;
+      git(repo, env, "worktree", "add", "-b", "side-1/external", destination, "main");
+      const head = git(destination, env, "rev-parse", "HEAD");
+      const nested = join(destination, "nested", "directory");
+      mkdirSync(nested, { recursive: true });
+      const setup = () => cli(aligndev, nested, env, "worktree", "setup", "--json");
+      const first = setup();
+      expect(first.status, first.stderr).toBe(0);
+      expect(first.stderr).toBe("");
+      const report = JSON.parse(first.stdout);
+      expect(report.worktree.path).toBe(destination);
+      expect(report.worktree.branch).toBe("side-1/external");
+      expect(report.directories[".plans"].mode).toBe(
+        mode === "companion" ? "companion" : "symlink",
+      );
+      expect(report.directories[".local"].mode).toBe("symlink");
+      const exclude = join(repo, ".git", "info", "exclude");
+      const exclusions = readFileSync(exclude, "utf8");
+      const repeated = setup();
+      expect(repeated.status, repeated.stderr).toBe(0);
+      expect(repeated.stderr).toBe("");
+      expect(JSON.parse(repeated.stdout)).toEqual(report);
+      expect(readFileSync(exclude, "utf8")).toBe(exclusions);
+
+      const mainCheck = cli(alignfirst, repo, env, "plans", "check", "--json");
+      const targetCheck = cli(alignfirst, destination, env, "plans", "check", "--json");
+      expect(mainCheck.status, mainCheck.stderr).toBe(0);
+      expect(targetCheck.status, targetCheck.stderr).toBe(0);
+      const mainPlans = JSON.parse(mainCheck.stdout);
+      const targetPlans = JSON.parse(targetCheck.stdout);
+      expect(targetPlans.mode).toBe(mainPlans.mode);
+      expect(targetPlans.plans.in).toBe(mainPlans.plans.in);
+      expect(targetPlans.plans.target).toBe(mainPlans.plans.target);
+      expect(targetPlans.plans.target).toBe(plans);
+      expect(targetPlans.mainWorktree).toBe(repo);
+      const mainConfig = cli(alignfirst, repo, env, "config", "--json");
+      const config = cli(alignfirst, destination, env, "config", "--json");
+      expect(mainConfig.status, mainConfig.stderr).toBe(0);
+      expect(config.status, config.stderr).toBe(0);
+      const mainLocations = JSON.parse(mainConfig.stdout).locations;
+      const locations = JSON.parse(config.stdout).locations;
+      expect(locations[".plans"].in).toBe(mainLocations[".plans"].in);
+      expect(realpathSync(locations[".plans"].path)).toBe(plans);
+      expect(realpathSync(mainLocations[".plans"].path)).toBe(plans);
+      expect(locations._aligndev.in).toBe(mainLocations._aligndev.in);
+      expect(realpathSync(locations._aligndev.path)).toBe(sessions);
+      expect(realpathSync(mainLocations._aligndev.path)).toBe(sessions);
+      expect(realpathSync(join(destination, ".local"))).toBe(local);
+      expect(readFileSync(join(destination, ".local", "shared.txt"), "utf8")).toBe(
+        "Shared local bytes.\n",
+      );
+      expect(git(destination, env, "status", "--porcelain")).toBe("");
+      expect(git(destination, env, "rev-parse", "HEAD")).toBe(head);
+
+      git(repo, env, "worktree", "remove", destination);
+      expect(existsSync(destination)).toBe(false);
+      expect(readFileSync(join(plans, "shared.md"), "utf8")).toBe("Shared plan bytes.\n");
+      expect(readFileSync(join(local, "shared.txt"), "utf8")).toBe("Shared local bytes.\n");
+      expect(git(repo, env, "rev-parse", "side-1/external")).toBe(head);
+      expect(git(repo, env, "worktree", "list", "--porcelain")).not.toContain(destination);
+      if (registryBefore !== undefined) {
+        expect(readFileSync(registry, "utf8")).toBe(registryBefore);
+      } else expect(existsSync(registry)).toBe(false);
+    },
+  );
+
   it.each(["local", "shared", "companion", "separateSessions"])(
     "keeps config, context, tickets, sync and coding sessions in %s plans",
     (mode) => {

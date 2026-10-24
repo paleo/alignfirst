@@ -295,7 +295,7 @@ Workspace cleanup follows "Cleanup requests". Delegate base-branch refresh and o
 
 Lean toward delegating; the less you touch the project directly, the better.
 
-Delegate to the agent: the project's workspace setup, writing code (`alignfirst` protocols), commits, pushes, opening MR/PRs. You run `{{ALIGNDEV}} worktree list/add/remove` and `{{ALIGNDEV}} guide work-files-setup` yourself; neither needs a coding launch.
+Delegate to the agent: the project's workspace setup, writing code (`alignfirst` protocols), commits, pushes, opening MR/PRs. You run `{{ALIGNDEV}} worktree list/add/setup/remove` and `{{ALIGNDEV}} guide work-files-setup` yourself; neither needs a coding launch.
 
 Delegate reasoning too, whether for the user or your own next step. Ask the agent for ideas, design advice, opinions, or approaches, and build on its answer.
 
@@ -378,7 +378,7 @@ Running the dev-server from the main worktree is fine.
 
 ### Linked worktrees and other branches
 
-`{{ALIGNDEV}} guide project-workspace-setup` selects or creates the workplace: through the project's workspace tooling when it has one, through `{{ALIGNDEV}} worktree list/add/remove` otherwise. Raw `git worktree add`/`remove`/`prune` and directory deletion are out of bounds.
+`{{ALIGNDEV}} guide project-workspace-setup` selects and prepares the workplace: through the project's documented workspace tooling, including non-Node implementations, when it has one; through `{{ALIGNDEV}} worktree list/add/setup/remove` otherwise. Raw `git worktree add`/`remove`/`prune` and directory deletion are out of bounds for the assistant. External tools may own Git creation and deletion; prepare their selected existing worktree through the applicable tooling rather than creating another branch. Lightweight setup is idempotent, so repair reported conflicts and retry after partial preparation. It covers Git and work files only; repository preparation and shutdown remain separate, with no lightweight teardown command or pre-deletion hook.
 
 ### Updating a branch with the base branch
 
@@ -577,7 +577,7 @@ When the user asks to tear down one named project workspace (or worktree) from i
 When the user asks to tear down one named project workspace (or worktree):
 {{/codingAgent}}
 
-1. Resolve the exact linked-worktree path through the selected tooling; ask the user when it is ambiguous. With workspace tooling, have the agent run its removal procedure, which also tears down the dev environment. Without it, stop whatever the project runs there, then run `{{ALIGNDEV}} worktree remove <exact-path>` from PROJECT_PATH yourself: it refuses a dirty or locked worktree, and you never force it. This direct removal needs no coding launch or work-files preparation, even when plans are unsuitable.
+1. Resolve the exact linked-worktree path through the selected tooling; ask the user when it is ambiguous. With workspace tooling, have the agent run its removal procedure, which also tears down the dev environment. When an external tool owns deletion, follow its lifecycle and arrange project-specific shutdown separately. Otherwise, without workspace tooling, stop whatever the project runs there, then run `{{ALIGNDEV}} worktree remove <exact-path>` from PROJECT_PATH yourself: it refuses a dirty or locked worktree, and you never force it. This direct removal needs no coding launch or work-files preparation, even when plans are unsuitable.
 2. Confirm what was removed.
 {{#openclaw}}
 3. Reset the thread session.

@@ -114,7 +114,9 @@ A workspace for a code review needs no ports and no infrastructure. `workspace s
 
 ### Externally managed worktrees and bootstrap
 
-`workspace setup` without a branch adopts an existing worktree without changing its path or branch. Configure generic hooks in the external tool, executed **inside the target worktree**. For a typical pnpm consumer:
+Use the project's documented workspace tooling when present, including non-Node implementations. Without it, an external tool such as Paseo can run `npx -y aligndev worktree setup` as its post-creation hook **inside the target worktree**. Setup discovers the current root from nested directories; an explicit path must name an exact registered root of the same repository. It preserves the path, branch, index and unrelated files, validates existing plans, and shares work files idempotently. Repair conflicts and retry setup after partial preparation. Repository installation/build steps and shutdown remain separate. The external tool owns Git deletion; lightweight worktrees need no pre-deletion hook and have no `aligndev worktree teardown` command.
+
+For the full workspace system, `workspace setup` without a branch adopts an existing worktree without changing its path or branch. Configure generic hooks inside the target worktree. For a typical pnpm consumer:
 
 ```sh
 pnpm i && pnpm workspace setup
@@ -325,7 +327,7 @@ The allocated ports are not one of them either: each workspace gets its own, and
 
 ## The AlignDev Contract
 
-When a project provides workspace tooling, the assistant uses its documented lifecycle, including non-Node implementations. `@alignfirst/workspace` supplies `--guide`, `list`, setup states and one-command removal; a full reimplementation reproduces that surface. Without project tooling, the assistant directly uses `aligndev worktree list/add/remove`, backed only by Git's registry. That fallback adds no workspace-package dependency or tracked configuration. It shares usable untracked project directories through locally excluded symlinks, uses companion plans directly, and preserves tracked `.local` with a warning. Lightweight removal refuses dirty worktrees and preserves branches and shared targets; stop processes and tear down infrastructure separately.
+When a project provides workspace tooling, the assistant uses its documented lifecycle, including non-Node implementations. `@alignfirst/workspace` supplies `--guide`, `list`, setup states and one-command removal; a full reimplementation reproduces that surface. Without project tooling, the assistant directly uses `aligndev worktree list/add/setup/remove`, backed only by Git's registry. That fallback adds no workspace-package dependency or tracked configuration. It shares usable untracked project directories through locally excluded symlinks, uses companion plans directly, and preserves tracked `.local` with a warning. Lightweight removal refuses dirty worktrees and preserves branches and shared targets; stop processes and tear down infrastructure separately.
 
 The requirements below apply when adopting the full workspace system for an assistant:
 

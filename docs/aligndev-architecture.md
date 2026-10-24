@@ -5,7 +5,7 @@ read_when:
   - onboarding to the aligndev codebase
   - changing how `aligndev code` launches, tracks or terminates a coding agent
   - changing session files, `aligndev code status` or the `_aligndev` location
-  - changing lightweight worktree creation, inventory or removal
+  - changing lightweight worktree creation, setup, inventory or removal
   - changing the project inventory, its marker or port claims
   - adding a coding agent
 ---
@@ -23,7 +23,7 @@ read_when:
 | `src/code/` | `aligndev code`: arguments, prompt, run, session file, adapters, models, quota. |
 | `src/guide/` | `aligndev guide`: topics, the template renderer, and the project's guide file (`guide-file.ts`). |
 | `src/project/` | `aligndev project`: discovery, markers, status, port allocation; AlignFirst report parsing and work-files gate calls. |
-| `src/worktree/` | Lightweight Git-backed worktree inventory, add, directory policy and non-force removal. |
+| `src/worktree/` | Git-backed worktree inventory, add/setup preparation, directory policy and non-force removal. |
 | `templates/guide/` | The playbook and guides, rendered per platform. |
 
 Templates use `{{ALIGNDEV}}`, `{{ALIGNFIRST}}` placeholders for rendered command forms. `src/command-form.ts` resolves invocation once through `@alignfirst/docmap/invocation`, separating launcher (`direct`, `packageRunner`, `projectScript`) from actual runtime (`node`, `bun`). Explicit runner evidence wins over lockfiles; a project script requires manifest, entry-point and immediate-parent agreement. User-agent metadata alone does not prove either a script or a runtime.
@@ -131,15 +131,19 @@ This is CLI integration, not OpenClaw deployment, Docker, conversation or provid
 
 `aligndev worktree` dispatches before coding settings, model discovery and project-marker checks. Git's worktree registry is its only inventory, including externally created, detached, missing, locked and prunable entries. `src/worktree/git.ts` parses Git's NUL-delimited output; project status adapts it to its existing report shape. CLI help owns command forms and JSON schemas.
 
-Add resolves the main worktree even from a linked worktree or subdirectory. It validates branch, destination and effective plans before creating anything. It shares usable untracked main-worktree `.plans` and optional `.local` through symlinks, with root-anchored exclusions in shared local Git metadata. Tracked `.local` stays branch-local with a warning. Companion plans resolve directly, without a link or exclusion. The finished worktree must pass `alignfirst plans check --json`, including linked-worktree parity with the main worktree. Late failures retain the branch and worktree and name manual recovery actions.
+Add validates branch, destination and main-worktree effective plans before Git creation, then applies the shared preparation in `src/worktree/setup.ts`. Setup adopts an existing registered worktree without changing its path, branch, index or Git registration. Without a path, it discovers the current root even from a subdirectory. An explicit path resolves relative to the caller and must be an exact registered root of the same repository. Main and detached worktrees are supported; main setup validates and reports existing directories without creating links or exclusions.
+
+Linked preparation shares usable untracked main-worktree `.plans` and optional `.local` through symlinks, with root-anchored exclusions in shared local Git metadata. It checks HEAD and the index: tracked `.local` stays branch-local with a warning, and project-tracked effective plans fail. Companion plans resolve directly, without a link or exclusion. All required link destinations are checked before writes; conflicting entries and unrelated dirty work remain untouched. Existing links to the expected real target retain their link text. Missing links and exclusions are added idempotently, with links pointing through the main-worktree path so source repairs propagate.
+
+The finished worktree must pass `alignfirst plans check --json`, including linked-worktree parity with the main worktree. Failures retain the branch, worktree and partial preparation, name the failed step and give a quoted setup retry command. Repair the reported problem, then retry setup; no rollback deletes user data.
 
 `src/project/plans.ts` runs `alignfirst plans check --json` and returns `plans.target`. AlignFirst refuses project-tracked effective plans through both logical and resolved paths. From a linked worktree, it requires the same real target and `in` as the main worktree. Separate work-files repositories remain supported; an unused tracked project copy does not block companion plans. New/resumed coding launches apply this gate before stale-session reconciliation, ticket/session writes or model discovery. Historical status, help and inventory remain readable. The playbook's work-files runbook calls `alignfirst plans check`.
 
-The playbook selects documented project workspace tooling first, including non-Node implementations. Without it, the assistant directly orchestrates lightweight list/add/remove, then delegates from the selected path. `guide work-files-setup` is the sole separately authorized companion-preparation recipe and runs before ticket reservation or request capture. The CLI never writes the companion registry or provisions missing plans.
+The playbook selects documented project workspace tooling first, including non-Node implementations. Without it, the assistant directly orchestrates lightweight list/add/setup/remove, then delegates from the selected path. `guide work-files-setup` is the sole separately authorized companion-preparation recipe and runs before ticket reservation or request capture. The CLI never writes the companion registry or provisions missing plans.
 
-Readiness covers Git and work files only. Install/build/test preparation follows repository commands separately; add manages no ports, environment seeding, infrastructure or application processes. A shared symlink grants no sandbox permissions. Companion access retains existing handling; missing access must be surfaced without silently changing permission policy.
+Readiness covers Git and work files only. Install/build/test preparation follows repository commands separately; add/setup manages no ports, environment seeding, infrastructure or application processes. A shared symlink grants no sandbox permissions. Companion access retains existing handling; missing access must be surfaced without silently changing permission policy.
 
-Remove uses ordinary non-force Git removal for one exact linked root. It refuses dirty, locked, main and protected shared-target paths, and any target containing another registered worktree root, even a locked or missing child. It preserves branches and companion registration and never follows shared links for deletion. Stop project activity separately; lightweight removal is not process or infrastructure teardown.
+Remove uses ordinary non-force Git removal for one exact linked root. It refuses dirty, locked, main and protected shared-target paths, and any target containing another registered worktree root, even a locked or missing child. It preserves branches and companion registration and never follows shared links for deletion. Stop project activity separately; lightweight removal is not process or infrastructure teardown. External owners such as Paseo can run `npx -y aligndev worktree setup` inside a worktree after creating it and retain ownership of Git deletion. There is no lightweight teardown command or pre-deletion hook: AlignDev has no services, ports or separate registry to release.
 
 ## Project Inventory
 
