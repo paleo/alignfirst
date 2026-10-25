@@ -1,5 +1,11 @@
 # @alignfirst/pi-background
 
+## 0.1.2
+
+### Patch Changes
+
+- 8d9b706: On Linux, cleanup reads the process table from `/proc` and no longer fails when `ps` is slow. Processes it cannot read, such as other users' under `hidepid`, are skipped.
+
 ## 0.1.1
 
 ### Patch Changes

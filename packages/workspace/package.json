@@ -1,6 +1,6 @@
 {
   "name": "@alignfirst/workspace",
-  "version": "0.40.0",
+  "version": "0.41.0",
   "description": "Run multiple git-worktree dev environments side by side.",
   "keywords": [
     "workspace",
@@ -49,7 +49,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@alignfirst/docmap": "~0.11.2"
+    "@alignfirst/docmap": "~0.12.0"
   },
   "devDependencies": {
     "@types/node": "~26.6.5",
