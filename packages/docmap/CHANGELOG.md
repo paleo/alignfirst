@@ -1,5 +1,11 @@
 # @alignfirst/docmap
 
+## 0.12.0
+
+### Minor Changes
+
+- 8d9b706: Added Bun CLI execution with runtime-preserving follow-up commands. Use `bunx --bun` for published CLIs or `bun --bun run` for project scripts on Bun-only hosts.
+
 ## 0.11.2
 
 ### Patch Changes

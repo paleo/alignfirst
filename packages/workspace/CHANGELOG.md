@@ -1,5 +1,16 @@
 # @alignfirst/workspace
 
+## 0.41.0
+
+### Minor Changes
+
+- 8d9b706: Added Bun CLI execution with runtime-preserving follow-up commands. Use `bunx --bun` for published CLIs or `bun --bun run` for project scripts on Bun-only hosts.
+
+### Patch Changes
+
+- Updated dependencies [8d9b706]
+  - @alignfirst/docmap@0.12.0
+
 ## 0.40.0
 
 ### Minor Changes

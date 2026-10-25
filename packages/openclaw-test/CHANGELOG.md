@@ -1,5 +1,17 @@
 # @alignfirst/openclaw-test
 
+## 0.24.0
+
+### Minor Changes
+
+- 8d9b706: Added Bun CLI execution with runtime-preserving follow-up commands. Use `bunx --bun` for published CLIs or `bun --bun run` for project scripts on Bun-only hosts.
+- 8d9b706: Added the `webchat` surface: scenarios drive OpenClaw app conversations through `ctx.webchat`, and declare the surfaces they support with `export const surfaces`.
+
+### Patch Changes
+
+- Updated dependencies [8d9b706]
+  - @alignfirst/docmap@0.12.0
+
 ## 0.23.4
 
 ### Patch Changes

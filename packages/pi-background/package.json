@@ -1,6 +1,6 @@
 {
   "name": "@alignfirst/pi-background",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Session-owned background shell jobs with bounded output and native Pi completion.",
   "license": "MIT",
   "author": "Thomas MUR",
