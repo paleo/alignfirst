@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "sharp-testing": {
+      "source": "paleo/skills",
+      "sourceType": "github",
+      "skillPath": "skills/sharp-testing/SKILL.md",
+      "computedHash": "c85b33855d997f452a6a203a1ea8fa6fedcd785eea525e06c01c2f40f4ca71c7"
+    },
     "sharp-writing": {
       "source": "paleo/skills",
       "sourceType": "github",
