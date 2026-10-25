@@ -86,6 +86,10 @@ validate_common() {
     http*) ;;
     *) echo "[seed] GATEWAY_DASHBOARD_ORIGIN must start with http." >&2; exit 1 ;;
   esac
+  case "${GATEWAY_TAILSCALE_SERVE:-}" in
+    "" | on) ;;
+    *) echo "[seed] GATEWAY_TAILSCALE_SERVE must be empty or on." >&2; exit 1 ;;
+  esac
 }
 
 configure_common() {
@@ -106,7 +110,8 @@ configure_common() {
   echo "[seed] memory — nothing persists across sessions"
   # Semantic recall is unused; disabled so it never binds a provider of its own.
   set_json memory.search.enabled false
-  # Defaults on while session.dmScope is unset; doctor reports it "effectively enabled".
+  # Defaults on without DM isolation (the Slack overlay leaves session.dmScope unset); doctor then
+  # reports it "effectively enabled". The pin keeps it off on every surface.
   set_json memory.search.rememberAcrossConversations false
   # The pre-compaction memory flush is an agentic turn that writes memory/YYYY-MM-DD.md when a
   # long session nears its token limit.
@@ -175,13 +180,23 @@ configure_common() {
   echo "[seed] agent identity"
   set_json agents.entries '{"main":{"identity":{"name":"{{ASSISTANT_NAME}}"}}}'
 
-  echo "[seed] gateway — loopback, token auth, dashboard through an SSH tunnel"
+  echo "[seed] gateway — loopback, token auth, SSH tunnel; Tailscale Serve when enabled"
   set_json gateway.port 18789
   set_scalar gateway.bind loopback
   set_scalar gateway.auth.mode token
   set_secret_ref gateway.auth.token /GATEWAY_AUTH_TOKEN
   set_json gateway.controlUi.allowedOrigins \
     "[\"$GATEWAY_DASHBOARD_ORIGIN\",\"http://127.0.0.1:18789\"]"
+  # The mobile apps reach the gateway through Tailscale Serve (docs/operations/use-the-apps.md). The
+  # Serve origin, a .ts.net host, is a private same-origin load and needs no allowedOrigins entry.
+  if [ "${GATEWAY_TAILSCALE_SERVE:-}" = on ]; then
+    set_scalar gateway.tailscale.mode serve
+    # The operator approves every device: a tailnet identity alone grants no operator access.
+    set_json gateway.auth.allowTailscale false
+  else
+    unset_key gateway.tailscale.mode
+    unset_key gateway.auth.allowTailscale
+  fi
 
   echo "[seed] plugins — explicit allowlist"
   install_plugin_once @alignfirst/service-openclaw-plugin

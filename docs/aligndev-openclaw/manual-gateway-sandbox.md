@@ -1,6 +1,6 @@
 ---
 title: Manual Gateway Sandbox
-summary: Start the test gateway and probe thread handoff without the scenario runner.
+summary: Start the test gateway, probe thread handoff and drive an app conversation without the scenario runner.
 read_when:
   - probing the plugin or a playbook change by hand outside the scenario runner
 ---
@@ -48,6 +48,29 @@ sandbox/inbound.sh <channel> <conversation-id> <text> [thread-id]
 ```
 
 Keep notes and captured payloads under `.local/side-7/`.
+
+## Drive a conversation
+
+An app conversation needs no bus: run the gateway methods the apps use, inside the gateway container.
+
+```sh
+# Home is agent:main:main. Without cwd, a conversation runs on the agent workspace.
+openclaw gateway call sessions.create --params '{"label":"probe"}' --json
+# On a project folder, with a managed worktree on branch openclaw/<name>:
+openclaw gateway call sessions.create \
+  --params '{"label":"probe","cwd":"/home/assistant/projects/nimbus","worktree":true,"worktreeName":"probe"}' --json
+
+openclaw gateway call chat.send \
+  --params '{"sessionKey":"<key>","message":"<text>","idempotencyKey":"<uuid>"}' --json
+openclaw gateway call chat.history --params '{"sessionKey":"<key>","limit":50}' --json
+
+openclaw gateway call sessions.reset --params '{"key":"agent:main:main"}' --json
+openclaw gateway call sessions.patch \
+  --params '{"key":"<key>","archived":true,"expectedSessionId":"<sessionId>"}' --json
+openclaw worktrees list --json
+```
+
+`sessions.create` returns the session `key`, and with a worktree the checkout's `worktree.path` and `worktree.branch`. A `cwd` outside the agent workspaces needs `operator.admin`: the CLI retries with that scope after a `FORBIDDEN` line in the gateway log. `chat.send` returns at run start; its `runId` is the `idempotencyKey`, a fresh one per message. A reply is an assistant message of `chat.history` with `stopReason: "stop"`; the run is over when the response has no `inFlightRun`. [OpenClaw Context Engineering](./openclaw-context-engineering.md#gateway-contract) records the full response shapes.
 
 ## Probe the gateway
 

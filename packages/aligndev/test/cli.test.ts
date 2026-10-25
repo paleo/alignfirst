@@ -18,6 +18,7 @@ afterEach(() => {
 async function run(
   args: string[],
   config?: object,
+  env: NodeJS.ProcessEnv = {},
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   const home = mkdtempSync(join(tmpdir(), "aligndev-cli-"));
   homes.push(home);
@@ -27,7 +28,7 @@ async function run(
   const code = await main({
     argv: ["node", "aligndev", ...args],
     cwd: home,
-    env: { HOME: home },
+    env: { HOME: home, ...env },
     alignfirstCommand: [process.execPath, ALIGNFIRST_BIN],
     home,
     stdout,
@@ -53,6 +54,30 @@ describe("aligndev", () => {
       expect(result.stdout).toContain("~/.alignfirst/aligndev.settings.json");
     }
   });
+
+  it.each([false, true])(
+    "prints setup help without a repository or valid coding settings (npx=%s)",
+    async (viaNpx) => {
+      const env = viaNpx
+        ? {
+            npm_config_user_agent: "npm/11.19.0 node/v26.8.1 linux x64",
+            npm_command: "exec",
+            npm_lifecycle_event: "npx",
+          }
+        : {};
+      const command = viaNpx ? "npx -y aligndev" : "aligndev";
+      for (const args of [
+        ["worktree", "--help"],
+        ["worktree", "setup", "--help"],
+        ["worktree", "setup", "-h"],
+      ]) {
+        const result = await run(args, { code: { agent: "invalid" } }, env);
+        expect(result.code, result.stderr).toBe(0);
+        expect(result.stderr).toBe("");
+        expect(result.stdout).toContain(`${command} worktree setup [<path>] [--json]`);
+      }
+    },
+  );
 
   it("prints the package version", async () => {
     const { version } = JSON.parse(readFileSync(PACKAGE_JSON, "utf8")) as { version: string };
@@ -103,6 +128,8 @@ describe("aligndev", () => {
       code: { agent: "claude" },
     });
     expect(guide.code).toBe(0);
-    expect(guide.stdout).toContain("aligndev guide [<topic>] [--root <path>]");
+    expect(guide.stdout).toContain(
+      "aligndev guide [--channel <slack|discord|app>] [<topic>] [--root <path>]",
+    );
   });
 });

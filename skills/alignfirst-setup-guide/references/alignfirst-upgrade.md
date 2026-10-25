@@ -180,6 +180,13 @@ Historical null/missing-profile resumes are separate: without an explicit/projec
 
 On an OpenClaw host, update the private admin repository and protected settings through controlled maintenance. Explicit valid `code.profile` remains mandatory even with one profile or a true flag. Preserve all native-store isolation and Pi authentication exceptions; upgrade the inventory helper and retain seed validation of every profile.
 
+## Rename the AlignDev Message-Tool Topics
+
+`aligndev` 0.29.0 replaces the `slack-message-tool` and `discord-message-tool` guide topics with `message-tool`, read through `aligndev guide --channel <slack|discord> message-tool`. The old topics fail. On an AlignDev OpenClaw host whose workspace `AGENTS.md` still names an old topic, migrate once during `update-assistant.md`:
+
+1. In the admin repository, bring `infra/openclaw/workspace/AGENTS.md` to the current template. On a Discord deployment, also bring `infra/openclaw/seed/surface.sh`: it sets `session.dmScope` to `per-channel-peer`, so a DM no longer shares the session of the apps' Home conversation. Commit and pull on the host.
+2. Install `aligndev` 0.29.0 through the npm packages section of `update-assistant.md`, then re-seed through the `config instructions` command in `configure-assistant.md`.
+
 ## Convert the Companion Registry
 
 `alignfirst` 0.11.0 reads the companion registry as `{ "projects": … }`, and each entry names its companion directory. When `~/.alignfirst/companions/registry.json` has a top-level `paths`, every command fails with an error pointing here. Convert it once:

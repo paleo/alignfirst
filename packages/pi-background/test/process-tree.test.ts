@@ -4,8 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
-import { launchManaged } from "../src/process-tree.js";
-import { type FixturePid, isLive, records, waitFor } from "./process-tree-helpers.js";
+import { launchManaged, psTarget } from "../src/process-tree.js";
+import {
+  type FixturePid,
+  isLive,
+  records,
+  toolStarted,
+  jsonEvents,
+  waitFor,
+} from "./process-tree-helpers.js";
 
 vi.mock("node:fs", async (original) => {
   const fs = await original<typeof FileSystem>();
@@ -20,7 +27,7 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
   it.each(["cooperative", "ignoring", "grouped", "natural", "closed", "late"])(
     "reaps the leader and terminates %s descendants",
     async (mode) => {
-      const dir = mkdtempSync(join(tmpdir(), "pi-subagent-tree-"));
+      const dir = mkdtempSync(join(tmpdir(), "pi-background-tree-"));
       const errors: Error[] = [];
       const managed = launchManaged({
         command: process.execPath,
@@ -65,7 +72,7 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
   );
 
   it("cleans actual Pi print-mode bash and its separately grouped grandchild", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "pi-subagent-host-"));
+    const dir = mkdtempSync(join(tmpdir(), "pi-background-host-"));
     const cli = fileURLToPath(
       new URL("./cli.js", import.meta.resolve("@earendil-works/pi-coding-agent")),
     );
@@ -132,7 +139,7 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
   }, 15_000);
 
   it("actual Pi parent shutdown awaits this extension's background Pi/bash cleanup", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "pi-subagent-parent-shutdown-"));
+    const dir = mkdtempSync(join(tmpdir(), "pi-background-parent-shutdown-"));
     const config = join(dir, "config");
     const cli = fileURLToPath(
       new URL("./cli.js", import.meta.resolve("@earendil-works/pi-coding-agent")),
@@ -142,6 +149,7 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
     mkdirSync(config);
     writeFileSync(join(config, "settings.json"), JSON.stringify({ extensions: [provider] }));
     let diagnostics = "";
+    let output = "";
     const managed = launchManaged({
       command: process.execPath,
       args: [
@@ -175,7 +183,9 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
         BACKGROUND_PARENT_COMMAND: `'${process.execPath}' '${cli}' --mode json -p --no-session --no-extensions -e '${provider}' --no-skills --no-prompt-templates --no-context-files --no-themes --offline --model subagent-fixture/local --tools bash 'Run the deterministic fixture.'`,
         SUBAGENT_FIXTURE_COMMAND: `'${process.execPath}' '${fixture}' '${dir}' grouped`,
       },
-      stdout: () => {},
+      stdout: (chunk) => {
+        output += chunk.toString();
+      },
       stderr(chunk) {
         diagnostics += chunk.toString();
       },
@@ -185,7 +195,16 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
     let timer: NodeJS.Timeout | undefined;
     try {
       await managed.spawned;
-      await waitFor(() => records(dir).length >= 3).catch((error) => {
+      await waitFor(
+        () => toolStarted(output, "background"),
+        () => jsonEvents(output).length,
+      ).catch((error) => {
+        throw new Error(`${error.message}\n${diagnostics}`);
+      });
+      await waitFor(
+        () => records(dir).length >= 3,
+        () => records(dir).length,
+      ).catch((error) => {
         throw new Error(`${error.message}\n${diagnostics}`);
       });
       const started = Date.now();
@@ -261,10 +280,14 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
     },
   );
 
-  it.each(["EACCES", "EIO"])(
-    "reports %s inspection failure, retains ownership, and permits retry",
-    async (code) => {
-      const dir = mkdtempSync(join(tmpdir(), "pi-subagent-query-failure-"));
+  // The leader's first stat read is the table scan; the second is the identity check before TERM.
+  it.each([
+    { code: "EACCES", stage: "pre-signal identity check", failingRead: 2 },
+    { code: "EIO", stage: "process-table scan", failingRead: 1 },
+  ])(
+    "reports $code from the $stage, retains ownership, and permits retry",
+    async ({ code, failingRead }) => {
+      const dir = mkdtempSync(join(tmpdir(), "pi-background-query-failure-"));
       const managed = launchManaged({
         command: process.execPath,
         args: [fixture, dir, "cooperative"],
@@ -276,16 +299,71 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
       try {
         await managed.spawned;
         await waitFor(() => records(dir).length === 2);
-        vi.mocked(readFileSync).mockImplementationOnce(() => {
-          throw Object.assign(new Error("inspection denied"), { code });
+        const original = vi.mocked(readFileSync).getMockImplementation();
+        if (!original) throw new Error("Missing filesystem implementation.");
+        let leaderReads = 0;
+        vi.mocked(readFileSync).mockImplementation((...args) => {
+          if (
+            String(args[0]) === `/proc/${managed.child.pid}/stat` &&
+            ++leaderReads === failingRead
+          ) {
+            throw Object.assign(new Error("inspection denied"), { code });
+          }
+          return original(...args);
         });
         const failed = managed.stop();
-        expect(managed.stop()).toBe(failed);
-        await expect(failed).rejects.toThrow("inspection denied");
+        try {
+          expect(managed.stop()).toBe(failed);
+          await expect(failed).rejects.toThrow("inspection denied");
+        } finally {
+          vi.mocked(readFileSync).mockImplementation(original);
+        }
         expect(records(dir).some(isLive)).toBe(true);
         const retry = managed.stop();
         expect(retry).not.toBe(failed);
         await retry;
+        expect(records(dir).filter(isLive)).toEqual([]);
+      } finally {
+        for (const record of records(dir)) if (isLive(record)) process.kill(record.pid, "SIGKILL");
+        await managed.stop(Date.now()).catch(() => {});
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+    12_000,
+  );
+
+  it.each(["EPERM", "EACCES"])(
+    "skips an unrelated process whose stat fails with %s",
+    async (code) => {
+      const dir = mkdtempSync(join(tmpdir(), "pi-background-hidden-"));
+      const managed = launchManaged({
+        command: process.execPath,
+        args: [fixture, dir, "cooperative"],
+        cwd: dir,
+        stdout: () => {},
+        stderr: () => {},
+        inputError: () => {},
+      });
+      try {
+        await managed.spawned;
+        await waitFor(() => records(dir).length === 2);
+        const original = vi.mocked(readFileSync).getMockImplementation();
+        if (!original) throw new Error("Missing filesystem implementation.");
+        let hiddenReads = 0;
+        // The test runner's parent is always listed in /proc and is unrelated to the fixture.
+        vi.mocked(readFileSync).mockImplementation((...args) => {
+          if (String(args[0]) === `/proc/${process.ppid}/stat`) {
+            ++hiddenReads;
+            throw Object.assign(new Error("hidden process"), { code });
+          }
+          return original(...args);
+        });
+        try {
+          await managed.stop();
+        } finally {
+          vi.mocked(readFileSync).mockImplementation(original);
+        }
+        expect(hiddenReads).toBeGreaterThan(0);
         expect(records(dir).filter(isLive)).toEqual([]);
       } finally {
         for (const record of records(dir)) if (isLive(record)) process.kill(record.pid, "SIGKILL");
@@ -326,5 +404,25 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
     expect(await managed.spawned).toBeInstanceOf(Error);
     expect((await managed.exited).code).toBeNull();
     await managed.stop();
+  });
+});
+
+describe("macOS process query parsing", () => {
+  it("reads a live record and keeps the start time as identity", () => {
+    expect(psTarget("  412     1   412 Ss   Sat Oct 24 23:50:21 2026")).toEqual({
+      pid: 412,
+      ppid: 1,
+      group: 412,
+      identity: "Sat Oct 24 23:50:21 2026",
+      zombie: false,
+    });
+  });
+
+  it("marks a zombie record", () => {
+    expect(psTarget("  913   412   412 Z+   Sat Oct 24 23:51:02 2026").zombie).toBe(true);
+  });
+
+  it("rejects a malformed record", () => {
+    expect(() => psTarget("  913   412 Z+")).toThrow("Invalid process query record.");
   });
 });

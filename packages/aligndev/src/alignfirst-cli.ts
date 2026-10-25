@@ -1,3 +1,4 @@
+import { createCommand, renderCommand } from "@alignfirst/docmap/invocation";
 import { spawnSync } from "node:child_process";
 import { accessSync, constants, existsSync, statSync } from "node:fs";
 import { delimiter, resolve, sep } from "node:path";
@@ -23,8 +24,7 @@ export function runAlignfirst(
   });
   if (result.error && isErrnoException(result.error) && result.error.code === "ENOENT") {
     throw new Error(
-      "alignfirst is not installed. Install it globally (`npm install -g alignfirst`), or run " +
-        `aligndev through npx (\`npx -y aligndev\`). ${describeAlignfirst(command, cwd, env)}`,
+      `alignfirst is not installed or its runner is unavailable. Missing executable \`${command[0]}\`. ${missingExecutableRecovery(command)} ${describeAlignfirst(command, cwd, env)}`,
     );
   }
   if (result.error) throw result.error;
@@ -57,12 +57,17 @@ function isSettingsWarning(line: string): boolean {
 }
 
 export function describeAlignfirst(command: string[], cwd: string, env: NodeJS.ProcessEnv): string {
-  const npx = command[0] === "npx";
-  const reason = npx
-    ? "aligndev was launched through npm/npx; npx prefers the project's local alignfirst dependency"
-    : "aligndev runs alignfirst from PATH when launched directly";
-  const facts = [`\`${command.join(" ")}\` (${reason})`];
-  if (!npx) facts.push(describeExecutable(command[0], cwd, env));
+  const runner = ["npx", "bunx", "pnpm", "yarn"].includes(command[0]);
+  const reason =
+    command[0] === "npx"
+      ? "npm/npx package runner; npx prefers the project's local alignfirst dependency"
+      : command[0] === "bunx"
+        ? `Bun package runner${command.includes("--bun") ? "; explicit Bun runtime" : "; entry-point shebang runtime"}`
+        : runner
+          ? `${command[0]} package runner`
+          : "direct executable";
+  const facts = [`\`${renderCommand(createCommand(command[0], command.slice(1)))}\` (${reason})`];
+  if (!runner) facts.push(describeExecutable(command[0], cwd, env));
   const version = spawnSync(command[0], [...command.slice(1), "--version"], {
     cwd,
     env,
@@ -76,6 +81,16 @@ export function describeAlignfirst(command: string[], cwd: string, env: NodeJS.P
   const entry = process.argv[1] === undefined ? "" : ` at ${process.argv[1]}`;
   facts.push(`aligndev ${readPackageVersion()}${entry}`);
   return `alignfirst: ${facts.join("; ")}`.replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, " ");
+}
+
+function missingExecutableRecovery(command: string[]): string {
+  if (command[0] === "bunx") {
+    return "Install Bun and make bunx available on PATH, then relaunch with `bunx --bun aligndev`.";
+  }
+  if (command[0] === "alignfirst") {
+    return "Install alignfirst on PATH, or relaunch with `npx -y aligndev`.";
+  }
+  return `Make the selected runner or executable available, then retry \`${renderCommand(createCommand(command[0], command.slice(1)))}\`.`;
 }
 
 function describeExecutable(command: string, cwd: string, env: NodeJS.ProcessEnv): string {

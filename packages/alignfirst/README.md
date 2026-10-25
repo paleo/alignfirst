@@ -6,6 +6,12 @@ See the [product page](https://alignfirst.paroi.tech/skills) for a demonstration
 
 Supported systems: Linux and macOS, and Windows through WSL.
 
+## CLI runtimes
+
+Use Node.js 22.11 or later with `npx -y alignfirst context`, or Bun with `bunx --bun alignfirst context` (`bun x --bun` is equivalent). Bun 1.4.4 is the tested baseline; older releases are not all compatible. Published bins retain Node shebangs, so ordinary `bunx alignfirst` normally runs Node when it is installed. Bun-only hosts should explicitly select `--bun`.
+
+Direct `bun <installed-entry.mjs>` and transparent project scripts launched with `bun --bun run <script>` also preserve Bun in follow-up commands. npm scripts retain their `--` argument separator. Embedded docmap follows the enclosing AlignFirst command, including custom or companion documentation roots. Git and external tools retain their own prerequisites.
+
 ## Agent skills
 
 Nine Agent Skill stubs expose the CLI as commands in Claude Code, Codex, GitHub Copilot, and Cursor. Install them globally:

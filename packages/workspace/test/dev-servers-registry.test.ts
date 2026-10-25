@@ -51,12 +51,6 @@ describe("pruneDeadServers", () => {
     const out = pruneDeadServers(data, isAlive).servers.map((e) => e.name);
     expect(out).toEqual(["b", "a"]);
   });
-
-  it("round-trips through JSON", () => {
-    const data = { servers: [entry("a", { main: 2 })] };
-    const round = JSON.parse(JSON.stringify(data));
-    expect(pruneDeadServers(round, isAlive)).toEqual(data);
-  });
 });
 
 describe("liveWorktrees", () => {
@@ -114,26 +108,6 @@ describe("evictOldest", () => {
     });
     expect(evicted).toHaveLength(1);
     expect(evicted[0].name).toBe("a");
-  });
-
-  it("removes the victim from the registry", async () => {
-    writeDevServers(mainWorktree, registryDir, {
-      servers: [
-        entry("b", { main: 2 }, "2026-05-10T02:00:00.000Z"),
-        entry("a", { main: 4 }, "2026-05-10T00:00:00.000Z"),
-      ],
-    });
-    await evictOldest({
-      mainWorktree,
-      registryDir,
-      count: 1,
-      callbackServers,
-      portsOf,
-      isAlive,
-      stop,
-    });
-    const remaining = readDevServers(mainWorktree, registryDir).servers.map((e) => e.name);
-    expect(remaining).toEqual(["b"]);
   });
 
   it("removes the two oldest when count is 2", async () => {

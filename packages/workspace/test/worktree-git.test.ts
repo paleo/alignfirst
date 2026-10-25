@@ -67,7 +67,9 @@ describe("createBranch conflicts", () => {
   it("throws on an ancestor conflict even with --dedupe", () => {
     git(["branch", "test"]);
     expect(() => createBranch("test/abc", ctx, run, { dedupe: true })).toThrow(WorkspaceError);
-    expect(() => createBranch("test/abc", ctx, run, { dedupe: true })).toThrow(/test/);
+    expect(() => createBranch("test/abc", ctx, run, { dedupe: true })).toThrow(
+      'conflicts with existing branch "test"',
+    );
   });
 
   it("keeps branch and directory aligned when a candidate directory is taken", () => {

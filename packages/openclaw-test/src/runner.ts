@@ -27,6 +27,7 @@ import type {
   ScenarioReport,
 } from "./report.js";
 import { parseArgs, type RunnerArgs } from "./runner-args.js";
+import { WEBCHAT_SURFACE } from "./webchat.js";
 
 const ARTIFACTS_ROOT = process.env.OPENCLAW_TEST_ARTIFACTS_DIR ?? "/opt/openclaw-test/artifacts";
 const SCENARIOS_ROOT =
@@ -64,17 +65,20 @@ async function runCell(args: RunnerArgs): Promise<number> {
       isScenarioEnded: () => internals.isScenarioEnded(),
     });
 
-    const initialCursor = await ctx.getCursor();
-    const subscription = startOutboundSubscription({
-      accountId,
-      conversationId,
-      initialCursor,
-      onMessage: internals.emitOutboundReceived,
-    });
+    // The webchat driver records replies itself; no channel plugin posts to the bus.
+    const subscription =
+      args.channel === WEBCHAT_SURFACE
+        ? undefined
+        : startOutboundSubscription({
+            accountId,
+            conversationId,
+            initialCursor: await ctx.getCursor(),
+            onMessage: internals.emitOutboundReceived,
+          });
 
     const { failure } = await executeScenario(args.scenario, ctx);
 
-    await subscription.stop();
+    await subscription?.stop();
     await mockCliServer.release();
 
     const finishedAtMs = Date.now();
@@ -83,8 +87,9 @@ async function runCell(args: RunnerArgs): Promise<number> {
 
     const { entries, judgeUsages, result } = internals.finalize({ failure });
 
-    await waitForTranscriptQuiescence({ conversationId, startedAtIso });
-    const snapshot = await fetchTranscriptSnapshot({ conversationId, startedAtIso });
+    const transcriptScope = { conversationId, startedAtIso, sessionKeys: internals.sessionKeys() };
+    await waitForTranscriptQuiescence(transcriptScope);
+    const snapshot = await fetchTranscriptSnapshot(transcriptScope);
     const { cost: agentCostUsd, turns: agentTurns } = readTranscriptCost(snapshot);
     const judgeUsd = judgeUsages.reduce((sum, u) => sum + judgeCostUsd(u), 0);
 

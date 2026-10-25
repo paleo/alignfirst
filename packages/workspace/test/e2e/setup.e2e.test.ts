@@ -1,11 +1,13 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import type { WorkspaceEntry } from "../../src/workspaces.js";
 import {
+  cliExecutable,
+  cliRuntime,
   createFixtureRepo,
   DEV_PORTS,
   type FixtureOptions,
@@ -26,13 +28,88 @@ beforeAll(() => {
   buildIfStale();
 }, 120_000);
 
-afterEach(() => {
+afterEach(async () => {
   for (const root of createdRoots.splice(0)) {
+    const repo = join(root, "fixrepo");
+    if (existsSync(registryFile(repo))) {
+      for (const entry of Object.values(readWorkspaces(repo).workspaces)) {
+        if (entry.status === "pending") runCli(repo, ["wait", entry.worktree]);
+      }
+    }
+    const log = join(repo, "finalize-pids.jsonl");
+    if (existsSync(log)) {
+      for (const pid of readFileSync(log, "utf-8").trim().split("\n").map(Number)) {
+        const deadline = Date.now() + 10_000;
+        while (isAlive(pid)) {
+          if (Date.now() > deadline) throw new Error(`Finalizer ${pid} did not exit`);
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+      }
+    }
     rmSync(root, { recursive: true, force: true });
   }
 });
 
 describe("workspace setup (e2e)", () => {
+  // The custom name `ws` tells a verified script apart from the default `workspace` fallback.
+  it("keeps a verified custom-named project script in the guide despite an npm lockfile", () => {
+    const { repo } = fixture();
+    const runtime = cliRuntime.bun === undefined ? "node" : "bun";
+    writeFileSync(
+      join(repo, "package.json"),
+      JSON.stringify({
+        scripts: {
+          ws: `${runtime} scripts/workspace.mjs`,
+          dev: `${runtime} scripts/dev-server.mjs`,
+        },
+      }),
+    );
+    writeFileSync(join(repo, "package-lock.json"), "{}");
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      PATH: `${dirname(cliExecutable)}${delimiter}${process.env.PATH}`,
+    };
+    // A new launcher must not inherit the npm test runner's launcher evidence.
+    for (const key of Object.keys(env)) if (key.startsWith("npm_")) delete env[key];
+    const result = spawnSync(
+      cliRuntime.bun === undefined ? "npm" : cliExecutable,
+      cliRuntime.bun === undefined
+        ? ["run", "ws", "--", "--guide"]
+        : ["--bun", "run", "ws", "--guide"],
+      {
+        cwd: repo,
+        encoding: "utf8",
+        timeout: 15_000,
+        env,
+      },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain(
+      cliRuntime.bun === undefined ? "npm run ws -- setup" : "bun --bun run ws setup",
+    );
+    if (cliRuntime.bun !== undefined) expect(result.stdout).not.toContain("npm run");
+  });
+
+  it("uses the actual invocation for workspace/dev unknown-command recovery and help", () => {
+    const { repo } = fixture();
+    for (const [name, script, result] of [
+      ["workspace", "workspace.mjs", runCli(repo, ["unknown"])],
+      ["dev", "dev-server.mjs", runDev(repo, ["unknown"])],
+    ] as const) {
+      expect(result.status, result.stderr).toBe(1);
+      if (cliRuntime.bun !== undefined) {
+        expect(result.stderr).toContain(
+          `${cliRuntime.executable} ${join(repo, "scripts", script)} --help`,
+        );
+        expect(result.stdout).toContain(`Usage: ${cliRuntime.executable}`);
+        expect(result.stdout + result.stderr).not.toContain("npm run");
+      } else {
+        expect(result.stderr).toContain(`npm run ${name} -- --help`);
+        expect(result.stdout).toContain(`Usage: npm run ${name} --`);
+      }
+    }
+  });
+
   it(
     "blocking setup reaches READY and prints no background message",
     () => {
@@ -452,7 +529,11 @@ describe("workspace setup --full (e2e)", () => {
       const result = runCli(repo, ["setup", "-c", "feat-fail", "--full"], failing);
       expect(result.status).toBe(1);
       expect(result.stderr).toContain(
-        "Workspace ready; dev setup failed: e2e dev boom. Run `npm run dev -- setup` to retry.",
+        `Workspace ready; dev setup failed: e2e dev boom. Run \`${
+          cliRuntime.bun === undefined
+            ? "npm run dev -- setup"
+            : `${cliRuntime.executable} ${join(repo, "scripts", "dev-server.mjs")} setup`
+        }\` to retry.`,
       );
       const entry = entryFor(repo, "fixrepo-feat-fail");
       expect(entry.status).toBe("ready");

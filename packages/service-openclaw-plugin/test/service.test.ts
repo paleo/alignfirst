@@ -123,7 +123,7 @@ describe("handoff turn start and recovery", () => {
       expect(fixture.store.findHandoffByRoute(record.routeKey)?.lastAttemptedAt).toBe(101_000),
     );
     expect(fixture.logger.warn).toHaveBeenCalledWith(
-      "thread-handoff handoff-1 start attempt 1 failed: dispatch refused",
+      expect.stringMatching(/handoff-1.*dispatch refused/),
     );
     await fixture.service.stop();
     fixture.store.close();

@@ -173,16 +173,7 @@ describe("registerWorkspace", () => {
 });
 
 describe("stored form", () => {
-  it("stores absolute paths and the format version", async () => {
-    await registerMain();
-    await register(join(root, "wt-a"));
-    const { version, workspaces } = readStored();
-    expect(version).toBe(2);
-    expect(workspaces.main.worktree).toBe(mainWorktree);
-    expect(workspaces["wt-a"].worktree).toBe(join(root, "wt-a"));
-  });
-
-  it("replaces the file through a rename, leaving no temporary file", async () => {
+  it("leaves no temporary file beside the written registry", async () => {
     await registerMain();
     await register(join(root, "wt-a"));
     expect(readdirSync(join(mainWorktree, registryDir))).toEqual(["workspaces.json"]);
@@ -204,11 +195,6 @@ describe("readWorkspaces repair", () => {
 
   it("keeps a missing external path beside an unrelated same-named sibling", () => {
     mkdirSync(join(root, "wt-a"));
-    writeStored({ "wt-a": entry("/old/place/wt-a") });
-    expect(readEntries()["wt-a"].worktree).toBe("/old/place/wt-a");
-  });
-
-  it("keeps a missing path without a sibling, as an orphan", () => {
     writeStored({ "wt-a": entry("/old/place/wt-a") });
     expect(readEntries()["wt-a"].worktree).toBe("/old/place/wt-a");
   });

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -263,6 +263,44 @@ export async function waitFor(check: () => boolean, deadlineMs = 5000): Promise<
   while (!check()) {
     if (Date.now() > deadline) throw new Error("Fixture watchdog expired.");
     await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+export function readPidFile(path: string): Promise<number> {
+  return pollFile(path, (content) => {
+    const pid = content.trim();
+    return /^\d+$/.test(pid) && Number(pid) > 0 ? Number(pid) : undefined;
+  });
+}
+
+export function readJsonFile(path: string): Promise<unknown> {
+  return pollFile(path, (content) => {
+    try {
+      return JSON.parse(content);
+    } catch {
+      return;
+    }
+  });
+}
+
+// Polls until the file exists and its content parses; a writer may create it before writing.
+async function pollFile<T>(path: string, parse: (content: string) => T | undefined): Promise<T> {
+  let value: T | undefined;
+  await waitFor(() => {
+    const content = readIfPresent(path);
+    value = content === undefined ? undefined : parse(content);
+    return value !== undefined;
+  });
+  if (value === undefined) throw new Error(`Missing file content: ${path}`);
+  return value;
+}
+
+function readIfPresent(path: string): string | undefined {
+  try {
+    return readFileSync(path, "utf8");
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
+    throw error;
   }
 }
 

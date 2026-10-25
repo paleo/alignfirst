@@ -58,45 +58,52 @@ writeFileSync(process.env.RECORD, JSON.stringify({
   });
 });
 
-for (const [label, mutate] of [
+for (const [label, refusal, mutate] of [
   [
     "wrong version",
+    /differs from the reviewed pin/u,
     (value) => {
       value.version = "1.3.1";
     },
   ],
   [
     "wrong package",
+    /differs from the reviewed pin/u,
     (value) => {
       value.name = "other-package";
     },
   ],
   [
     "missing bin",
+    /relative bin\.pi entry/u,
     (value) => {
       delete value.bin;
     },
   ],
   [
     "absolute bin",
+    /relative bin\.pi entry/u,
     (value) => {
       value.bin.pi = "/tmp/cli.js";
     },
   ],
   [
     "escaping bin",
+    /escapes its package/u,
     (value) => {
       value.bin.pi = "../../cli.js";
     },
   ],
   [
     "missing entry",
+    /ENOENT.*missing\.js/u,
     (value) => {
       value.bin.pi = "missing.js";
     },
   ],
   [
     "unknown engine range",
+    /Cannot verify Pi's Node requirement/u,
     (value) => {
       value.engines.node = "^22 || ^24";
     },
@@ -108,7 +115,7 @@ for (const [label, mutate] of [
       const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
       mutate(manifest);
       writeFileSync(join(root, "package.json"), JSON.stringify(manifest));
-      assert.throws(() => renderPiLauncher(root, "1.3.0", "26.0.0"));
+      assert.throws(() => renderPiLauncher(root, "1.3.0", "26.0.0"), refusal);
     });
   });
 }
@@ -138,8 +145,9 @@ test("production generator refuses unprotected or out-of-prefix packages without
 test("launcher checks both Pi and extension Node floors, including a newer package requirement", () => {
   withFixture((fixture) => {
     const root = fakePackage(fixture);
-    for (const version of ["20.19.0", "22.18.9", "22.19.0-rc.1"])
-      assert.throws(() => renderPiLauncher(root, "1.3.0", version));
+    for (const version of ["20.19.0", "22.18.9"])
+      assert.throws(() => renderPiLauncher(root, "1.3.0", version), /unsupported/u);
+    assert.throws(() => renderPiLauncher(root, "1.3.0", "22.19.0-rc.1"), /Cannot verify/u);
     for (const version of ["22.19.0", "24.0.0", "26.0.0"])
       assert.match(renderPiLauncher(root, "1.3.0", version), /exec \/usr\/bin\/node /u);
     const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
@@ -293,10 +301,7 @@ writeFileSync(process.env.PARENT_RECORD, JSON.stringify({runtime:process.execPat
   });
 });
 
-test("installer and checker syntax is valid without running privileged installation", () => {
-  for (const name of ["install-pi-launcher.sh", "check-project-runtimes.sh"])
-    execFileSync("/bin/bash", ["-n", join(runtime, name)]);
-  execFileSync(process.execPath, ["--check", join(runtime, "pi-launcher.mjs")]);
+test("installer generates the launcher with system Node and installs it root-owned, without fnm", () => {
   const installer = readFileSync(join(runtime, "install-pi-launcher.sh"), "utf8");
   assert.match(installer, /install -o root -g root -m 755/u);
   assert.match(

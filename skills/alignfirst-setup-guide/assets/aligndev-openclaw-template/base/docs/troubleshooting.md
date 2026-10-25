@@ -1,7 +1,7 @@
 ---
 title: Troubleshooting
 read_when:
-  - the gateway, a channel, the project routing or a delegation fails
+  - the gateway, a channel, an app, the project routing or a delegation fails
 ---
 
 # Troubleshooting
@@ -104,6 +104,15 @@ sudo journalctl _SYSTEMD_USER_UNIT=openclaw-gateway.service --since today --no-p
 ```
 
 See [gotchas.md](gotchas.md#when-the-bot-may-stay-silent).
+
+## App conversations
+
+Setup and pairing: [use-the-apps.md](operations/use-the-apps.md).
+
+- **The Serve URL times out from a team device** while `tailscale serve status` shows the route: the tailnet policy lacks the TCP 443 grant to the server.
+- **A device connects but gets no answer** (`pairing required`): its request is pending. Approve it with `openclaw devices list` and `openclaw devices approve <request-id>`.
+- **The Control UI reports `origin not allowed`**: the browser loaded it from an origin other than the Serve URL or the tunnel. Use the `https://…ts.net` URL; a different origin needs an entry in `gateway.controlUi.allowedOrigins`, set in `seed/common.sh`.
+- **A conversation does not find its project**: it started on a folder that is not a listed project, or on the agent workspace with a request naming none. The assistant then resolves the request against the project inventory; check the project with `aligndev project list` as under "Project routing".
 
 ## Incidents
 

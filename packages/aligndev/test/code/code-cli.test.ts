@@ -124,7 +124,7 @@ describe("coding-agent selection", () => {
     expect(stdout.text()).toContain("code.profile          Global named profile");
     expect(stdout.text()).toContain("(selected: codex)");
     expect(stdout.text()).toContain("astra, sol, terra, luna");
-    expect(stdout.text()).toContain("aligndev guide code");
+    expect(stdout.text()).toContain("See the `code` topic of `aligndev guide`");
     expect(stdout.text()).toContain("--quiet");
     expect(stdout.text()).toContain("--result");
     expect(stdout.text()).toContain("host owns background execution and completion delivery");
@@ -850,18 +850,15 @@ describe("resolveTicket", () => {
   });
 
   it("resume inherits the latest run's ticket, including null", () => {
+    const resume = parse(["resume", "abc", "--message", "m"]);
     const records = [
       record({ ticket: "30", startedAt: "2026-07-01T09:00:00.000Z" }),
       record({ ticket: "31", startedAt: "2026-07-01T10:00:00.000Z" }),
-      record({ ticket: null, startedAt: "2026-07-01T11:00:00.000Z" }),
       record({ ticket: "99", sessionId: "other", startedAt: "2026-07-01T12:00:00.000Z" }),
     ];
-    expect(resolveTicket(parse(["resume", "abc", "--message", "m"]), records)).toBeUndefined();
-  });
-
-  it("resume without any ticketed record yields no ticket", () => {
-    const records = [record({ ticket: null })];
-    expect(resolveTicket(parse(["resume", "abc", "--message", "m"]), records)).toBeUndefined();
+    expect(resolveTicket(resume, records)).toBe("31");
+    const unticketed = record({ ticket: null, startedAt: "2026-07-01T11:00:00.000Z" });
+    expect(resolveTicket(resume, [...records, unticketed])).toBeUndefined();
   });
 
   it("infers the ticket from a .plans/<ticket>/ path in the message", () => {
@@ -915,7 +912,7 @@ describe("buildRunConfig", () => {
     const config = build({
       code: { ...CODE, skipPermissions: true, unset: ["X", "Y"], childEnv: env },
     });
-    expect(config.env).toBe(env);
+    expect(config.env).toEqual(env);
     expect(config.executableModel).toBeUndefined();
     expect(config.skipPermissions).toBe(true);
     expect(config.resume).toBeUndefined();
@@ -1472,12 +1469,10 @@ describe("companion projects", () => {
 
     const gated = await run(project, ["new", "-m", "go"]);
     expect(gated.code).toBe(1);
-    expect(gated.stderr).toBe(
-      `No .plans/ directory at ${plans} (companion).\n` +
-        `Local work files:  mkdir -p ${plans}\n` +
-        "Team work files:   alignfirst plans setup <clone-dir>\n" +
-        "See `aligndev guide work-files-setup` for authorized preparation.\n",
-    );
+    expect(gated.stderr).toContain(`No .plans/ directory at ${plans} (companion).`);
+    expect(gated.stderr).toContain(`mkdir -p ${plans}`);
+    expect(gated.stderr).toContain("alignfirst plans setup <clone-dir>");
+    expect(gated.stderr).toContain("`work-files-setup` topic of `aligndev guide`");
 
     mkdirSync(plans, { recursive: true });
     const started = await run(project, ["new", "-m", "go"]);

@@ -41,7 +41,7 @@ import { formatDuration, setupLogPath, setupProgressPath } from "./helpers.js";
 import { followLogFile, LOG_TAIL_LINES, replayTail } from "./log-polling.js";
 import { refuseOldRegistry, runMigrate } from "./migrate.js";
 import { findOrphanNames } from "./orphans.js";
-import { devCmd, wsCmd } from "./package-manager.js";
+import { configureCommands, devCmd, wsCmd } from "./package-manager.js";
 import { formatPorts } from "./ports.js";
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
 import {
@@ -201,6 +201,7 @@ interface Kernel {
 }
 
 export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
+  configureCommands({ workspace: config.workspaceScript, dev: config.devServerScript });
   let command: WorkspaceCommand;
   let verbose: boolean;
   try {

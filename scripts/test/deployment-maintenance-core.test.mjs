@@ -58,42 +58,52 @@ test("core inventory includes every coding/quota store and resolves deployed rel
 test("core refuses symlinks, hardlinks, overlaps, ambiguous environment and discovery globs", () => {
   fixture((f) => {
     const original = structuredClone(f.settings);
-    for (const profile of [
-      { agent: "pi", configDir: "~/.pi/agent/nested" },
-      { agent: "codex", configDir: "~/.pi/agent" },
-      { agent: "pi", configDir: "~/projects" },
-      { agent: "pi", configDir: "/tmp/external-store" },
-      { agent: "pi", configDir: "~/.pi/agent", env: { PI_CODING_AGENT_DIR: "elsewhere" } },
-      { agent: "pi", configDir: "~/.pi/agent", env: { HOME: "/elsewhere" } },
-      { agent: "pi", configDir: "~/.pi/agent", quota: { source: "codex" } },
-      { agent: "pi", configDir: " ~/.pi/agent " },
-      { agent: "pi", configDir: pathToFileURL(f.native).href },
+    const ambiguous = /Ambiguous native resource path/u;
+    for (const [profile, diagnostic] of [
+      [{ agent: "pi", configDir: "~/.pi/agent/nested" }, /Overlapping native stores/u],
+      [{ agent: "codex", configDir: "~/.pi/agent" }, /Different agents cannot share/u],
+      [{ agent: "pi", configDir: "~/projects" }, /isolated beneath the service home/u],
+      [{ agent: "pi", configDir: "/tmp/external-store" }, /isolated beneath the service home/u],
+      [
+        { agent: "pi", configDir: "~/.pi/agent", env: { PI_CODING_AGENT_DIR: "elsewhere" } },
+        /env\/unset conflicts with explicit configDir/u,
+      ],
+      [
+        { agent: "pi", configDir: "~/.pi/agent", env: { HOME: "/elsewhere" } },
+        /forbids HOME overrides/u,
+      ],
+      [
+        { agent: "pi", configDir: "~/.pi/agent", quota: { source: "codex" } },
+        /quota store needs an explicit null\/string configDir/u,
+      ],
+      [{ agent: "pi", configDir: " ~/.pi/agent " }, ambiguous],
+      [{ agent: "pi", configDir: pathToFileURL(f.native).href }, ambiguous],
     ]) {
       f.settings.code.profiles.bad = profile;
       f.save();
-      assert.notEqual(f.call("validate").status, 0);
+      assertRefused(f, diagnostic);
     }
     f.settings = original;
     f.save();
     mkdirSync(dirname(f.native), { recursive: true });
     symlinkSync(join(f.root, "elsewhere"), f.native);
-    assert.notEqual(f.call("validate").status, 0);
+    assertRefused(f, /Refusing symlink: .*\/\.pi\/agent$/mu);
     rmSync(f.native);
     mkdirSync(join(f.native, "extensions"), { recursive: true });
     symlinkSync(join(f.root, "elsewhere"), join(f.native, "extensions/escape"));
-    assert.notEqual(f.call("validate").status, 0);
+    assertRefused(f, /Refusing symlink: .*\/extensions\/escape$/mu);
     rmSync(join(f.native, "extensions/escape"));
     writeFileSync(join(f.native, "settings.json"), JSON.stringify({ extensions: ["../*.js"] }));
-    assert.notEqual(f.call("validate").status, 0);
+    assertRefused(f, /instead of globs/u);
     writeFileSync(join(f.native, "settings.json"), "{}");
     linkSync(join(f.native, "settings.json"), join(f.native, "models.json"));
-    assert.notEqual(f.call("validate").status, 0);
+    assertRefused(f, /Refusing hard-linked file: .*\/models\.json$/mu);
     rmSync(join(f.native, "models.json"));
     writeFileSync(
       join(f.native, "extensions/package.json"),
       JSON.stringify({ pi: { extensions: ["../../outside.js"] } }),
     );
-    assert.notEqual(f.call("validate").status, 0);
+    assertRefused(f, /must stay inside their protected package tree/u);
     assert(!existsSync(f.log), "validation must not call privileged commands");
   });
 });
@@ -143,7 +153,9 @@ test("contained npm prefix bin and native package .bin links survive validation,
     const savedLink = join(backup, "store-0/npm/node_modules/.bin/tool");
     rmSync(savedLink);
     symlinkSync(join(f.root, "outside"), savedLink);
-    assert.notEqual(f.call("recover", backup).status, 0);
+    const escapingBackupLink = f.call("recover", backup);
+    assert.notEqual(escapingBackupLink.status, 0);
+    assert.match(escapingBackupLink.stderr, /Package link escapes managed root/u);
     assert(existsSync(marker), "Unsafe backup links must fail before exact replacement begins");
     rmSync(savedLink);
     symlinkSync(join(backup, "store-0/npm/node_modules/tool/cli.js"), savedLink);
@@ -289,12 +301,17 @@ test("native loader accepts padded/file URL resources that deployment rejects be
       });
       assert.equal(native.status, 0, native.stderr);
       assert(JSON.parse(native.stdout).includes(extension), declaration);
-      for (const action of ["prepare", "unlock", "harden", "snapshot", "backup"])
-        assert.notEqual(f.call(action, join(f.root, "must-not-create")).status, 0, action);
+      for (const action of ["prepare", "unlock", "harden", "snapshot", "backup"]) {
+        const refused = f.call(action, join(f.root, "must-not-create"));
+        assert.notEqual(refused.status, 0, action);
+        assert.match(refused.stderr, /Ambiguous native resource path/u, action);
+      }
       assert(!existsSync(join(f.root, "must-not-create")));
       assert(!existsSync(join(f.native, "models.json")), "Refusal must precede prepare");
       f.install();
-      assert.notEqual(f.run(["agent-config"]).status, 0);
+      const maintenance = f.run(["agent-config"]);
+      assert.notEqual(maintenance.status, 0);
+      assert.match(maintenance.stderr, /Ambiguous native resource path/u);
       assert.equal(
         f.calls().length,
         0,
@@ -467,10 +484,17 @@ test("native recovery alone tolerates missing declared npm contents and snapshot
     const backup = join(f.root, "npm-recovery-backup");
     assert.equal(f.call("backup", backup).status, 0);
     rmSync(installed, { recursive: true });
-    for (const action of ["validate", "validate-maintenance", "snapshot", "backup"])
-      assert.notEqual(f.call(action, join(f.root, `strict-${action}`)).status, 0);
-    for (const scope of ["agent-config", "config", "skills"])
-      assert.notEqual(f.run([scope]).status, 0);
+    const missingPackages = /Install declared npm packages in the managed agent npm directory/u;
+    for (const action of ["validate", "validate-maintenance", "snapshot", "backup"]) {
+      const refused = f.call(action, join(f.root, `strict-${action}`));
+      assert.notEqual(refused.status, 0, action);
+      assert.match(refused.stderr, missingPackages, action);
+    }
+    for (const scope of ["agent-config", "config", "skills"]) {
+      const refused = f.run([scope]);
+      assert.notEqual(refused.status, 0, scope);
+      assert.match(refused.stderr, missingPackages, scope);
+    }
     assert.equal(f.calls().length, 0, "Normal maintenance must refuse before containment");
     const result = f.recover(backup);
     assert.equal(result.status, 0, result.stderr);
@@ -821,7 +845,9 @@ test("private backup/recovery maps custom stores, sessions, credentials and exec
     assert((statSync(join(f.native, "npm/tool")).mode & 0o100) !== 0);
     mapping.stores[0].destination = join(f.root, "escape");
     writeFileSync(join(backup, "mapping.json"), JSON.stringify(mapping));
-    assert.notEqual(f.call("recover", backup).status, 0);
+    const escaping = f.call("recover", backup);
+    assert.notEqual(escaping.status, 0);
+    assert.match(escaping.stderr, /Backup destination mapping differs/u);
     assert(!existsSync(join(f.root, "escape")));
   });
 });
@@ -834,7 +860,9 @@ test("recovery replaces contents exactly rather than retaining post-backup execu
     writeFileSync(join(local, "original"), "original\n", { mode: 0o755 });
     writeFileSync(join(f.native, "settings.json"), JSON.stringify({ packages: [local] }));
     const overlapping = join(local, "unsafe-backup");
-    assert.notEqual(f.call("backup", overlapping).status, 0);
+    const overlap = f.call("backup", overlapping);
+    assert.notEqual(overlap.status, 0);
+    assert.match(overlap.stderr, /Backup overlaps a native store or managed resource/u);
     assert(
       !existsSync(overlapping),
       "Reject overlapping external resources before creating a backup",
@@ -861,7 +889,9 @@ test("recovery replaces contents exactly rather than retaining post-backup execu
     const manifest = JSON.parse(readFileSync(join(backup, "mapping.json"), "utf8"));
     manifest.resources.at(-1).destination = join(f.root, "outside");
     writeFileSync(join(backup, "mapping.json"), JSON.stringify(manifest));
-    assert.notEqual(f.call("recover", backup).status, 0);
+    const invalid = f.call("recover", backup);
+    assert.notEqual(invalid.status, 0);
+    assert.match(invalid.stderr, /Invalid external resource mapping/u);
     assert(existsSync(marker), "Validate the complete backup before deleting anything");
   });
 });
@@ -956,6 +986,13 @@ test("pinned native Pi loader keeps empty system files neutral and normal auth/l
     assert.equal(cli.status, 0, cli.stderr);
   });
 });
+
+// Each case must reach its own guard, not an earlier refusal left over from a previous case.
+function assertRefused(f, diagnostic) {
+  const result = f.call("validate");
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, diagnostic);
+}
 
 function fixture(callback) {
   const root = mkdtempSync(join(tmpdir(), "deployment-core-"));

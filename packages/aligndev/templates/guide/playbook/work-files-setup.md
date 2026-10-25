@@ -8,7 +8,7 @@ For explicit companion-only onboarding, start at section 3 under the onboarding 
 
 Run `{{ALIGNFIRST}} plans check --json` from PROJECT_PATH. It reads the effective `.plans` location from `{{ALIGNFIRST}} config --json`, where explicit `project` or `companion` selections win and, under `auto`, an existing companion copy wins over an existing project copy; when neither exists, a registered companion is the creation target. The check passes when that location is a usable directory with no file tracked by this project's own repository, through a tracked symlink, mixed tracked/untracked contents, or an alias into tracked files included. A separate work-files repository may track its contents, and an unused tracked project `.plans` is not a blocker when a usable companion is effective.
 
-If `--json` is rejected, the selected AlignFirst CLI needs upgrading alongside AlignDev. With `npx`, check the project's local `alignfirst` dependency, which takes precedence over the cached or global CLI. Retry the JSON check after upgrading; do not substitute a plain-text check.
+If `--json` is rejected, the selected AlignFirst CLI needs upgrading alongside AlignDev. Check the AlignFirst installation selected by `{{ALIGNFIRST}}`. For npm/npx, check the project's local `alignfirst` dependency first. Retry the JSON check after upgrading; do not substitute a plain-text check.
 
 When an existing linked worktree is selected, run the command there too: it also requires the same effective target as the main worktree. A different location is an error: do not create a second history or repair links silently.
 

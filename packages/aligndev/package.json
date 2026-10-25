@@ -45,6 +45,9 @@
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts"
   },
+  "dependencies": {
+    "@alignfirst/docmap": "~0.11.2"
+  },
   "devDependencies": {
     "@types/node": "~26.6.5",
     "rimraf": "~6.1.3",

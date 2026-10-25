@@ -1,4 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import { lstatSync, realpathSync } from "node:fs";
+import { basename, delimiter, join } from "node:path";
 
 import type { Output } from "../output.js";
 import {
@@ -288,13 +290,43 @@ export function buildAgentEnv(
   overrides: Readonly<Record<string, string>> = {},
   required: Readonly<Record<string, string>> = {},
 ): NodeJS.ProcessEnv {
-  const inherited = { ...baseEnv };
+  const inherited = externalProcessBaseline(baseEnv);
   for (const name of unset) delete inherited[name];
   const env = { ...inherited, ...overrides };
   for (const name of ASSISTANT_SESSION_VARIABLES) delete env[name];
   if (env.PI_CODING_AGENT === "true") delete env.PI_CODING_AGENT;
   if (env.AI_AGENT === "pi") delete env.AI_AGENT;
   return { ...env, ...required };
+}
+
+function externalProcessBaseline(baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env = { ...baseEnv };
+  if (env.PATH === undefined) return env;
+  const entries = env.PATH.split(delimiter);
+  const shims = new Set(entries.filter(isBunRuntimeShim));
+  if (shims.size === 0) return env;
+  env.PATH = entries.filter((entry) => !shims.has(entry)).join(delimiter);
+  for (const name of ["NODE", "npm_node_execpath"]) {
+    const value = env[name];
+    if (value !== undefined && shims.has(value)) delete env[name];
+  }
+  return env;
+}
+
+function isBunRuntimeShim(directory: string): boolean {
+  // Forced Bun runners inject a dedicated node/bun symlink pair. A Bun installation or
+  // a directory name alone does not establish a launcher override.
+  if (!/^bun-node-(?:\d+-)?[a-f0-9]+$/.test(basename(directory))) return false;
+  const extension = process.platform === "win32" ? ".exe" : "";
+  const node = join(directory, `node${extension}`);
+  const bun = join(directory, `bun${extension}`);
+  try {
+    if (!lstatSync(node).isSymbolicLink() || !lstatSync(bun).isSymbolicLink()) return false;
+    const target = realpathSync(bun);
+    return /^bunx?(?:\.exe)?$/.test(basename(target)) && realpathSync(node) === target;
+  } catch {
+    return false;
+  }
 }
 
 function guardChildLifecycle(

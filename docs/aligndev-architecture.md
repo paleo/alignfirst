@@ -5,7 +5,7 @@ read_when:
   - onboarding to the aligndev codebase
   - changing how `aligndev code` launches, tracks or terminates a coding agent
   - changing session files, `aligndev code status` or the `_aligndev` location
-  - changing lightweight worktree creation, inventory or removal
+  - changing lightweight worktree creation, setup, inventory or removal
   - changing the project inventory, its marker or port claims
   - adding a coding agent
 ---
@@ -21,17 +21,29 @@ read_when:
 | `src/cli.ts` | Entry point: dispatches commands and loads settings; creates command-scoped model discovery. |
 | `src/config.ts` | `~/.alignfirst/aligndev.settings.json`: tolerant settings, reference validation, effective selection and child environment. |
 | `src/code/` | `aligndev code`: arguments, prompt, run, session file, adapters, models, quota. |
-| `src/guide/` | `aligndev guide`: topics, the template renderer, and the project's guide file (`guide-file.ts`). |
+| `src/guide/` | `aligndev guide [--channel <surface>]`: topics by context, the template renderer, and the project's guide file (`guide-file.ts`). |
 | `src/project/` | `aligndev project`: discovery, markers, status, port allocation; AlignFirst report parsing and work-files gate calls. |
-| `src/worktree/` | Lightweight Git-backed worktree inventory, add, directory policy and non-force removal. |
-| `templates/guide/` | The playbook and guides, rendered per platform. |
+| `src/worktree/` | Git-backed worktree inventory, add/setup preparation, directory policy and non-force removal. |
+| `templates/guide/` | The dispatcher, the playbook and the guides, rendered per platform and surface. |
 
-Templates use `{{ALIGNDEV}}`, `{{ALIGNFIRST}}` placeholders for the command forms. Under `npx`, both commands print as `npx -y …`. Variants sit in blocks, each marker alone on its line:
+Templates use `{{ALIGNDEV}}`, `{{ALIGNFIRST}}` placeholders for rendered command forms. `src/command-form.ts` resolves invocation once through `@alignfirst/docmap/invocation`, separating launcher (`direct`, `packageRunner`, `projectScript`) from actual runtime (`node`, `bun`). Explicit runner evidence wins over lockfiles; a project script requires manifest, entry-point and immediate-parent agreement. User-agent metadata alone does not prove either a script or a runtime.
+
+Under npm/npx, counterpart commands use `npx -y alignfirst`; under Bun runtime they use `bunx --bun alignfirst`. Verified scripts are retained only for self follow-ups. Direct Bun entry launches also produce explicit Bun package-runner commands. Published bins keep Node shebangs, so ordinary `bunx` normally uses Node when it is installed. No automatic runtime re-execution occurs.
+
+`src/alignfirst-cli.ts` spawns the structured executable and fixed argv plus operation arguments, never split rendered text. This covers config reports, plans checks, ticket open/reservation/catchup, companion context and diagnostic `--version` probes. Missing/outdated-report diagnostics describe the selected runner, explicit Bun runtime when applicable, and direct executable resolution. Delegated prompts use the same counterpart selection; the native coding agent keeps its own executable policy and prerequisites.
+
+A render has a platform, a surface under `openclaw` (`--channel slack|discord|app`), and a guide-file condition under `codingAgent`. Without a topic, `aligndev guide` prints the dispatcher, the only `openclaw` render without a surface. `code` without `--channel` renders the `app` surface, for operators who validate profiles outside any session. `--channel` alone prints the surface's playbook. The entry topics, `working-session` and `channel-handling`, print the playbook first. The topics are keyed by context: `thread` (Slack and Discord), `app`, `codingAgent`. `{{GUIDE}}` renders as `aligndev guide --channel <surface>` or `aligndev guide`, so every later guide call keeps the surface.
+
+Variants sit in blocks, each marker alone on its line. A block names a fact, and a line is kept when every block around it holds:
 
 - A platform block, `{{#openclaw}}` or `{{#codingAgent}}`, sits at the top level.
-- A condition block, `{{#developers}}`, `{{#readme}}`, `{{#noGuide}}` or `{{#hasGuide}}` (both guide files), sits directly inside a `{{#codingAgent}}` block and holds text only.
+- A surface block, `{{#slack}}`, `{{#discord}}` or `{{#app}}`, and `{{#thread}}` never sit inside a `{{#codingAgent}}` block.
+- `{{#conversation}}` sits anywhere.
+- A condition block, `{{#developers}}`, `{{#readme}}`, `{{#noGuide}}` or `{{#hasGuide}}` (both guide files), sits inside a `{{#codingAgent}}` block, at any depth.
 
-The condition names the project's guide file for the assistant. Under `codingAgent`, `aligndev guide` resolves it once per call, before rendering a playbook topic: it runs `alignfirst config --json` in PROJECT_PATH, the main worktree of the working directory, and a report error fails the command. `DEVELOPERS.md` at its reported location gives `developers`; otherwise `README.md` at the root of PROJECT_PATH gives `readme`; otherwise, outside git included, `noGuide`. Ordinary OpenClaw playbooks read no report. The `code` topic reads the report in the actual cwd for project profile selection, independently of the main-worktree guide-file policy.
+`thread` and `conversation` are derived: `thread` holds on Slack and Discord, `conversation` on `app` and under `codingAgent`.
+
+The condition names the project's guide file for the assistant. Under `codingAgent`, `aligndev guide` resolves it once per playbook-topic call: it runs `alignfirst config --json` in PROJECT_PATH, the main worktree of the working directory, and a report error fails the command. `DEVELOPERS.md` at its reported location gives `developers`; otherwise `README.md` at the root of PROJECT_PATH gives `readme`; otherwise, outside git included, `noGuide`. Ordinary OpenClaw playbooks read no report. The `code` topic reads the report in the actual cwd for project profile selection, independently of the main-worktree guide-file policy.
 
 ## Running the Agent
 
@@ -41,13 +53,13 @@ The condition names the project's guide file for the assistant. Under `codingAge
 - Claude Code/Codex parents retain their established background facilities and sandbox elevation. Claude Code wakes the parent on exit; where no completion bridge is configured, Codex uses the next-user-turn status fallback. Pi work does not certify or replace these integrations.
 - A persistent Pi parent uses the generic `background` tool to launch an ordinary quoted CLI command with `--quiet` and a unique per-run `--meta`. The guide owns those flags, not the extension. A notice triggers a handle-ownership check, then exact-file or unique-key `status --result` retrieval from the original worktree. Parent host and child adapter are independent. See [Pi Extensions](pi-extensions.md) for package and native delivery boundaries.
 
-The prompt reaches the agent through stdin. A new session's prompt opens with a run context. It tells the agent that ending its turn kills its subagents and background commands, so it must wait for them first. The effective profile starts with the caller environment, removes its `unset`, applies literal `env` values and the directory selection (set a resolved string or remove the native variable for null), strips parent session identity (`CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`, Pi markers, …), then applies adapter-required values. `buildAgentEnv` owns this order; Claude's background-wait ceiling always wins. The finalized `CodeConfig.childEnv` reaches model discovery, adapter state, spawn and Codex rollout lookup. Caller environments are immutable; run metadata contains no environment snapshot.
+The prompt reaches the agent through stdin. A new session's prompt opens with a run context. It tells the agent that ending its turn kills its subagents and background commands, so it must wait for them first. The effective profile starts with a copy of the caller environment, removes verified forced-Bun launcher shim directories from inherited PATH and their matching runtime metadata, removes its `unset`, then applies literal `env` values and the directory selection (set a resolved string or remove the native variable for null), strips parent session identity (`CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`, Pi markers, …), then applies adapter-required values. `buildAgentEnv` owns this order; Claude's background-wait ceiling always wins. Ordinary Bun installations and explicit profile PATH overrides remain intact. This external-process baseline also applies to explicit quota sources; owned AlignFirst calls retain the original caller environment and explicit Bun runner. The finalized `CodeConfig.childEnv` reaches model discovery, adapter state, spawn and Codex rollout lookup. Caller environments are immutable; run metadata contains no environment snapshot.
 
 ### Session File
 
 The session file is the durable handoff of a run. Its frontmatter holds `profile` (named selection or null), `agent`, the user-facing `model`, `sessionId`, `status` (`running`, then `succeeded` or `failed`) and an optional `exitReason`; a `---- Result ----` block closes it. The block lists every completed response oldest first, separated by `---- Later result ----`. Each non-empty Claude `result` and each Pi assistant message ending with `stop` counts as a response. Earlier responses also precede failure or termination text. The completion turn finds it with `aligndev code status`. A response containing `---- Result ----` on its own line can be truncated by status because the legacy format also uses that line as its boundary. Fixing this ambiguity requires unambiguous payload framing with legacy-file support; it remains a follow-up limitation. String metadata containing control characters is JSON-quoted on one physical line, preserving embedded newlines in exact profile/model names through completion and resume.
 
-Each new record carries `machineId`, a random UUID read from `~/.alignfirst/machine-id`, created on first use with an exclusive write. Concurrent creators read the winning id. An empty or unreadable file is an error; older records read as `machineId: null`.
+Each new record carries `machineId`, a random UUID read from `~/.alignfirst/machine-id`, created on first use by writing a temporary file and hard-linking it into place. Concurrent creators read the winning id. An empty or unreadable file is an error; older records read as `machineId: null`.
 
 Session files live under the project's `_aligndev` location, read from `alignfirst config --json`: `<ticket>/_aligndev/`, or `_aligndev/` without a ticket. That location is below the project's `.plans/`, unless a companion directory holds a separate tree.
 
@@ -125,15 +137,19 @@ This is CLI integration, not OpenClaw deployment, Docker, conversation or provid
 
 `aligndev worktree` dispatches before coding settings, model discovery and project-marker checks. Git's worktree registry is its only inventory, including externally created, detached, missing, locked and prunable entries. `src/worktree/git.ts` parses Git's NUL-delimited output; project status adapts it to its existing report shape. CLI help owns command forms and JSON schemas.
 
-Add resolves the main worktree even from a linked worktree or subdirectory. It validates branch, destination and effective plans before creating anything. It shares usable untracked main-worktree `.plans` and optional `.local` through symlinks, with root-anchored exclusions in shared local Git metadata. Tracked `.local` stays branch-local with a warning. Companion plans resolve directly, without a link or exclusion. The finished worktree must pass `alignfirst plans check --json`, including linked-worktree parity with the main worktree. Late failures retain the branch and worktree and name manual recovery actions.
+Add validates branch, destination and main-worktree effective plans before Git creation, then applies the shared preparation in `src/worktree/setup.ts`. Setup adopts an existing registered worktree without changing its path, branch, index or Git registration. Without a path, it discovers the current root even from a subdirectory. An explicit path resolves relative to the caller and must be an exact registered root of the same repository. Main and detached worktrees are supported; main setup validates and reports existing directories without creating links or exclusions.
+
+Linked preparation shares usable untracked main-worktree `.plans` and optional `.local` through symlinks, with root-anchored exclusions in shared local Git metadata. It checks HEAD and the index: tracked `.local` stays branch-local with a warning, and project-tracked effective plans fail. Companion plans resolve directly, without a link or exclusion. All required link destinations are checked before writes; conflicting entries and unrelated dirty work remain untouched. Existing links to the expected real target retain their link text. Missing links and exclusions are added idempotently, with links pointing through the main-worktree path so source repairs propagate.
+
+The finished worktree must pass `alignfirst plans check --json`, including linked-worktree parity with the main worktree. Failures retain the branch, worktree and partial preparation, name the failed step and give a quoted setup retry command. Repair the reported problem, then retry setup; no rollback deletes user data.
 
 `src/project/plans.ts` runs `alignfirst plans check --json` and returns `plans.target`. AlignFirst refuses project-tracked effective plans through both logical and resolved paths. From a linked worktree, it requires the same real target and `in` as the main worktree. Separate work-files repositories remain supported; an unused tracked project copy does not block companion plans. New/resumed coding launches apply this gate before stale-session reconciliation, ticket/session writes or model discovery. Historical status, help and inventory remain readable. The playbook's work-files runbook calls `alignfirst plans check`.
 
-The playbook selects documented project workspace tooling first, including non-Node implementations. Without it, the assistant directly orchestrates lightweight list/add/remove, then delegates from the selected path. `guide work-files-setup` is the sole separately authorized companion-preparation recipe and runs before ticket reservation or request capture. The CLI never writes the companion registry or provisions missing plans.
+The playbook selects documented project workspace tooling first, including non-Node implementations. Without it, the assistant directly orchestrates lightweight list/add/setup/remove, then delegates from the selected path. The `work-files-setup` guide topic is the sole separately authorized companion-preparation recipe and runs before ticket reservation or request capture. The CLI never writes the companion registry or provisions missing plans.
 
-Readiness covers Git and work files only. Install/build/test preparation follows repository commands separately; add manages no ports, environment seeding, infrastructure or application processes. A shared symlink grants no sandbox permissions. Companion access retains existing handling; missing access must be surfaced without silently changing permission policy.
+Readiness covers Git and work files only. Install/build/test preparation follows repository commands separately; add/setup manages no ports, environment seeding, infrastructure or application processes. A shared symlink grants no sandbox permissions. Companion access retains existing handling; missing access must be surfaced without silently changing permission policy.
 
-Remove uses ordinary non-force Git removal for one exact linked root. It refuses dirty, locked, main and protected shared-target paths, and any target containing another registered worktree root, even a locked or missing child. It preserves branches and companion registration and never follows shared links for deletion. Stop project activity separately; lightweight removal is not process or infrastructure teardown.
+Remove uses ordinary non-force Git removal for one exact linked root. It refuses dirty, locked, main and protected shared-target paths, and any target containing another registered worktree root, even a locked or missing child. It preserves branches and companion registration and never follows shared links for deletion. Stop project activity separately; lightweight removal is not process or infrastructure teardown. External owners such as Paseo can run `npx -y aligndev worktree setup` inside a worktree after creating it and retain ownership of Git deletion. There is no lightweight teardown command or pre-deletion hook: AlignDev has no services, ports or separate registry to release.
 
 ## Project Inventory
 

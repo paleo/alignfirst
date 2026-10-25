@@ -1,10 +1,10 @@
 import type { CodingAgent } from "../code/coding-agent.js";
 import type { CommandForms } from "../command-form.js";
-import { CONFIG_DIRECTORY_VARIABLES, type Platform } from "../config.js";
-import { renderGuideTemplate } from "./render-template.js";
+import { CONFIG_DIRECTORY_VARIABLES } from "../config.js";
+import { type ActiveBlocks, renderGuideTemplate } from "./render-template.js";
 
 export function renderCodeGuide(
-  platform: Platform,
+  active: ActiveBlocks,
   agent: CodingAgent,
   models: readonly string[] | undefined,
   defaultModel: string | undefined,
@@ -12,7 +12,7 @@ export function renderCodeGuide(
   profile: string | null = null,
   nativeStorage = `${CONFIG_DIRECTORY_VARIABLES[agent]}: inherited/default native storage`,
 ): string {
-  return renderGuideTemplate("code.md", { platform }, forms, {
+  return renderGuideTemplate("code.md", active, forms, {
     AGENT: agent,
     PROFILE: profile ?? "(built-in)",
     NATIVE_CONFIG: nativeStorage,
@@ -34,11 +34,7 @@ export function renderCodeGuide(
         : `One of ${models.map((model) => `\`${model}\``).join(", ")}`,
     DEFAULT_MODEL:
       defaultModel === undefined ? "the coding agent's default" : `\`${defaultModel}\``,
-    ALIGNFIRST_SETUP: forms.viaNpx
-      ? "The project must be prepared for AlignFirst. `npx -y aligndev` runs the `alignfirst` CLI through `npx`."
-      : "The project must be prepared for AlignFirst, with the `alignfirst` CLI installed (`npm install -g alignfirst`).",
-    ALIGNFIRST_USE: forms.viaNpx
-      ? "`npx -y aligndev code` runs the `alignfirst` CLI through `npx`, and so does the agent: it runs `npx -y alignfirst guide <protocol>` in the project."
-      : "`aligndev code` requires the `alignfirst` CLI on `PATH`. The agent runs `alignfirst guide <protocol>` in the project, so the protocols come from the installed CLI.",
+    ALIGNFIRST_SETUP: `The project must be prepared for AlignFirst. AlignDev uses \`${forms.alignfirst}\` for the AlignFirst CLI.`,
+    ALIGNFIRST_USE: `\`${forms.aligndev} code\` and the agent use the same AlignFirst command: \`${forms.alignfirst} guide <protocol>\` in the project.`,
   });
 }

@@ -22,6 +22,16 @@ const BASE: RunConfig = {
   env: {},
 };
 
+let codexHome: string | undefined;
+
+beforeEach(() => {
+  codexHome = mkdtempSync(join(tmpdir(), "aligndev-codex-home-"));
+});
+
+afterEach(() => {
+  if (codexHome !== undefined) rmSync(codexHome, { recursive: true, force: true });
+});
+
 describe("Codex argv", () => {
   it("builds new and resumed commands with normal sandboxing", () => {
     expect(buildCodexArgs(BASE)).toEqual(["exec", "--json", "--sandbox", "workspace-write", "-"]);
@@ -240,16 +250,6 @@ function createCodexState(config: RunConfig = BASE) {
 function event(state: ReturnType<typeof createCodexState>, value: unknown): string | undefined {
   return interpretCodexLine(JSON.stringify(value), state);
 }
-
-let codexHome: string | undefined;
-
-beforeEach(() => {
-  codexHome = mkdtempSync(join(tmpdir(), "aligndev-codex-home-"));
-});
-
-afterEach(() => {
-  if (codexHome !== undefined) rmSync(codexHome, { recursive: true, force: true });
-});
 
 function completedState(threadId: string, options: { streamTotal: number }) {
   const state = createCodexState({ ...BASE, env: { CODEX_HOME: codexHome } });

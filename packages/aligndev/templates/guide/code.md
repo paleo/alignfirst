@@ -9,7 +9,7 @@ Run a coding agent through AlignFirst protocols with `{{ALIGNDEV}} code`. It wra
 
 **Never implement, investigate, or modify the codebase yourself. Your role is to delegate and guide the agent.**
 
-Run `{{ALIGNDEV}} code` from the root of the selected worktree, so the agent works in the right repository. The project must have usable `.plans/`, in the repository or in its companion directory: `{{ALIGNFIRST}} plans check` verifies it, and `{{ALIGNDEV}} guide work-files-setup` prepares it.
+Run `{{ALIGNDEV}} code` from the root of the selected worktree, so the agent works in the right repository. The project must have usable `.plans/`, in the repository or in its companion directory: `{{ALIGNFIRST}} plans check` verifies it, and `{{GUIDE}} work-files-setup` prepares it.
 
 {{ALIGNFIRST_SETUP}}
 
@@ -29,7 +29,12 @@ Under OpenClaw, background it through the `exec` tool:
 
   `{{ALIGNDEV}} code <command> <options> ; openclaw system event --text "aligndev code run finished — read its session file and report to the user" --mode now --session-key <KEY>`
 
+{{#thread}}
   Chain with `;` (never `&&`) so a failed run wakes you too, and keep the `;` on the same line as the `{{ALIGNDEV}} code` command: a line that starts with `;` is a shell syntax error, the wake command never runs, and the run's completion is lost. The wake may reach you as a bare heartbeat with the text dropped, and OpenClaw's own `Exec completed` notice may lag behind it. Never wait for either text.
+{{/thread}}
+{{#app}}
+  Chain with `;` (never `&&`) so a failed run wakes you too, and keep the `;` on the same line as the `{{ALIGNDEV}} code` command: a line that starts with `;` is a shell syntax error, the wake command never runs, and the run's completion is lost. The wake may reach you as a bare heartbeat with the text dropped. Never wait for its text.
+{{/app}}
 - Pass `background: true` and `timeoutSeconds: 0` (no kill timer). Never rely on the auto-yield or a finite timeout.
 - For a run launched without `--ticket` or `--no-ticket`, pass `--meta <KEY>` with this session's key. `{{ALIGNDEV}} code status --meta <KEY>` then finds its result among concurrent runs in the shared main worktree.
 - Set the exec `workdir` to the project root as an **absolute** path (`~` is not expanded there), or `cd` into the project inside the command itself.
@@ -42,6 +47,10 @@ As soon as the run is backgrounded, tell the user — in the user's language —
 ## After a background run completes
 
 The chained wake fires when the backgrounded `{{ALIGNDEV}} code` exits. This session receives a heartbeat, often as a plain heartbeat poll with no message text. A run counts as pending while it is running **and until its outcome is reported**.
+{{#app}}
+
+In this conversation, the run's exit brings two turns, about ten seconds apart: OpenClaw's `Exec completed` notice, then the chained wake as a heartbeat. Both are completion wakes. The first finds the run pending and reports it; the second finds it reported.
+{{/app}}
 
 **First, decide whether this heartbeat needs a report.** A heartbeat is a completion wake only while a run is pending. Once you have reported the outcome, later heartbeats for that run need nothing. End them with exactly `HEARTBEAT_OK`, alone.
 
@@ -54,7 +63,7 @@ Any heartbeat received while an `{{ALIGNDEV}} code` run is **still pending** ent
 
    For a consultation, answer it directly from the findings; include a failure or uncertainty when relevant. The coding-run template above is for change reports.
 
-   The report is the plain text that ends the turn, on Slack and Discord alike. It must be the turn's **final message**: text written between tool calls may never post. Never follow it with `NO_REPLY`, `HEARTBEAT_OK`, a duplicate message-tool post, or another tool call.
+   The report is the plain text that ends the turn. It must be the turn's **final message**: text written between tool calls may never post. Never follow it with `NO_REPLY`, `HEARTBEAT_OK`, a duplicate message-tool post, or another tool call.
 3. **Don't reconstruct what happened.** Verifying the result is what your operating instructions prescribe; re-deriving the run's story is not: no re-running the agent, no fetch/merge, no `git` archaeology to double-check its account — the session file is authoritative for that.
 
 Reporting the run is not calling the work done: the report relays the agent's claim plus what you verified. When your verification finds a failing check, the report says so, and the fix is new work — a fresh run with its own completion wake; the wake you were answering is discharged by your report.
@@ -89,7 +98,7 @@ Retain these distinct values for each run:
 Prepare the literal delegated prompt in a UTF-8 file, then launch the ordinary quoted shell command through `background` with `action: "start"` and `cwd`. Supply `--quiet --meta <unique-run-key>` yourself; the extension never parses or appends CLI options. This example assumes `/tmp/aligndev-request.txt` already contains the request. Generate a fresh key for every actual launch; the UUID below illustrates one run:
 
 ```json
-{"action":"start","command":"{{ALIGNDEV}} code new --message-file '/tmp/aligndev-request.txt' --quiet --meta 'a20bc7c1-c056-4d07-8cc2-90fe491a6df6'","cwd":"/srv/projects/example","label":"coding run"}
+{"action":"start","command":{{BACKGROUND_COMMAND_JSON}},"cwd":"/srv/projects/example","label":"coding run"}
 ```
 
 For resume, use `{{ALIGNDEV}} code resume <sessionId> --message-file <path> --quiet --meta <fresh-run-key>` from the original worktree. A Pi child must resume from its recorded directory. Use safe shell quoting for paths and options; never interpolate raw user text into a command. A quoted heredoc with `--message-file -` is another literal-input route.

@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { DevServerEntry } from "../../src/dev-servers-registry.js";
 import type { ServerContext } from "../../src/server-descriptor.js";
 import {
+  cliExecutable,
   createFixtureRepo,
   type FixtureRepo,
   readWorkspaces,
@@ -101,6 +102,24 @@ afterEach(async () => {
 });
 
 describe("registered callback identity (e2e)", () => {
+  it(
+    "escalates a TERM-resistant owned server and clears its process group",
+    async () => {
+      const target = prepareTarget();
+      const started = runDev(target.root, ["up"], { ...ENV, E2E_RESIST_TERM: "1" });
+      expect(started.status, started.stderr).toBe(0);
+      const pid = spawns(target.fx).at(-1)?.pid;
+      if (pid === undefined) throw new Error("Missing resistant server PID");
+      const stopped = runDev(target.root, ["down"], ENV);
+      expect(stopped.status, stopped.stderr).toBe(0);
+      await waitUntil(() => !isAlive(pid), "resistant server exit");
+      expect(() => process.kill(-pid, 0)).toThrow();
+      expect(devEntries(target.fx)).toEqual([]);
+      expect(stops(target.fx)).toEqual(expectedStops(target.ctx));
+    },
+    TIMEOUT_MS,
+  );
+
   it(
     "starts, reports, attaches and stops from a nested directory using root logs",
     async () => {
@@ -320,7 +339,7 @@ function prepareTarget(devSetup = true): Target {
 }
 
 function setup(fx: FixtureRepo, worktree: string): void {
-  const result = runCli(fx.repo, ["setup"], { E2E_FINALIZE_PID_LOG: "1" }, worktree);
+  const result = runCli(fx.repo, ["setup"], undefined, worktree);
   expect(result.status, result.stderr).toBe(0);
 }
 
@@ -332,7 +351,7 @@ function addWorktree(fx: FixtureRepo, path: string, branch: string): string {
 }
 
 function foreground(target: Target, env: Record<string, string> = {}): RunningChild {
-  const child = spawn(process.execPath, [join(target.root, "scripts", "dev-server.mjs")], {
+  const child = spawn(cliExecutable, [join(target.root, "scripts", "dev-server.mjs")], {
     cwd: target.nested,
     env: { ...process.env, ...ENV, ...env },
     stdio: ["ignore", "pipe", "pipe"],

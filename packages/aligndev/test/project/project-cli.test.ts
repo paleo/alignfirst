@@ -54,6 +54,7 @@ describe("projects command surface", () => {
     mkdirSync(projects);
     const result = await runProjects(fixture, ["list", "--root", "~/projects"]);
     expect(result.code).toBe(1);
+    expect(result.stderr).toContain(`${projects} is not a projects directory`);
     expect(result.stderr).toContain(".alignfirst-projects.json is missing");
     expect(result.stderr).toContain("Run `aligndev project init` there");
     expect(result.stderr).toContain("--root <path>");
@@ -130,13 +131,14 @@ describe("projects command surface", () => {
   });
 
   it("rejects invalid groups of init port ranges before writing", async () => {
-    for (const args of [
-      ["--port-range", "8000-8099", "--port-range", "8100-8199"],
-      ["--port-range", "8000-8099", "--port-range", "local=8050-8199"],
-    ]) {
+    for (const [args, message] of [
+      [["--port-range", "8000-8099", "--port-range", "8100-8199"], "at most one port range"],
+      [["--port-range", "8000-8099", "--port-range", "local=8050-8199"], "overlap"],
+    ] as const) {
       const fixture = makeFixture();
       const result = await runProjects(fixture, ["init", ...args]);
       expect(result.code).toBe(1);
+      expect(result.stderr).toContain(message);
       expect(existsSync(join(fixture.root, ".alignfirst-projects.json"))).toBe(false);
     }
   });
@@ -184,20 +186,19 @@ describe("projects command surface", () => {
     }
   });
 
-  it("validates command-specific options", async () => {
-    const fixture = makeFixture();
-    for (const args of [
-      ["status"],
-      ["list", "extra"],
-      ["init", "--json"],
-      ["doctor", "--json"],
-      ["list", "--size", "2"],
-      ["list", "--range", "local"],
-      ["free-ports"],
-      ["--guide"],
-    ]) {
-      expect((await runProjects(fixture, args)).code).toBe(1);
-    }
+  it.each([
+    [["status"], "status requires exactly one path"],
+    [["list", "extra"], "list does not accept a path"],
+    [["init", "--json"], "--json is valid only with"],
+    [["doctor", "--json"], "--json is valid only with"],
+    [["list", "--size", "2"], "--size is valid only with free-ports"],
+    [["list", "--range", "local"], "--range is valid only with free-ports"],
+    [["free-ports"], "free-ports requires --size"],
+    [["--guide"], "Unknown option '--guide'"],
+  ])("rejects the command-specific option misuse %j", async (args, message) => {
+    const result = await runProjects(makeFixture(), args);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain(message);
   });
 });
 

@@ -106,13 +106,13 @@ Example:
 For every plan, single or specialized, add a final step named "Write a Handover Document" with this content:
 
 ```markdown
-Write a **handover document** for your teammates. List every file you updated, then summarize the changes very concisely. Keep only what helps a teammate understand what is new; leave out the obvious. When there is nothing to explain, explain nothing. Create its path by replacing the final `.md` in `{PLAN_FILE_PATH}` with `.summary.md`, then write the handover there. Ignore lint errors (formatting issues) in this file. At the end, give the path of this handover file to the user.
+Write a **handover document** for your teammates. List every file you updated, then summarize the changes very concisely. Keep only what helps a teammate understand what is new; leave out the obvious. When there is nothing to explain, explain nothing. Create and write the file `{HANDOVER_FILE_PATH}`. Ignore lint errors (formatting issues) in this file. At the end, give the path of this handover file to the user.
 ```
 
 Note:
 
 - This is a regular step, numbered like the others. A plan with 5 steps gets this one as step 6.
-- Replace "{PLAN_FILE_PATH}" with the complete plan file path, such as `.plans/123/A2-plan-backend.md`. Its handover path is `.plans/123/A2-plan-backend.summary.md`.
+- Replace "{HANDOVER_FILE_PATH}" with the complete handover file path: the plan file path with `.summary.md` in place of the final `.md`. The plan `.plans/123/A2-plan-backend.md` gets `.plans/123/A2-plan-backend.summary.md`.
 
 ### 3.5 Common Footer for All Plans
 
@@ -184,7 +184,7 @@ Write a **main plan handover document**. This document:
 1. References each specialized plan's handover file
 2. For each referenced handover, states "Completed" when the plan was executed successfully, and details any issue encountered otherwise
 
-Keep this handover very short. Do not combine or repeat the content of individual handovers. Create its path by replacing the final `.md` in `{PLAN_FILE_PATH}` with `.summary.md`, then write the handover there. Ignore lint errors (formatting issues) in this file.
+Keep this handover very short. Do not combine or repeat the content of individual handovers. Create and write the file `{HANDOVER_FILE_PATH}`. Ignore lint errors (formatting issues) in this file.
 
 ---
 
@@ -195,13 +195,15 @@ Do not use external search tools (Context7, web search, documentation fetching) 
 
 Note:
 
-- Replace "{PLAN_FILE_PATH}" with the complete plan file path, such as `.plans/123/A2-main-plan.md`. Its handover path is `.plans/123/A2-main-plan.summary.md`.
+- Replace "{HANDOVER_FILE_PATH}" with the complete handover file path: the main plan file path with `.summary.md` in place of the final `.md`. The main plan `.plans/123/A2-main-plan.md` gets `.plans/123/A2-main-plan.summary.md`.
 
 ## Phase 5. Writing
 
-Continue the current cycle. Request the file names with `{{TICKET_CMD}} --next`, then write every file it named before requesting anything else. Append each name to TICKET_DIR to get its path. Never overwrite an existing file.
+Plan in the spec's cycle unless the user requests another: pass the CYCLE_LETTER of the spec filename as `--cycle <letter>`. Without a cycle prefix on the spec filename, omit `--cycle`.
 
-**Single plan**: run `{{TICKET_CMD}} --next plan.md`.
+Request the file names as below, then write every file the command named before requesting anything else. Append each name to TICKET_DIR to get its path. Never overwrite an existing file.
+
+**Single plan**: run `{{TICKET_CMD}} --cycle <letter> --next plan.md`.
 
 - Plan: `{TICKET_DIR}{CYCLE_LETTER}{FILE_NUMBER}-plan.md`, e.g. `.plans/123/A2-plan.md`
 - Handover: `.plans/123/A2-plan.summary.md`
@@ -209,7 +211,7 @@ Continue the current cycle. Request the file names with `{{TICKET_CMD}} --next`,
 **Multiple plans**: run one command with a `--next` per file, the main plan first, then the specialized plans in the order the main plan lists them. The command returns all the names, numbered in that order, so the main plan can reference the specialized plans exactly. Example:
 
 ```
-{{TICKET_CMD}} --next main-plan.md --next plan-api.md --next plan-ui.md
+{{TICKET_CMD}} --cycle <letter> --next main-plan.md --next plan-api.md --next plan-ui.md
 ```
 
 - Main plan: `{TICKET_DIR}{CYCLE_LETTER}{FILE_NUMBER}-main-plan.md`, e.g. `.plans/123/A2-main-plan.md`

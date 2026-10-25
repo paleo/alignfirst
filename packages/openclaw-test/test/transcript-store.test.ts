@@ -56,6 +56,34 @@ describe("conversation transcript attribution", () => {
   });
 });
 
+describe("session key selection", () => {
+  it("selects exact keys only: Home without the dashboard sessions, a dashboard key alone", () => {
+    const directory = mkdtempSync(join(tmpdir(), "openclaw-transcripts-"));
+    directories.push(directory);
+    const path = join(directory, "agent.sqlite");
+    const db = new DatabaseSync(path);
+    db.exec(`
+      CREATE TABLE session_nodes (session_key TEXT, current_session_id TEXT);
+      CREATE TABLE session_windows (session_key TEXT, session_id TEXT, created_at INTEGER);
+      CREATE TABLE transcript_events (
+        session_id TEXT, created_at INTEGER, seq INTEGER, event_json TEXT, event_zstd BLOB
+      );
+    `);
+    const home = "agent:main:main";
+    const dashboard = "agent:main:dashboard:x";
+    seedSession(db, home, "home", "home reply");
+    seedSession(db, dashboard, "dashboard", "dashboard reply");
+    db.close();
+
+    const keys = (sessionKey: string) =>
+      readConversationSessions(path, 0, "A26-webchat-abc", [], [sessionKey]).map(
+        (session) => session.sessionKey,
+      );
+    expect(keys(home)).toEqual([home]);
+    expect(keys(dashboard)).toEqual([dashboard]);
+  });
+});
+
 function seedSession(db: DatabaseSync, key: string, id: string, text: string): void {
   db.prepare("INSERT INTO session_nodes VALUES (?, ?)").run(key, id);
   seedWindow(db, key, id, text, 1);

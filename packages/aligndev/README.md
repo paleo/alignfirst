@@ -35,11 +35,15 @@ For a coding-agent assistant, parent host and delegated child are independent: a
 
 ## Start in Claude Code, Codex or Pi
 
-The project needs usable AlignFirst work files, untracked by the project's own repository or in a [companion directory](https://github.com/paleo/alignfirst/tree/main/packages/alignfirst#companion-directories). A separate work-files repository may track them. The [setup guide](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/coding-agent-assistant.md) prepares it. `alignfirst plans check --json` verifies them, from the main worktree or a linked one. AlignFirst refuses effective plans tracked by the project's own repository. Missing or project-tracked effective plans require authorized companion preparation through `aligndev guide work-files-setup`; existing project content stays untouched and is not copied.
+The project needs usable AlignFirst work files, untracked by the project's own repository or in a [companion directory](https://github.com/paleo/alignfirst/tree/main/packages/alignfirst#companion-directories). A separate work-files repository may track them. The [setup guide](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/coding-agent-assistant.md) prepares it. `alignfirst plans check --json` verifies them, from the main worktree or a linked one. AlignFirst refuses effective plans tracked by the project's own repository. Missing or project-tracked effective plans require authorized companion preparation through the `work-files-setup` topic of `aligndev guide`; existing project content stays untouched and is not copied.
 
-Full workspace tooling is optional. The assistant follows the project's documented tooling when present; otherwise `aligndev worktree` creates or reuses an isolated Git worktree without installation or tracked configuration changes. It shares usable untracked project plans and optional `.local` through locally excluded symlinks, or uses companion plans directly. Readiness covers Git and work files only; dependency installation, builds, tests and application lifecycle follow the repository's commands separately. Removal refuses dirty worktrees, preserves branches and shared targets, and does not stop processes or tear down infrastructure. See `aligndev worktree --help` for the command reference.
+Full workspace tooling is optional. The assistant follows the project's documented tooling when present, including non-Node implementations; otherwise `aligndev worktree` creates or prepares an isolated Git worktree without installation or tracked configuration changes. It shares usable untracked project plans and optional `.local` through locally excluded symlinks, or uses companion plans directly. Readiness covers Git and work files only; dependency installation, builds, tests and application lifecycle follow the repository's commands separately.
 
-The child needs network access and access to its selected work files. Parent-host elevation and the child's permission policy are separate. A shared symlink grants no sandbox permission. In native Codex 0.162.1 host probes, normal `workspace-write` denied writes through shared project `.plans` and `.local` links (`Errno 30`). Prepared companion plans passed through the existing `--add-dir <companion>` route; shared `.local` and outside-root writes remained denied. Report denied real paths. For companion plans, obtain approval through `aligndev guide work-files-setup`, preserving existing project files. Do not silently bypass the sandbox or grant the whole main repository write access.
+For externally created worktrees, tools such as Paseo can run `npx -y aligndev worktree setup` as a post-creation hook inside the target. With no path, setup discovers the current worktree root even from a subdirectory; an explicit path must name an exact registered root of the same repository. Setup preserves the branch, index and unrelated files. Conflicts remain untouched; repair the reported problem and retry the idempotent setup to complete partial preparation. Setup validates existing plans without provisioning or migrating them.
+
+The external tool owns Git creation and deletion, with project-specific preparation and shutdown handled separately. There is no `aligndev worktree teardown` command or lightweight pre-deletion hook. AlignDev's own removal refuses dirty worktrees, preserves branches and shared targets, and does not stop processes or tear down infrastructure. See `aligndev worktree --help` for the command reference.
+
+The child needs network access and access to its selected work files. Parent-host elevation and the child's permission policy are separate. A shared symlink grants no sandbox permission. In native Codex 0.162.1 host probes, normal `workspace-write` denied writes through shared project `.plans` and `.local` links (`Errno 30`). Prepared companion plans passed through the existing `--add-dir <companion>` route; shared `.local` and outside-root writes remained denied. Report denied real paths. For companion plans, obtain approval through the `work-files-setup` topic of `aligndev guide`, preserving existing project files. Do not silently bypass the sandbox or grant the whole main repository write access.
 
 Pi uses ordinary OS permissions and saved project trust; a profile's `skipPermissions` has no effect. Native Pi 1.3.0 host probes passed for shared plans, a separate work-files repository, companion plans and `.local`. These results establish OS access, not sandbox confinement. Neither agent's host-user probes establish production service-account or deployment support.
 
@@ -78,10 +82,14 @@ Then ask your session to work with aligndev.
 
 ### Requirements
 
-- Node.js 22.11 or later. The assistant runs `aligndev` through `npx`, so there is nothing to install.
+- Node.js 22.11 or later with `npx -y aligndev`, or Bun with `bunx --bun aligndev` (`bun x --bun` is equivalent). Bun 1.4.4 is the tested CLI baseline; compatibility with every older release is not promised.
 - The selected child installed and authenticated under the same effective environment and cwd as the child. Apply the profile's `unset/env/configDir`, including HOME, PATH and credential routing, before using `claude` then `/login`, `codex login`, or `pi` then `/login <provider>` (or configured provider credentials). A bare login in another shell may select another account. Pi requires Node.js 22.19 or later; the Pi adapter and extensions target Pi 1.3.0.
 - For Pi, select a usable native model, preferably `provider/model` (optional thinking suffix). Authenticate in the same account/configuration used by the child; never expose credential values in diagnostics.
 - Linux or macOS, or Windows through WSL.
+
+Published bins retain Node shebangs. Ordinary `bunx aligndev` normally runs Node when it is installed; Bun-only hosts should explicitly select `--bun`. Direct `bun <installed-entry.mjs>` and transparent project scripts launched with `bun --bun run <script>` preserve Bun in follow-up commands and internal AlignFirst calls. npm scripts retain their `--` argument separator.
+
+Bun support covers this CLI, not its selected coding agent, Docker or an OpenClaw deployment. Those tools keep their own runtime, installation and authentication requirements; selecting Bun for AlignDev never forces the coding agent to use Bun.
 
 ## Configuration
 
@@ -130,7 +138,7 @@ For multiple accounts and independent quota sources:
 
 The Pi targets illustrate native shorthand; availability depends on Pi's catalog and account. Exact provider-qualified IDs pin a model. Provider-qualified fuzzy selectors and thinking suffixes pass unchanged to Pi, which owns their resolution. AlignDev neither guesses providers nor implements newest-family ordering.
 
-- `platform` — `codingAgent` (default), or `openclaw`.
+- `platform` — `codingAgent` (default), or `openclaw`. On `openclaw`, `aligndev guide` takes `--channel <slack|discord|app>`: a Slack or Discord thread and an app conversation are separate contexts, each with its own topics. Every playbook topic requires it, `code` defaults to `app`, and `project` rejects it.
 - `projectsRoot` — projects directory, required by the OpenClaw playbook. `~/` uses the configured home; relative paths resolve against the settings directory.
 - `code.profile` — global named child profile, independent of the parent host.
 - `code.profiles` — complete profiles, with required `agent` (`claude`, `codex`, `pi`). Names and references are exact, nonblank strings. Profiles have no inheritance or merging.

@@ -3,7 +3,7 @@
 - **Name:** {{ASSISTANT_NAME}}
 - **Role:** AI developer for {{TEAM_NAME}}.
 - **Service account:** `{{SERVICE_USER}}` on `{{SERVER_HOST}}`.
-- **Channels:** the configured channel plugin.
+- **Channels:** the configured channel plugin, and the OpenClaw apps (web, desktop, mobile).
 - **Model:** `{{RUNTIME_PROVIDER}}/{{RUNTIME_MODEL}}`.
 
 ## Runtime

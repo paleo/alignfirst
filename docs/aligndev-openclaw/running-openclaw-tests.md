@@ -38,11 +38,15 @@ npm run e2e -- --model gpt-5.6-terra --channel slack-mock A03-question
 npm run env:down
 ```
 
+`--channel` selects `slack-mock`, `discord-mock`, `webchat` (the OpenClaw apps, driven through the gateway methods they use) or `all`. A scenario runs only on the surfaces it supports; see [Scenarios](#scenarios).
+
 See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLEL` in `.env.local`) runs cells concurrently on K worker stacks; per-worker workspace copies land in `.workers/` (gitignored). When upgrading from a pre-parallel version, tear down the legacy un-suffixed Compose project once: `docker compose down` from `aligndev-openclaw-tests/`.
 
 > ⚠️ **Never `rm -rf artifacts` (or `.gateway-logs`).** Each run lands in its own **timestamped** subdir, so runs accumulate without colliding — deleting the directory throws away prior runs you may still need. These are bind-mount outputs; leave them in place.
 
 The reviewed toolchain is Node 26, npm `12.2.0`, Corepack `0.36.0` and pnpm `12.14.0`. Run local npm 12 commands without a global install, for example `fnm exec --using=.nvmrc npx --yes --package=npm@12.2.0 npm run env:build --prefix aligndev-openclaw-tests` from the repository root. npm 12 blocks dependency lifecycle scripts by default; the root and standalone manifests approve only the reviewed OpenClaw, esbuild and koffi versions. GenAI's no-op and protobufjs's warning-only scripts stay disabled. Re-review these policies when their versions change.
+
+The generic host CLI can alternatively run on Bun 1.4.4 via `bunx --bun @alignfirst/openclaw-test` or explicitly Bun-owned scripts. This does not change the reviewed npm build/vendor/lockfile workflow above or the Node container toolchain. For a new Bun consumer, follow init's Docker Node/npm lockfile-preparation instructions before image builds; see the [package README](../../packages/openclaw-test/README.md#init). Docker, OpenClaw and native coding agents retain their own prerequisites.
 
 ## Shared-daemon isolation
 
@@ -105,6 +109,8 @@ Workspace setup is portless. The dev-server wrapper allocates `frontend` and gen
 
 The root and its nested `external-projects` and `lifecycle-projects` directories carry `.alignfirst-projects.json` markers with descriptions and a default `portRanges` entry. The lifecycle directory resets empty; the creation scenario uses it for `nova`. Removal scenarios seed a real linked `nimbus` workspace and a sibling additional directory after reset.
 
+An OpenClaw managed worktree, created by a `webchat` conversation with `worktree`, lives in the gateway's state directory (`/home/assistant/.openclaw/worktrees/<fingerprint>/<name>`), outside the shared volume. Read it through `ctx.execInGateway`, for example `["git", "-C", path, "branch", "--show-current"]`. Run `pnpm workspace …` with the main worktree as `cwd`: from elsewhere, Corepack's pnpm rejects the project's pinned version.
+
 `aligndev project` runs for real against the fixture tree and calls `alignfirst config --json` in each child. Scenarios assert on the agent's exec calls and on the filesystem.
 
 A24 and A25 opt into [`scripts/lightweight-fixture.ts`](../../aligndev-openclaw-tests/scripts/lightweight-fixture.ts) after reset. It transforms only `nimbus` into a dependency-free ESM library with a real local origin and `npm test`. It removes the project workspace/dev scripts and provides missing or tracked plans, respectively. The tracked case keeps a recognizable `old-history.md`. Existing full-workspace fixtures and assertions remain unchanged. Offline tests also exercise shared untracked plans and an already prepared companion, including profile/other-item preservation and removal that retains shared targets.
@@ -113,7 +119,9 @@ The lightweight flow discovers worktrees through Git-backed `aligndev worktree l
 
 ## Scenarios
 
-Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` are skipped by discovery. The suite has 25 scenarios. Related states run sequentially in one conversation to share startup and workspace setup.
+Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`. Shared helpers under `scenarios/_lib/` are skipped by discovery. The suite has 27 scenarios.
+
+A scenario declares its surfaces with `export const surfaces: readonly string[] = ["webchat"];`, string literals only. Without the export, it runs on every channel except `webchat`. A26 and A27 run on `webchat` only; the other scenarios on the two channel mocks. `scenarios/_lib/app-conversation.ts` holds the app helpers: the judged reply wait, the banner, the delegation chain and the check that no `message` or `thread_handoff` call happened. Related states run sequentially in one conversation to share startup and workspace setup.
 
 `bootstrapThreadFromChannel` sends the channel request, observes one native starter and one `thread_handoff start`, and checks that the parent performed no target work. The plugin injects `Take over this thread.` from `AlignFirst Service`. The thread session reads the starter and owns the work. `sendInThread` supplies missing values, holds, confirmations, and subsequent requests.
 
@@ -144,6 +152,8 @@ Drop `scenarios/<id>.ts`, default-export `async (ctx: ScenarioContext) => void`.
 | A23 | A human opens the thread and tags the bot inside it: no starter, no handoff. The fresh session reacts to the latest message, resolves the project itself, opens no second thread, and leaves the author's thread name alone. |
 | A24 | No workspace tooling, missing plans and explicit no-ticket work. Snapshots registration, plans and Git state before approval; requires separate companion preparation, explicit selection, side-ticket/request capture before real worktree creation, then coding from that worktree. |
 | A25 | No workspace tooling and tracked project plans. Uses the same approval gate; old history remains byte-identical in the repository and absent from the companion, with no copying offer or operation. New request/session files use the selected companion without a generated plans link. |
+| A26 | `webchat`. Home answers a change request with one reply asking for a new conversation and does no project work. A new conversation on the agent workspace resolves `nimbus` from the inventory, sets up the ticket's workspace, posts the banner, and delegates in the background with the chained wake of its own key; the completion report lands in the same conversation. |
+| A27 | `webchat`. A conversation on a fresh managed worktree of `nimbus` switches it to a new `ABC-0271/…` branch without asking, registers it with `workspace setup`, and stops at the banner with status `ready`. No sibling worktree, no coding run. |
 
 A04, A10 and A15 retain separate fresh conversations because absent-project inference depends on both the initial message and the inventory. A01 and A18 distinguish a missing task description from a complete detailed request. A20 keeps its startup race separate from A08's explicit hold.
 
@@ -169,6 +179,15 @@ CODING_AGENT=codex npm run e2e -- --model gpt-5.6-terra --channel slack-mock --i
 ```
 
 Inspect the cell results, transcripts and gateway logs. Investigate and fix unexpected errors before expanding coverage, then rerun the affected case to verify the fix. Additional scenarios, surfaces or iterations need a recorded coverage gap or diagnostic reason. A full matrix requires explicit justification; a failure alone is not a reason to launch one.
+
+The app scenarios run on `webchat` only:
+
+```bash
+CODING_AGENT=codex npm run e2e -- --model gpt-5.6-terra --channel webchat \
+  A26-app-conversation-from-home A27-managed-worktree-conversation
+```
+
+`--channel all` with a scenario list, or with `--all`, runs each scenario on its own surfaces. A selection that leaves a scenario no supported surface fails before any stack starts.
 
 Run the deterministic A09 contract once for each coding agent affected by the change:
 
@@ -214,12 +233,29 @@ Actual native Pi 1.3.0 with Terra read and wrote parent-verified nonce markers t
 
 A separate native Codex 0.162.1/Terra probe used verified `--sandbox workspace-write` with no bypass. Worktree writes passed, but shared project `.plans` and `.local` writes returned `Errno 30` (read-only filesystem). The prepared-companion control passed through the existing narrow `--add-dir <companion>` grant; shared `.local` and outside-root writes remained denied. Shared Codex work-file access remains a limitation; no permission remedy or broad main-repository grant was introduced. Native Codex saved disposable-project trust records; read-only comparison confirmed the companion control changed no sandbox, approval or profile value. Native evidence, exact argv, marker verification, cleanup and limitations are in `.local/side-29/C2/native/evidence.md`.
 
+### side-20 acceptance — 2026-10-24
+
+The app conversations and the per-surface guide renders were validated with Terra and Haiku through OpenRouter, `CODING_AGENT=codex`, one iteration each:
+
+| Case | Result | Artifact run under `aligndev-openclaw-tests/artifacts/` |
+| --- | --- | --- |
+| A26 app conversation from Home, webchat | Passed | `2026-10-24T20-09-56-815Z` |
+| A27 managed-worktree conversation, webchat | Passed | `2026-10-24T19-46-21-010Z` |
+| A01, A08, A23, Slack and Discord | Passed (6 cells) | `2026-10-24T20-09-56-815Z` |
+| A09 code-agent contract, Slack | Failed, then passed after the fix | `2026-10-24T20-21-28-946Z`, `2026-10-24T20-23-35-480Z` |
+
+Two earlier A26 runs answered Home with the project folder alone, dropping the agent workspace. The Home section now asks to keep both places when a project is listed; the rerun named both. A27 never writes in Home and was not rerun after that edit.
+
+A09 read the `.running.md` path that `aligndev code` prints, but a run that has ended renames its file to `<stamp>.md`. The scenario now reads the completed file. The defect came from `main`, not from this change.
+
+Pi and Claude children, the other scenarios and repeated iterations were not run. Offline suites, typechecks, lint, the integration suites and the deployment-template tests passed.
+
 ## Offline helper checks
 
 From the repository root, using Node 26:
 
 ```sh
-fnm exec --using=.nvmrc npm run build --workspace aligndev
+fnm exec --using=.nvmrc npm run build --workspace @alignfirst/docmap --workspace alignfirst --workspace aligndev
 fnm exec --using=.nvmrc npm test --prefix aligndev-openclaw-tests
 fnm exec --using=.nvmrc npm run typecheck --prefix aligndev-openclaw-tests
 fnm exec --using=.nvmrc npm test --workspace aligndev -- test/code/pi-agent.test.ts
@@ -234,11 +270,11 @@ These offline checks do not start Docker, import credentials or execute any scen
 
 ## Vendored packages
 
-This harness vendors the **local** sources of the four generic `@alignfirst/openclaw-*` packages and `@alignfirst/service-openclaw-plugin`.
+This harness vendors the **local** sources of the four generic `@alignfirst/openclaw-*` packages, `@alignfirst/service-openclaw-plugin` and their invocation provider `@alignfirst/docmap`. The provider is built and packed first so the installed harness resolves its new subpath from the local tarball, rather than an older registry release.
 
 The dependencies are `file:vendor/<pkg>.tgz`; [`scripts/vendor-packages.mjs`](../../aligndev-openclaw-tests/scripts/vendor-packages.mjs) builds each package and `npm pack`s it into `vendor/` (gitignored). The Docker build context is `aligndev-openclaw-tests/`, so the tarballs must live in `aligndev-openclaw-tests/vendor/`.
 
-`npm run env:build` chains `vendor` → `npm install` (refreshing `package-lock.json`) → `openclaw-test env build`, so a source edit in any of the five packages is picked up on the next build. Run `npm run vendor` before a standalone `npm install`; the tarballs must exist for resolution.
+`npm run env:build` chains `vendor` → `npm install` (refreshing `package-lock.json`) → `openclaw-test env build`, so a source edit in any vendored package is picked up on the next build. Run `npm run vendor` before a standalone `npm install`; the tarballs must exist for resolution.
 
 The plugin is explicitly allowlisted, loaded from its installed package path, and exposes optional tool `thread_handoff`. Slack uses `replyToMode: "off"`; Discord remains non-automatic. Both surface IDs map to their native receipt contract in `plugins.entries.alignfirst-service.config.channelSurfaces`.
 
@@ -256,7 +292,7 @@ To repeat that suite against a clean standalone packed install outside Docker, s
 
 - [`openclaw.json`](../../aligndev-openclaw-tests/openclaw.json) · [`docker-compose.yml`](../../aligndev-openclaw-tests/docker-compose.yml) · [`Dockerfile`](../../aligndev-openclaw-tests/Dockerfile) · [`package.json`](../../aligndev-openclaw-tests/package.json) · [`scripts/vendor-packages.mjs`](../../aligndev-openclaw-tests/scripts/vendor-packages.mjs) — committed.
 - [`sandbox/inbound.sh`](../../aligndev-openclaw-tests/sandbox/inbound.sh) — manual inbound-message helper; see [Manual Gateway Sandbox](./manual-gateway-sandbox.md).
-- `vendor/` (gitignored) — locally-built `@alignfirst/openclaw-*` tarballs, regenerated by `npm run vendor`.
+- `vendor/` (gitignored) — locally-built harness, plugin and docmap tarballs, regenerated by `npm run vendor`.
 - `.env.local` (gitignored) — API keys, workspace/repository paths, and `CODING_AGENT`.
 - `artifacts/` (gitignored) — per-run outputs.
 - `.gateway-logs/` (gitignored) — `raw-stream.jsonl` (opt-in). Session transcripts live in the gateway's SQLite store; each cell's artifact dir archives them as `transcripts.json`, and the gateway's OpenClaw log as `gateway.log`.

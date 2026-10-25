@@ -51,6 +51,7 @@
     "openclaw": "*"
   },
   "dependencies": {
+    "@alignfirst/docmap": "~0.11.2",
     "@anthropic-ai/sdk": "~0.135.0",
     "@alignfirst/openclaw-channel-mock-core": "0.11.2",
     "@alignfirst/openclaw-discord-mock": "0.6.6",

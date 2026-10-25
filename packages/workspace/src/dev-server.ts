@@ -34,7 +34,7 @@ import {
   type PollableServer,
   replayTail,
 } from "./log-polling.js";
-import { devCmd } from "./package-manager.js";
+import { configureCommands, devCmd } from "./package-manager.js";
 import { checkPortClaim } from "./port-claim.js";
 import {
   canonicalCwd,
@@ -108,6 +108,7 @@ export interface DevServerSummaryContext {
 }
 
 export async function runDevServer(config: DevServerConfig): Promise<void> {
+  configureCommands({ dev: process.argv[1] });
   let command: DevCommand;
   try {
     command = parseDevArgs();

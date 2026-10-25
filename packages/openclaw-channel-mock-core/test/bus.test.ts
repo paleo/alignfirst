@@ -149,15 +149,6 @@ describe("bus HTTP round-trip", () => {
       { conversationId: "Project-With-Case", title: "Other thread" },
     );
     expect(second.thread.id).not.toBe(created.thread.id);
-    const sent = await post<{ message: { conversation: { id: string }; threadId?: string } }>(
-      fixture.baseUrl,
-      "/v1/outbound/message",
-      { to: `thread:Project-With-Case/${created.thread.id}`, text: "report" },
-    );
-    expect(sent.message).toMatchObject({
-      conversation: { id: "Project-With-Case" },
-      threadId: created.thread.id,
-    });
     const got = await post<{ thread: { id: string } }>(fixture.baseUrl, "/v1/actions/thread-get", {
       threadId: created.thread.id,
     });

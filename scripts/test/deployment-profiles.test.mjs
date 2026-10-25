@@ -503,6 +503,7 @@ test("seed rejects a mismatched overlay before writing instructions or installed
       options(fixture),
     );
     assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /do not match the coding-agent overlay/u);
     assert(!existsSync(fixture.deployedSettings));
     assert(!existsSync(fixture.instructions));
     assert(!existsSync(join(fixture.home, ".claude")));

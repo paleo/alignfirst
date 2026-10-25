@@ -1,9 +1,17 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { validateInput } from "../src/background-tool.js";
 import { launchManaged as importLaunch, type ManagedProcess } from "../src/process-tree.js";
-import { gate, host, jobFrom, waitFor } from "./host-fixture.js";
+import {
+  gate,
+  host,
+  jobFrom,
+  readJsonFile,
+  readPidFile,
+  waitFor,
+  waitJob,
+} from "./host-fixture.js";
 
 const TEST_GRACE_MS = 300;
 const waitCommand = "while [ ! -f release ]; do sleep 0.02; done; printf 'done'; exit 0";
@@ -69,8 +77,7 @@ describe("public background actions", () => {
     try {
       const command = `'${process.execPath}' -e 'require("fs").writeFileSync("env.json", JSON.stringify(process.env))'`;
       const job = jobFrom(await h.call({ action: "start", command }));
-      await waitFor(() => existsSync(join(h.cwd, "env.json")));
-      const env = JSON.parse(readFileSync(join(h.cwd, "env.json"), "utf8"));
+      const env = await readJsonFile(join(h.cwd, "env.json"));
       expect(env).toMatchObject({
         AI_AGENT: "pi",
         PI_CODING_AGENT: "true",
@@ -80,7 +87,7 @@ describe("public background actions", () => {
         PI_MODEL: "local",
         PI_REASONING_LEVEL: "high",
       });
-      expect(env.PI_SESSION_FILE).toBeUndefined();
+      expect(env).not.toHaveProperty("PI_SESSION_FILE");
       expect(job.cwd).toBe(h.cwd);
     } finally {
       await h.close();
@@ -340,18 +347,11 @@ describe("public background actions", () => {
               "sleep 60 & echo $! > descendant.pid; while [ ! -f exit ]; do sleep 0.02; done; exit 17",
           }),
         );
-        await waitFor(() => existsSync(join(h.cwd, "descendant.pid")));
-        pid = Number(readFileSync(join(h.cwd, "descendant.pid"), "utf8"));
+        pid = await readPidFile(join(h.cwd, "descendant.pid"));
         identity = processFields(pid)?.[19];
         expect(identity).toBeDefined();
         writeFileSync(join(h.cwd, "exit"), "go");
-        const deadline = Date.now() + 8000;
-        let status = jobFrom(await h.call({ action: "status", id: job.id }));
-        while (status.status === "running" && Date.now() < deadline) {
-          await new Promise((resolve) => setTimeout(resolve, 10));
-          status = jobFrom(await h.call({ action: "status", id: job.id }));
-        }
-        expect(status).toMatchObject({ status: "failed", exitCode: 17 });
+        expect(await waitJob(h, job.id)).toMatchObject({ status: "failed", exitCode: 17 });
         expect(processFields(pid)?.[19] === identity && processFields(pid)?.[0] !== "Z").toBe(
           false,
         );
@@ -391,7 +391,12 @@ function processFields(pid: number): string[] | undefined {
     const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
     return stat.slice(stat.lastIndexOf(")") + 2).split(" ");
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error.code === "ENOENT" || error.code === "ESRCH")
+    )
+      return;
     throw error;
   }
 }

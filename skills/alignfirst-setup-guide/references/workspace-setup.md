@@ -1,12 +1,12 @@
 # Implementing Worktree-Based Concurrent Local Environments
 
-Blueprint for a **workspace** system — multiple git-worktree dev environments side by side. Requires git. The templates are Node.js, but the approach fits any runtime.
+Blueprint for a **workspace** system — multiple git-worktree dev environments side by side. Requires Git. The JavaScript templates run on Node or Bun; the approach also fits other runtimes.
 
 Workspace can be installed on its own. Add the workspace instructions below; AlignFirst skills, protocols, and Docmap are separate choices.
 
-**Node consumers** install `@alignfirst/workspace` and write thin wrappers — `workspace.mjs`, plus `dev-server.mjs` when the project has a dev server — that build a config object and call `runWorkspace(config)` / `runDevServer(config)`. The package owns the kernel (workspace and dev-server registries, port allocation in the dev-server, branch lifecycle, process control, log polling, CLI). In `workspace.mjs`, you supply project callbacks (`finalizeWorkspace`, `formatSummary`, optional `purgeInfrastructure`) plus a `gitignoredFiles` list. In `dev-server.mjs`, you declare the port range, the files that carry ports, the infrastructure `setup` and the servers.
+**Node and Bun consumers** install `@alignfirst/workspace` and write thin wrappers — `workspace.mjs`, plus `dev-server.mjs` when the project has a dev server — that build a config object and call `runWorkspace(config)` / `runDevServer(config)`. The package owns the kernel (workspace and dev-server registries, port allocation in the dev-server, branch lifecycle, process control, log polling, CLI). In `workspace.mjs`, you supply project callbacks (`finalizeWorkspace`, `formatSummary`, optional `purgeInfrastructure`) plus a `gitignoredFiles` list. In `dev-server.mjs`, you declare the port range, the files that carry ports, the infrastructure `setup` and the servers.
 
-**Non-Node consumers** can reimplement the full system from this design; the concept sections are self-contained. Existing documented implementations remain authoritative for AlignDev. Full workspace installation is optional for an assistant: without project tooling, `aligndev worktree` provides lightweight isolation. Its readiness covers Git and work files, not dependencies, ports, seeded config, infrastructure or servers. Follow repository preparation and teardown commands separately. See [the AlignDev contract](#the-aligndev-contract) when adopting the full system.
+**Consumers on other runtimes** can reimplement the full system from this design; the concept sections are self-contained. Existing documented implementations remain authoritative for AlignDev. Full workspace installation is optional for an assistant: without project tooling, `aligndev worktree` provides lightweight isolation. Its readiness covers Git and work files, not dependencies, ports, seeded config, infrastructure or servers. Follow repository preparation and teardown commands separately. See [the AlignDev contract](#the-aligndev-contract) when adopting the full system.
 
 The `assets/` scripts ([workspace.mjs](../assets/workspace.mjs), [dev-server.mjs](../assets/dev-server.mjs)) are annotated references. Each field carries an `ADAPT` comment. Copy a script, fill in the `ADAPT` points, then **strip the scaffolding comments** — keep only the rare comment explaining a non-obvious project choice. Aim for lean wrappers.
 
@@ -55,7 +55,7 @@ Suggest `.local/` by default, even when the repo has no such directory yet: a gi
 
 `runtimeDir` (`.local-wt/` above) stays per-worktree, but the kernel symlinks its `workspace-registry/` sub-directory to the main worktree's, so every worktree reads one registry.
 
-The main worktree's project-local `.plans` may itself be a symlink into a separate work-files repository (see [plans-setup.md](plans-setup.md)); the symlink chain resolves on its own. Companion-backed plans resolve directly through `alignfirst config --json` and need no worktree link; omit `.plans` from `sharedDirs` in that case. AlignDev refuses effective plans tracked by the project's own repository. Missing or project-tracked plans follow the separately authorized `aligndev guide work-files-setup` before ticket or setup effects, without copying existing project files.
+The main worktree's project-local `.plans` may itself be a symlink into a separate work-files repository (see [plans-setup.md](plans-setup.md)); the symlink chain resolves on its own. Companion-backed plans resolve directly through `alignfirst config --json` and need no worktree link; omit `.plans` from `sharedDirs` in that case. AlignDev refuses effective plans tracked by the project's own repository. Missing or project-tracked plans follow the separately authorized `work-files-setup` guide topic of `aligndev` before ticket or setup effects, without copying existing project files.
 
 ### Port range
 
@@ -114,7 +114,9 @@ A workspace for a code review needs no ports and no infrastructure. `workspace s
 
 ### Externally managed worktrees and bootstrap
 
-`workspace setup` without a branch adopts an existing worktree without changing its path or branch. Configure generic hooks in the external tool, executed **inside the target worktree**. For a typical pnpm consumer:
+Use the project's documented workspace tooling when present, including non-Node implementations. Without it, an external tool such as Paseo can run `npx -y aligndev worktree setup` as its post-creation hook **inside the target worktree**. Setup discovers the current root from nested directories; an explicit path must name an exact registered root of the same repository. It preserves the path, branch, index and unrelated files, validates existing plans, and shares work files idempotently. Repair conflicts and retry setup after partial preparation. Repository installation/build steps and shutdown remain separate. The external tool owns Git deletion; lightweight worktrees need no pre-deletion hook and have no `aligndev worktree teardown` command.
+
+For the full workspace system, `workspace setup` without a branch adopts an existing worktree without changing its path or branch. Configure generic hooks inside the target worktree. For a typical pnpm consumer:
 
 ```sh
 pnpm i && pnpm workspace setup
@@ -122,7 +124,15 @@ pnpm i && pnpm workspace setup --full
 pnpm workspace teardown
 ```
 
-The first two are alternative post-creation hooks; the second requires a configured dev wrapper. The last is the pre-deletion hook. Apply the consumer's runtime selection. Installation-first works when dependencies do not require seeded files and uses the new branch's wrapper. Setup blocks by default; detached setup is an explicit alternative and must settle before cleanup.
+For a Bun consumer using the same kernel and thin wrappers:
+
+```sh
+bun install && bun --bun run workspace setup
+bun install && bun --bun run workspace setup --full
+bun --bun run workspace teardown
+```
+
+In each block, the first two are alternative post-creation hooks; the second requires a configured dev wrapper. The last is the pre-deletion hook. Apply the consumer's runtime selection. Installation-first works when dependencies do not require seeded files and uses the new branch's wrapper. Setup blocks by default; detached setup is an explicit alternative and must settle before cleanup.
 
 For seed-before-install or missing local dependencies after failure, stay in the target worktree and invoke the installed main wrapper:
 
@@ -132,7 +142,7 @@ main_worktree=$(dirname "$common_dir")
 node "$main_worktree/<path-to>/workspace.mjs" setup
 ```
 
-Adapt the wrapper-relative path and runtime selection. The main wrapper must have usable dependencies/build output. This fallback runs the main worktree's recipe against the target; it is not a dependency-free launcher.
+For a Bun consumer, replace the final line with `bun "$main_worktree/<path-to>/workspace.mjs" setup`. The guide prints the quoted actual runtime for this bootstrap path. Adapt the wrapper-relative path and runtime selection. The main wrapper must have usable dependencies/build output. This fallback runs the main worktree's recipe against the target; it is not a dependency-free launcher.
 
 ### Cleanup without deletion
 
@@ -186,7 +196,7 @@ Builds a `WorkspaceConfig` and calls `runWorkspace`. Key fields:
 - `sharedDirs` (symlinked from main), `runtimeDir` (per-worktree; holds logs and the registry).
 - `gitignoredFiles: Array<{ path, source, patch?, optional? }>` — the files install, build or tests need ([Gitignored files](#gitignored-files-two-lists)). Functional `content(ctx)` and `patch(content, ctx)` receive `{ name, mainWorktree, currentWorktree, isMainWorktree }`; omit `patch` to copy verbatim.
 - `preSetup({ name, isMainWorktree, currentWorktree, mainWorktree, force, log })` — optional; runs **before** `gitignoredFiles` are copied. Use it for work outside file-source resolution, such as checking the work-files link with `npx alignfirst plans check`, creating directories, or configuring git hooks. **MUST be idempotent**; on a linked-worktree setup it MUST NOT mutate the main worktree. Omit the hook only when it has no remaining work.
-- `finalizeWorkspace(ctx)` — the detached background step: install and build. It returns nothing; infrastructure belongs in `setup` of `dev-server.mjs`. `ctx` carries `name`, `branch`, `currentWorktree`, `mainWorktree`, `isMainWorktree`, `force`, and `progress(label)`. **MUST be idempotent** — `workspace setup` is the documented retry path and re-runs it. **Run `npm install` first**, so any later failure still leaves usable `node_modules/` for the retry to import `@alignfirst/workspace`.
+- `finalizeWorkspace(ctx)` — the detached background step: install and build. It returns nothing; infrastructure belongs in `setup` of `dev-server.mjs`. `ctx` carries `name`, `branch`, `currentWorktree`, `mainWorktree`, `isMainWorktree`, `force`, and `progress(label)`. **MUST be idempotent** — `workspace setup` is the documented retry path and re-runs it. **Run the project's dependency installer first** (`npm install`, `bun install`, etc.), so any later failure still leaves usable `node_modules/` for the retry to import `@alignfirst/workspace`.
 - `purgeInfrastructure(ctx)` — optional destructive teardown (typically `docker compose down -v`). Runs on `workspace teardown`, `remove`, `prune`, and orphan removal, whether or not `dev setup` ever succeeded. **MUST be idempotent and cwd-independent**: `ctx.worktree` may be gone (orphan), so tear down *by name* ([Teardown by name](#teardown-by-name)). `ctx.purgeData` is legacy: only a workspace provisioned by an older `finalizeWorkspace` carries one. If you swallow errors for absent resources, cleanup remains best-effort.
 - `formatSummary(ctx)` — returns the post-setup string. Don't list dev-server URLs; the dev-server isn't running yet at this point.
 
@@ -250,11 +260,21 @@ Migration/seed scripts that invoke Compose indirectly must inherit matching `COM
 
 **Changing the layout** (seeded to committed, or back) affects every branch on the other side of the change. Moving to the committed pattern, Git overwrites the ignored compose file when a checkout, merge or rebase brings the tracked one. Update a worktree in this order: stop its dev server, update the branch, start the dev server.
 
-### npm scripts to add
+### Project scripts to add
 
 ```json
 { "workspace": "node scripts/workspace/workspace.mjs", "dev": "node scripts/workspace/dev-server.mjs" }
 ```
+
+For a Bun consumer, use the same wrappers with explicit Bun entries:
+
+```json
+{ "workspace": "bun scripts/workspace/workspace.mjs", "dev": "bun scripts/workspace/dev-server.mjs" }
+```
+
+Launch with `bun --bun run workspace setup` or `bun --bun run dev setup`, without npm's `--` separator. Direct `bun scripts/workspace/workspace.mjs setup` is also supported. Bun 1.4.4 is the tested baseline; compatibility with every older release is not promised. Finalizers and configured wrapper calls retain the selected runtime. Keep real install/build callbacks in their project's toolchain: running the kernel on Bun does not require changing an existing npm build callback or Docker command.
+
+Published CLI bins such as AlignFirst retain Node shebangs. Ordinary `bunx` normally uses Node when it is installed; Bun-only hosts should select `bunx --bun alignfirst`. The workspace package itself has no bin and uses the wrappers above.
 
 The single `dev` script carries every subcommand. Don't name it after the app's own dev command — a spawn server running `npm run dev` would recurse; use a distinct name (e.g. `dev:app`). A project without a dev server adds the `workspace` script alone.
 
@@ -307,7 +327,7 @@ The allocated ports are not one of them either: each workspace gets its own, and
 
 ## The AlignDev Contract
 
-When a project provides workspace tooling, the assistant uses its documented lifecycle, including non-Node implementations. `@alignfirst/workspace` supplies `--guide`, `list`, setup states and one-command removal; a full reimplementation reproduces that surface. Without project tooling, the assistant directly uses `aligndev worktree list/add/remove`, backed only by Git's registry. That fallback adds no workspace-package dependency or tracked configuration. It shares usable untracked project directories through locally excluded symlinks, uses companion plans directly, and preserves tracked `.local` with a warning. Lightweight removal refuses dirty worktrees and preserves branches and shared targets; stop processes and tear down infrastructure separately.
+When a project provides workspace tooling, the assistant uses its documented lifecycle, including non-Node implementations. `@alignfirst/workspace` supplies `--guide`, `list`, setup states and one-command removal; a full reimplementation reproduces that surface. Without project tooling, the assistant directly uses `aligndev worktree list/add/setup/remove`, backed only by Git's registry. That fallback adds no workspace-package dependency or tracked configuration. It shares usable untracked project directories through locally excluded symlinks, uses companion plans directly, and preserves tracked `.local` with a warning. Lightweight removal refuses dirty worktrees and preserves branches and shared targets; stop processes and tear down infrastructure separately.
 
 The requirements below apply when adopting the full workspace system for an assistant:
 
@@ -315,7 +335,7 @@ The requirements below apply when adopting the full workspace system for an assi
 2. Public URLs from the environment *(dev server)*, below.
 3. A `dev up` summary printing the public URL *(dev server)*: `formatSummary` in `dev-server.mjs` reads it from the run file, so the assistant reports an address that works from the user's browser.
 4. A README section on remote access, below.
-5. A Node version declaration (`.nvmrc`, `.node-version` or `engines.node`) named in `DEVELOPERS.md`, so fnm selects the project runtime. Ask which version to declare when the repository has none.
+5. A runtime version declaration named in `DEVELOPERS.md`. For Node, use `.nvmrc`, `.node-version` or `engines.node` so fnm selects the project runtime. For Bun, document the selected Bun version and explicit script commands; declare Node separately if project build callbacks require it. Ask which version to declare when the repository has none.
 
 ### Public URLs
 
@@ -359,10 +379,10 @@ Items marked *(ports)* drop out without ports, items marked *(dev server)* witho
 - [ ] **Decide database provisioning** in the dev-server's `setup`. File copy (SQLite) or Docker + migrate + seed. With Docker, follow the repo's compose pattern, committed by default ([Docker Compose](#docker-compose)).
 - [ ] **Decide the dev-server ready marker** and **fatal markers** (or leave empty) for fast-fail. *(dev server)*
 - [ ] **Pair main-worktree sources with committed fallbacks.** Declare each existing `.example` template as `fallback` so fresh main and linked setup work while siblings still prefer customized main files.
-- [ ] **Install `@alignfirst/workspace`** (Node consumers).
+- [ ] **Install `@alignfirst/workspace`** (Node and Bun consumers).
 - [ ] **Write `workspace.mjs`** from the asset — adapt the `ADAPT` points, then strip the scaffolding.
 - [ ] **Write `dev-server.mjs`** from the asset — same approach. *(dev server)*
-- [ ] **Add the `workspace` npm script**, and the `dev` one *(dev server)* (don't reuse the app's dev name).
+- [ ] **Add the `workspace` project script**, and the `dev` one *(dev server)* (don't reuse the app's dev name).
 - [ ] **Set `maxConcurrentDevServers`** (default `5`). *(dev server)*
 - [ ] **Give every callback server its own row in the `dev up` summary.** *(dev server)* The spawn servers get a URL, a PID and a log path for free; a database or a mock container gets none of the three. Print its connection string, its container name and the container-logs command, in the same column order as the spawn rows.
 - [ ] **Update `.gitignore`** for your shared and per-worktree directories.

@@ -30,7 +30,7 @@ Loading only registers capabilities. Work belongs to the active runtime, session
 
 Shutdown, session replacement, reload and successful navigation to a different tree point stop owned work. Merely opening or cancelling the tree picker does not stop it. Commands must stay attached; no daemonization or detachment is supported. Cleanup sends TERM immediately, escalates after a shared five-second graceful window, and awaits bounded direct-child reaping and pipe draining. Jobs stop concurrently. Incomplete cleanup remains an explicit error with retained ownership for retry, not a successful cancellation. Crash/SIGKILL recovery and deliberately escaped daemons are outside the guarantee.
 
-Each package has its own small `process-tree.ts` leaf so installation stays independent. Propagate generic fixes and conformance tests to both copies. They supervise observable attached descendants and retained process groups, including Pi's separately grouped bash work. This is process ownership, not an OS sandbox.
+Each package has its own small `process-tree.ts` leaf so installation stays independent. Propagate generic fixes and conformance tests to both copies. They supervise observable attached descendants and retained process groups, including Pi's separately grouped bash work. On Linux they read the process table from `/proc` and skip processes they cannot read, as `ps` does; `ps` serves macOS only. This is process ownership, not an OS sandbox.
 
 ## Notices are not workflow completion
 

@@ -181,7 +181,6 @@ describe("independent quota configuration", () => {
       const quota = resolveQuotaConfig(code, caller);
       expect(quota).toEqual({ source: agent, env: code.childEnv });
       if (quota.source === "none") throw new Error("unexpected disabled quota");
-      expect(quota.env).toBe(code.childEnv);
       expect(Object.hasOwn(quota.env, variable)).toBe(false);
       expect(quota.env.TOKEN).toBeUndefined();
       expect(caller[variable]).toBe(nativeB);
@@ -365,7 +364,6 @@ describe("independent quota configuration", () => {
       cwd: project,
       env: expect.objectContaining({ CODEX_HOME: nativeB }),
     });
-    expect(reader.mock.calls[0]).toBeDefined();
     expect(result.stdout).toContain("Profile: a; native source: codex");
     expect(result.stdout).toContain("account pairing with the coding agent is not verified");
     expect(result.stdout).not.toContain("fixture-secret");

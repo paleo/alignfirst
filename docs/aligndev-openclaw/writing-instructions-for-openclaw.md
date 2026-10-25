@@ -4,15 +4,29 @@ Hard-won notes from tightening the `myassistant` workspace files (`aligndev-open
 
 ## Shared templates
 
-The playbook templates and `code.md` serve both platforms: `openclaw` and `codingAgent`, a Claude Code or Codex session acting as the assistant. `project.md` is OpenClaw only.
+The playbook templates and `code.md` serve four contexts: a Slack thread, a Discord thread and an app conversation under `openclaw`, and `codingAgent`, a Claude Code, Codex or Pi session acting as the assistant. `project.md` is OpenClaw only.
+
+### Dispatcher, playbook, entry topics
+
+`aligndev guide` without a topic prints `dispatcher.md`, which routes the session to its surface's guide. Under `openclaw`, every topic but `project` takes `--channel <slack|discord|app>`, and `--channel` alone prints the surface's `playbook.md`. The entry topics, `working-session` and `channel-handling`, print the playbook, then the topic: a session reads dispatcher, playbook and topic in two calls. Under `codingAgent`, `aligndev guide working-session` does the same. The topics are keyed by context (`thread`, `app`, `codingAgent`) in `src/guide/topics.ts`.
 
 ### Blocks
 
-A platform-specific paragraph sits in a platform block, each marker alone on its line:
+A block names a fact, each marker alone on its line. A line is kept when every block around it holds:
+
+| Context | Facts |
+| --- | --- |
+| Slack | `openclaw`, `slack`, `thread` |
+| Discord | `openclaw`, `discord`, `thread` |
+| App | `openclaw`, `app`, `conversation` |
+| `codingAgent` | `codingAgent`, `conversation`, and `developers`, `readme` or `noGuide` (`hasGuide` with the first two) |
 
 ```text
 {{#openclaw}}
 Text only for OpenClaw.
+{{#slack}}
+Text only for Slack.
+{{/slack}}
 {{/openclaw}}
 {{#codingAgent}}
 Text only for a coding agent.
@@ -33,25 +47,25 @@ Sentence for a project without a guide file.
 {{/codingAgent}}
 ```
 
-`aligndev guide` keeps the active blocks without their marker lines and drops the others. Blocks mark whole lines. A platform block sits at the top level; a condition block sits directly inside a `{{#codingAgent}}` block and holds text only, which keeps the OpenClaw output independent of the project. An unknown name, a misplaced block, an unclosed block or a stray closing marker fails the render, naming the template and the line.
+A platform block sits at the top level. A surface block and `{{#thread}}` never sit inside a `{{#codingAgent}}` block, and `{{#conversation}}` sits anywhere. A condition block sits inside a `{{#codingAgent}}` block, at any depth, which keeps the OpenClaw output independent of the project. An unknown name, a misplaced block, an unclosed block or a stray closing marker fails the render, naming the template and the line.
 
-After block removal, runs of blank lines collapse to one, which repairs the gaps left by dropped blocks. Keep the templates free of double blank lines: the collapse would remove them from the OpenClaw output.
+After block removal, runs of blank lines collapse to one, which repairs the gaps left by dropped blocks. Keep the templates free of double blank lines: the collapse would remove them from the rendered output.
 
-### OpenClaw text stays byte-identical
+### Each surface's text stays identical
 
-The OpenClaw text was tuned against the harness scenarios. When a sentence must differ for `codingAgent`, keep the OpenClaw paragraph untouched in an `{{#openclaw}}` block and write the `codingAgent` copy in a `{{#codingAgent}}` block right after it. A paragraph is one line, so a one-word difference duplicates the whole paragraph. Check an edit by rendering every OpenClaw guide before and after it and comparing the output. Rewording OpenClaw text to share more of it needs harness runs.
+The OpenClaw text was tuned against the harness scenarios. A sentence that names one surface, or a mechanism only one surface has, sits in that surface's block. When a sentence must differ for another context, keep the tuned paragraph untouched in its block and write the other copy in its own block right after it. A paragraph is one line, so a one-word difference duplicates the whole paragraph. Check an edit by rendering each surface's guides before and after it, and compare them with `--channel <surface>` normalized away. Rewording tuned text to share more of it needs harness runs.
 
 ### Step numbers stay aligned
 
-Cross-references cite step numbers, as in "Step 5 of `{{ALIGNDEV}} guide project-workspace-setup`". When a step is OpenClaw only, the `codingAgent` variant gets its own step under the same number, with its own content or a one-line skip. Every shared reference then stays valid without renumbering.
+Cross-references cite step numbers, as in "Step 5 of `{{GUIDE}} project-workspace-setup`". When a step is OpenClaw only, the `codingAgent` variant gets its own step under the same number, with its own content or a one-line skip. Every shared reference then stays valid without renumbering.
 
 ### `codingAgent` prose
 
-The `codingAgent` assistant runs in the project's repository, and the user talks to it in the session's conversation. Its prose names no OpenClaw tool, surface or sentinel: no thread, channel, `message`, `exec`, `thread_handoff`, `HEARTBEAT_OK` or `NO_REPLY`. It never mentions `aligndev project` or the project inventory either.
+The `codingAgent` assistant runs in the project's repository, and the user talks to it in the session's conversation. Its prose names no OpenClaw tool, surface or sentinel: no thread, channel, `message`, `exec`, `thread_handoff`, `HEARTBEAT_OK` or `NO_REPLY`. It never mentions `aligndev project` or the project inventory either. A `{{#conversation}}` block is `codingAgent` prose too, since the app conversation reuses it; app-only facts go in `{{#app}}`.
 
 ### Placeholders
 
-Write every command as `{{ALIGNDEV}} …` or `{{ALIGNFIRST}} …`. They render as `aligndev` and `alignfirst`, or as `npx -y aligndev` and `npx -y alignfirst` when `aligndev` runs through `npx`. `{{PROJECTS_ROOT}}` exists under `openclaw` only. Placeholders are replaced after block rendering, and the tests fail on any placeholder left in a rendered guide.
+Write every command as `{{ALIGNDEV}} …` or `{{ALIGNFIRST}} …`. They render as `aligndev` and `alignfirst`, or as `npx -y aligndev` and `npx -y alignfirst` when `aligndev` runs through `npx`. Write a guide call as `{{GUIDE}} <topic>`: it renders as `aligndev guide --channel <surface>` under `openclaw` and `aligndev guide` under `codingAgent`, so the model carries the surface into every later call. The dispatcher writes its routes literally, and `{{ALIGNDEV}} guide project` takes no channel. `{{PROJECTS_ROOT}}` exists under `openclaw` only. Placeholders are replaced after block rendering, and the tests fail on any placeholder left in a rendered guide.
 
 ## One rule, stated once
 
@@ -125,7 +139,7 @@ An exception placed after the procedure it excepts gets skipped: the model acts 
 
 ## A literal value outranks a pointer to the reference
 
-Step 2 said "react with 🦞" and pointed to the surface reference for the call. On Slack, Terra often skipped the reference and sent `🦞`, where Slack needs the name `lobster`. It failed the reaction contract in A01 (2026-09-28) and A20 (2026-09-29). When a value differs by surface, give each value in the instruction that uses it: "`🦞` on Discord, `lobster` on Slack".
+Step 2 said "react with 🦞" and pointed to the surface reference for the call. On Slack, Terra often skipped the reference and sent `🦞`, where Slack needs the name `lobster`. It failed the reaction contract in A01 (2026-09-28) and A20 (2026-09-29). When a value differs by surface, give each value in the instruction that uses it, inside that surface's block.
 
 ## Template + variations beats N full examples
 

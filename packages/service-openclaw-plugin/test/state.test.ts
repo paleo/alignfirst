@@ -66,26 +66,15 @@ describe("handoff SQLite state", () => {
     store.close();
   });
 
-  it("claims atomically across independent connections", async () => {
+  it("rejects another run's claim made through an independent connection", () => {
     const stateDir = temporaryStateDir();
     const first = createHandoffStore(stateDir);
     const second = createHandoffStore(stateDir);
     first.insertHandoff(handoff());
-    const identity = {
-      targetSessionKey: handoff().targetSessionKey,
-      agentId: "main",
-      sessionId: "target-uuid",
-      runId: "run-1",
-      accountId: "workspace-1",
-      handoffId: "handoff-1",
-    };
-    const results = await Promise.all([
-      Promise.resolve().then(() => first.claimHandoff(identity, 2_000).status),
-      Promise.resolve().then(
-        () => second.claimHandoff({ ...identity, runId: "run-2" }, 2_001).status,
-      ),
-    ]);
-    expect(results.sort()).toEqual(["alreadyClaimed", "claimed"]);
+    expect(first.claimHandoff(claimIdentity({ runId: "run-1" }), 2_000).status).toBe("claimed");
+    expect(second.claimHandoff(claimIdentity({ runId: "run-2" }), 2_001).status).toBe(
+      "alreadyClaimed",
+    );
     first.close();
     second.close();
   });

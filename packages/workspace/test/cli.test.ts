@@ -59,14 +59,6 @@ describe("parseWorkspaceArgs", () => {
     });
   });
 
-  it("rejects the removed `--profile` flag", () => {
-    expect(() => parseWorkspaceArgs(["setup", "--profile", "assistant"])).toThrow(ConfigError);
-  });
-
-  it("rejects the removed `--slot` flag on setup", () => {
-    expect(() => parseWorkspaceArgs(["setup", "feat/42", "--slot", "8110"])).toThrow(ConfigError);
-  });
-
   it("parses `-d` / `--detached`", () => {
     expect(parseWorkspaceArgs(["setup", "-d"]).command).toMatchObject({
       kind: "setup",
@@ -97,14 +89,6 @@ describe("parseWorkspaceArgs", () => {
   it("parses `-v` and `--version` as the version command", () => {
     expect(parseWorkspaceArgs(["-v"]).command).toEqual({ kind: "version" });
     expect(parseWorkspaceArgs(["--version"]).command).toEqual({ kind: "version" });
-  });
-
-  it("rejects the removed `--wait` flag on setup", () => {
-    expect(() => parseWorkspaceArgs(["setup", "feat/42", "--wait"])).toThrow(ConfigError);
-  });
-
-  it("rejects the removed `--owner` flag on setup", () => {
-    expect(() => parseWorkspaceArgs(["setup", "feat/42", "--owner", "alice"])).toThrow(ConfigError);
   });
 
   it("parses `setup <branch> -c --from <ref>`", () => {
@@ -188,14 +172,6 @@ describe("parseWorkspaceArgs", () => {
     expect(() => parseWorkspaceArgs(["remove", "--slot", "8110"])).toThrow(ConfigError);
   });
 
-  it("rejects the removed `--no-remote-check` flag", () => {
-    expect(() => parseWorkspaceArgs(["remove", "--no-remote-check"])).toThrow(ConfigError);
-  });
-
-  it("rejects the removed `set-owner` command", () => {
-    expect(() => parseWorkspaceArgs(["set-owner", "alice"])).toThrow(ConfigError);
-  });
-
   it("parses `list`", () => {
     const { command } = parseWorkspaceArgs(["list"]);
     expect(command).toEqual({ kind: "list" });
@@ -258,10 +234,6 @@ describe("parseWorkspaceArgs", () => {
     );
   });
 
-  it("rejects the removed `migrate-0.16` command", () => {
-    expect(() => parseWorkspaceArgs(["migrate-0.16", ".local/registry"])).toThrow(ConfigError);
-  });
-
   it("rejects an unknown subcommand", () => {
     expect(() => parseWorkspaceArgs(["frobnicate"])).toThrow(ConfigError);
   });
@@ -285,18 +257,17 @@ describe("renderWorkspaceHelp", () => {
     expect(help).not.toContain("basename");
   });
 
-  it("documents `setup --full` and no `--profile`", () => {
+  it("documents `setup --full`", () => {
     const help = renderWorkspaceHelp();
     expect(help).toContain("[--enter] [--full]");
     expect(help).toContain("--full: also run the dev setup");
-    expect(help).not.toContain("--profile");
   });
 });
 
 describe("renderDevHelp", () => {
   it("documents `dev setup` and its public options, not the internal one", () => {
     const help = renderDevHelp();
-    expect(help).toContain("dev setup [--force] [--reset-ports]");
+    expect(help).toContain("npm run dev -- setup [--force] [--reset-ports]");
     expect(help).toContain("--reset-ports");
     expect(help).not.toContain("--from-finalize");
   });

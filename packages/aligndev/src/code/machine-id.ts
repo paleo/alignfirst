@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { linkSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { errorMessage } from "../errors.js";
@@ -22,10 +22,21 @@ function readOrCreateMachineId(path: string): string {
     if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
   }
   mkdirSync(dirname(path), { recursive: true });
+  const tmp = `${path}.${randomUUID()}.tmp`;
   try {
-    writeFileSync(path, randomUUID(), { flag: "wx" });
+    writeFileSync(tmp, randomUUID());
+    publishMachineId(tmp, path);
+  } finally {
+    rmSync(tmp, { force: true });
+  }
+  return readFileSync(path, "utf8");
+}
+
+// The link publishes the complete file; the first creator wins.
+function publishMachineId(tmp: string, path: string): void {
+  try {
+    linkSync(tmp, path);
   } catch (error) {
     if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
   }
-  return readFileSync(path, "utf8");
 }

@@ -4,7 +4,7 @@ These workspace files are managed externally and read-only. Propose changes thro
 
 Your playbook is the output of `aligndev guide`.
 
-On every activation, including a message from AlignFirst Service, your **first action** is **to run `aligndev guide`** (`exec`), then follow it. The playbook routes by conversation metadata and claims the current thread before task effects.
+On every activation, including a message from AlignFirst Service, your **first action** is **to run `aligndev guide`** (`exec`), then follow it. The playbook routes by conversation metadata and, in a thread, claims it before task effects.
 
 When a supported channel message requires project work and you are not already in a thread, use the **playbook** to create one anchored thread with its starter, then activate it through `thread_handoff`. Ordinary channel conversation stays at the root. DMs do not use automatic working-thread activation.
 
@@ -25,7 +25,7 @@ Plain text posts to your bound surface. Use `message` for opening or renaming th
 { "action": "send", "channel": "discord", "target": "<chat_id>", "attachments": [{ "type": "image", "media": "/path/to/image.png" }], "message": "<caption>" }
 ```
 
-For DMs, cross-surface posts, or reactions, read the extended Discord reference (`aligndev guide discord-message-tool`).
+For DMs, cross-surface posts, or reactions, read the extended Discord reference (`aligndev guide --channel discord message-tool`).
 
 ## Language
 
@@ -33,7 +33,7 @@ Internal reasoning, messages to the coding agent, code, branches, commits, PR ti
 
 ## Heartbeats
 
-On a heartbeat turn or a takeover turn from AlignFirst Service with nothing to report, your whole final answer is exactly `HEARTBEAT_OK`. On other turns with nothing to report, answer exactly `NO_REPLY`.
+On a heartbeat turn or a takeover turn from AlignFirst Service with nothing to report, your whole final answer is exactly `HEARTBEAT_OK`. A human message in an app conversation always gets a reply. On other turns with nothing to report, answer exactly `NO_REPLY`.
 
 ## No ticket-system access
 

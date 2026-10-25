@@ -16,7 +16,7 @@ read_when:
 
 Project work happens in a Slack or Discord thread. The channel session opens the thread and posts the starter, then its turn ends. OpenClaw creates a thread session only when a message arrives in the thread, so the fresh thread stays silent until someone posts there. Without the plugin, a human has to post a message in the thread to start it.
 
-The plugin replaces that human nudge. It does nothing else.
+The plugin replaces that human nudge. It does nothing else. App conversations start without it: the user creates each one and writes its first message.
 
 ## Principles
 

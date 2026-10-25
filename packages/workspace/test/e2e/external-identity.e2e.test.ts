@@ -113,7 +113,7 @@ describe("externally created same-basename worktrees", () => {
       const detached = runCli(
         repo,
         ["setup", "--detached"],
-        { E2E_FINALIZE_BARRIER: barrier, E2E_FINALIZE_PID_LOG: "1" },
+        { E2E_FINALIZE_BARRIER: barrier },
         second,
       );
       expect(detached.status).toBe(0);
@@ -151,7 +151,7 @@ describe("externally created same-basename worktrees", () => {
       const forced = runCli(
         repo,
         ["setup", "--force", "--detached"],
-        { E2E_FINALIZE_BARRIER: barrier, E2E_FINALIZE_PID_LOG: "1" },
+        { E2E_FINALIZE_BARRIER: barrier },
         second,
       );
       expect(forced.status).toBe(0);
@@ -173,12 +173,7 @@ describe("externally created same-basename worktrees", () => {
       const { repo, first, second } = fixture;
       expect(runCli(repo, ["setup"], undefined, first).status).toBe(0);
       const original = entryAt(fixture, first).entry;
-      const failed = runCli(
-        repo,
-        ["setup", "--detached"],
-        { E2E_FINALIZE_FAIL: "1", E2E_FINALIZE_PID_LOG: "1" },
-        second,
-      );
+      const failed = runCli(repo, ["setup", "--detached"], { E2E_FINALIZE_FAIL: "1" }, second);
       expect(failed.status).toBe(0);
       const name = entryAt(fixture, second).name;
       const wait = runCli(repo, ["wait", name]);
@@ -213,11 +208,11 @@ describe("externally created same-basename worktrees", () => {
       expect(entry.status).toBe("ready");
       expect(entry.devSetupFailure?.message).toContain("e2e dev boom");
       expect(entry.devSetupAt).toBeUndefined();
-      expect(
-        Object.values(entry.ports ?? {}).every(
-          (port) => !Object.values(original.ports ?? {}).includes(port),
-        ),
-      ).toBe(true);
+      const originalPorts = Object.values(original.ports ?? {});
+      const failedPorts = Object.values(entry.ports ?? {});
+      expect(originalPorts).toHaveLength(2);
+      expect(failedPorts).toHaveLength(2);
+      expect(failedPorts.filter((port) => originalPorts.includes(port))).toEqual([]);
       mkdirSync(join(second, "nested", "inside"), { recursive: true });
       const nested = join(second, "nested", "inside");
       expect(runCli(repo, ["status"], undefined, nested).stdout).toContain("Dev setup failed:");

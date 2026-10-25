@@ -1,21 +1,12 @@
-import {
-  createChannelMockAccountHelpers,
-  createChannelMockMessageActions,
-  createChannelMockPlugin,
-} from "@alignfirst/openclaw-channel-mock-core";
 import { createServer, type Server } from "node:http";
 import { createBus } from "@alignfirst/openclaw-channel-mock-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { slackMockPlugin } from "../src/plugin.js";
 
 const CHANNEL_ID = "slack-mock";
-const helpers = createChannelMockAccountHelpers({ channelId: CHANNEL_ID });
-const actions = createChannelMockMessageActions({
-  channelId: CHANNEL_ID,
-  surface: "slack",
-  helpers,
-});
+const actions = slackMockPlugin.actions;
 
-if (!actions.handleAction || !actions.describeMessageTool || !actions.prepareSendPayload) {
+if (!actions?.handleAction || !actions.describeMessageTool || !actions.prepareSendPayload) {
   throw new Error("slack-mock actions missing required adapters");
 }
 const handleAction: NonNullable<typeof actions.handleAction> = actions.handleAction;
@@ -72,7 +63,7 @@ async function run(action: string, params: Record<string, unknown>) {
 }
 
 describe("slack-mock action surface", () => {
-  it("exposes native send but not fake thread creation or rename", () => {
+  it("exposes native send but not thread-create or thread-reply", () => {
     const desc = describeMessageTool({
       cfg: cfg() as unknown as Parameters<typeof describeMessageTool>[0]["cfg"],
       accountId: "default",
@@ -105,16 +96,7 @@ describe("slack-mock action surface", () => {
   });
 
   it("returns the bus-resolved target and thread from the message adapter", async () => {
-    const plugin = createChannelMockPlugin({
-      channelId: CHANNEL_ID,
-      label: "Slack Mock",
-      surface: "slack",
-      autoThread: true,
-      getRuntime: () => {
-        throw new Error("runtime is not used by the message adapter");
-      },
-    });
-    const sendText = plugin.message?.send?.text;
+    const sendText = slackMockPlugin.message?.send?.text;
     if (!sendText) throw new Error("slack-mock message adapter missing send.text");
     const result = await sendText({
       cfg: cfg(),
@@ -135,7 +117,7 @@ describe("slack-mock action surface", () => {
     });
   });
 
-  it("continues to reject fake Slack creation and rename actions", async () => {
+  it("rejects thread-create and thread-reply", async () => {
     await expect(run("thread-create", { to: "sample-project", title: "x" })).rejects.toThrow(
       /does not expose action/,
     );

@@ -1,5 +1,13 @@
 import type * as FileSystem from "node:fs";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,7 +16,7 @@ import { readMachineId } from "../../src/code/machine-id.js";
 
 vi.mock("node:fs", async (original) => {
   const fs = await original<typeof FileSystem>();
-  return { ...fs, writeFileSync: vi.fn(fs.writeFileSync) };
+  return { ...fs, linkSync: vi.fn(fs.linkSync), writeFileSync: vi.fn(fs.writeFileSync) };
 });
 
 describe("readMachineId", () => {
@@ -37,15 +45,16 @@ describe("readMachineId", () => {
     expect(readFileSync(path, "utf8")).toBe("  existing-installation\n");
   });
 
-  it("reads the winning identity after an exclusive-create collision", () => {
+  it("reads the winning identity when another creator links first", () => {
     const original = vi.mocked(writeFileSync).getMockImplementation();
     if (!original) throw new Error("Missing filesystem implementation.");
     vi.mocked(writeFileSync).mockImplementationOnce((file, ...args) => {
-      original(file, "winner");
+      original(path, "winner");
       return original(file, ...args);
     });
     expect(readMachineId(home)).toBe("winner");
     expect(readFileSync(path, "utf8")).toBe("winner");
+    expect(tempFiles()).toEqual([]);
   });
 
   it("reports an empty identity without replacing it", () => {
@@ -61,10 +70,15 @@ describe("readMachineId", () => {
     expect(() => readMachineId(home)).toThrow(path);
   });
 
-  it("names the identity path when creation fails", () => {
-    vi.mocked(writeFileSync).mockImplementationOnce(() => {
-      throw Object.assign(new Error("write denied"), { code: "EACCES" });
+  it("names the identity path and removes the temporary file when publishing fails", () => {
+    vi.mocked(linkSync).mockImplementationOnce(() => {
+      throw Object.assign(new Error("link failed"), { code: "EIO" });
     });
     expect(() => readMachineId(home)).toThrow(path);
+    expect(tempFiles()).toEqual([]);
   });
+
+  function tempFiles(): string[] {
+    return readdirSync(join(home, ".alignfirst")).filter((name) => name.endsWith(".tmp"));
+  }
 });

@@ -82,7 +82,7 @@ describe("registered public subagent tool", () => {
     },
   );
 
-  it("reports missing executable without leaving a live process", async () => {
+  it("reports a missing executable as a failed result", async () => {
     const host = harness(async () => ({ command: "/absent/pi", args: [] }));
     const result = await host.tool.execute(
       "missing",
@@ -112,7 +112,7 @@ describe("registered public subagent tool", () => {
     expect(host.captures()).toEqual([]);
   });
 
-  it("handles stdin EPIPE and removes its profile file", async () => {
+  it("reports a stdin EPIPE as a failed result", async () => {
     const host = harness(async () => ({ command: process.execPath, args: [fixture, "--epipe"] }));
     const result = await host.tool.execute(
       "epipe",

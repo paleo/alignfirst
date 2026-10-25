@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { addInitScripts, type PackageJsonScripts } from "../src/cli.js";
 
 describe("addInitScripts", () => {
+  it("runs the local entry through Bun on the Bun runtime", () => {
+    const pkg: PackageJsonScripts = {};
+    addInitScripts(pkg, "bun");
+    expect(pkg.scripts).toEqual({
+      "env:build": "bun ./node_modules/.bin/openclaw-test env build",
+      "env:up": "bun ./node_modules/.bin/openclaw-test env up",
+      "env:down": "bun ./node_modules/.bin/openclaw-test env down",
+      e2e: "bun ./node_modules/.bin/openclaw-test run",
+    });
+  });
+
   it("adds the four scripts to a package.json without scripts", () => {
     const pkg: PackageJsonScripts = {};
     const added = addInitScripts(pkg);

@@ -21,7 +21,7 @@ describe("docmap command", () => {
       (
         await runMain(["docmap", "--guide"], {
           cwd,
-          env: { npm_config_user_agent: "npm/11" },
+          env: { npm_config_user_agent: "npm/11", npm_command: "exec", npm_lifecycle_event: "npx" },
         })
       ).stdout,
     ).toContain("npx -y alignfirst docmap --check");

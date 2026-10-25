@@ -27,6 +27,7 @@ interface Fixture {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -407,6 +408,8 @@ it("leaves pending sync-message merges intact before Git's rebase", async () => 
   const hook = join(fixture.clone, ".git/hooks/pre-rebase");
   writeFileSync(hook, `#!/bin/sh\ngit rev-parse HEAD > '${beforeRebase}'\n`);
   chmodSync(hook, 0o755);
+  write(fixture.other, "remote.md", "remote\n");
+  publishOther(fixture);
   const result = await runMain(["sync"], { cwd: fixture.product });
   expect(result.code, result.stderr).toBe(0);
   expect(readFileSync(beforeRebase, "utf8").trim()).toBe(head);
@@ -445,18 +448,24 @@ it("stages only resolver paths and leaves an unrelated untracked file alone", as
   expect(findStoppedRebase(fixture.clone)).toBeUndefined();
 });
 
-it("reports a live lock after three attempts within ten seconds", async () => {
+it("reports a live lock when the retry budget expires", async () => {
+  vi.spyOn(Math, "random").mockReturnValue(0);
   const fixture = await makeFixture();
   const path = join(fixture.clone, ".git/alignfirst-sync.lock");
   mkdirSync(path);
   writeFileSync(join(path, "pid"), String(process.pid));
   const started = Date.now();
-  const result = await runMain(["sync"], { cwd: fixture.product });
+  const result = await runMain(["sync"], {
+    cwd: fixture.product,
+    env: { ALIGNFIRST_SYNC_RETRY_MS: "1000" },
+  });
   expect(result.code).toBe(1);
   expect(result.stderr).toContain("lock is busy");
   expect(result.stderr).toContain(path);
   expect(result.stderr).toContain(String(process.pid));
-  expect(Date.now() - started).toBeLessThan(10_000);
+  const elapsed = Date.now() - started;
+  expect(elapsed).toBeGreaterThanOrEqual(1000);
+  expect(elapsed).toBeLessThan(5000);
   expect(existsSync(path)).toBe(true);
 }, 10_000);
 
@@ -471,6 +480,7 @@ it("replaces a stale lock and releases it after sync", async () => {
 });
 
 it("retries after the remote advances just before the first push", async () => {
+  vi.spyOn(Math, "random").mockReturnValue(0);
   const fixture = await makeFixture();
   write(fixture.clone, "local.md", "local\n");
   write(fixture.other, "remote.md", "remote\n");
@@ -495,6 +505,124 @@ it("retries after the remote advances just before the first push", async () => {
   expect(remoteContent(fixture, "remote.md")).toBe("remote\n");
   expect(git(fixture.remote, "log", "--format=%s")).toContain("remote race");
   expect(findStoppedRebase(fixture.clone)).toBeUndefined();
+});
+
+it.each([false, true])(
+  "keeps a write that lands before the rebase starts (autoStash=%s)",
+  async (autoStash) => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const path = "product-plans/80/f.md";
+    const fixture = await makeFixture({ [path]: "base\n" });
+    git(fixture.clone, "config", "rebase.autoStash", String(autoStash));
+    write(fixture.other, "remote.md", "remote\n");
+    publishOther(fixture);
+    write(fixture.clone, "local.md", "local\n");
+    const marker = join(fixture.root, "written");
+    const hook = join(fixture.clone, ".git/hooks/pre-rebase");
+    writeFileSync(
+      hook,
+      `#!/bin/sh\nif [ ! -f '${marker}' ]; then\n  touch '${marker}'\n  printf 'concurrent\\n' > '${path}'\nfi\n`,
+    );
+    chmodSync(hook, 0o755);
+
+    const result = await runMain(["sync"], { cwd: fixture.product });
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(remoteContent(fixture, path)).toBe("concurrent\n");
+    expect(remoteContent(fixture, "local.md")).toBe("local\n");
+    expect(findStoppedRebase(fixture.clone)).toBeUndefined();
+    expect(git(fixture.clone, "stash", "list")).toBe("");
+    expect(result.stderr).not.toContain("would be overwritten");
+  },
+);
+
+it.each([false, true])(
+  "keeps a write that lands during the rebase (autoStash=%s)",
+  async (autoStash) => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const path = "product-plans/80/f.md";
+    const fixture = await makeFixture({ [path]: "base\n" });
+    git(fixture.clone, "config", "rebase.autoStash", String(autoStash));
+    write(fixture.other, "remote.md", "remote\n");
+    publishOther(fixture);
+    write(fixture.clone, path, "local\n");
+    write(fixture.clone, "other.md", "other local\n");
+    const marker = join(fixture.root, "written");
+    const hook = join(fixture.clone, ".git/hooks/post-checkout");
+    writeFileSync(
+      hook,
+      `#!/bin/sh\nif [ ! -f '${marker}' ]; then\n  touch '${marker}'\n  printf 'concurrent\\n' > '${path}'\nfi\n`,
+    );
+    chmodSync(hook, 0o755);
+
+    const result = await runMain(["sync"], { cwd: fixture.product });
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(remoteContent(fixture, path)).toBe("concurrent\n");
+    expect(remoteContent(fixture, "other.md")).toBe("other local\n");
+    expect(findStoppedRebase(fixture.clone)).toBeUndefined();
+    expect(git(fixture.clone, "stash", "list")).toBe("");
+  },
+);
+
+it("does not skip a stopped commit while the working tree is dirty", async () => {
+  const path = "product-plans/80/f.md";
+  const fixture = await makeFixture({ [path]: "base\n" });
+  write(fixture.other, "remote.md", "remote\n");
+  publishOther(fixture);
+  write(fixture.clone, path, "local\n");
+  write(fixture.clone, "other.md", "other local\n");
+  commitLocal(fixture, "sync");
+  git(fixture.clone, "fetch", "--quiet");
+  const hook = join(fixture.clone, ".git/hooks/post-checkout");
+  writeFileSync(hook, `#!/bin/sh\nprintf 'concurrent\\n' > '${path}'\n`);
+  chmodSync(hook, 0o755);
+  expect(() => git(fixture.clone, "-c", "rebase.autoStash=false", "rebase", "@{u}")).toThrow();
+  expect(findStoppedRebase(fixture.clone)?.conflictedFiles).toEqual([]);
+
+  await expect(
+    resolveStoppedRebase({ stdout: makeSink(), stderr: makeSink() }, fixture.clone),
+  ).rejects.toThrow("git rebase failed");
+
+  expect(readFileSync(join(fixture.clone, path), "utf8")).toBe("concurrent\n");
+  expect(findStoppedRebase(fixture.clone)).toBeDefined();
+});
+
+it("gives up when work files keep changing", async () => {
+  vi.spyOn(Math, "random").mockReturnValue(0);
+  const path = "product-plans/80/f.md";
+  const fixture = await makeFixture({ [path]: "base\n" });
+  write(fixture.other, "remote.md", "remote\n");
+  publishOther(fixture);
+  write(fixture.clone, "local.md", "local\n");
+  const hook = join(fixture.clone, ".git/hooks/pre-rebase");
+  writeFileSync(hook, `#!/bin/sh\nprintf 'concurrent\\n' >> '${path}'\n`);
+  chmodSync(hook, 0o755);
+
+  const result = await runMain(["sync"], {
+    cwd: fixture.product,
+    env: { ALIGNFIRST_SYNC_RETRY_MS: "1000" },
+  });
+
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain("kept changing");
+  expect(result.stderr).toContain("would be overwritten");
+  expect(existsSync(join(fixture.clone, ".git/alignfirst-sync.lock"))).toBe(false);
+  expect(findStoppedRebase(fixture.clone)).toBeUndefined();
+  const content = readFileSync(join(fixture.clone, path), "utf8");
+  expect(content).toMatch(/^base\n(?:concurrent\n)+$/);
+  expect(git(fixture.clone, "diff", "--", path)).toContain("+concurrent");
+  expect(Number(git(fixture.clone, "rev-list", "--count", "@{u}..HEAD"))).toBeGreaterThanOrEqual(1);
+});
+
+it.each(["-1", "NaN", "Infinity"])("rejects an invalid retry budget: %s", async (budget) => {
+  const fixture = await makeFixture();
+  const result = await runMain(["sync"], {
+    cwd: fixture.product,
+    env: { ALIGNFIRST_SYNC_RETRY_MS: budget },
+  });
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain("ALIGNFIRST_SYNC_RETRY_MS must be a non-negative number");
 });
 
 function commitLocal(fixture: Fixture, message: string): void {

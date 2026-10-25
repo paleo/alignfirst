@@ -68,10 +68,8 @@ describe("thread-handoff reply dispatch", () => {
       MessageSidFull: "message-1",
       Timestamp: expect.any(Number),
     });
-    expect(context.Timestamp).toEqual(expect.any(Number));
     expect(context.Timestamp as number).toBeGreaterThanOrEqual(before);
     expect(context.Timestamp as number).toBeLessThanOrEqual(after);
-    expect(context).not.toHaveProperty("SenderId");
     expect(buildLastRoute(request)).toEqual({
       sessionKey: request.sessionKey,
       channel: "slack",

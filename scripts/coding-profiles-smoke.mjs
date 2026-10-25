@@ -229,7 +229,7 @@ async function createProjects(f) {
   }
   await command(f, f.project, "git", ["worktree", "add", "--quiet", "-b", "linked", f.linked]);
   mkdirSync(join(f.project, ".plans"));
-  mkdirSync(join(f.linked, ".plans"));
+  symlinkSync(join(f.project, ".plans"), join(f.linked, ".plans"));
 }
 
 async function command(f, cwd, executable, args, expected = 0) {
@@ -560,7 +560,16 @@ async function launch(f, cwd, args, expected = 0) {
     match,
     `Every started run must expose its durable file.\n${result.stdout}\n${result.stderr}`,
   );
-  return { ...result, file: resolve(cwd, match[1]) };
+  const runningFile = resolve(cwd, match[1]);
+  assert.match(runningFile, /\.running\.md$/);
+  const file = runningFile.replace(/\.running\.md$/, ".md");
+  assert.equal(existsSync(runningFile), false, "Ended runs must rename their running file.");
+  assert.ok(existsSync(file), "Ended runs must retain their completed file.");
+  const status = await command(f, cwd, "aligndev", ["code", "status", runningFile, "--result"]);
+  const resolvedFile = /^sessionFile: (.+)$/m.exec(status.stdout);
+  assert.ok(resolvedFile, "Status must resolve a retained running path to its completed file.");
+  assert.equal(resolve(cwd, resolvedFile[1]), file);
+  return { ...result, file };
 }
 
 async function metadata(f, cwd, file, expected) {

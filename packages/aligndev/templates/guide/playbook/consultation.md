@@ -13,16 +13,19 @@ Run `{{ALIGNDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` 
 {{/openclaw}}
 {{#codingAgent}}
 {{#hasGuide}}
-Read DEVELOPERS_PATH, retained by Step 1 of `{{ALIGNDEV}} guide working-session`, and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
+Read DEVELOPERS_PATH, retained by Step 1 of `{{GUIDE}} working-session`, and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
 {{/hasGuide}}
 {{#noGuide}}
 Run `{{ALIGNFIRST}} context` from PROJECT_PATH.
 {{/noGuide}}
 {{/codingAgent}}
 
-{{#openclaw}}
+{{#thread}}
 Use the main worktree on the configured default branch. When the question explicitly concerns a branch or a PR, or follows ongoing branch work in this thread, use that branch's existing registered workspace instead: resolve it through the project's documented workspace list, or `{{ALIGNDEV}} worktree list --json` when no tooling exists. Report the limitation rather than inspecting a different branch when no worktree exists. Do not create a worktree merely to answer a question.
-{{/openclaw}}
+{{/thread}}
+{{#app}}
+When this conversation started in a linked worktree of the project, use that worktree and its branch as they are. Otherwise use the main worktree on the configured default branch. When the question explicitly concerns another branch or a PR, or follows ongoing branch work in this conversation, use that branch's existing registered workspace instead: resolve it through the project's documented workspace list, or `{{ALIGNDEV}} worktree list --json` when no tooling exists. Report the limitation rather than inspecting a different branch when no worktree exists. Do not create a worktree merely to answer a question.
+{{/app}}
 {{#codingAgent}}
 Use the session's worktree and its branch as they are. When the question explicitly concerns another branch or a PR, use that branch's existing registered workspace instead: resolve it through the project's documented workspace list, or `{{ALIGNDEV}} worktree list --json` when no tooling exists. Report the limitation rather than inspecting a different branch when no worktree exists. Do not create a worktree merely to answer a question.
 {{/codingAgent}}
@@ -31,6 +34,10 @@ Use the session's worktree and its branch as they are. When the question explici
 ## Step 2 — Refresh the default branch
 
 Skip this step when Step 1 selected an existing branch workspace; inspect its current state as it is, without the workspace setup or branch-sync procedure.
+{{#app}}
+
+Skip it too when Step 1 selected this conversation's own worktree. Retain `git rev-parse --short HEAD` there instead: the revision the answer comes from, reported as below.
+{{/app}}
 
 Before delegating against the default branch, verify that the main worktree is clean and on that branch. Fetch its remote and fast-forward from its upstream with `git merge --ff-only`.
 
@@ -48,14 +55,14 @@ Retain `git rev-parse --short HEAD`, the revision the answer comes from. Report 
 
 ## Step 3 — Delegate
 
-Delegation creates session files under the work files, so complete `{{ALIGNDEV}} guide work-files-setup` from PROJECT_PATH first.
+Delegation creates session files under the work files, so complete `{{GUIDE}} work-files-setup` from PROJECT_PATH first.
 
-{{#openclaw}}
-Apply the takeover-turn checkpoint in the playbook (`{{ALIGNDEV}} guide`), then run `{{ALIGNDEV}} code new --message` from the selected worktree, without `--protocol`, `--ticket`, or `--no-ticket`.
-{{/openclaw}}
-{{#codingAgent}}
+{{#thread}}
+Apply the takeover-turn checkpoint in the playbook (`{{GUIDE}}`), then run `{{ALIGNDEV}} code new --message` from the selected worktree, without `--protocol`, `--ticket`, or `--no-ticket`.
+{{/thread}}
+{{#conversation}}
 Run `{{ALIGNDEV}} code new --message` from the selected worktree, without `--protocol`, `--ticket`, or `--no-ticket`.
-{{/codingAgent}}
+{{/conversation}}
 
 {{#openclaw}}
 The message carries the complete question, however detailed, the selected branch, and an explicit constraint to investigate and answer without implementing changes. Include the environment refresh described in the working session when the main branch advanced. Use the delegation guide's background launch and completion procedure.
@@ -73,19 +80,19 @@ Retain the child session id, from authoritative completion retrieval for an asyn
 
 ## Step 4 — Relay
 
-{{#openclaw}}
+{{#thread}}
 Answer in the thread, in your own words, grounded in what the agent found.
-{{/openclaw}}
-{{#codingAgent}}
+{{/thread}}
+{{#conversation}}
 Answer in the conversation, in your own words, grounded in what the agent found.
-{{/codingAgent}}
+{{/conversation}}
 
-{{#openclaw}}
+{{#thread}}
 A request for changes ends the consultation: return to the ticket and linked-workspace flow before anything is implemented.
-{{/openclaw}}
-{{#codingAgent}}
+{{/thread}}
+{{#conversation}}
 A request for changes ends the consultation: return to the ticket and workspace flow before anything is implemented.
-{{/codingAgent}}
+{{/conversation}}
 
 ## Step 5 — Record a discussion
 

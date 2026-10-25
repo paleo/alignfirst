@@ -67,25 +67,18 @@ describe("Slack session routing", () => {
     ).toBe("agent:main:slack-mock:account:Team-A:channel:Project-X");
   });
 
-  it("routes an all-mode root and its later reply to exactly the same session", () => {
-    const route = {
-      agentId: "main",
-      sessionKey: "agent:main:slack-mock:account:Team-A:channel:Project-X",
-    };
-    const root = resolveInboundSessionKey({
-      surface: "slack",
-      channelId: "slack-mock",
-      route,
-      threadId: "Root-Message-ID",
-    });
-    const reply = resolveInboundSessionKey({
-      surface: "slack",
-      channelId: "slack-mock",
-      route,
-      threadId: "Root-Message-ID",
-    });
-    expect(root).toBe(reply);
-    expect(root).toContain(":thread:root-message-id");
+  it("derives an all-mode thread session from the account-qualified channel session", () => {
+    expect(
+      resolveInboundSessionKey({
+        surface: "slack",
+        channelId: "slack-mock",
+        route: {
+          agentId: "main",
+          sessionKey: "agent:main:slack-mock:account:Team-A:channel:Project-X",
+        },
+        threadId: "Root-Message-ID",
+      }),
+    ).toBe("agent:main:slack-mock:account:Team-A:channel:Project-X:thread:root-message-id");
   });
 
   it("inherits replyToMode and permits an account override", () => {

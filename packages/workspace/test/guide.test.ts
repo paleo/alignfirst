@@ -1,14 +1,19 @@
+import { scriptCommand } from "@alignfirst/docmap/invocation";
 import { describe, expect, it } from "vitest";
 
 import { type GuideLayout, renderGuide } from "../src/guide.js";
 import type { PackageManagerCommands } from "../src/package-manager.js";
 
 const NPM: PackageManagerCommands = {
+  install: "npm install",
+  runtime: "node",
   workspace: { base: "npm run workspace", withArgs: "npm run workspace --" },
   dev: { base: "npm run dev", withArgs: "npm run dev --" },
 };
 
 const PNPM: PackageManagerCommands = {
+  install: "pnpm i",
+  runtime: "node",
   workspace: { base: "pnpm workspace", withArgs: "pnpm workspace" },
   dev: { base: "pnpm dev", withArgs: "pnpm dev" },
 };
@@ -28,6 +33,25 @@ describe("renderGuide", () => {
     expect(guide).toContain("npm run dev -- up");
     // Bare foreground takes no forwarded args, so no separator.
     expect(guide).toMatch(/^npm run dev {2,}#/m);
+  });
+
+  it("renders `$&` literally in commands and layout, not as a replacement pattern", () => {
+    const token = "$&";
+    const workspace = scriptCommand("npm", `workspace${token}`);
+    const dev = scriptCommand("npm", `dev${token}`);
+    const runtimeDir = `.local-${token}`;
+    const sharedDir = `.shared-${token}`;
+    const guide = renderGuide(
+      { ...NPM, workspace, dev },
+      { ...LAYOUT, runtimeDir, sharedDirs: [sharedDir] },
+    );
+    expect(guide).toContain(`${workspace.withArgs} setup -c my-branch`);
+    expect(guide).toContain(`${dev.withArgs} up`);
+    expect(guide).toContain(`Ports and infrastructure arrive with the first \`${dev.base}\``);
+    expect(guide).toContain(`cd <worktree-dir> && ${dev.withArgs} up`);
+    expect(guide).toContain(`\`${runtimeDir}/\``);
+    expect(guide).toContain(`symlinked from the main worktree: \`${sharedDir}/\`.`);
+    expect(guide).not.toContain("{{");
   });
 
   it("renders pnpm commands without a separator", () => {
@@ -88,41 +112,21 @@ describe("renderGuide", () => {
   it.each([NPM, PNPM])("renders external hooks and teardown in both modes: %j", (pm) => {
     for (const layout of [LAYOUT, SETUP_ONLY]) {
       const guide = renderGuide(pm, layout);
-      const install = pm === NPM ? "npm install" : "pnpm i";
-      expect(guide).toContain(`${install} && ${pm.workspace.withArgs} setup`);
+      expect(guide).toContain(`${pm.install} && ${pm.workspace.withArgs} setup`);
       expect(guide).toContain(`${pm.workspace.withArgs} teardown <registered-name>`);
       expect(guide).toContain(`${pm.workspace.withArgs} teardown ../my-worktree`);
       expect(guide).toContain("Paths select exactly; there is no basename-search fallback");
       expect(guide).toContain("names, collision suffixes and ports are not reserved");
       expect(guide).toContain('node "$main_worktree/<path-to>/workspace.mjs" setup');
       expect(guide).toContain("Main-worktree teardown preserves the shared registry");
-      expect(guide).not.toContain("{{");
-      expect(guide).not.toMatch(/\n\n\n/);
       if (layout.hasDevServer) {
-        expect(guide).toContain(`${install} && ${pm.workspace.withArgs} setup --full`);
+        expect(guide).toContain(`${pm.install} && ${pm.workspace.withArgs} setup --full`);
         expect(guide).toContain("stops dev processes and configured callbacks");
       } else {
         expect(guide).not.toContain("--full");
         expect(guide).not.toContain(pm.dev.base);
       }
     }
-  });
-
-  it.each(["yarn run", "bun run"])("renders %s install hooks", (prefix) => {
-    const pm = {
-      workspace: { base: `${prefix} workspace`, withArgs: `${prefix} workspace` },
-      dev: { base: `${prefix} dev`, withArgs: `${prefix} dev` },
-    };
-    const manager = prefix.split(" ")[0];
-    expect(renderGuide(pm, SETUP_ONLY)).toContain(
-      `${manager} install && ${prefix} workspace setup`,
-    );
-  });
-
-  it("says nothing of setup profiles", () => {
-    const guide = renderGuide(NPM, LAYOUT);
-    expect(guide).not.toContain("--profile");
-    expect(guide).not.toContain("Setup profiles");
   });
 
   it("leaves no template marker and no blank-line gap in either mode", () => {

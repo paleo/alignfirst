@@ -1,23 +1,21 @@
-import { spawn, spawnSync } from "node:child_process";
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
+import type { Invocation } from "@alignfirst/docmap/invocation";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import {
+  type CellSelection,
+  countCells,
   discoverScenarios,
   expandChannelSelection,
+  readScenarioSurfaces,
   runMatrix,
   type WorkerContext,
   workerSpawnEnv,
 } from "./loop.js";
 import { resolveSelectedModels, type SelectedModel } from "./models.js";
+import { cliCommand, resolveCliInvocation } from "./invocation.js";
+import { spawnHostProcess } from "./host-process.js";
+import { cleanupRuntimeConfigs, writeRuntimeConfig } from "./runtime-config.js";
 
 // Path-shaped vars from .env.local: resolved against the consumer's project dir so users
 // can write natural relative paths. Compose `include:` would otherwise resolve them
@@ -37,6 +35,11 @@ const RUN_USAGE = `usage: openclaw-test run --channel <id|id,id,…|all> [<scena
                                    [--parallel K] [--stop-on-fail] [--reuse-stack]
 
   Scenario selection is required: either a positional list or --all (mutually exclusive).
+  --channel <id|id,id,…|all>
+                      a channel of openclaw.json, or "webchat", the OpenClaw apps' surface
+                      (no channel plugin); "all" selects them all. A scenario runs on the
+                      surfaces its "export const surfaces" lists, by default on every channel
+                      except webchat; unsupported pairs are skipped.
   --model <id|id,id,…|all>
                       select the agent model(s): a bare id (e.g. claude-sonnet-5), a
                       comma list of bare ids, or "all". Defaults to OPENCLAW_DEFAULT_TEST_MODEL.
@@ -75,13 +78,20 @@ const ENV_USAGE = `usage: openclaw-test env <build|up|down>
                       OPENCLAW_TEST_PARALLEL, fallback 1).
   down                tear down every <base>-w* worker stack, whatever K was.`;
 
-export async function envCommand(packageDir: string, argv: string[]): Promise<never> {
+export async function envCommand(
+  packageDir: string,
+  argv: string[],
+  invocation: Invocation = resolveCliInvocation(),
+): Promise<never> {
+  const failEnv: UsageFailure = usageFailure(
+    ENV_USAGE.replaceAll("openclaw-test", cliCommand(invocation)),
+  );
   const [sub, ...rest] = argv;
   if (sub !== "build" && sub !== "up" && sub !== "down") failEnv();
-  const parallelFlag = parseEnvArgs(sub, rest);
+  const parallelFlag = parseEnvArgs(sub, rest, failEnv);
   setupHostEnv(packageDir);
   setBaseTag(packageDir);
-  if (sub === "down") process.exit(sweepWorkerStacks());
+  if (sub === "down") process.exit(await sweepWorkerStacks());
   if (sub === "build") {
     ensureHostOutputDirs([]);
     ensureBaseImage(packageDir, { force: true });
@@ -102,15 +112,24 @@ export async function envCommand(packageDir: string, argv: string[]): Promise<ne
       ),
     ),
   );
-  process.exit(codes.find((code) => code !== 0) ?? 0);
+  const exitCode = combinedExitCode(codes);
+  if (exitCode === 0) cleanupRuntimeConfigs(process.env.OPENCLAW_TEST_PROJECT_DIR as string);
+  process.exit(exitCode);
 }
 
 export function buildConsumerImageArgs(composeArgs: string[]): string[] {
   return [...composeArgs, "build", "bus"];
 }
 
-export async function runCommand(packageDir: string, argv: string[]): Promise<never> {
-  const args = parseRunArgs(argv);
+export async function runCommand(
+  packageDir: string,
+  argv: string[],
+  invocation: Invocation = resolveCliInvocation(),
+): Promise<never> {
+  const failRun: UsageFailure = usageFailure(
+    RUN_USAGE.replaceAll("openclaw-test", cliCommand(invocation)),
+  );
+  const args = parseRunArgs(argv, failRun);
   setupHostEnv(packageDir);
   const parallel = resolveParallel(args.parallel, readEnvVar("OPENCLAW_TEST_PARALLEL"));
   const models = resolveSelectedModels({
@@ -119,8 +138,21 @@ export async function runCommand(packageDir: string, argv: string[]): Promise<ne
     defaultEnv: readEnvVar("OPENCLAW_DEFAULT_TEST_MODEL"),
   });
   const canonicalPath = canonicalConfigPath();
-  // Each model's config is rendered once (its own temp file holding the expanded
-  // secret); worker loops hand the path to every spawn via per-spawn env.
+  const scenariosDir = process.env.OPENCLAW_TEST_SCENARIOS_DIR as string;
+  // `--all` is alphabetical (discoverScenarios sorts); an explicit list keeps CLI
+  // order, deduped.
+  const scenarios = args.all ? discoverScenarios(scenariosDir) : [...new Set(args.positionals)];
+  const channels = expandChannelSelection(args.channel, canonicalPath);
+  const cellSelection: CellSelection = {
+    scenarios,
+    channels,
+    models,
+    iterations: args.iterations,
+    scenarioSurfaces: readScenarioSurfaces(scenariosDir, scenarios),
+  };
+  const cellCount = countCells(cellSelection);
+  // Each model gets one private config; mount-aware collection retains it for warm workers.
+  // Worker loops hand the path to every spawn via per-spawn env.
   const renderedConfigs = new Map<string, string>();
   const renderConfigPath = (m: SelectedModel): string => {
     const cached = renderedConfigs.get(m.id);
@@ -135,19 +167,11 @@ export async function runCommand(packageDir: string, argv: string[]): Promise<ne
   // them all so the lazy per-cell recreate boots them on the new image — and so
   // the auto-down at the end fires (wasRunningBefore is computed after the sweep).
   if (didBuild) {
-    const sweepCode = sweepWorkerStacks();
+    const sweepCode = await sweepWorkerStacks();
     if (sweepCode !== 0) process.exit(sweepCode);
   }
 
-  const scenariosDir = process.env.OPENCLAW_TEST_SCENARIOS_DIR as string;
   const artifactsDir = process.env.OPENCLAW_TEST_ARTIFACTS_DIR as string;
-
-  // `--all` is alphabetical (discoverScenarios sorts); an explicit list keeps CLI
-  // order, deduped.
-  const scenarios = args.all ? discoverScenarios(scenariosDir) : [...new Set(args.positionals)];
-  const channels = expandChannelSelection(args.channel, canonicalPath);
-
-  const cellCount = models.length * scenarios.length * channels.length * args.iterations;
   const workers = buildWorkerContexts(Math.min(parallel, cellCount));
   ensureHostOutputDirs(workers);
   ensureConsumerImage(workerComposeArgs(1));
@@ -158,27 +182,41 @@ export async function runCommand(packageDir: string, argv: string[]): Promise<ne
   const runnerResultsDir = `/opt/openclaw-test/artifacts/${baseStamp}/cells`;
   mkdirSync(resultsDir, { recursive: true });
 
-  const matrixExit = await runMatrix({
-    scenarios,
-    channels,
-    models,
-    renderConfigPath,
-    iterations: args.iterations,
-    maxFailures: args.maxFailures,
-    stopOnFail: args.stopOnFail,
-    reuseStack: args.reuseStack,
-    parallel: workers.length,
-    workers,
-    refreshWorkspace: refreshWorkerWorkspace,
-    artifactsDir: resolve(artifactsDir, baseStamp),
-    resultsDir,
-    runnerResultsDir,
-    baseStamp,
-  });
+  let matrixExit: number;
+  let teardownExit = 0;
+  try {
+    matrixExit = await runMatrix({
+      ...cellSelection,
+      renderConfigPath,
+      maxFailures: args.maxFailures,
+      stopOnFail: args.stopOnFail,
+      reuseStack: args.reuseStack,
+      parallel: workers.length,
+      workers,
+      refreshWorkspace: refreshWorkerWorkspace,
+      artifactsDir: resolve(artifactsDir, baseStamp),
+      resultsDir,
+      runnerResultsDir,
+      baseStamp,
+    });
+  } finally {
+    const booted = workers.filter((worker) => !worker.wasRunningBefore);
+    const codes = await Promise.all(
+      booted.map((worker) => execCompose([...worker.composeArgs, "down"])),
+    );
+    teardownExit = combinedExitCode(codes);
+    if (teardownExit === 0) {
+      cleanupRuntimeConfigs(process.env.OPENCLAW_TEST_PROJECT_DIR as string);
+    }
+  }
+  process.exit(matrixExit !== 0 ? matrixExit : teardownExit);
+}
 
-  const booted = workers.filter((worker) => !worker.wasRunningBefore);
-  await Promise.all(booted.map((worker) => execCompose([...worker.composeArgs, "down"])));
-  process.exit(matrixExit);
+function combinedExitCode(codes: number[]): number {
+  // A sibling's ordinary failure must not hide cancellation.
+  return (
+    codes.find((code) => code === 130 || code === 143) ?? codes.find((code) => code !== 0) ?? 0
+  );
 }
 
 /** Flag wins over the env var; fallback 1. Both must parse to an integer ≥ 1. */
@@ -245,25 +283,30 @@ function refreshWorkerWorkspace(worker: WorkerContext): void {
 }
 
 /** Tear down every `<base>-w<N>` Compose project, whatever K was. Idempotent. */
-function sweepWorkerStacks(): number {
-  let exitCode = 0;
-  for (const name of listWorkerStackNames()) {
-    const code = execComposeSync([...composeBaseArgs(), "-p", name, "down"]);
-    if (code !== 0) exitCode = code;
-  }
+async function sweepWorkerStacks(): Promise<number> {
+  const names = listWorkerStackNames();
+  if (names === undefined) return 1;
+  const codes = await Promise.all(
+    names.map((name) => execCompose([...composeBaseArgs(), "-p", name, "down"])),
+  );
+  const exitCode = combinedExitCode(codes);
+  if (exitCode === 0) cleanupRuntimeConfigs(process.env.OPENCLAW_TEST_PROJECT_DIR as string);
   return exitCode;
 }
 
-function listWorkerStackNames(): string[] {
+function listWorkerStackNames(): string[] | undefined {
   const r = spawnSync("docker", ["compose", "ls", "--all", "--format", "json"], {
     encoding: "utf8",
   });
-  if (r.status !== 0) return [];
+  if (r.status !== 0) return;
   let projects: { Name?: string }[];
   try {
     projects = JSON.parse(r.stdout) as { Name?: string }[];
+    if (!Array.isArray(projects) || projects.some((project) => typeof project?.Name !== "string")) {
+      return;
+    }
   } catch {
-    return [];
+    return;
   }
   // The sanitized base contains no regex metacharacters (only [a-z0-9_-]).
   const pattern = new RegExp(`^${projectNameBase()}-w\\d+$`);
@@ -286,13 +329,13 @@ function ensureConsumerImage(composeArgs: string[]): void {
  * OpenClaw has no native env interpolation in its config, so the harness expands
  * `${VAR}` itself. Walk the canonical config, replace any string value of the
  * exact form `${VAR}` with the value of `VAR` (process.env wins over `.env.local`),
- * and write the rendered JSON to a run-scoped temp dir so the expanded secret is
+ * and write the rendered JSON to owned private state so the expanded secret is
  * never persisted to a committed or artifact path. Returns the rendered path; the
  * canonical file is never mutated and `process.env` is never repointed — callers
  * pass the path to worker spawns via per-spawn env.
  *
  * When a `model` is given, `agents.entries.main.model` is set to its full ref so
- * the gateway boots on the selected model. Rendered per model (own temp file).
+ * the gateway boots on the selected model. Rendered per model (own private file).
  *
  * A `${VAR}` resolving to empty drops its enclosing `models.providers.*` entry so
  * a defined-but-unused provider with no key can't trip OpenClaw boot validation.
@@ -307,10 +350,7 @@ function renderRuntimeConfig(canonicalPath: string, model?: SelectedModel): stri
     assertModelProviderPresent(model, droppedProviders);
     setMainAgentModel(rendered, model.ref);
   }
-  const dir = mkdtempSync(join(tmpdir(), "openclaw-test-config-"));
-  const renderedPath = join(dir, "openclaw.json");
-  writeFileSync(renderedPath, JSON.stringify(rendered, null, 2));
-  return renderedPath;
+  return writeRuntimeConfig(projectDir, rendered);
 }
 
 // A model's provider is the ref's first segment (`provider/model`); built-in
@@ -613,17 +653,7 @@ function execComposeSync(args: string[]): number {
 }
 
 function execCompose(args: string[], env?: Record<string, string>): Promise<number> {
-  return new Promise((resolveExit) => {
-    const child = spawn("docker", args, {
-      stdio: "inherit",
-      env: env ? { ...process.env, ...env } : process.env,
-    });
-    child.on("exit", (code) => resolveExit(code ?? 1));
-    child.on("error", (err) => {
-      console.error(err.message);
-      resolveExit(1);
-    });
-  });
+  return spawnHostProcess({ command: "docker", argv: args, env });
 }
 
 interface RunArgs {
@@ -638,14 +668,16 @@ interface RunArgs {
   positionals: string[];
 }
 
-function requireFlagValue(flag: string, raw: string | undefined): string {
+type UsageFailure = (msg?: string) => never;
+
+function requireFlagValue(flag: string, raw: string | undefined, failRun: UsageFailure): string {
   if (raw === undefined || raw.startsWith("--")) {
     failRun(`error: ${flag} expects a value`);
   }
   return raw;
 }
 
-function parseIntFlag(flag: string, raw: string, min: number): number {
+function parseIntFlag(flag: string, raw: string, min: number, failRun: UsageFailure): number {
   const n = Number(raw);
   if (!Number.isInteger(n) || n < min) {
     failRun(`error: ${flag} expects an integer >= ${min}, got ${JSON.stringify(raw)}`);
@@ -653,7 +685,7 @@ function parseIntFlag(flag: string, raw: string, min: number): number {
   return n;
 }
 
-function parseRunArgs(argv: string[]): RunArgs {
+function parseRunArgs(argv: string[], failRun: UsageFailure): RunArgs {
   let channel: string | undefined;
   let model: string | undefined;
   let iterations = 1;
@@ -670,18 +702,19 @@ function parseRunArgs(argv: string[]): RunArgs {
     else if (a === "--all") all = true;
     else if (a === "--reuse-stack") reuseStack = true;
     else if (a === "--stop-on-fail") stopOnFail = true;
-    else if (a === "--channel") channel = requireFlagValue("--channel", argv[++i]);
+    else if (a === "--channel") channel = requireFlagValue("--channel", argv[++i], failRun);
     else if (a?.startsWith("--channel=")) channel = a.slice("--channel=".length);
-    else if (a === "--model") model = requireFlagValue("--model", argv[++i]);
+    else if (a === "--model") model = requireFlagValue("--model", argv[++i], failRun);
     else if (a?.startsWith("--model=")) model = a.slice("--model=".length);
-    else if (a === "--iterations") iterations = parseIntFlag("--iterations", argv[++i] ?? "", 1);
+    else if (a === "--iterations")
+      iterations = parseIntFlag("--iterations", argv[++i] ?? "", 1, failRun);
     else if (a?.startsWith("--iterations="))
-      iterations = parseIntFlag("--iterations", a.slice("--iterations=".length), 1);
+      iterations = parseIntFlag("--iterations", a.slice("--iterations=".length), 1, failRun);
     else if (a === "--max-failures")
-      maxFailures = parseIntFlag("--max-failures", argv[++i] ?? "", 0);
+      maxFailures = parseIntFlag("--max-failures", argv[++i] ?? "", 0, failRun);
     else if (a?.startsWith("--max-failures="))
-      maxFailures = parseIntFlag("--max-failures", a.slice("--max-failures=".length), 0);
-    else if (a === "--parallel") parallel = requireFlagValue("--parallel", argv[++i]);
+      maxFailures = parseIntFlag("--max-failures", a.slice("--max-failures=".length), 0, failRun);
+    else if (a === "--parallel") parallel = requireFlagValue("--parallel", argv[++i], failRun);
     else if (a?.startsWith("--parallel=")) parallel = a.slice("--parallel=".length);
     else if (a?.startsWith("--")) failRun(`error: unknown flag ${a}`);
     else if (a) positionals.push(a);
@@ -706,14 +739,20 @@ function parseRunArgs(argv: string[]): RunArgs {
   };
 }
 
-function failRun(msg?: string): never {
-  if (msg) console.error(msg);
-  console.error(RUN_USAGE);
-  process.exit(1);
+function usageFailure(usage: string): UsageFailure {
+  return (msg) => {
+    if (msg !== undefined) console.error(msg);
+    console.error(usage);
+    process.exit(1);
+  };
 }
 
 /** Returns the raw `--parallel` value; only `env up` accepts it. */
-function parseEnvArgs(sub: EnvSubcommand, rest: string[]): string | undefined {
+function parseEnvArgs(
+  sub: EnvSubcommand,
+  rest: string[],
+  failEnv: UsageFailure,
+): string | undefined {
   let parallel: string | undefined;
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
@@ -728,10 +767,4 @@ function parseEnvArgs(sub: EnvSubcommand, rest: string[]): string | undefined {
     failEnv("error: --parallel is only valid on 'env up'");
   }
   return parallel;
-}
-
-function failEnv(msg?: string): never {
-  if (msg) console.error(msg);
-  console.error(ENV_USAGE);
-  process.exit(1);
 }

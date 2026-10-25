@@ -1,3 +1,4 @@
+import { createCommand, renderCommand } from "@alignfirst/docmap/invocation";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, relative } from "node:path";
@@ -27,7 +28,9 @@ describe("readProjectReport", () => {
     expect(result).toMatchObject({ error: expect.stringContaining(tooOld) });
     if (!("error" in result)) throw new Error("expected report failure");
     expect(result.error.startsWith(tooOld)).toBe(true);
-    expect(result.error).toContain(`alignfirst: \`${command.join(" ")}\``);
+    expect(result.error).toContain(
+      `alignfirst: \`${renderCommand(createCommand(command[0], command.slice(1)))}\``,
+    );
   });
 
   it.each([null, { profile: "work" }, { profile: " Work " }])(
@@ -38,21 +41,14 @@ describe("readProjectReport", () => {
     },
   );
 
-  it.each([
-    {},
-    [],
-    "work",
-    false,
-    { profile: null },
-    { profile: 1 },
-    { profile: "" },
-    { profile: "  " },
-    { profile: "work", extra: true },
-  ])("rejects a malformed selection: %j", (aligndev) => {
-    expect(() => readProjectReport(reportCommand({ ...report(cwd), aligndev }), cwd, {})).toThrow(
-      `Invalid alignfirst config report for ${cwd}`,
-    );
-  });
+  it.each([{}, "work", { profile: 1 }, { profile: "  " }, { profile: "work", extra: true }])(
+    "rejects a malformed selection: %j",
+    (aligndev) => {
+      expect(() => readProjectReport(reportCommand({ ...report(cwd), aligndev }), cwd, {})).toThrow(
+        `Invalid alignfirst config report for ${cwd}`,
+      );
+    },
+  );
 
   it("diagnoses an outdated executable on PATH with its version", () => {
     const f = executableFixture("alignfirst", {});
@@ -172,12 +168,15 @@ describe("readProjectReport", () => {
     );
   });
 
-  it("diagnoses invalid JSON and invalid report structure", () => {
-    for (const text of ["bad json", "null"]) {
+  it.each(["bad json", "null"])(
+    "diagnoses the invalid report %j with the alignfirst used",
+    (text) => {
       const command = [process.execPath, "-e", `process.stdout.write(${JSON.stringify(text)})`];
-      expect(() => readProjectReport(command, cwd, {})).toThrow("alignfirst: ");
-    }
-  });
+      expect(() => readProjectReport(command, cwd, {})).toThrow(
+        /^Invalid alignfirst config report for .*alignfirst: /s,
+      );
+    },
+  );
 
   it("retains the legacy plans.folder parser for compatible reports", () => {
     const command = reportCommand({

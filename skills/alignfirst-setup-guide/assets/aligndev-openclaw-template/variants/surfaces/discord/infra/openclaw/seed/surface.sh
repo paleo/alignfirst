@@ -32,6 +32,9 @@ configure_surface() {
   set_secret_ref channels.discord.token /DISCORD_BOT_TOKEN
   # The owner is pre-trusted; another DM sender gets a pairing code (operations/pair-dm-sender.md).
   set_scalar channels.discord.dmPolicy pairing
+  # Each DM sender gets a session of their own. Unset, every DM shares agent:main:main, the apps'
+  # Home conversation.
+  set_scalar session.dmScope per-channel-peer
   set_json channels.discord.allowFrom "[\"$DISCORD_OWNER_ID\"]"
   # Unset falls back to "open": any guild member could trigger the bot from any channel.
   set_scalar channels.discord.groupPolicy allowlist

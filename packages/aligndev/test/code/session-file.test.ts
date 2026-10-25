@@ -89,13 +89,6 @@ describe("resolveSessionFilePath", () => {
     expect(path).toBe(join(sessionsDir, "_aligndev", "20260701-091503.running.md"));
   });
 
-  it("writes under a separate sessions directory", () => {
-    const companionTree = join("/companions", "proj", ".plans");
-    expect(resolveSessionFilePath(companionTree, "29", FIXED_DATE, () => false)).toBe(
-      join(companionTree, "29", "_aligndev", "20260701-091503.running.md"),
-    );
-  });
-
   it("appends a numeric suffix on same-second collisions, running or completed", () => {
     const taken = new Set([
       join(sessionsDir, "29", "_aligndev", "20260701-091503.running.md"),
@@ -142,13 +135,11 @@ describe("frontmatter serialization", () => {
     },
   );
 
-  it("round-trips null pid and cwd", () => {
+  it("round-trips null metadata", () => {
     const block = serializeFrontmatter(makeFrontmatter())
       .replace(/^---\n/, "")
       .replace(/\n---\n$/, "");
-    const parsed = parseFrontmatter(block);
-    expect(parsed.pid).toBeNull();
-    expect(parsed.cwd).toBeNull();
+    expect(parseFrontmatter(block)).toEqual(makeFrontmatter());
   });
 
   it("round-trips pi identity", () => {
@@ -350,16 +341,19 @@ describe("session file lifecycle", () => {
     expect(completion.result).toContain("is gone");
   });
 
-  it("detects pid reuse when Linux process start time differs", () => {
-    const currentStartTime = readPidStartTime(process.pid);
-    if (currentStartTime === null) return;
-    writeInitialSessionFile(
-      sessionFilePath,
-      makeFrontmatter({ pid: process.pid, pidStartTime: `${currentStartTime}-other` }),
-    );
+  it.skipIf(process.platform !== "linux")(
+    "detects pid reuse when Linux process start time differs",
+    () => {
+      const currentStartTime = readPidStartTime(process.pid);
+      if (currentStartTime === null) throw new Error("Missing Linux process start time.");
+      writeInitialSessionFile(
+        sessionFilePath,
+        makeFrontmatter({ pid: process.pid, pidStartTime: `${currentStartTime}-other` }),
+      );
 
-    expect(reconcileSessionFile(sessionFilePath, MACHINE_ID).frontmatter.status).toBe("failed");
-  });
+      expect(reconcileSessionFile(sessionFilePath, MACHINE_ID).frontmatter.status).toBe("failed");
+    },
+  );
 
   it.each(["EPERM", "EACCES"])(
     "leaves a run untouched when probing its pid fails with %s",
