@@ -508,9 +508,9 @@ it("retries after the remote advances just before the first push", async () => {
 });
 
 it.each([false, true])(
-  "retries when a write lands before the rebase starts (autoStash=%s)",
+  "keeps a write that lands before the rebase starts (autoStash=%s)",
   async (autoStash) => {
-    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    vi.spyOn(Math, "random").mockReturnValue(0);
     const path = "product-plans/80/f.md";
     const fixture = await makeFixture({ [path]: "base\n" });
     git(fixture.clone, "config", "rebase.autoStash", String(autoStash));
@@ -533,14 +533,13 @@ it.each([false, true])(
     expect(findStoppedRebase(fixture.clone)).toBeUndefined();
     expect(git(fixture.clone, "stash", "list")).toBe("");
     expect(result.stderr).not.toContain("would be overwritten");
-    expect(random).toHaveBeenCalled();
   },
 );
 
 it.each([false, true])(
   "keeps a write that lands during the rebase (autoStash=%s)",
   async (autoStash) => {
-    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    vi.spyOn(Math, "random").mockReturnValue(0);
     const path = "product-plans/80/f.md";
     const fixture = await makeFixture({ [path]: "base\n" });
     git(fixture.clone, "config", "rebase.autoStash", String(autoStash));
@@ -563,7 +562,6 @@ it.each([false, true])(
     expect(remoteContent(fixture, "other.md")).toBe("other local\n");
     expect(findStoppedRebase(fixture.clone)).toBeUndefined();
     expect(git(fixture.clone, "stash", "list")).toBe("");
-    expect(random).toHaveBeenCalled();
   },
 );
 

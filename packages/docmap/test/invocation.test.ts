@@ -26,63 +26,35 @@ beforeEach(() => {
 
 afterEach(() => rmSync(directory, { recursive: true, force: true }));
 
-describe("package execution and actual runtime", () => {
-  it.each([
-    ["npm/11.19.0 node/v26.8.1 linux x64", "exec", "npx", "node", "npx -y @alignfirst/docmap"],
-    ["npm/12.2.0 node/v26.8.1 linux x64", "exec", "npx", "bun", "bunx --bun @alignfirst/docmap"],
-    ["bun/1.4.4 npm/? node/v26.3.0 linux x64", "exec", "bunx", "node", "bunx @alignfirst/docmap"],
-    [
-      "bun/1.4.4 npm/? node/v26.3.0 linux x64",
-      "exec",
-      "bunx",
-      "bun",
-      "bunx --bun @alignfirst/docmap",
-    ],
-    ["bun/1.4.4 npm/?", "run-script", undefined, "bun", "bunx --bun @alignfirst/docmap"],
-    ["pnpm/10.0.0 npm/?", "dlx", undefined, "node", "pnpm dlx @alignfirst/docmap"],
-    ["yarn/4.0.0 npm/?", "dlx", undefined, "node", "yarn dlx @alignfirst/docmap"],
-  ] as const)("%s %s %s under %s", (agent, command, event, runtime, expected) => {
-    const input = evidence({
-      npm_config_user_agent: agent,
-      npm_command: command,
-      npm_lifecycle_event: event,
-    });
-    input.runtime = runtime;
-    for (const lock of [
-      "package-lock.json",
-      "pnpm-lock.yaml",
-      "yarn.lock",
-      "bun.lock",
-      "bun.lockb",
-    ]) {
-      writeFileSync(join(directory, lock), "");
-    }
-    const invocation = resolveInvocation(target, input);
-    expect(invocation.launcher).toBe("packageRunner");
-    expect(invocationCommand(invocation).base).toBe(expected);
-  });
-
+describe("runner selection from launcher and runtime", () => {
   it.each([
     [undefined, "node", "docmap"],
     ["", "node", "docmap"],
     ["unknown/1", "node", "docmap"],
     ["arbitrary nonempty", "node", "docmap"],
     [undefined, "bun", "bunx --bun @alignfirst/docmap"],
-    ["npm/12.2.0", "bun", "bunx --bun @alignfirst/docmap"],
-    ["npm/12.2.0", "node", "npx -y @alignfirst/docmap"],
-    ["bun/1.4.4", "node", "bunx @alignfirst/docmap"],
-    ["pnpm/10", "node", "pnpm dlx @alignfirst/docmap"],
+    ["npm/12.2.0 node/v26.8.1 linux x64", "bun", "bunx --bun @alignfirst/docmap"],
+    ["npm/12.2.0 node/v26.8.1 linux x64", "node", "npx -y @alignfirst/docmap"],
+    ["bun/1.4.4 npm/? node/v26.3.0 linux x64", "node", "bunx @alignfirst/docmap"],
+    ["bun/1.4.4 npm/? node/v26.3.0 linux x64", "bun", "bunx --bun @alignfirst/docmap"],
+    ["pnpm/10.0.0 npm/? node/v26.8.1", "node", "pnpm dlx @alignfirst/docmap"],
     ["yarn/1.22.22", "node", "npx -y @alignfirst/docmap"],
     ["yarn/2.4.3", "node", "yarn dlx @alignfirst/docmap"],
     ["yarn/4.0.0-rc.1", "node", "yarn dlx @alignfirst/docmap"],
     ["yarn/unknown", "node", "npx -y @alignfirst/docmap"],
     ["yarn/4.invalid", "node", "npx -y @alignfirst/docmap"],
     ["yarn/1.22.22", "bun", "bunx --bun @alignfirst/docmap"],
-  ] as const)("agent-only %s runtime %s", (agent, runtime, expected) => {
-    const input = evidence({ npm_config_user_agent: agent });
-    input.runtime = runtime;
-    expect(invocationCommand(resolveInvocation(target, input)).base).toBe(expected);
-  });
+  ] as const)(
+    "picks the runner for agent %s under %s, never from lockfiles",
+    (agent, runtime, expected) => {
+      for (const lock of ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"]) {
+        writeFileSync(join(directory, lock), "");
+      }
+      const input = evidence({ npm_config_user_agent: agent });
+      input.runtime = runtime;
+      expect(invocationCommand(resolveInvocation(target, input)).base).toBe(expected);
+    },
+  );
 
   it.each([
     ["yarn/1.22.22 npm/? node/v26.8.1", 1, "npx -y alignfirst"],
@@ -222,15 +194,21 @@ describe("verified owning scripts", () => {
     undefined,
     ["node", "/ancestor.mjs"],
     ["bun", "run", "different"],
+    ["npm", "run", "different"],
     ["npm run ancestor"],
+    ["sh", "-c", "other-tool --help"],
   ])("rejects even manifest-valid same-target ancestor metadata with parent %s", (parentArgv) => {
     const input = scriptEvidence("npm", "run");
     input.parentArgv = parentArgv;
     expect(resolveInvocation(target, input).launcher).toBe("packageRunner");
   });
 
-  it("explicit exec wins even over manifest-valid same-target metadata", () => {
-    const input = scriptEvidence("npm", "exec");
+  it.each([
+    ["npm", "exec"],
+    ["pnpm", "dlx"],
+    ["yarn", "dlx"],
+  ])("explicit %s %s wins even over manifest-valid same-target metadata", (manager, mode) => {
+    const input = scriptEvidence(manager, mode);
     expect(resolveInvocation(target, input).launcher).toBe("packageRunner");
   });
 
@@ -276,10 +254,13 @@ describe("structured and shell-safe commands", () => {
     );
   });
 
-  it("preserves exact executable paths including bunx.exe", () => {
+  it("keeps executable paths with spaces as one argv word and quotes them when rendered", () => {
     const command = createCommand("/tmp/Bun install/bunx.exe", ["/tmp/my file.mjs"]);
-    expect(command.executable).toBe("/tmp/Bun install/bunx.exe");
-    expect(command.args).toEqual(["/tmp/my file.mjs"]);
+    expect([command.executable, ...command.args]).toEqual([
+      "/tmp/Bun install/bunx.exe",
+      "/tmp/my file.mjs",
+    ]);
+    expect(command.base).toBe("'/tmp/Bun install/bunx.exe' '/tmp/my file.mjs'");
   });
 
   it("renders configured scripts with explicit Bun runtime", () => {

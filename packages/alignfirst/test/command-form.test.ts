@@ -1,12 +1,12 @@
-import { resolveInvocation } from "@alignfirst/docmap/invocation";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { type LaunchEvidence, resolveInvocation } from "@alignfirst/docmap/invocation";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { checkCliRange } from "../src/version-guard.js";
-import { main } from "../src/cli.js";
 import { describe, expect, it } from "vitest";
 
-import { renderCommandForm, resolveCommandForm } from "../src/command-form.js";
+import { main } from "../src/cli.js";
+import { renderCommandForm } from "../src/command-form.js";
+import { checkCliRange } from "../src/version-guard.js";
+import { makeSink, makeTempDir } from "./helpers.js";
 
 describe("command form", () => {
   it.each([
@@ -23,7 +23,6 @@ describe("command form", () => {
     "propagates %s/%j through help, context, embedded docmap and protocol guides",
     async (runtime, env, form) => {
       const evidence = { runtime, env, cwd: "/tmp", executable: "/runtime" };
-      expect(resolveCommandForm(env, evidence)).toBe(form);
       for (const args of [
         ["--help"],
         ["context"],
@@ -31,85 +30,44 @@ describe("command form", () => {
         ["guide", "spec", "--protocol-only"],
         ["docmap", "--guide", "--root", "docs with spaces"],
       ]) {
-        let output = "";
-        const code = await main({
-          argv: ["runtime", "alignfirst", ...args],
-          cwd: "/tmp",
-          home: "/tmp",
-          env,
-          evidence,
-          stdout: {
-            write: (s) => {
-              output += s;
-            },
-          },
-          stderr: { write: () => {} },
-        });
+        const { code, output } = await runWithEvidence(args, evidence);
         expect(code).toBe(0);
         expect(output).toContain(form);
+        if (form === "alignfirst") expect(output).not.toMatch(/\b(?:npx|bunx)\b/);
         if (args[0] === "docmap")
           expect(output).toContain(`${form} docmap --root 'docs with spaces'`);
       }
     },
   );
-  it.each(["npm", "bun"] as const)(
-    "keeps verified %s self scripts but rejects inherited aligndev ownership",
-    (manager) => {
-      const cwd = mkdtempSync(join(tmpdir(), "alignfirst-script-"));
-      try {
-        const entryPoint = join(cwd, "alignfirst.mjs");
-        const otherEntry = join(cwd, "aligndev.mjs");
-        const manifest = join(cwd, "package.json");
-        const script = `node ${entryPoint}`;
-        const otherScript = `node ${otherEntry}`;
-        writeFileSync(entryPoint, "");
-        writeFileSync(otherEntry, "");
-        writeFileSync(manifest, JSON.stringify({ scripts: { af: script, dev: otherScript } }));
-        const env = {
-          npm_config_user_agent: `${manager}/1`,
-          npm_command: manager === "npm" ? "run" : "run-script",
-          npm_lifecycle_event: "af",
-          npm_lifecycle_script: script,
-          npm_package_json: manifest,
-        };
-        const evidence = {
-          runtime: manager === "bun" ? ("bun" as const) : ("node" as const),
-          env,
-          cwd,
-          entryPoint,
-          executable: "/runtime",
-          parentArgv: ["/bin/sh", "-c", script],
-        };
-        expect(resolveCommandForm(env, evidence)).toBe(
-          manager === "npm" ? "npm run af --" : "bun --bun run af",
-        );
-        const inherited = { ...env, npm_lifecycle_event: "dev", npm_lifecycle_script: otherScript };
-        expect(
-          resolveCommandForm(inherited, {
-            ...evidence,
-            env: inherited,
-            parentArgv: ["/bin/sh", "-c", otherScript],
-          }),
-        ).toBe(manager === "npm" ? "npx -y alignfirst" : "bunx --bun alignfirst");
-      } finally {
-        rmSync(cwd, { recursive: true, force: true });
-      }
-    },
-  );
 
-  it("uses the installed binary outside a package runner", () => {
-    expect(resolveCommandForm({})).toBe("alignfirst");
-    expect(resolveCommandForm({ npm_config_user_agent: "" })).toBe("alignfirst");
-  });
-
-  it("uses npx inside a package runner", () => {
-    expect(
-      resolveCommandForm({
+  it("forwards follow-up arguments through a verified npm script", async () => {
+    const cwd = makeTempDir("alignfirst-script-");
+    try {
+      const entryPoint = join(cwd, "alignfirst.mjs");
+      const manifest = join(cwd, "package.json");
+      const script = `node ${entryPoint}`;
+      writeFileSync(entryPoint, "");
+      writeFileSync(manifest, JSON.stringify({ scripts: { af: script } }));
+      const env = {
         npm_config_user_agent: "npm/11",
-        npm_command: "exec",
-        npm_lifecycle_event: "npx",
-      }),
-    ).toBe("npx -y alignfirst");
+        npm_command: "run",
+        npm_lifecycle_event: "af",
+        npm_lifecycle_script: script,
+        npm_package_json: manifest,
+      };
+      const { code, output } = await runWithEvidence(["guide"], {
+        runtime: "node",
+        env,
+        cwd,
+        entryPoint,
+        executable: "/runtime",
+        parentArgv: ["/bin/sh", "-c", script],
+      });
+      expect(code).toBe(0);
+      expect(output).toContain("npm run af -- guide spec");
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
   });
 
   it("retains the version constraint, Bun runtime and quoted arguments in recovery", () => {
@@ -127,16 +85,27 @@ describe("command form", () => {
     ).toThrow("bunx --bun 'alignfirst@>=9 <10' docmap --root 'a'\\''b'");
   });
 
-  it.each(["$&", "$'", "$`", "$$"])("renders %s literally in command forms", (token) => {
+  it.each(["", "$&", "$'", "$`", "$$"])("renders every placeholder literally with %j", (token) => {
     const form = `npm run 'af${token}' --`;
     expect(renderCommandForm("{{CMD}} guide; {{CMD}} ticket", form)).toBe(
       `${form} guide; ${form} ticket`,
     );
   });
-
-  it("renders every placeholder", () => {
-    expect(renderCommandForm("{{CMD}} guide; {{CMD}} ticket", "alignfirst")).toBe(
-      "alignfirst guide; alignfirst ticket",
-    );
-  });
 });
+
+async function runWithEvidence(
+  args: string[],
+  evidence: LaunchEvidence,
+): Promise<{ code: number; output: string }> {
+  const stdout = makeSink();
+  const code = await main({
+    argv: ["runtime", "alignfirst", ...args],
+    cwd: evidence.cwd,
+    home: evidence.cwd,
+    env: evidence.env,
+    evidence,
+    stdout,
+    stderr: makeSink(),
+  });
+  return { code, output: stdout.text() };
+}

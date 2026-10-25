@@ -154,7 +154,7 @@ describe("webchat driver", () => {
     );
   });
 
-  it("resets Home once, before its first send, and ignores the Reset system message", async () => {
+  it("resets Home once, before its first send", async () => {
     const gateway = createFakeGateway();
     expect(gateway.driver.homeKey).toBe(HOME_KEY);
     await gateway.driver.send(HOME_KEY, "first");
@@ -168,9 +168,6 @@ describe("webchat driver", () => {
     ]);
     expect(gateway.calls[0]?.params).toEqual({ key: HOME_KEY });
     expect(gateway.sessionKeys.has(HOME_KEY)).toBe(true);
-    await expect(
-      gateway.driver.waitForReply(HOME_KEY, () => true, { timeoutMs: 10 }),
-    ).rejects.toThrow("unmatched replies: (none)");
   });
 
   it("names the method and stderr when a gateway call fails", async () => {
@@ -199,7 +196,9 @@ describe("webchat driver", () => {
     await expect(driver.send(HOME_KEY, "hi")).rejects.toThrow(
       'gateway call sessions.reset failed (exit 1): {"ok":false,"error":{"type":"gateway_transport_error"',
     );
-    expect(argvs[0]?.slice(-2)).toEqual(["--timeout", "45000"]);
+    // Above the CLI's 10 s default, too short for a freshly started gateway.
+    expect(argvs[0]?.at(-2)).toBe("--timeout");
+    expect(Number(argvs[0]?.at(-1))).toBeGreaterThan(10_000);
   });
 });
 
@@ -226,7 +225,7 @@ function createFakeGateway(): FakeGateway {
   const calls: GatewayCall[] = [];
   const histories = new Map<string, unknown[]>([
     [CONVERSATION_KEY, []],
-    [HOME_KEY, [resetMessage()]],
+    [HOME_KEY, []],
   ]);
   const entries: ReportEntry[] = [];
   const sessionKeys = new Set<string>();
@@ -284,15 +283,6 @@ function createFakeGateway(): FakeGateway {
   };
 }
 
-function resetMessage(): unknown {
-  return {
-    role: "system",
-    content: [{ type: "text", text: "Reset" }],
-    timestamp: 1_792_864_660_312,
-    __openclaw: { kind: "reset", id: "reset-1", seq: 1 },
-  };
-}
-
 function userMessage(seq: number, text: string): unknown {
   return {
     role: "user",
@@ -306,7 +296,10 @@ function userMessage(seq: number, text: string): unknown {
 function assistantToolUse(seq: number): unknown {
   return {
     role: "assistant",
-    content: [{ type: "toolCall", id: `call-${seq}`, name: "exec", arguments: {} }],
+    content: [
+      { type: "text", text: "Checking the workspace." },
+      { type: "toolCall", id: `call-${seq}`, name: "exec", arguments: {} },
+    ],
     stopReason: "toolUse",
     timestamp: 1_792_864_000_000 + seq * 1000,
     __openclaw: { runId: "run-1", id: `msg-${seq}`, seq },

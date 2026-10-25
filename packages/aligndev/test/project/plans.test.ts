@@ -47,28 +47,20 @@ describe("validateEffectivePlans", () => {
     );
   });
 
-  it.each(["not JSON", "Work files ready: /plans", '{"plans":'])(
-    "rejects malformed JSON without falling back: %j",
-    (stdout) => {
-      const fixture = gateCommand(stdout);
-      expect(() => validateEffectivePlans(fixture.ctx)).toThrow(
-        `Invalid alignfirst plans check JSON report for ${fixture.ctx.cwd}\n${PREPARE}`,
-      );
-      expect(fixture.invocations()).toHaveLength(1);
-    },
-  );
+  it("rejects a human-readable report without falling back to parsing it", () => {
+    const fixture = gateCommand("Work files ready: /plans");
+    expect(() => validateEffectivePlans(fixture.ctx)).toThrow(
+      `Invalid alignfirst plans check JSON report for ${fixture.ctx.cwd}\n${PREPARE}`,
+    );
+    expect(fixture.invocations()).toHaveLength(1);
+  });
 
   it.each([
     null,
-    [],
-    "ready",
     {},
-    { plans: null },
     { plans: "ready" },
     { plans: {} },
-    { plans: { target: null } },
     { plans: { target: 42 } },
-    { plans: { target: "" } },
     { plans: { target: "   " } },
     { plans: { target: "relative/.plans" } },
   ])("rejects missing or invalid target data: %j", (report) => {

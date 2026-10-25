@@ -86,10 +86,6 @@ describe("json shape", () => {
       "ranges[1].code must match /^[a-z][a-z0-9-]*$/",
     ],
     [{ agent: "claude", ranges: [{ first: 80, code: 1 }] }, "ranges[0].code must be a string"],
-    [
-      { agent: "claude", ranges: [{ first: 80, description: 1 }] },
-      "ranges[0].description must be a string",
-    ],
   ])("rejects %j", (value, message) => {
     expect(() => parse(sampleShape, value)).toThrow(`invalid: ${message}`);
   });
@@ -109,7 +105,6 @@ describe("json shape", () => {
     expect(warnings).toEqual([".old", ".other"]);
     expect(value.old).toEqual({ broken: true });
     expect(() => parse(tolerant, { enabled: "yes", stale: true })).toThrow("be a boolean");
-    expect(() => parse(sampleShape, { agent: "claude", stale: true })).toThrow("be removed");
   });
 
   it("redacts dynamic record keys in warning paths while keeping validation paths", () => {

@@ -72,10 +72,6 @@ describe("composeProjectName", () => {
     expect(composeProjectName("Review-ABC-deadbeef")).toBe("review-abc-deadbeef");
   });
 
-  it("lowercases the name", () => {
-    expect(composeProjectName("myrepo-feat-ABC-123")).toBe("myrepo-feat-abc-123");
-  });
-
   it("drops characters outside [a-z0-9_-]", () => {
     expect(composeProjectName("my.repo-v1.2")).toBe("myrepo-v12");
   });

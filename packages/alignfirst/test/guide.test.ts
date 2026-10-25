@@ -62,7 +62,7 @@ describe("guide command", () => {
     expect(overview.stdout).not.toContain("# Ticket Directory and Work Files");
   });
 
-  it("plans single and multiple plans in a selected cycle", async () => {
+  it("tells the plan protocol to number single and multiple plans in a selected cycle", async () => {
     const result = await runMain(["guide", "plan"], { cwd: temp() });
     expect(result).toMatchObject({ code: 0, stderr: "" });
     expect(result.stdout).toContain("alignfirst ticket <id> --cycle <letter> --next plan.md");

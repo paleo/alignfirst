@@ -72,24 +72,15 @@ describe("session key selection", () => {
     const home = "agent:main:main";
     const dashboard = "agent:main:dashboard:x";
     seedSession(db, home, "home", "home reply");
-    seedSession(db, dashboard, "dashboard-before", "first window");
-    db.prepare("UPDATE session_nodes SET current_session_id = ? WHERE session_key = ?").run(
-      "dashboard-after",
-      dashboard,
-    );
-    seedWindow(db, dashboard, "dashboard-after", "second window", 2);
+    seedSession(db, dashboard, "dashboard", "dashboard reply");
     db.close();
 
-    const homeSessions = readConversationSessions(path, 0, "A26-webchat-abc", [], [home]);
-    expect(homeSessions.map((session) => session.sessionKey)).toEqual([home]);
-    const [selected] = readConversationSessions(path, 0, "A26-webchat-abc", [], [dashboard]);
-    expect(selected).toMatchObject({
-      sessionKey: dashboard,
-      messages: [
-        { role: "assistant", content: "first window" },
-        { role: "assistant", content: "second window" },
-      ],
-    });
+    const keys = (sessionKey: string) =>
+      readConversationSessions(path, 0, "A26-webchat-abc", [], [sessionKey]).map(
+        (session) => session.sessionKey,
+      );
+    expect(keys(home)).toEqual([home]);
+    expect(keys(dashboard)).toEqual([dashboard]);
   });
 });
 

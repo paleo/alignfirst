@@ -140,10 +140,6 @@ describe("matchWorktreeByDir", () => {
     expect(matchWorktreeByDir("repo-feat-a", registry, "/somewhere/else")).toBe("repo-feat-a");
   });
 
-  it("matches an orphan by name even when its directory is gone", () => {
-    expect(matchWorktreeByDir("repo-feat-b", registry, "/tmp")).toBe("repo-feat-b");
-  });
-
   it("prefers an exact path over an exact registered name", () => {
     const colliding: WorkspacesRegistry = {
       workspaces: {

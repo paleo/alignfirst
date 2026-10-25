@@ -33,13 +33,13 @@ describe("workspace invocation", () => {
       npm_package_json: join(evidence.cwd, "package.json"),
     };
     evidence.parentArgv = ["bun", "--bun", "run", "ws"];
+    const dev = join(evidence.cwd, "scripts", "dev.mjs");
     const commands = detectPackageManager(evidence.cwd, evidence, {
       workspace: evidence.entryPoint,
-      dev: join(evidence.cwd, "scripts", "dev.mjs"),
+      dev,
     });
     expect(commands.workspace.withArgs).toBe("bun --bun run ws");
-    expect(commands.dev.base).toContain("dev.mjs");
-    expect(commands.dev.base).not.toContain("run ws");
+    expect(commands.dev.base).toBe(`'/runtime with spaces/bunx.exe' ${dev}`);
   });
 
   it("preserves exact Bun executable paths for direct wrappers and bootstrap", () => {
@@ -56,7 +56,7 @@ describe("workspace invocation", () => {
     expect(guide).not.toContain("npm run");
   });
 
-  it("does not reuse ambient evidence between resolutions", () => {
+  it("falls back to the project lockfile, pnpm before npm, without runner evidence", () => {
     const evidence = fixture("node");
     expect(detectPackageManager(evidence.cwd, evidence).workspace.withArgs).toBe(
       "npm run workspace --",

@@ -231,7 +231,7 @@ function getJudge(): JudgeClient {
   return cached;
 }
 
-export function parseJudgeModelRef(ref: string): {
+function parseJudgeModelRef(ref: string): {
   provider: "anthropic" | "openrouter";
   bareModel: string;
 } {

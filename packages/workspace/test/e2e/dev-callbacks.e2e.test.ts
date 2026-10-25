@@ -339,7 +339,7 @@ function prepareTarget(devSetup = true): Target {
 }
 
 function setup(fx: FixtureRepo, worktree: string): void {
-  const result = runCli(fx.repo, ["setup"], { E2E_FINALIZE_PID_LOG: "1" }, worktree);
+  const result = runCli(fx.repo, ["setup"], undefined, worktree);
   expect(result.status, result.stderr).toBe(0);
 }
 

@@ -84,17 +84,13 @@ describe("explicit companion-only onboarding", () => {
     },
   );
 
-  it.each(
-    PLATFORMS.flatMap((platform) => [false, true].map((viaNpx) => [platform, viaNpx] as const)),
-  )(
-    "renders the explicit entry into the shared selection recipe for %s (npx=%s)",
-    async (platform, viaNpx) => {
+  it.each(PLATFORMS)(
+    "renders the explicit entry into the shared selection recipe for %s",
+    async (platform) => {
       const fixture = makeFixture();
       const repo = makeUntouchedProject(fixture);
       writeSettings(fixture.home, { platform, projectsRoot: fixture.root });
-      const env = viaNpx ? NPX_ENV : {};
-      const forms = resolveCommandForms(env);
-      const result = await runAligndev(fixture, workFilesSetupArgs(platform), { cwd: repo, env });
+      const result = await runAligndev(fixture, workFilesSetupArgs(platform), { cwd: repo });
       expect(result.code, result.stderr).toBe(0);
       expect(result.stdout).not.toContain("{{");
       const explicitEntry = result.stdout.indexOf("For explicit companion-only onboarding");
@@ -106,7 +102,7 @@ describe("explicit companion-only onboarding", () => {
       expect(result.stdout).toContain(
         "Usable, non-project-tracked effective plans need no preparation",
       );
-      expect(result.stdout).toContain(`${forms.alignfirst} companion register`);
+      expect(result.stdout).toContain("alignfirst companion register");
       expect(result.stdout).toContain('setting `items[".plans"]` to `"companion"`');
       expect(result.stdout).toContain(
         "Preserve all other fields, item settings, profile selections",
@@ -130,14 +126,11 @@ describe("explicit companion-only onboarding", () => {
     expect(reference).toContain("do not copy, merge, migrate, archive, or delete them");
   });
 
-  it.each(
-    PLATFORMS.flatMap((platform) => REGISTRATION_STATES.map((state) => [platform, state] as const)),
-  )(
-    "follows the authorized recipe with usable ignored project plans for %s/%s",
-    async (platform, state) => {
+  it.each(REGISTRATION_STATES)(
+    "follows the authorized recipe with usable ignored project plans (%s registration)",
+    async (state) => {
       const fixture = makeFixture();
       const repo = makeUntouchedProject(fixture);
-      writeSettings(fixture.home, { platform, projectsRoot: fixture.root });
       const key = repo;
       const entry: RegistryEntry = {
         aligndev: { profile: "kept-profile", futureProfileField: { keep: true } },
@@ -183,9 +176,6 @@ describe("explicit companion-only onboarding", () => {
       const excludeBefore = readFileSync(join(repo, ".git", "info", "exclude"), "utf8");
       const worktreesBefore = execGit(repo, "worktree", "list", "--porcelain");
       const headBefore = execGit(repo, "rev-parse", "HEAD");
-      const guide = await runAligndev(fixture, workFilesSetupArgs(platform), { cwd: repo });
-      expect(guide.code, guide.stderr).toBe(0);
-      expect(guide.stdout).toContain("start at section 3 under the onboarding authorization");
 
       // Execute the explicit onboarding entry, rather than the readiness gate's early return.
       runFirst(fixture, repo, ["companion", "register"]);

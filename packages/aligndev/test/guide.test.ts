@@ -377,7 +377,6 @@ describe("aligndev guide playbook", () => {
         const result = await runGuide(fixture, surfaceArgs(topic, surface));
         expect(result.code, result.stderr).toBe(0);
         expectTitled(result.stdout, topic);
-        expect(result.stdout).not.toContain("{{");
         expect(result.stdout).not.toMatch(/^---\n/);
       }
     }
@@ -395,15 +394,13 @@ describe("aligndev guide playbook", () => {
     }
   });
 
-  it("names no retired command or skill file in any topic", async () => {
+  it("names no retired command or skill file in any guide", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, OPENCLAW_CONFIG);
-    for (const surface of THREAD_SURFACES) {
-      for (const topic of ["dispatcher", "playbook", ...PLAYBOOK_TOPICS.thread]) {
-        const result = await runGuide(fixture, surfaceArgs(topic, surface));
-        for (const retired of ["alcode", "alproject", "SKILL.md", "references/"]) {
-          expect(result.stdout, `${topic} mentions ${retired}`).not.toContain(retired);
-        }
+    for (const args of everyGuide()) {
+      const result = await runGuide(fixture, args);
+      for (const retired of ["alcode", "alproject", "SKILL.md", "references/"]) {
+        expect(result.stdout, `${args} mentions ${retired}`).not.toContain(retired);
       }
     }
   });
@@ -432,26 +429,24 @@ describe("aligndev guide playbook", () => {
   it("opens the claim step with the every-turn rule, human turns included", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, OPENCLAW_CONFIG);
-    for (const surface of THREAD_SURFACES) {
-      const session = await runGuide(fixture, ["--channel", surface, "working-session"]);
-      const step = session.stdout.slice(
-        session.stdout.indexOf("### Step 1"),
-        session.stdout.indexOf("### Step 2"),
-      );
-      const firstParagraph = step.split("\n\n")[1];
-      expect(firstParagraph).toMatch(/^Every turn in this thread, a human message's included, /);
-      expect(firstParagraph).toContain("in a thread a human opened, it answers `none`");
-    }
+    const session = await runGuide(fixture, ["--channel", "slack", "working-session"]);
+    const step = session.stdout.slice(
+      session.stdout.indexOf("### Step 1"),
+      session.stdout.indexOf("### Step 2"),
+    );
+    const firstParagraph = step.split("\n\n")[1];
+    expect(firstParagraph).toMatch(/^Every turn in this thread, a human message's included, /);
+    expect(firstParagraph).toContain("in a thread a human opened, it answers `none`");
   });
 
   it("names the reaction emoji of the surface only", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, OPENCLAW_CONFIG);
     const slack = (await runGuide(fixture, ["--channel", "slack", "working-session"])).stdout;
-    expect(slack).toContain("The `emoji` value is `lobster` on Slack.");
+    expect(slack).toContain("`lobster`");
     expect(slack).not.toContain("`🦞`");
     const discord = (await runGuide(fixture, ["--channel", "discord", "working-session"])).stdout;
-    expect(discord).toContain("The `emoji` value is `🦞` on Discord.");
+    expect(discord).toContain("`🦞`");
     expect(discord).not.toContain("`lobster`");
   });
 
@@ -490,30 +485,26 @@ describe("aligndev guide playbook", () => {
     expect(session.stdout).toContain("Write `{TICKET_DIR}A1-request.md`");
   });
 
-  it.each(THREAD_SURFACES)(
-    "uses lightweight worktrees and optional full workspace onboarding on %s",
-    async (surface) => {
-      const fixture = makeFixture();
-      writeConfig(fixture.home, OPENCLAW_CONFIG);
-      for (const topic of ["project-workspace-setup", "working-session", "project-lifecycle"]) {
-        const result = await runGuide(fixture, ["--channel", surface, topic]);
-        expect(result.stdout, topic).not.toContain("main-worktree mode");
-        expect(result.stdout, topic).not.toContain("git switch -c {TICKET_ID}/{1-3-words}");
-        expect(result.stdout, topic).toContain("aligndev worktree");
-      }
-      const lifecycle = (await runGuide(fixture, ["--channel", surface, "project-lifecycle"]))
-        .stdout;
-      expect(lifecycle).toContain("The workspace system is optional");
-      expect(lifecycle).toContain("The project is prepared when DEVELOPERS_PATH exists");
-      expect(lifecycle).toContain("Wait for explicit confirmation of those exact paths");
-      expect(lifecycle).toContain("Stop immediately if any removal fails");
-      expect(lifecycle).toContain("No coding launch or plans preparation is needed");
-      expect(lifecycle).toContain("ask whether to keep or delete it");
-      const working = (await runGuide(fixture, ["--channel", surface, "working-session"])).stdout;
-      expect(working).toContain("bootstrapping a new project before its initial commit");
-      expect(working).toContain("repository-onboarding setup branch");
-    },
-  );
+  it("uses lightweight worktrees and optional full workspace onboarding", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, OPENCLAW_CONFIG);
+    for (const topic of ["project-workspace-setup", "working-session", "project-lifecycle"]) {
+      const result = await runGuide(fixture, ["--channel", "slack", topic]);
+      expect(result.stdout, topic).not.toContain("main-worktree mode");
+      expect(result.stdout, topic).not.toContain("git switch -c {TICKET_ID}/{1-3-words}");
+      expect(result.stdout, topic).toContain("aligndev worktree");
+    }
+    const lifecycle = (await runGuide(fixture, ["--channel", "slack", "project-lifecycle"])).stdout;
+    expect(lifecycle).toContain("The workspace system is optional");
+    expect(lifecycle).toContain("The project is prepared when DEVELOPERS_PATH exists");
+    expect(lifecycle).toContain("Wait for explicit confirmation of those exact paths");
+    expect(lifecycle).toContain("Stop immediately if any removal fails");
+    expect(lifecycle).toContain("No coding launch or plans preparation is needed");
+    expect(lifecycle).toContain("ask whether to keep or delete it");
+    const working = (await runGuide(fixture, ["--channel", "slack", "working-session"])).stdout;
+    expect(working).toContain("bootstrapping a new project before its initial commit");
+    expect(working).toContain("repository-onboarding setup branch");
+  });
 
   it("routes companion rules and preparation to the companion", async () => {
     const fixture = makeFixture();
@@ -532,14 +523,12 @@ describe("aligndev guide playbook", () => {
     );
   });
 
-  it.each(
-    THREAD_SURFACES.flatMap((surface) => [false, true].map((viaNpx) => [surface, viaNpx] as const)),
-  )(
-    "renders the starter's handoff fields and original-request slot on %s (npx=%s)",
-    async (surface, viaNpx) => {
+  it.each([false, true])(
+    "renders the starter's handoff fields and original-request slot (npx=%s)",
+    async (viaNpx) => {
       const fixture = makeFixture();
       writeConfig(fixture.home, OPENCLAW_CONFIG);
-      const result = await runGuide(fixture, ["--channel", surface, "channel-handling"], {
+      const result = await runGuide(fixture, ["--channel", "slack", "channel-handling"], {
         env: viaNpx ? NPX_ENV : {},
       });
       expect(result.code, result.stderr).toBe(0);
@@ -773,7 +762,6 @@ describe("app conversations", () => {
       for (const word of THREAD_WORDS) {
         expect(stdout, `${topic} matches ${word}`).not.toMatch(word);
       }
-      expect(stdout, topic).not.toContain("{{");
     }
   });
 
@@ -794,7 +782,6 @@ describe("app conversations", () => {
     expect(home).toContain(
       "Open a new conversation for this request, on the agent workspace or on the {PROJECT} folder.",
     );
-    expect(home).toContain("With a listed project, keep both places in the line.");
     expect(home).toContain("Home does no project work and sets up no workspace");
     expect(home.indexOf("An actionable message")).toBeLessThan(
       home.indexOf("Answer ordinary conversation"),
@@ -823,16 +810,14 @@ describe("app conversations", () => {
   it("keeps the claim step on threads", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, OPENCLAW_CONFIG);
-    for (const surface of THREAD_SURFACES) {
-      for (const topic of ["working-session", "channel-handling"]) {
-        const { stdout } = await runGuide(fixture, ["--channel", surface, topic]);
-        expect(stdout, `${surface} ${topic}`).not.toContain("session_status");
-        expect(stdout, `${surface} ${topic}`).not.toContain("### Home");
-      }
-      const session = (await runGuide(fixture, ["--channel", surface, "working-session"])).stdout;
-      expect(session).toContain("### Step 1 — Claim before any task effect");
-      expect(session).not.toContain("`MEDIA:<absolute path>`");
+    for (const topic of ["working-session", "channel-handling"]) {
+      const { stdout } = await runGuide(fixture, ["--channel", "slack", topic]);
+      expect(stdout, topic).not.toContain("session_status");
+      expect(stdout, topic).not.toContain("### Home");
     }
+    const session = (await runGuide(fixture, ["--channel", "slack", "working-session"])).stdout;
+    expect(session).toContain("### Step 1 — Claim before any task effect");
+    expect(session).not.toContain("`MEDIA:<absolute path>`");
   });
 
   it("states the inventory resolution rules in the playbook only", async () => {
@@ -844,14 +829,10 @@ describe("app conversations", () => {
       expect(playbook, surface).toContain("### Resolving a project from the inventory");
       expect(playbook, surface).toContain(rule);
     }
-    for (const surface of THREAD_SURFACES) {
-      const channel = (await runGuide(fixture, ["--channel", surface, "channel-handling"])).stdout;
-      const topic = channel.slice(channel.indexOf(`\n${PLAYBOOK_TITLES["channel-handling"]}\n`));
-      expect(topic).toContain(
-        'with the playbook\'s rules, "Resolving a project from the inventory"',
-      );
-      expect(topic).not.toContain(rule);
-    }
+    const channel = (await runGuide(fixture, ["--channel", "slack", "channel-handling"])).stdout;
+    const topic = channel.slice(channel.indexOf(`\n${PLAYBOOK_TITLES["channel-handling"]}\n`));
+    expect(topic).toContain('with the playbook\'s rules, "Resolving a project from the inventory"');
+    expect(topic).not.toContain(rule);
   });
 
   it.each(["app", "codingAgent"] as const)(
@@ -1401,23 +1382,6 @@ describe("renderBlocks", () => {
     expect(render("noGuide")).toBe("");
   });
 
-  it("derives thread for Slack and Discord, conversation for app and codingAgent", () => {
-    const text = [
-      "{{#thread}}",
-      "Thread.",
-      "{{/thread}}",
-      "{{#conversation}}",
-      "Conversation.",
-      "{{/conversation}}",
-    ].join("\n");
-    const render = (active: ActiveBlocks) => renderBlocks(text, active, "t.md");
-    expect(render({ platform: "openclaw", surface: "slack" })).toBe("Thread.");
-    expect(render({ platform: "openclaw", surface: "discord" })).toBe("Thread.");
-    expect(render({ platform: "openclaw", surface: "app" })).toBe("Conversation.");
-    expect(render({ platform: "codingAgent", guideFile: "noGuide" })).toBe("Conversation.");
-    expect(render({ platform: "openclaw" })).toBe("");
-  });
-
   it("selects the blocks of each context", () => {
     const text = [
       "{{#openclaw}}",
@@ -1462,6 +1426,8 @@ describe("renderBlocks", () => {
       "App.",
       "Conversation.",
     ]);
+    // The dispatcher renders without a surface: neither thread nor conversation holds.
+    expect(render({ platform: "openclaw" })).toEqual(["OpenClaw."]);
     expect(render({ platform: "codingAgent", guideFile: "readme" })).toEqual([
       "Conversation.",
       "Guide.",

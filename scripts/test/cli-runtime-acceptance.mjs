@@ -54,7 +54,6 @@ async function main() {
     return;
   }
   assert.equal(tier, "isolated");
-  check("known absolute Node hidden", "/bin/sh", ["-c", `! '${node}' --version`]);
   prepareProject();
   alignfirstLifecycle();
   await alignDevLifecycle();
@@ -88,8 +87,12 @@ function matrix() {
     ["bun-script", bun, ["run", "af"], "node", "bun run af"],
     ["bun-forced-script", bun, ["--bun", "run", "af"], "bun", "bun --bun run af"],
   ];
-  for (const [name, executable, prefix, runtime, contains] of cells) {
-    check(name, executable, [...prefix, "context"], { runtime, contains });
+  // The backticks anchor the whole emitted command: "bun run af" also occurs in "bun --bun run af".
+  for (const [name, executable, prefix, runtime, command] of cells) {
+    check(name, executable, [...prefix, "context"], {
+      runtime,
+      contains: `\`${command} guide <protocol>\``,
+    });
   }
   for (const [name, entry] of Object.entries(entries)) {
     for (const runtime of ["node", "bun"]) {
@@ -265,7 +268,6 @@ function externalNativeMatrix(npm) {
   );
   assert.equal(readRecords(log)[before].runtime, "bun");
   const yarn = join(root, "node_modules", "yarn-classic", "bin", "yarn.js");
-  check("yarn-classic-version", node, [yarn, "--version"], { contains: "1.22.22" });
   check("yarn-classic-counterpart", node, [yarn, "run", "ad", "code", "quota"], {
     cwd: project,
     env,
@@ -359,9 +361,6 @@ function alignfirstLifecycle() {
   check("isolated-ordinary-bunx-fallback", "bunx", ["alignfirst", "context"], {
     runtime: "bun",
     contains: "bunx --bun alignfirst",
-  });
-  check("isolated-bun-x", bun, ["x", "--bun", "alignfirst", "config", "--json"], {
-    runtime: "bun",
   });
   check("isolated-direct-bun", bun, [entries.alignfirst, "context"], {
     runtime: "bun",

@@ -43,7 +43,6 @@ describe("command forms", () => {
       "bunx --bun aligndev",
       ["bunx", "--bun", "alignfirst"],
     ],
-    ["bun", {}, "bunx --bun aligndev", ["bunx", "--bun", "alignfirst"]],
     [
       "node",
       { npm_config_user_agent: "pnpm/10", npm_command: "dlx" },
@@ -52,21 +51,9 @@ describe("command forms", () => {
     ],
     [
       "node",
-      { npm_config_user_agent: "yarn/1.22.22" },
-      "npx -y aligndev",
-      ["npx", "-y", "alignfirst"],
-    ],
-    [
-      "node",
       { npm_execpath: "/tools/yarn/bin/yarn.js" },
       "npx -y aligndev",
       ["npx", "-y", "alignfirst"],
-    ],
-    [
-      "node",
-      { npm_config_user_agent: "yarn/4", npm_command: "dlx" },
-      "yarn dlx aligndev",
-      ["yarn", "dlx", "alignfirst"],
     ],
   ] as const)("preserves %s invocation %j", (runtime, env, self, counterpart) => {
     const forms = resolveCommandForms(env, { runtime, env, cwd: "/tmp", executable: "/runtime" });

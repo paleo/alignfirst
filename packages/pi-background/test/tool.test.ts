@@ -3,7 +3,15 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { validateInput } from "../src/background-tool.js";
 import { launchManaged as importLaunch, type ManagedProcess } from "../src/process-tree.js";
-import { gate, host, jobFrom, readJsonFile, readPidFile, waitFor } from "./host-fixture.js";
+import {
+  gate,
+  host,
+  jobFrom,
+  readJsonFile,
+  readPidFile,
+  waitFor,
+  waitJob,
+} from "./host-fixture.js";
 
 const TEST_GRACE_MS = 300;
 const waitCommand = "while [ ! -f release ]; do sleep 0.02; done; printf 'done'; exit 0";
@@ -343,13 +351,7 @@ describe("public background actions", () => {
         identity = processFields(pid)?.[19];
         expect(identity).toBeDefined();
         writeFileSync(join(h.cwd, "exit"), "go");
-        const deadline = Date.now() + 8000;
-        let status = jobFrom(await h.call({ action: "status", id: job.id }));
-        while (status.status === "running" && Date.now() < deadline) {
-          await new Promise((resolve) => setTimeout(resolve, 10));
-          status = jobFrom(await h.call({ action: "status", id: job.id }));
-        }
-        expect(status).toMatchObject({ status: "failed", exitCode: 17 });
+        expect(await waitJob(h, job.id)).toMatchObject({ status: "failed", exitCode: 17 });
         expect(processFields(pid)?.[19] === identity && processFields(pid)?.[0] !== "Z").toBe(
           false,
         );

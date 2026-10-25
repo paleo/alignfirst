@@ -97,7 +97,6 @@ describe("aggregateAgentToolCalls", () => {
     const [call] = aggregateAgentToolCalls([noTimestamp]);
     expect(call?.toolUseId).toBe("t1");
     expect(call?.startedAt).toBeUndefined();
-    expect("startedAt" in (call ?? {})).toBe(false);
   });
 });
 

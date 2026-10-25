@@ -1,10 +1,7 @@
 import { createServer, type Server } from "node:http";
-import {
-  createBus,
-  createChannelMockAccountHelpers,
-  createChannelMockMessageActions,
-} from "@alignfirst/openclaw-channel-mock-core";
+import { createBus } from "@alignfirst/openclaw-channel-mock-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { discordMockPlugin } from "../src/plugin.js";
 
 const CHANNEL_ID = "discord-mock";
 
@@ -32,14 +29,9 @@ async function stopBus(fixture: BusFixture) {
   });
 }
 
-const helpers = createChannelMockAccountHelpers({ channelId: CHANNEL_ID });
-const actions = createChannelMockMessageActions({
-  channelId: CHANNEL_ID,
-  surface: "discord",
-  helpers,
-});
+const actions = discordMockPlugin.actions;
 
-if (!actions.handleAction || !actions.describeMessageTool) {
+if (!actions?.handleAction || !actions.describeMessageTool) {
   throw new Error("discord-mock actions missing handleAction/describeMessageTool");
 }
 const handleAction: NonNullable<typeof actions.handleAction> = actions.handleAction;

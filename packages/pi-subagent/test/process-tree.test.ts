@@ -281,9 +281,13 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
     },
   );
 
-  it.each(["EACCES", "EIO"])(
-    "reports %s inspection failure, retains ownership, and permits retry",
-    async (code) => {
+  // The leader's first stat read is the table scan; the second is the identity check before TERM.
+  it.each([
+    { code: "EACCES", stage: "pre-signal identity check", failingRead: 2 },
+    { code: "EIO", stage: "process-table scan", failingRead: 1 },
+  ])(
+    "reports $code from the $stage, retains ownership, and permits retry",
+    async ({ code, failingRead }) => {
       const dir = mkdtempSync(join(tmpdir(), "pi-subagent-query-failure-"));
       const managed = launchManaged({
         command: process.execPath,
@@ -299,17 +303,22 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
         const original = vi.mocked(readFileSync).getMockImplementation();
         if (!original) throw new Error("Missing filesystem implementation.");
         let leaderReads = 0;
-        // The first read is the table scan; the second is the identity check before SIGTERM.
         vi.mocked(readFileSync).mockImplementation((...args) => {
-          if (String(args[0]) === `/proc/${managed.child.pid}/stat` && ++leaderReads === 2) {
+          if (
+            String(args[0]) === `/proc/${managed.child.pid}/stat` &&
+            ++leaderReads === failingRead
+          ) {
             throw Object.assign(new Error("inspection denied"), { code });
           }
           return original(...args);
         });
         const failed = managed.stop();
-        expect(managed.stop()).toBe(failed);
-        await expect(failed).rejects.toThrow("inspection denied");
-        vi.mocked(readFileSync).mockImplementation(original);
+        try {
+          expect(managed.stop()).toBe(failed);
+          await expect(failed).rejects.toThrow("inspection denied");
+        } finally {
+          vi.mocked(readFileSync).mockImplementation(original);
+        }
         expect(records(dir).some(isLive)).toBe(true);
         const retry = managed.stop();
         expect(retry).not.toBe(failed);
@@ -341,8 +350,11 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
         await waitFor(() => records(dir).length === 2);
         const original = vi.mocked(readFileSync).getMockImplementation();
         if (!original) throw new Error("Missing filesystem implementation.");
+        let hiddenReads = 0;
+        // The test runner's parent is always listed in /proc and is unrelated to the fixture.
         vi.mocked(readFileSync).mockImplementation((...args) => {
-          if (String(args[0]) === "/proc/1/stat") {
+          if (String(args[0]) === `/proc/${process.ppid}/stat`) {
+            ++hiddenReads;
             throw Object.assign(new Error("hidden process"), { code });
           }
           return original(...args);
@@ -352,6 +364,7 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
         } finally {
           vi.mocked(readFileSync).mockImplementation(original);
         }
+        expect(hiddenReads).toBeGreaterThan(0);
         expect(records(dir).filter(isLive)).toEqual([]);
       } finally {
         for (const record of records(dir)) if (isLive(record)) process.kill(record.pid, "SIGKILL");

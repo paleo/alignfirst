@@ -51,14 +51,15 @@ afterEach(async () => {
 });
 
 describe("workspace setup (e2e)", () => {
-  it("preserves real project-script launch evidence despite an npm lockfile", () => {
+  // The custom name `ws` tells a verified script apart from the default `workspace` fallback.
+  it("keeps a verified custom-named project script in the guide despite an npm lockfile", () => {
     const { repo } = fixture();
     const runtime = cliRuntime.bun === undefined ? "node" : "bun";
     writeFileSync(
       join(repo, "package.json"),
       JSON.stringify({
         scripts: {
-          workspace: `${runtime} scripts/workspace.mjs`,
+          ws: `${runtime} scripts/workspace.mjs`,
           dev: `${runtime} scripts/dev-server.mjs`,
         },
       }),
@@ -73,8 +74,8 @@ describe("workspace setup (e2e)", () => {
     const result = spawnSync(
       cliRuntime.bun === undefined ? "npm" : cliExecutable,
       cliRuntime.bun === undefined
-        ? ["run", "workspace", "--", "--guide"]
-        : ["--bun", "run", "workspace", "--guide"],
+        ? ["run", "ws", "--", "--guide"]
+        : ["--bun", "run", "ws", "--guide"],
       {
         cwd: repo,
         encoding: "utf8",
@@ -84,16 +85,16 @@ describe("workspace setup (e2e)", () => {
     );
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain(
-      cliRuntime.bun === undefined ? "npm run workspace -- setup" : "bun --bun run workspace setup",
+      cliRuntime.bun === undefined ? "npm run ws -- setup" : "bun --bun run ws setup",
     );
     if (cliRuntime.bun !== undefined) expect(result.stdout).not.toContain("npm run");
   });
 
   it("uses the actual invocation for workspace/dev unknown-command recovery and help", () => {
     const { repo } = fixture();
-    for (const [script, result] of [
-      ["workspace.mjs", runCli(repo, ["unknown"])],
-      ["dev-server.mjs", runDev(repo, ["unknown"])],
+    for (const [name, script, result] of [
+      ["workspace", "workspace.mjs", runCli(repo, ["unknown"])],
+      ["dev", "dev-server.mjs", runDev(repo, ["unknown"])],
     ] as const) {
       expect(result.status, result.stderr).toBe(1);
       if (cliRuntime.bun !== undefined) {
@@ -102,7 +103,10 @@ describe("workspace setup (e2e)", () => {
         );
         expect(result.stdout).toContain(`Usage: ${cliRuntime.executable}`);
         expect(result.stdout + result.stderr).not.toContain("npm run");
-      } else expect(result.stdout).toContain("Usage: npm run");
+      } else {
+        expect(result.stderr).toContain(`npm run ${name} -- --help`);
+        expect(result.stdout).toContain(`Usage: npm run ${name} --`);
+      }
     }
   });
 

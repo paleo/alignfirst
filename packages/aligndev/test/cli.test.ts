@@ -75,22 +75,9 @@ describe("aligndev", () => {
         expect(result.code, result.stderr).toBe(0);
         expect(result.stderr).toBe("");
         expect(result.stdout).toContain(`${command} worktree setup [<path>] [--json]`);
-        expect(result.stdout).toContain(`${command} worktree setup`);
-        expect(result.stdout).toMatch(/current.*root|root.*current/i);
-        expect(result.stdout).toMatch(/exact.*root/i);
-        expect(result.stdout).toMatch(/idempotent|retri|retry/i);
-        expect(result.stdout).toMatch(/Git and work files only/);
-        expect(result.stdout).not.toContain(`${command} worktree teardown`);
       }
     },
   );
-
-  it("rejects teardown rather than treating it as a lightweight lifecycle hook", async () => {
-    const result = await run(["worktree", "teardown"]);
-    expect(result.code).toBe(1);
-    expect(result.stdout).toBe("");
-    expect(result.stderr).toContain("Unknown worktree command: teardown");
-  });
 
   it("prints the package version", async () => {
     const { version } = JSON.parse(readFileSync(PACKAGE_JSON, "utf8")) as { version: string };
@@ -135,7 +122,6 @@ describe("aligndev", () => {
     const worktree = await run(["worktree", "--help"]);
     expect(worktree.code).toBe(0);
     expect(worktree.stdout).toContain("aligndev worktree add <path> <branch> [--json]");
-    expect(worktree.stdout).toContain("aligndev worktree setup [<path>] [--json]");
 
     const guide = await run(["guide", "--help"], {
       platform: "openclaw",

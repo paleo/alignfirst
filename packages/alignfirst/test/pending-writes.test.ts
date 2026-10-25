@@ -54,7 +54,7 @@ it("refuses an index changed behind the CLI's back", () => {
   const dir = makeFixture();
   writeFileSync(join(dir, "README.md"), "staged\n");
   git(dir, "add", "-A");
-  expect(() => capturePendingWrites(dir)).toThrow("Resolve the rebase manually");
+  expect(() => capturePendingWrites(dir)).toThrow("index changed during synchronization");
   expect(git(dir, "diff", "--cached")).toContain("+staged");
 });
 
@@ -62,7 +62,7 @@ it("refuses to read a pending symlink", () => {
   const dir = makeFixture();
   rmSync(join(dir, "README.md"));
   symlinkSync("gitconfig", join(dir, "README.md"));
-  expect(() => capturePendingWrites(dir)).toThrow("Resolve the rebase manually");
+  expect(() => capturePendingWrites(dir)).toThrow("Cannot automatically replace README.md");
 });
 
 it("refuses to restore through a symlink in the directory chain", () => {
@@ -73,7 +73,7 @@ it("refuses to restore through a symlink in the directory chain", () => {
 
   expect(() =>
     restorePendingWrites(dir, [{ path: "ticket/spec.md", content: Buffer.from("pending\n") }]),
-  ).toThrow("Resolve the rebase manually");
+  ).toThrow("Cannot automatically write through ticket");
   expect(existsSync(join(outside, "spec.md"))).toBe(false);
 });
 

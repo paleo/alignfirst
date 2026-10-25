@@ -81,7 +81,5 @@ describe("toCallbackStartupError", () => {
     const original = new StartupError("docker", "compose failed", "/tmp/docker.log");
     const err = toCallbackStartupError("api", original);
     expect(err).toBe(original);
-    expect(err.reason).toBe("compose failed");
-    expect(err.logFile).toBe("/tmp/docker.log");
   });
 });

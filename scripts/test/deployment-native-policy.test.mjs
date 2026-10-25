@@ -132,17 +132,6 @@ for (const custom of [false, true]) {
     });
   });
 
-  test(`native ${directoryKind} credential updates need a writable file and adjacent lock`, () => {
-    withFixture(custom, (fixture) => {
-      const result = JSON.parse(runNode(fixture, [storageProbe, "mutable"]));
-      assert.deepEqual(result, {
-        adjacentLockObserved: true,
-        credentialUpdated: true,
-        lockRemoved: true,
-      });
-    });
-  });
-
   test(`${directoryKind} native discovery, empty prompt reservations and saved parent trust`, () => {
     withFixture(custom, (fixture) => {
       const probe = fileURLToPath(

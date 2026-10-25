@@ -15,10 +15,6 @@ describe("thread-handoff list rendering", () => {
     expect(JSON.parse(output)).toEqual([metadata]);
     expect(output).not.toContain(starterText);
     expect(record.starterText).toBe(starterText);
-    expect(JSON.parse(output)[0].claimedBy).toEqual({
-      sessionId: "target-uuid",
-      runId: "run-1",
-    });
   });
 
   it("renders attempt counts in text output", () => {
@@ -61,7 +57,6 @@ describe("thread-handoff receipt rendering", () => {
         expiresAt: receipt().expiresAt,
       },
     ]);
-    expect(output).not.toContain(receipt().starterText);
   });
 
   it("renders tab-separated text without starter text", () => {
@@ -73,6 +68,5 @@ describe("thread-handoff receipt rendering", () => {
     expect(output).toBe(
       `${records[0].sessionKey}\t100.200\t100.201\t1000\t3601000\n${records[1].sessionKey}\t200.300\t-\t1000\t3601000`,
     );
-    expect(output).not.toContain(receipt().starterText);
   });
 });

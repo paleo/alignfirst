@@ -31,7 +31,6 @@ export interface MainOptions {
   stdout?: { write(s: string): void };
   stderr?: { write(s: string): void };
   cwd?: string;
-  userAgent?: string;
   evidence?: LaunchEvidence;
   commands?: PackageManagerCommands;
 }
@@ -41,12 +40,7 @@ export function main(options?: MainOptions): number {
   const stdout = options?.stdout ?? process.stdout;
   const stderr = options?.stderr ?? process.stderr;
   const cwd = options?.cwd ?? process.cwd();
-  const evidence = options?.evidence ?? {
-    ...readLaunchEvidence(),
-    cwd,
-    env:
-      options?.userAgent === undefined ? process.env : { npm_config_user_agent: options.userAgent },
-  };
+  const evidence = options?.evidence ?? { ...readLaunchEvidence(), cwd };
 
   const { paths, unknownFlags, recursive, root, check, help, guide, search, version } =
     parseArgs(argv);

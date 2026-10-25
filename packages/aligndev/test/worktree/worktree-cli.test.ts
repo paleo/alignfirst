@@ -611,13 +611,14 @@ describe("worktree setup target selection", () => {
       const result = await run(fixture, repo, ["setup", target, "--json"]);
       expect(result.code).toBe(1);
       expect(result.stdout).toBe("");
+      expect(result.stderr).toContain("Setup requires");
       expect(execGit(repo, "worktree", "list", "--porcelain", "-z")).toBe(registry);
       expect(readFileSync(exclude)).toEqual(before);
       expect(existsSync(join(destination, ".plans"))).toBe(false);
     },
   );
 
-  it("requires AlignFirst only when executing setup, not when reading its help", async () => {
+  it("requires AlignFirst to execute setup", async () => {
     const { fixture, repo, destination } = project();
     addWorktree(repo, destination, "ticket");
     const result = await runAligndev(fixture, ["worktree", "setup", "--json"], {
@@ -626,6 +627,7 @@ describe("worktree setup target selection", () => {
     });
     expect(result.code).toBe(1);
     expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("alignfirst is not installed");
     expect(existsSync(join(destination, ".plans"))).toBe(false);
   });
 });

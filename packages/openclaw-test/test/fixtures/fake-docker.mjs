@@ -42,13 +42,10 @@ if (args[0] === "image") {
 }
 if (args[0] === "inspect") {
   if (process.env.FAKE_FAIL_INSPECT !== undefined) process.exit(1);
-  if (process.env.FAKE_MALFORMED_INSPECT !== undefined) {
-    console.log('[{"Mounts":null}]');
-    process.exit(0);
-  }
   const container = containers().find((entry) => entry.Id === args[1]);
   if (!container) process.exit(1);
-  console.log(JSON.stringify([container]));
+  const malformed = process.env.FAKE_MALFORMED_INSPECT !== undefined;
+  console.log(JSON.stringify([malformed ? { ...container, Mounts: null } : container]));
   process.exit(0);
 }
 if (args.includes("ls")) {

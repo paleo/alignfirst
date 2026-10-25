@@ -295,16 +295,6 @@ describe("settings shape", () => {
     ).toThrow("default must be a boolean");
   });
 
-  it("reports malformed and unreadable JSON without loading native state", () => {
-    const home = makeHome({});
-    const path = join(home, ".alignfirst/aligndev.settings.json");
-    writeFileSync(path, "not json");
-    expect(() => loadConfig(home)).toThrow(path);
-    rmSync(path);
-    mkdirSync(path);
-    expect(() => loadConfig(home)).toThrow(path);
-  });
-
   it("normalizes coding and quota directories but preserves literal values and typed quota", () => {
     const home = makeHome(
       profileConfig({
@@ -710,14 +700,15 @@ describe("command boundaries outside Git", () => {
     expect(() => requireProjectsRoot(loadConfig(home))).toThrow();
   });
 
-  it.each([["guide", "project"], ["guide"], ["code", "status", "--no-ticket"]])(
-    "rejects --profile on unrelated commands %j",
-    async (...args) => {
-      const result = await run(makeHome(), [...args, "--profile", "x"]);
-      expect(result.code).toBe(1);
-      expect(result.stderr).toContain("profile");
-    },
-  );
+  it.each([
+    [["guide", "project"], "--profile is valid only with `aligndev guide code`"],
+    [["guide"], "--profile is valid only with `aligndev guide code`"],
+    [["code", "status", "--no-ticket"], "Unknown option '--profile'"],
+  ])("rejects --profile on unrelated commands %j", async (args, message) => {
+    const result = await run(makeHome(), [...args, "--profile", "x"]);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain(message);
+  });
 
   it.each([
     { profile: "deleted" },

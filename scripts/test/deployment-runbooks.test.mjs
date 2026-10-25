@@ -221,6 +221,7 @@ syncBuiltinESMExports();
       profile.configDir = "/outside-service-home";
       writeFileSync(settingsPath, JSON.stringify(settings));
       f.run(check, 1, env);
+      assert.match(f.last.stderr, /isolated beneath the service home/u);
       assert.equal(readFileSync(join(f.root, "native-calls.jsonl"), "utf8"), before);
     });
   }

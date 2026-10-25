@@ -49,7 +49,7 @@ afterEach(() => {
 });
 
 describe("built worktree CLI lifecycle", () => {
-  it("keeps counterpart JSON and version probes banner-free through a real npm script", () => {
+  it("probes the counterpart binary, never its same-named npm script, under a real npm script", () => {
     const fixture = makeFixture("local");
     const { repo, env, plans } = fixture;
     mkdirSync(join(repo, "node_modules", ".bin"), { recursive: true });

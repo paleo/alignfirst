@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { main, type PackageManagerCommands } from "../src/cli.js";
+import { type MainOptions, main, type PackageManagerCommands } from "../src/cli.js";
 import { extractFallbackTitle } from "../src/parser.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
@@ -32,16 +32,23 @@ function run(args: string[], fixtureDir: string) {
   return invoke(["node", "docmap", "--root", fixtureDir, ...args], process.cwd());
 }
 
-function invoke(
-  argv: string[],
-  cwd: string,
-  userAgent?: string,
-  commands?: PackageManagerCommands,
-) {
+/** The line following the first one that mentions `text`, which must exist. */
+function lineAfter(output: string, text: string): string {
+  const lines = output.split("\n");
+  const index = lines.findIndex((line) => line.includes(text));
+  expect(index).toBeGreaterThan(-1);
+  return lines[index + 1] ?? "";
+}
+
+function invoke(argv: string[], cwd: string, commands?: PackageManagerCommands) {
+  return invokeWith({ argv, cwd, commands });
+}
+
+function invokeWith(options: Omit<MainOptions, "stdout" | "stderr">) {
   const stdout: string[] = [];
   const stderr: string[] = [];
   const code = main({
-    argv,
+    ...options,
     stdout: {
       write: (s) => {
         stdout.push(s);
@@ -52,9 +59,6 @@ function invoke(
         stderr.push(s);
       },
     },
-    cwd,
-    userAgent,
-    commands,
   });
   return { code, stdout: stdout.join(""), stderr: stderr.join("") };
 }
@@ -257,13 +261,11 @@ describe("listable extensions (listable fixture)", () => {
     expect(stdout).toContain(`- \`${dsl}\`\n`);
   });
 
-  it("reads a non-markdown file verbatim, without stripping a leading `---`", () => {
-    const { code, stdout } = run(["c4-model.dsl"], fixtures.listable);
+  it("reads a non-markdown file verbatim, without stripping a leading `---` block", () => {
+    const { code, stdout } = run(["config.yaml"], fixtures.listable);
     expect(code).toBe(0);
-    expect(stdout).toContain(
-      `<document_file path="${dp(fixtures.listable, "diagrams/c4-model.dsl")}">`,
-    );
-    expect(stdout).toContain('workspace "Example"');
+    expect(stdout).toContain(`<document_file path="${dp(fixtures.listable, "config.yaml")}">`);
+    expect(stdout).toContain("---\nkey: value\n---\nother: value");
   });
 
   it("does not flag missing frontmatter or title on non-markdown files under --check", () => {
@@ -280,6 +282,7 @@ describe("listable extensions (listable fixture)", () => {
     expect(stdout).toContain(
       `<document_file path="${dp(fixtures.listable, "diagrams/c4-model.dsl")}">`,
     );
+    expect(stdout).toContain('workspace "Example"');
   });
 });
 
@@ -434,31 +437,18 @@ describe("nested fixture with --recursive", () => {
 });
 
 describe("name validation", () => {
-  it("shows warning for files with spaces", () => {
-    const { stdout } = run([], fixtures.badNames);
-    expect(stdout).toContain("has space.md");
-    expect(stdout).toContain("⚠ Name contains spaces or special characters");
-  });
+  const nameWarning = "⚠ Name contains spaces or special characters";
 
-  it("shows warning for files with special characters", () => {
-    const { stdout } = run([], fixtures.badNames);
-    expect(stdout).toContain("special(chars).md");
-    expect(stdout).toContain("⚠ Name contains spaces or special characters");
+  it.each(["has space.md", "special(chars).md"])("warns under the badly named file %s", (name) => {
+    expect(lineAfter(run([], fixtures.badNames).stdout, name)).toContain(nameWarning);
   });
 
   it("shows no warning for good file names", () => {
-    const { stdout } = run([], fixtures.badNames);
-    const lines = stdout.split("\n");
-    const goodLine = lines.findIndex((l: string) => l.includes("good-file.md"));
-    expect(goodLine).toBeGreaterThan(-1);
-    const nextLine = lines[goodLine + 1];
-    expect(nextLine).not.toContain("⚠ Name contains");
+    expect(lineAfter(run([], fixtures.badNames).stdout, "good-file.md")).not.toContain(nameWarning);
   });
 
-  it("shows warning for directories with bad names", () => {
-    const { stdout } = run([], fixtures.badNames);
-    expect(stdout).toContain("sub dir/");
-    expect(stdout).toContain("⚠ Name contains spaces or special characters");
+  it("warns about a badly named directory", () => {
+    expect(run([], fixtures.badNames).stdout).toContain(`${nameWarning}: sub dir/`);
   });
 });
 
@@ -558,13 +548,6 @@ describe("--root propagation", () => {
   it("documents `--root <path>` in full help when no root is given", () => {
     const { stdout } = invoke(["node", "docmap", "--help"], process.cwd());
     expect(stdout).toContain("--root <path>");
-  });
-
-  it("is accepted alongside a bare invocation without counting as a positional", () => {
-    const { code, stdout } = run([], fixtures.basic);
-    expect(code).toBe(0);
-    expect(stdout).toContain("# Documentation");
-    expect(stdout).toContain(dp(fixtures.basic, "getting-started.md"));
   });
 
   it("quotes a root with spaces so the folded command stays copy-pasteable", () => {
@@ -756,11 +739,6 @@ describe("--search result cap (large fixture)", () => {
 });
 
 describe("CHANGELOG file exclusion", () => {
-  it("does not list CHANGELOG.md in default listing", () => {
-    const { stdout } = run([], fixtures.basic);
-    expect(stdout).not.toContain("CHANGELOG");
-  });
-
   it("does not list CHANGELOG.md in recursive listing", () => {
     const { stdout } = run(["--recursive"], fixtures.basic);
     expect(stdout).not.toContain("CHANGELOG");
@@ -778,27 +756,9 @@ describe("no-frontmatter fixture", () => {
     expect(stdout).toContain("My Title");
   });
 
-  it("shows prelude.md with its heading as title", () => {
-    const { stdout } = run([], fixtures.noFrontmatter);
-    expect(stdout).toContain("Actual Title");
-  });
-
-  it("shows code-block-trap.md with the real title, not the one inside the code block", () => {
-    const { stdout } = run([], fixtures.noFrontmatter);
-    expect(stdout).toContain("Real Title");
-    const lines = stdout.split("\n");
-    const trapLine = lines.find((l: string) => l.includes("code-block-trap.md"));
-    expect(trapLine).not.toContain("not a title");
-  });
-
   it("shows no-heading.md without a title and without a warning", () => {
     const { stdout } = run([], fixtures.noFrontmatter);
-    expect(stdout).toContain("no-heading.md");
-    const lines = stdout.split("\n");
-    const noHeadingLine = lines.findIndex((l: string) => l.includes("no-heading.md"));
-    expect(noHeadingLine).toBeGreaterThan(-1);
-    const nextLine = lines[noHeadingLine + 1];
-    expect(nextLine).not.toContain("⚠");
+    expect(lineAfter(stdout, "no-heading.md")).not.toContain("⚠");
   });
 
   it("--check warns about missing title on no-heading.md", () => {
@@ -841,33 +801,15 @@ describe("extractFallbackTitle", () => {
 });
 
 describe("invocation-aware CLI prefixes", () => {
+  // Runner selection itself is covered in invocation.test.ts; these cases check the CLI wiring:
+  // evidence reaches help and guide, the root is folded in, and lockfiles stay ignored.
   it.each([
     ["node", {}, "docmap"],
     ["bun", {}, "bunx --bun @alignfirst/docmap"],
     [
       "node",
-      { npm_config_user_agent: "bun/1.4.4", npm_command: "exec" },
-      "bunx @alignfirst/docmap",
-    ],
-    [
-      "bun",
-      { npm_config_user_agent: "bun/1.4.4", npm_command: "exec" },
-      "bunx --bun @alignfirst/docmap",
-    ],
-    [
-      "node",
       { npm_config_user_agent: "npm/12", npm_command: "exec", npm_lifecycle_event: "npx" },
       "npx -y @alignfirst/docmap",
-    ],
-    [
-      "node",
-      { npm_config_user_agent: "pnpm/10", npm_command: "dlx" },
-      "pnpm dlx @alignfirst/docmap",
-    ],
-    [
-      "node",
-      { npm_config_user_agent: "yarn/4", npm_command: "dlx" },
-      "yarn dlx @alignfirst/docmap",
     ],
   ] as const)("uses real %s evidence %j over conflicting lockfiles", (runtime, env, prefix) => {
     const cwd = mkdtempSync(join(tmpdir(), "docmap-invocation-"));
@@ -875,26 +817,21 @@ describe("invocation-aware CLI prefixes", () => {
       for (const lock of ["package-lock.json", "bun.lock", "yarn.lock", "pnpm-lock.yaml"])
         writeFileSync(join(cwd, lock), "");
       for (const mode of ["--help", "--guide"]) {
-        let output = "";
-        main({
+        const { stdout } = invokeWith({
           argv: ["runtime", "docmap", mode, "--root", "docs' quoted\\path"],
           cwd,
           evidence: { runtime, env, cwd, executable: "/runtime" },
-          stdout: {
-            write: (s) => {
-              output += s;
-            },
-          },
         });
-        expect(output).toContain(`${prefix} --root 'docs'\\'' quoted\\path'`);
-        expect(output).not.toContain("npm run docmap");
+        expect(stdout).toContain(`${prefix} --root 'docs'\\'' quoted\\path'`);
+        expect(stdout).not.toContain("npm run docmap");
       }
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
   });
 
-  it.each(["docs", "docs$&", "docs$'", "docs$`", "docs$$"])(
+  // `$&` would re-insert the placeholder if the guide used string replacement patterns.
+  it.each(["docs", "docs$&"])(
     "retains verified npm script %s literally with its forwarding separator",
     (name) => {
       const cwd = mkdtempSync(join(tmpdir(), "docmap-script-"));
@@ -918,40 +855,12 @@ describe("invocation-aware CLI prefixes", () => {
             npm_package_json: manifest,
           },
         };
-        const renderedName = name === "docs" ? name : `'${name.replaceAll("'", "'\\''")}'`;
-        let output = "";
+        const renderedName = name === "docs" ? name : `'${name}'`;
         for (const mode of ["--help", "--guide"]) {
-          output = "";
-          main({
-            argv: ["node", entryPoint, mode],
-            evidence,
-            cwd,
-            stdout: {
-              write: (s) => {
-                output += s;
-              },
-            },
-          });
-          expect(output).toContain(`npm run ${renderedName} -- --check`);
-          expect(output).not.toContain("{{");
+          const { stdout } = invokeWith({ argv: ["node", entryPoint, mode], evidence, cwd });
+          expect(stdout).toContain(`npm run ${renderedName} -- --check`);
+          expect(stdout).not.toContain("{{");
         }
-        output = "";
-        main({
-          argv: ["node", entryPoint, "--help"],
-          evidence: { ...evidence, runtime: "bun" },
-          cwd,
-          commands: {
-            base: "bunx --bun alignfirst docmap",
-            withArgs: "bunx --bun alignfirst docmap",
-          },
-          stdout: {
-            write: (s) => {
-              output += s;
-            },
-          },
-        });
-        expect(output).toContain("bunx --bun alignfirst docmap --guide");
-        expect(output).not.toContain("npm run");
       } finally {
         rmSync(cwd, { recursive: true, force: true });
       }
@@ -959,75 +868,24 @@ describe("invocation-aware CLI prefixes", () => {
   );
 });
 
-describe("package-manager prefix in help", () => {
-  // Walk from "/" so no lockfile is found and detection falls through to the invocation-based
-  // fallback. `--help` returns before any listing, so no `--root` is needed (and omitting it keeps
-  // the suggested commands free of a folded-in root that would sit between prefix and `--guide`).
-  function help(userAgent: string | undefined) {
-    return invoke(["node", "docmap", "--help"], "/", userAgent).stdout;
-  }
-
-  it("suggests the bare global binary when no runner agent is set", () => {
-    const out = help("");
-    expect(out).toContain("docmap --guide");
-    expect(out).not.toContain("npx @alignfirst/docmap");
-    expect(out).not.toContain("npm run docmap");
-  });
-
-  it("keeps the npx suggestion when launched through npx, even if installed globally", () => {
-    const out = help("npm/10.0.0 node/v24.0.0 linux x64 workspaces/false");
-    expect(out).toContain("npx -y @alignfirst/docmap --guide");
-  });
-
-  it("suggests pnpm dlx under a pnpm runner", () => {
-    expect(help("pnpm/9.0.0 npm/? node/v24.0.0")).toContain("pnpm dlx @alignfirst/docmap");
-  });
-
-  it("suggests bunx under a bun runner", () => {
-    expect(help("bun/1.1.0 npm/? node/v24.0.0")).toContain("bunx @alignfirst/docmap");
-  });
-
-  it("keeps the explicit runner inside a lockfile'd project", () => {
-    const out = invoke(
-      ["node", "docmap", "--help"],
-      process.cwd(),
-      "npm/10.0.0 node/v24.0.0 linux x64",
-    ).stdout;
-    expect(out).toContain("npx -y @alignfirst/docmap");
-    expect(out).not.toContain("npm run docmap");
-  });
-
-  it("suggests the bare binary even inside a lockfile'd project when run as a global binary", () => {
-    const out = invoke(["node", "docmap", "--help"], process.cwd(), "").stdout;
-    expect(out).toContain("docmap --guide");
-    expect(out).not.toContain("npm run docmap");
-    expect(out).not.toContain("npx @alignfirst/docmap");
-  });
-});
-
 describe("injected command prefix", () => {
   const commands = { base: "alignfirst docmap", withArgs: "alignfirst docmap" };
 
   it("renders the injected prefix in full and short help", () => {
-    const full = invoke(["node", "docmap", "--help"], "/", undefined, commands).stdout;
-    const short = invoke(["node", "docmap"], "/", undefined, commands).stdout;
+    const full = invoke(["node", "docmap", "--help"], "/", commands).stdout;
+    const short = invoke(["node", "docmap"], "/", commands).stdout;
     expect(full).toContain("alignfirst docmap --check");
     expect(full).toContain("alignfirst docmap --guide");
     expect(short).toContain("alignfirst docmap --guide");
   });
 
   it("renders the injected prefix in the guide", () => {
-    const out = invoke(["node", "docmap", "--guide"], "/", undefined, commands).stdout;
+    const out = invoke(["node", "docmap", "--guide"], "/", commands).stdout;
     expect(out).toContain("alignfirst docmap --check");
   });
 
   it("folds --root into the injected prefix", () => {
-    const out = invoke(
-      ["node", "docmap", "--root", "my docs", "--help"],
-      "/",
-      undefined,
-      commands,
-    ).stdout;
+    const out = invoke(["node", "docmap", "--root", "my docs", "--help"], "/", commands).stdout;
     expect(out).toContain("alignfirst docmap --root 'my docs' --check");
   });
 });

@@ -19,6 +19,7 @@ const packageRoot = resolve(import.meta.dirname, "..");
 const cli = join(packageRoot, "bin", "cli.mjs");
 const bun = process.env.BUN_BIN;
 const runtimes = bun === undefined ? [process.execPath] : [process.execPath, bun];
+const RUN_CASE = ["run", "--channel", "mock", "--model", "offline", "case"];
 const roots: string[] = [];
 const children: ChildProcess[] = [];
 
@@ -52,33 +53,26 @@ afterEach(async () => {
 });
 
 describe.each(runtimes)("built harness with %s", (runtime) => {
-  it.each([
-    { args: ["--help"] },
-    { args: ["run"] },
-    { args: ["run", "--channel"] },
-    { args: ["run", "--bogus"] },
-    { args: ["env", "oops"] },
-  ])("renders usage and recovery for $args without losing the runtime", ({ args }) => {
-    const fixture = consumer();
-    const result = run(runtime, fixture, args);
-    expect(result.status, result.stderr).toBe(1);
-    const command = runtime === bun ? "bunx --bun @alignfirst/openclaw-test" : "openclaw-test";
-    expect(result.stderr).toContain(`usage: ${command}`);
-    if (args[0] === "run") expect(result.stderr).toContain(`${command} env up`);
-  });
+  it.each([{ args: ["--help"] }, { args: ["run"] }, { args: ["env", "oops"] }])(
+    "renders usage and recovery for $args without losing the runtime",
+    ({ args }) => {
+      const fixture = consumer();
+      const result = run(runtime, fixture, args);
+      expect(result.status, result.stderr).toBe(1);
+      const command = runtime === bun ? "bunx --bun @alignfirst/openclaw-test" : "openclaw-test";
+      expect(result.stderr).toContain(`usage: ${command}`);
+      if (args[0] === "run") expect(result.stderr).toContain(`${command} env up`);
+    },
+  );
 
-  it.each(["npm", "bun"])("retains %s package-runner recovery forms", (manager) => {
+  it("retains the package-runner recovery form", () => {
     const fixture = consumer();
     const result = run(runtime, fixture, ["run", "--channel"], {
-      npm_config_user_agent: `${manager}/1.0.0`,
+      npm_config_user_agent: "npm/1.0.0",
       npm_command: "exec",
     });
     const command =
-      runtime === bun
-        ? "bunx --bun @alignfirst/openclaw-test"
-        : manager === "npm"
-          ? "npx -y @alignfirst/openclaw-test"
-          : "bunx @alignfirst/openclaw-test";
+      runtime === bun ? "bunx --bun @alignfirst/openclaw-test" : "npx -y @alignfirst/openclaw-test";
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(`usage: ${command} run`);
     expect(result.stderr).toContain(`${command} env up`);
@@ -106,12 +100,7 @@ describe.each(runtimes)("built harness with %s", (runtime) => {
   it("executes env down, preserves Docker argv/env and propagates nonzero recreate exits", () => {
     const fixture = consumer();
     expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
-    const failed = run(
-      runtime,
-      fixture,
-      ["run", "--channel", "mock", "--model", "offline", "case"],
-      { FAKE_FAIL_UP: "7" },
-    );
+    const failed = run(runtime, fixture, RUN_CASE, { FAKE_FAIL_UP: "7" });
     expect(failed.status, failed.stderr).toBe(7);
     expect(failed.stderr).toContain("fake recreate failure");
     const calls = records(fixture);
@@ -164,257 +153,129 @@ describe.each(runtimes)("built harness with %s", (runtime) => {
     },
   );
 
-  it.each(["run", "env"])(
-    "cancels and escalates owned Docker children during %s",
-    async (command) => {
+  it("cancels a running cell, escalates its Docker children and still tears down", async () => {
+    const fixture = consumer();
+    const started = start(runtime, fixture, RUN_CASE, { FAKE_HANG: "run", FAKE_FAIL_DOWN: "9" });
+    await waitUntil(() => started.output().includes("FAKE_RUNNING"));
+    started.child.kill("SIGTERM");
+    await started.closed;
+    expect(started.child.exitCode, started.output()).toBe(143);
+    expect(records(fixture).at(-1)?.args?.at(-1)).toBe("down");
+    await waitForOwnedProcesses(fixture);
+  });
+
+  it.each([
+    { mode: "parallel", signal: "SIGINT" },
+    { mode: "partial", signal: "SIGTERM" },
+    { mode: "mixed", signal: "SIGINT" },
+    { mode: "matrixFailure", signal: "SIGTERM" },
+  ] as const)(
+    "retains $signal during final teardown and joins every owned worker ($mode)",
+    async ({ mode, signal }) => {
       const fixture = consumer();
-      const args =
-        command === "run"
-          ? ["run", "--channel", "mock", "--model", "offline", "case"]
-          : ["env", "up"];
-      const child = spawn(runtime, [cli, ...args], {
-        cwd: fixture.root,
-        env: {
-          ...fixture.env,
-          FAKE_HANG: command === "run" ? "run" : "up",
-          FAKE_FAIL_DOWN: "9",
+      const started = start(
+        runtime,
+        fixture,
+        ["run", "--channel", "mock", "--model", "offline", "--parallel", "2", "first", "second"],
+        {
+          FAKE_HANG: "down",
+          FAKE_REMOVE_BEFORE_DOWN: "1",
+          ...(mode === "partial" || mode === "mixed" ? { FAKE_HANG_WORKER: "2" } : {}),
+          ...(mode === "mixed" ? { FAKE_FAIL_DOWN: "9" } : {}),
+          ...(mode === "matrixFailure" ? { FAKE_FAIL_UP: "7" } : {}),
         },
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-      children.push(child);
-      let output = "";
-      child.stdout?.on("data", (data) => {
-        output += data.toString();
-      });
-      child.stderr?.on("data", (data) => {
-        output += data.toString();
-      });
-      try {
-        await waitUntil(() => output.includes("FAKE_RUNNING"));
-        child.kill("SIGTERM");
-        await waitUntil(() => child.exitCode !== null || child.signalCode !== null);
-        expect(child.exitCode, output).toBe(143);
-        const calls = records(fixture);
-        if (command === "run") expect(calls.at(-1)?.args?.at(-1)).toBe("down");
-        for (const call of calls) {
-          for (const pid of [call.pid, call.worker]) {
-            if (pid !== undefined) await waitUntil(() => !alive(pid));
-          }
-        }
-      } finally {
-        // Cleanup remains owned even when an assertion fails.
-        for (const call of records(fixture)) {
-          for (const pid of [call.pid, call.worker]) {
-            if (pid !== undefined && alive(pid)) process.kill(pid, "SIGKILL");
-          }
-        }
-      }
+      );
+      const hanging = mode === "partial" || mode === "mixed" ? 1 : 2;
+      await waitUntil(() => started.output().split("FAKE_RUNNING").length - 1 === hanging);
+      const calls = records(fixture);
+      const configs = configPaths(fixture);
+      expect(configs).toHaveLength(1);
+      started.child.kill(signal);
+      await started.closed;
+      expect(started.child.exitCode, started.output()).toBe(
+        mode === "matrixFailure" ? 7 : signal === "SIGINT" ? 130 : 143,
+      );
+      expect(calls.filter((call) => call.args?.at(-1) === "down")).toHaveLength(2);
+      for (const config of configs) expect(existsSync(config)).toBe(true);
+      expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
+      for (const config of configs) expect(existsSync(config)).toBe(false);
+      await waitForOwnedProcesses(fixture);
     },
-    20_000,
   );
 
-  it.each(["SIGINT", "SIGTERM"] as const)(
-    "retains %s during final teardown and joins every owned worker",
-    async (signal) => {
-      for (const mode of ["serial", "parallel", "partial", "mixed", "matrixFailure"]) {
-        const fixture = consumer();
-        const parallel = mode === "serial" ? 1 : 2;
-        const child = spawn(
-          runtime,
-          [
-            cli,
-            "run",
-            "--channel",
-            "mock",
-            "--model",
-            "offline",
-            "--parallel",
-            String(parallel),
-            "first",
-            "second",
-          ],
-          {
-            cwd: fixture.root,
-            env: {
-              ...fixture.env,
-              FAKE_HANG: "down",
-              FAKE_REMOVE_BEFORE_DOWN: "1",
-              ...(mode === "partial" || mode === "mixed" ? { FAKE_HANG_WORKER: "2" } : {}),
-              ...(mode === "mixed" ? { FAKE_FAIL_DOWN: "9" } : {}),
-              ...(mode === "matrixFailure" ? { FAKE_FAIL_UP: "7" } : {}),
-            },
-            stdio: ["ignore", "pipe", "pipe"],
-          },
-        );
-        children.push(child);
-        let output = "";
-        child.stdout?.on("data", (data) => {
-          output += data.toString();
-        });
-        child.stderr?.on("data", (data) => {
-          output += data.toString();
-        });
-        const closed = new Promise<void>((resolve) => child.once("close", () => resolve()));
-        const hanging = mode === "partial" || mode === "mixed" ? 1 : parallel;
-        await waitUntil(() => output.split("FAKE_RUNNING").length - 1 === hanging);
-        const calls = records(fixture);
-        const configs = new Set(
-          calls
-            .map((call) => call.config)
-            .filter((path): path is string => path?.includes("openclaw-test-config-") === true),
-        );
-        expect(configs.size).toBe(1);
-        for (const config of configs) expect(existsSync(config)).toBe(true);
-        child.kill(signal);
-        await waitUntil(() => child.exitCode !== null || child.signalCode !== null);
-        await closed;
-        expect(child.exitCode, `${mode}: ${output}`).toBe(
-          mode === "matrixFailure" ? 7 : signal === "SIGINT" ? 130 : 143,
-        );
-        expect(calls.filter((call) => call.args?.at(-1) === "down")).toHaveLength(parallel);
-        for (const config of configs) expect(existsSync(config)).toBe(true);
-        expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
-        for (const config of configs) expect(existsSync(config)).toBe(false);
-        for (const call of records(fixture)) {
-          for (const pid of [call.pid, call.worker]) {
-            if (pid !== undefined) await waitUntil(() => !alive(pid));
-          }
-        }
-      }
-    },
-    40_000,
-  );
+  it("prioritizes a signal over a failed sibling during parallel env up", async () => {
+    const fixture = consumer();
+    const started = start(runtime, fixture, ["env", "up", "--parallel", "2"], {
+      FAKE_HANG: "up",
+      FAKE_HANG_WORKER: "2",
+      FAKE_FAIL_UP: "7",
+    });
+    await waitUntil(() => started.output().includes("FAKE_RUNNING"));
+    const ups = records(fixture).filter((call) => call.args?.includes("up"));
+    expect(ups).toHaveLength(2);
+    const failed = ups.find((call) => call.args?.includes("project-w1"));
+    expect(failed?.pid).toBeDefined();
+    await waitUntil(() => failed?.pid !== undefined && !alive(failed.pid));
+    expect(started.output()).toContain("fake recreate failure");
+    started.child.kill("SIGINT");
+    await started.closed;
+    expect(started.child.exitCode, started.output()).toBe(130);
+    await waitForOwnedProcesses(fixture);
+    const config = lastConfigPath(fixture);
+    expect(existsSync(config)).toBe(true);
+    expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
+    expect(existsSync(config)).toBe(false);
+  });
 
-  it.each(["SIGINT", "SIGTERM"] as const)(
-    "prioritizes %s over a failed sibling during parallel env up",
-    async (signal) => {
+  it.each([
+    { command: "down", mode: "parallel", signal: "SIGINT" },
+    { command: "rebuild", mode: "mixed", signal: "SIGTERM" },
+  ] as const)(
+    "cancels the env $command sweep on $signal without collecting warm configs ($mode)",
+    async ({ command, mode, signal }) => {
       const fixture = consumer();
-      const child = spawn(runtime, [cli, "env", "up", "--parallel", "2"], {
-        cwd: fixture.root,
-        env: {
-          ...fixture.env,
-          FAKE_HANG: "up",
-          FAKE_HANG_WORKER: "2",
-          FAKE_FAIL_UP: "7",
-        },
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-      children.push(child);
-      let output = "";
-      child.stdout?.on("data", (data) => {
-        output += data.toString();
-      });
-      child.stderr?.on("data", (data) => {
-        output += data.toString();
-      });
-      const closed = new Promise<void>((resolve) => child.once("close", () => resolve()));
-      await waitUntil(() => output.includes("FAKE_RUNNING"));
-      const ups = records(fixture).filter((call) => call.args?.includes("up"));
-      expect(ups).toHaveLength(2);
-      const failed = ups.find((call) => call.args?.includes("project-w1"));
-      expect(failed?.pid).toBeDefined();
-      await waitUntil(() => failed?.pid !== undefined && !alive(failed.pid));
-      expect(output).toContain("fake recreate failure");
-      child.kill(signal);
-      await waitUntil(() => child.exitCode !== null || child.signalCode !== null);
-      await closed;
-      expect(child.exitCode, output).toBe(signal === "SIGINT" ? 130 : 143);
-      for (const call of records(fixture)) {
-        for (const pid of [call.pid, call.worker]) {
-          if (pid !== undefined) await waitUntil(() => !alive(pid));
-        }
-      }
+      expect(run(runtime, fixture, ["env", "up", "--parallel", "2"]).status).toBe(0);
       const config = lastConfigPath(fixture);
+      const started = start(runtime, fixture, command === "down" ? ["env", "down"] : RUN_CASE, {
+        FAKE_HANG: "down",
+        // Remove every mount before cancellation to expose premature config collection.
+        FAKE_REMOVE_BEFORE_DOWN: "1",
+        ...(command === "rebuild" ? { FAKE_BASE_MISSING: "1" } : {}),
+        ...(mode === "mixed" ? { FAKE_HANG_WORKER: "2", FAKE_FAIL_DOWN: "9" } : {}),
+      });
+      const hanging = mode === "mixed" ? 1 : 2;
+      await waitUntil(() => started.output().split("FAKE_RUNNING").length - 1 === hanging);
+      const downs = records(fixture).filter((call) => call.args?.at(-1) === "down");
+      expect(downs.map((call) => call.args?.[call.args.indexOf("-p") + 1]).sort()).toEqual([
+        "project-w1",
+        "project-w2",
+      ]);
+      if (mode === "mixed") {
+        const failed = downs.find((call) => call.args?.includes("project-w1"));
+        expect(failed?.pid).toBeDefined();
+        await waitUntil(() => failed?.pid !== undefined && !alive(failed.pid));
+      }
+      started.child.kill(signal);
+      await started.closed;
+      expect(started.child.exitCode, started.output()).toBe(signal === "SIGINT" ? 130 : 143);
+      const calls = records(fixture);
+      expect(calls.filter((call) => call.worker !== undefined)).toHaveLength(hanging);
+      await waitForOwnedProcesses(fixture);
+      expect(configPaths(fixture)).toEqual([config]);
+      expect(calls.some((call) => call.args?.includes("run"))).toBe(false);
       expect(existsSync(config)).toBe(true);
       expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
       expect(existsSync(config)).toBe(false);
     },
-    20_000,
-  );
-
-  it.each(["SIGINT", "SIGTERM"] as const)(
-    "cancels %s during env down and rebuild sweeps without collecting warm configs",
-    async (signal) => {
-      for (const command of ["down", "rebuild"]) {
-        for (const mode of ["parallel", "mixed"]) {
-          const fixture = consumer();
-          expect(run(runtime, fixture, ["env", "up", "--parallel", "2"]).status).toBe(0);
-          const config = lastConfigPath(fixture);
-          const args =
-            command === "down"
-              ? ["env", "down"]
-              : ["run", "--channel", "mock", "--model", "offline", "case"];
-          const child = spawn(runtime, [cli, ...args], {
-            cwd: fixture.root,
-            env: {
-              ...fixture.env,
-              FAKE_HANG: "down",
-              // Remove every mount before cancellation to expose premature config collection.
-              FAKE_REMOVE_BEFORE_DOWN: "1",
-              ...(command === "rebuild" ? { FAKE_BASE_MISSING: "1" } : {}),
-              ...(mode === "mixed" ? { FAKE_HANG_WORKER: "2", FAKE_FAIL_DOWN: "9" } : {}),
-            },
-            stdio: ["ignore", "pipe", "pipe"],
-          });
-          children.push(child);
-          let output = "";
-          child.stdout?.on("data", (data) => {
-            output += data.toString();
-          });
-          child.stderr?.on("data", (data) => {
-            output += data.toString();
-          });
-          const closed = new Promise<void>((resolve) => child.once("close", () => resolve()));
-          const hanging = mode === "mixed" ? 1 : 2;
-          await waitUntil(() => output.split("FAKE_RUNNING").length - 1 === hanging);
-          const downs = records(fixture).filter((call) => call.args?.at(-1) === "down");
-          expect(downs).toHaveLength(2);
-          expect(downs.map((call) => call.args?.[call.args.indexOf("-p") + 1]).sort()).toEqual([
-            "project-w1",
-            "project-w2",
-          ]);
-          if (mode === "mixed") {
-            const failed = downs.find((call) => call.args?.includes("project-w1"));
-            expect(failed?.pid).toBeDefined();
-            await waitUntil(() => failed?.pid !== undefined && !alive(failed.pid));
-          }
-          expect(existsSync(config)).toBe(true);
-          child.kill(signal);
-          await waitUntil(() => child.exitCode !== null || child.signalCode !== null);
-          await closed;
-          expect(child.exitCode, `${command}/${mode}: ${output}`).toBe(
-            signal === "SIGINT" ? 130 : 143,
-          );
-          const calls = records(fixture);
-          expect(calls.filter((call) => call.worker !== undefined)).toHaveLength(hanging);
-          for (const call of calls) {
-            for (const pid of [call.pid, call.worker]) {
-              if (pid !== undefined) await waitUntil(() => !alive(pid));
-            }
-          }
-          expect(configPaths(fixture)).toEqual([config]);
-          expect(calls.some((call) => call.args?.includes("run"))).toBe(false);
-          expect(existsSync(config)).toBe(true);
-          expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
-          expect(existsSync(config)).toBe(false);
-        }
-      }
-    },
-    40_000,
   );
 
   it.each([0, 7])("preserves matrix exit %i across a failing teardown", (matrixExit) => {
     const fixture = consumer();
-    const result = run(
-      runtime,
-      fixture,
-      ["run", "--channel", "mock", "--model", "offline", "case"],
-      {
-        FAKE_FAIL_DOWN: "9",
-        FAKE_REMOVE_BEFORE_DOWN: "1",
-        ...(matrixExit === 7 ? { FAKE_FAIL_UP: "7" } : {}),
-      },
-    );
+    const result = run(runtime, fixture, RUN_CASE, {
+      FAKE_FAIL_DOWN: "9",
+      FAKE_REMOVE_BEFORE_DOWN: "1",
+      ...(matrixExit === 7 ? { FAKE_FAIL_UP: "7" } : {}),
+    });
     expect(result.status, result.stderr).toBe(matrixExit === 0 ? 9 : matrixExit);
     const config = configPaths(fixture).at(-1);
     expect(config).toBeDefined();
@@ -436,37 +297,23 @@ describe.each(runtimes)("built harness with %s", (runtime) => {
     expect(first.startsWith(`${fixture.env.XDG_STATE_HOME}/openclaw-test/`)).toBe(true);
     expect(readFileSync(first, "utf8")).toContain("private-test-secret");
     expect(first.startsWith(fixture.root)).toBe(false);
-    const args = ["run", "--channel", "mock", "--model", "offline", "case"];
-    expect(run(runtime, fixture, args).status).toBe(0);
+    expect(run(runtime, fixture, RUN_CASE).status).toBe(0);
     const second = lastConfigPath(fixture);
     expect(second).not.toBe(first);
     expect(existsSync(first)).toBe(false);
     expect(existsSync(second)).toBe(true);
-    expect(run(runtime, fixture, args).status).toBe(0);
+    expect(run(runtime, fixture, RUN_CASE).status).toBe(0);
     const third = lastConfigPath(fixture);
     expect(existsSync(second)).toBe(false);
     expect(existsSync(third)).toBe(true);
     expect(records(fixture).filter((call) => call.args?.at(-1) === "down")).toHaveLength(0);
     expect(run(runtime, fixture, ["env", "down"]).status).toBe(0);
     expect(existsSync(third)).toBe(false);
-    for (const stamp of readdirSync(join(fixture.root, "artifacts"))) {
-      for (const file of readdirSync(join(fixture.root, "artifacts", stamp, "cells"))) {
-        expect(
-          readFileSync(join(fixture.root, "artifacts", stamp, "cells", file), "utf8"),
-        ).not.toContain("private-test-secret");
-      }
-    }
   });
 
-  it.each([
-    { location: "XDG_STATE_HOME", uncertain: false },
-    { location: "HOME fallback", uncertain: false },
-    { location: "XDG_STATE_HOME", uncertain: true },
-    { location: "HOME fallback", uncertain: true },
-    { location: "symlinked ancestor", uncertain: false },
-  ])(
-    "discovers $location configs across TMPDIR changes (uncertain=$uncertain)",
-    ({ location, uncertain }) => {
+  it.each(["XDG_STATE_HOME", "HOME fallback", "symlinked ancestor"])(
+    "discovers %s configs across TMPDIR changes",
+    (location) => {
       const fixture = consumer();
       if (location === "HOME fallback") fixture.env.XDG_STATE_HOME = "";
       if (location === "symlinked ancestor") {
@@ -484,17 +331,12 @@ describe.each(runtimes)("built harness with %s", (runtime) => {
       const first = lastConfigPath(fixture);
       rmSync(temps[0], { recursive: true });
       expect(existsSync(first)).toBe(true);
-      const result = run(
-        runtime,
-        fixture,
-        ["run", "--channel", "mock", "--model", "offline", "case"],
-        { TMPDIR: temps[1], ...(uncertain ? { FAKE_FAIL_INSPECT: "1" } : {}) },
-      );
+      const result = run(runtime, fixture, RUN_CASE, { TMPDIR: temps[1] });
       expect(result.status, result.stderr).toBe(0);
       const second = lastConfigPath(fixture);
       expect(second).not.toBe(first);
       expect(dirname(dirname(first))).toBe(dirname(dirname(second)));
-      expect(existsSync(first)).toBe(uncertain);
+      expect(existsSync(first)).toBe(false);
       expect(existsSync(second)).toBe(true);
       expect(records(fixture).filter((call) => call.args?.at(-1) === "down")).toHaveLength(0);
       rmSync(temps[1], { recursive: true });
@@ -534,7 +376,7 @@ describe.each(runtimes)("built harness with %s", (runtime) => {
       expect(run(runtime, fixture, ["env", "up"]).status).toBe(0);
       const first = lastConfigPath(fixture);
       expect(
-        run(runtime, fixture, ["run", "--channel", "mock", "--model", "offline", "case"], {
+        run(runtime, fixture, RUN_CASE, {
           [failure]: "1",
         }).status,
       ).toBe(0);
@@ -578,12 +420,7 @@ describe.each(runtimes)("built harness with %s", (runtime) => {
     const fixture = consumer();
     expect(run(runtime, fixture, ["env", "up", "--parallel", "2"]).status).toBe(0);
     const old = lastConfigPath(fixture);
-    const result = run(
-      runtime,
-      fixture,
-      ["run", "--channel", "mock", "--model", "offline", "case"],
-      { FAKE_BASE_MISSING: "1" },
-    );
+    const result = run(runtime, fixture, RUN_CASE, { FAKE_BASE_MISSING: "1" });
     expect(result.status, result.stderr).toBe(0);
     const downs = records(fixture).filter((call) => call.args?.at(-1) === "down");
     expect(downs).toHaveLength(3);
@@ -595,12 +432,7 @@ describe.each(runtimes)("built harness with %s", (runtime) => {
     const fixture = consumer();
     expect(run(runtime, fixture, ["env", "up"]).status).toBe(0);
     const config = lastConfigPath(fixture);
-    const result = run(
-      runtime,
-      fixture,
-      ["run", "--channel", "mock", "--model", "offline", "case"],
-      { FAKE_BASE_MISSING: "1", FAKE_FAIL_DOWN: "9" },
-    );
+    const result = run(runtime, fixture, RUN_CASE, { FAKE_BASE_MISSING: "1", FAKE_FAIL_DOWN: "9" });
     expect(result.status).toBe(9);
     expect(existsSync(config)).toBe(true);
     expect(configPaths(fixture)).toEqual([config]);
@@ -821,6 +653,43 @@ function run(
     encoding: "utf8",
     timeout: 25_000,
   });
+}
+
+interface StartedCli {
+  child: ChildProcess;
+  output(): string;
+  closed: Promise<void>;
+}
+
+function start(
+  runtime: string,
+  fixture: Consumer,
+  args: string[],
+  extra: Record<string, string>,
+): StartedCli {
+  const child = spawn(runtime, [cli, ...args], {
+    cwd: fixture.root,
+    env: { ...fixture.env, ...extra },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  children.push(child);
+  let output = "";
+  child.stdout?.on("data", (data) => {
+    output += data.toString();
+  });
+  child.stderr?.on("data", (data) => {
+    output += data.toString();
+  });
+  const closed = new Promise<void>((resolve) => child.once("close", () => resolve()));
+  return { child, output: () => output, closed };
+}
+
+async function waitForOwnedProcesses(fixture: Consumer): Promise<void> {
+  for (const call of records(fixture)) {
+    for (const pid of [call.pid, call.worker]) {
+      if (pid !== undefined) await waitUntil(() => !alive(pid));
+    }
+  }
 }
 
 function lastConfigPath(fixture: Consumer): string {

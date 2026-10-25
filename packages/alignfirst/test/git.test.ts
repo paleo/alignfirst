@@ -81,8 +81,7 @@ describe("git failures", () => {
   it("rejects a quiet spawn error", async () => {
     const dir = makeFixture();
     vi.stubEnv("PATH", dir);
-    await expect(gitQuiet(dir, ["status"])).rejects.toThrow("git status failed:");
-    await expect(gitQuiet(dir, ["status"])).rejects.toThrow("ENOENT");
+    await expect(gitQuiet(dir, ["status"])).rejects.toThrow(/git status failed:\n.*ENOENT/);
   });
 
   it("streams output beyond the synchronous child-process buffer limit", async () => {
