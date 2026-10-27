@@ -69,7 +69,7 @@ function verifyDefaults({ root, env }, run) {
   }
 }
 
-function verifyPythonMonorepo({ root, env }, run) {
+function verifyPythonMonorepo({ root, env, evidence }, run) {
   const project = join(root, "python monorepo with spaces");
   const linked = join(root, "python linked with spaces");
   prepareRepository(project, env, true);
@@ -87,7 +87,7 @@ function verifyPythonMonorepo({ root, env }, run) {
     const pids = [project, linked].flatMap((cwd, index) => {
       assertNoNodeProject(cwd);
       run(cwd, ["dev", "up"]);
-      const owned = verifyPythonServices(cwd, records[index], env);
+      const owned = verifyPythonServices(cwd, records[index], env, evidence);
       verifyPythonTransform(cwd, records[index], run);
       return owned;
     });
@@ -120,12 +120,14 @@ function verifyPythonMonorepo({ root, env }, run) {
   }
 }
 
-function verifyPythonServices(cwd, record, env) {
+function verifyPythonServices(cwd, record, env, evidence) {
   const identity = JSON.parse(readFileSync(join(cwd, ".local-wt/data/identity.json"), "utf8"));
   assert.equal(identity.name, record.name);
   assert.equal(identity.currentWorktree, cwd);
   const pids = ["api", "worker"].map((role) => {
     const service = JSON.parse(readFileSync(join(cwd, `.local-wt/${role}.json`), "utf8"));
+    if (evidence !== undefined)
+      appendFileSync(evidence, `${JSON.stringify({ kind: "pythonService", ...service })}\n`);
     assert.equal(service.context.name, record.name);
     assert.deepEqual(service.context.ports, record.ports);
     assert.equal(service.context.currentWorktree, cwd);
@@ -146,6 +148,8 @@ function verifyPythonServices(cwd, record, env) {
     ),
   );
   assert.equal(response.context.name, record.name);
+  if (evidence !== undefined)
+    appendFileSync(evidence, `${JSON.stringify({ kind: "pythonHttpResponse", response })}\n`);
   return pids;
 }
 
