@@ -73,6 +73,8 @@ export interface DevSetupOptions {
   resetPorts: boolean;
   /** Set only by the finalize child of `workspace setup --full`: a `pending` workspace passes. */
   fromFinalize: boolean;
+  /** Internal proof that the live finalizer owns this dev setup. */
+  preparationToken?: string;
   /** Set by the implicit `dev setup` of a start: existing run files follow a changed basis only. */
   beforeStart: boolean;
   verbose?: boolean;
@@ -167,14 +169,23 @@ export async function admitDevWorkspace(input: DevSetupInput): Promise<ResolvedW
     if (!entry) throw new WorkspaceError(`No workspace registered for ${selected.worktree}.`);
     assertWorkspaceRecipe(selected.worktree, entry.recipe, input.recipe);
     assertWorkspaceCleanupComplete(entry);
-    if (entry.preparationOwner && !input.options.fromFinalize)
-      throw new WorkspaceError(`Preparation still owns ${selected.worktree}.`);
+    assertDevPreparationAdmission(entry, input.options);
     checkReady(input, selected, entry);
     return selected;
   });
   if (input.storage)
     assertRuntimeOwnership(resolveWorkspaceStorage(input.storage, workspace.worktree));
   return workspace;
+}
+
+function assertDevPreparationAdmission(entry: WorkspaceEntry, options: DevSetupOptions): void {
+  const owner = entry.preparationOwner;
+  if (options.fromFinalize) {
+    if (!owner || options.preparationToken !== owner.token || !isProcessAlive(owner.pid))
+      throw new WorkspaceError(`Preparation ownership lost for ${entry.worktree}.`);
+    return;
+  }
+  if (owner) throw new WorkspaceError(`Preparation still owns ${entry.worktree}.`);
 }
 
 function refuseWhileRunning(mainWorktree: string, registryDir: string, worktree: string): void {

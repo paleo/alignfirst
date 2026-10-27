@@ -6,7 +6,8 @@ import { isProcessAlive } from "./process-control.js";
 import { withRegistryLock } from "./registry-lock.js";
 import { claimRegistryStorage, readRegistry, writeRegistry } from "./registry-storage.js";
 import { readWorkspaces } from "./workspaces.js";
-import { assertStartupOwner, type StartupOwner } from "./startup-ownership.js";
+import { assertStartupOwner } from "./startup-ownership.js";
+import type { StartupOwner } from "./startup-registry.js";
 import { getWorktreeBranch } from "./worktree.js";
 
 const DEV_SERVERS_FILENAME = "dev-servers.json";

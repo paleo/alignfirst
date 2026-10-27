@@ -9,8 +9,15 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { withRegistryLock } from "@alignfirst/workspace";
-import { resolveProjectLayout } from "../src/project-layout.js";
+import {
+  claimRuntime,
+  claimRuntimeDisposal,
+  releaseRuntimeResources,
+  resolveWorkspaceStorage,
+  withRegistryLock,
+} from "@alignfirst/workspace";
+import * as companionLocks from "../src/companion-registry-lock.js";
+import { assertCompanionLifecycleAdmission, resolveProjectLayout } from "../src/project-layout.js";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -342,6 +349,83 @@ describe("companion unregister", () => {
         })
       ).code,
     ).toBe(0);
+  });
+
+  it("gates runtime-only prune after unregister inspects clean state", async () => {
+    const { home, project } = makeHome();
+    const companion = companionOf(home);
+    mkdirSync(companion, { recursive: true });
+    writeRegistry(home, {
+      projects: { "~/projects/app": { dir: "projects_app", defaultLocation: "companion" } },
+    });
+    const storage = resolveWorkspaceStorage(
+      resolveProjectLayout(project, home).storage,
+      join(project, "..", "missing"),
+    );
+    const runtime = await claimRuntime(storage);
+    if (!runtime) throw new Error("Expected external runtime");
+    mkdirSync(storage.runtimeDir, { recursive: true });
+    writeFileSync(join(storage.runtimeDir, "evidence"), "retained");
+    await releaseRuntimeResources(storage, runtime.generation, "retain");
+    const before = readFileSync(join(storage.registryDir, "workspaces.json"), "utf8");
+
+    let release!: () => void;
+    let entered!: () => void;
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const inspected = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const lock = companionLocks.withCompanionRegistryLock;
+    let calls = 0;
+    vi.spyOn(companionLocks, "withCompanionRegistryLock").mockImplementation(async (...args) => {
+      if (++calls === 2) {
+        entered();
+        await barrier;
+      }
+      return lock(...args);
+    });
+    const unregister = runMain(["companion", "unregister", "--remove-dir", "--force"], {
+      cwd: project,
+      home,
+    });
+    await inspected;
+    try {
+      const prune = await runMain(["workspace", "prune", "--json"], { cwd: project, home });
+      expect(prune.code, prune.stderr).toBe(1);
+      expect(prune.stderr).toContain("removal is in progress");
+      expect(prune.stdout).toBe("");
+      expect(readFileSync(join(storage.registryDir, "workspaces.json"), "utf8")).toBe(before);
+      expect(readFileSync(join(storage.runtimeDir, "evidence"), "utf8")).toBe("retained");
+    } finally {
+      release();
+      const removed = await unregister;
+      expect(removed.code, removed.stderr).toBe(0);
+    }
+    expect(existsSync(companion)).toBe(false);
+  });
+
+  it("rejects a stale disposal selection after plain unregister completes", async () => {
+    const { home, project } = makeHome();
+    mkdirSync(companionOf(home), { recursive: true });
+    writeRegistry(home, {
+      projects: { "~/projects/app": { dir: "projects_app", defaultLocation: "companion" } },
+    });
+    const layout = resolveProjectLayout(project, home);
+    const storage = resolveWorkspaceStorage(layout.storage, join(project, "..", "missing"));
+    const runtime = await claimRuntime(storage);
+    if (!runtime) throw new Error("Expected external runtime");
+    await releaseRuntimeResources(storage, runtime.generation, "retain");
+    const before = readFileSync(join(storage.registryDir, "workspaces.json"), "utf8");
+    const removed = await runMain(["companion", "unregister"], { cwd: project, home });
+    expect(removed.code, removed.stderr).toBe(0);
+    await expect(
+      claimRuntimeDisposal(storage, runtime.generation, () =>
+        assertCompanionLifecycleAdmission(home, layout),
+      ),
+    ).rejects.toThrow(/selection changed/);
+    expect(readFileSync(join(storage.registryDir, "workspaces.json"), "utf8")).toBe(before);
   });
 
   it("gates setup while unregister waits for the selected runtime lock", async () => {

@@ -4,7 +4,12 @@ import { resolve } from "node:path";
 import { WorkspaceError } from "./errors.js";
 import { isProcessAlive } from "./process-control.js";
 import { withRegistryLock } from "./registry-lock.js";
-import { readRegistry, writeRegistry } from "./registry-storage.js";
+import {
+  readStartupRegistry,
+  writeStartupRegistry,
+  type StartupOwner,
+  type StartupOwners,
+} from "./startup-registry.js";
 import {
   assertRuntimeAvailable,
   assertWorkspaceCleanupComplete,
@@ -12,39 +17,6 @@ import {
   readWorkspaces,
   type WorkspacesRegistry,
 } from "./workspaces.js";
-
-const FILENAME = "dev-startups.json";
-const SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["version", "owners"],
-  properties: {
-    version: { const: 1 },
-    owners: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["worktree", "id", "pid"],
-        properties: {
-          worktree: { type: "string", pattern: "^/" },
-          id: { type: "string", minLength: 1 },
-          pid: { type: "integer", minimum: 1 },
-        },
-      },
-    },
-  },
-};
-
-export interface StartupOwner {
-  worktree: string;
-  id: string;
-  pid: number;
-}
-
-export interface StartupOwners {
-  owners: StartupOwner[];
-}
 
 /** The claim survives hooks without holding the registry lock. Only a dead PID is abandoned. */
 export async function claimStartup(
@@ -59,7 +31,12 @@ export async function claimStartup(
     const path = resolve(worktree);
     const registry = readWorkspaces(mainWorktree, registryDir);
     assertRuntimeAvailable(registry, path);
-    assertWorkspaceCleanupComplete(findWorkspaceByPath(registry, path)?.entry);
+    const entry = findWorkspaceByPath(registry, path)?.entry;
+    assertWorkspaceCleanupComplete(entry);
+    if (entry?.preparationOwner)
+      throw new WorkspaceError(
+        `Preparation still owns ${path}; complete it or recover through explicit cleanup.`,
+      );
     const existing = data.owners.find((owner) => owner.worktree === path);
     if (existing && isProcessAlive(existing.pid)) {
       throw new WorkspaceError(`Dev-server startup already in progress for ${path}.`);
@@ -67,7 +44,7 @@ export async function claimStartup(
     const owner: StartupOwner = { worktree: path, id: randomUUID(), pid: process.pid };
     data.owners = data.owners.filter((entry) => entry.worktree !== path);
     data.owners.push(owner);
-    writeOwners(mainWorktree, registryDir, data);
+    writeStartupRegistry(mainWorktree, registryDir, data);
     return owner;
   });
 }
@@ -98,18 +75,13 @@ export async function releaseStartup(
       (entry) =>
         entry.worktree !== owner.worktree || entry.id !== owner.id || entry.pid !== owner.pid,
     );
-    writeOwners(mainWorktree, registryDir, data);
+    writeStartupRegistry(mainWorktree, registryDir, data);
   });
 }
 
 export function readStartupOwners(mainWorktree: string, registryDir: string): StartupOwners {
   readWorkspaces(mainWorktree, registryDir);
-  const path = resolve(mainWorktree, registryDir, FILENAME);
-  const data = readRegistry<StartupOwners>(path, SCHEMA, { owners: [] }, mainWorktree);
-  const paths = data.owners.map((owner) => resolve(owner.worktree));
-  if (new Set(paths).size !== paths.length)
-    throw new WorkspaceError(`Invalid registry ${path}: duplicate startup identities.`);
-  return { owners: data.owners.map((owner) => ({ ...owner, worktree: resolve(owner.worktree) })) };
+  return readStartupRegistry(mainWorktree, registryDir);
 }
 
 /** Call under the shared lock after establishing a workspace cleanup gate. */
@@ -137,14 +109,5 @@ export function recoverStartupForCleanup(
       `Persist a cleanup gate before recovering startup ownership for ${worktree}.`,
     );
   data.owners = data.owners.filter((entry) => entry.worktree !== resolve(worktree));
-  writeOwners(mainWorktree, registryDir, data);
-}
-
-function writeOwners(mainWorktree: string, registryDir: string, data: StartupOwners): void {
-  writeRegistry(
-    resolve(mainWorktree, registryDir, FILENAME),
-    { version: 1, ...data },
-    SCHEMA,
-    mainWorktree,
-  );
+  writeStartupRegistry(mainWorktree, registryDir, data);
 }

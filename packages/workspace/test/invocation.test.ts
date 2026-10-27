@@ -200,6 +200,8 @@ describe("installed CLI boundary", () => {
       "dev",
       "setup",
       "--from-finalize",
+      "--preparation-token",
+      preparationOwner.token,
       "--force",
       "--verbose",
     ]);

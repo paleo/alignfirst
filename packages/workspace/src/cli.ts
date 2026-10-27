@@ -338,7 +338,14 @@ export type DevCommand =
   | { kind: "down"; all: boolean; retainCleanup?: boolean }
   | { kind: "list" }
   | { kind: "status" }
-  | { kind: "setup"; force: boolean; resetPorts: boolean; fromFinalize: boolean; verbose?: boolean }
+  | {
+      kind: "setup";
+      force: boolean;
+      resetPorts: boolean;
+      fromFinalize: boolean;
+      preparationToken?: string;
+      verbose?: boolean;
+    }
   | { kind: "help" };
 
 export function parseDevArgs(argv: string[]): DevCommand {
@@ -454,6 +461,7 @@ function parseDevSetup(tokens: string[]): DevCommand {
       force: { type: "boolean" },
       "reset-ports": { type: "boolean" },
       "from-finalize": { type: "boolean" },
+      "preparation-token": { type: "string" },
       verbose: { type: "boolean" },
     },
     allowPositionals: true,
@@ -465,6 +473,7 @@ function parseDevSetup(tokens: string[]): DevCommand {
     force: values.force ?? false,
     resetPorts: values["reset-ports"] ?? false,
     fromFinalize: values["from-finalize"] ?? false,
+    preparationToken: values["preparation-token"],
     verbose: values.verbose,
   };
 }

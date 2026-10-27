@@ -10,6 +10,7 @@ import { assertDirectoryPath, registryOwner, type RegistryOwner } from "./regist
 import { canonicalPath } from "./git.js";
 import { resolveWorkspaceStorage } from "./storage.js";
 import { isProcessAlive } from "./process-control.js";
+import { readStartupRegistry } from "./startup-registry.js";
 
 export const REGISTRY_SUBDIR = "workspace-registry";
 
@@ -396,6 +397,14 @@ export async function registerWorkspace(
     if (existing) assertWorkspaceRecipe(worktree, existing.recipe, input.recipe);
     assertWorkspaceCleanupComplete(existing);
     assertRuntimeAvailable(registry, worktree);
+    if (
+      readStartupRegistry(input.mainWorktree, input.registryDir).owners.some(
+        (owner) => owner.worktree === worktree,
+      )
+    )
+      throw new WorkspaceError(
+        `Startup ownership exists for ${worktree}; finish it or recover through explicit cleanup.`,
+      );
     if (existing?.preparationOwner) {
       const reason = isProcessAlive(existing.preparationOwner.pid)
         ? "already in progress"

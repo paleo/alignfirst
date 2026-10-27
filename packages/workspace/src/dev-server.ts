@@ -29,7 +29,8 @@ import {
   stopAllRegistered,
 } from "./dev-servers-registry.js";
 import { stopTarget } from "./target-stop.js";
-import { claimStartup, releaseStartup, type StartupOwner } from "./startup-ownership.js";
+import { claimStartup, releaseStartup } from "./startup-ownership.js";
+import type { StartupOwner } from "./startup-registry.js";
 import { ConfigError, errorMessage, StartupError, WorkspaceError } from "./errors.js";
 import type { RunFileEntry } from "./file-entries.js";
 import {
@@ -271,6 +272,7 @@ function devSetupInput(kernel: DevKernel, options: DevSetupOptions): DevSetupInp
       force: options.force,
       resetPorts: options.resetPorts,
       fromFinalize: options.fromFinalize,
+      preparationToken: options.preparationToken,
       beforeStart: options.beforeStart,
       verbose: options.verbose,
     },

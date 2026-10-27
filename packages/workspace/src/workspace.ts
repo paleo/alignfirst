@@ -348,6 +348,7 @@ interface DevSetupChildInput {
   worktree: string;
   /** Passes `--from-finalize`, so the dev setup accepts the `pending` workspace. */
   fromFinalize: boolean;
+  preparationToken?: string;
   force: boolean;
   verbose: boolean;
 }
@@ -361,7 +362,11 @@ async function runDevSetupChild(input: DevSetupChildInput): Promise<string | und
   if (!kernel.config.hasDevServer) throw new WorkspaceError("No dev services declared.");
   const startedAt = new Date().toISOString();
   const args = ["dev", "setup"];
-  if (input.fromFinalize) args.push("--from-finalize");
+  if (input.fromFinalize) {
+    if (input.preparationToken === undefined)
+      throw new WorkspaceError("Finalizer dev setup requires preparation ownership.");
+    args.push("--from-finalize", "--preparation-token", input.preparationToken);
+  }
   if (input.force) args.push("--force");
   if (input.verbose) args.push("--verbose");
   const child = installedCliCommand(kernel.invocation, args);
@@ -809,6 +814,7 @@ async function finalizeOwned(
       mainWorktree: ctx.mainWorktree,
       worktree: ctx.currentWorktree,
       fromFinalize: true,
+      preparationToken: command.preparationToken,
       force: command.force,
       verbose,
     });
@@ -1125,7 +1131,11 @@ async function disposeTargetRuntime(
   )
     throw new WorkspaceError(`Target is no longer orphaned: ${worktree}.`);
   const storage = resolveWorkspaceStorage(kernel.config.storage, worktree);
-  const disposal = await claimRuntimeDisposal(storage, runtime.generation);
+  const disposal = await claimRuntimeDisposal(
+    storage,
+    runtime.generation,
+    kernel.host?.assertLifecycleAdmission,
+  );
   await disposeRuntime(disposal, kernel.config.signal);
 }
 

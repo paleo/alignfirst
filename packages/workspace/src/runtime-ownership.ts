@@ -138,13 +138,15 @@ export function retainedRuntime(storage: WorkspaceStorage): RuntimeOwner | undef
   return { ...runtime };
 }
 
-/** No lock is held while the filesystem is recursively removed. Live claims never expire by age. */
+/** Host admission runs under the shared lock; recursive deletion does not. */
 export async function claimRuntimeDisposal(
   storage: WorkspaceStorage,
   generation: string,
+  admit?: () => void,
 ): Promise<RuntimeDisposal> {
   assertStorage(storage);
   return updateWorkspaces(storage.mainWorktree, storage.registryDir, (registry) => {
+    admit?.();
     const runtime = expectedRuntime(storage, registry, generation);
     assertQuiescent(storage, registry, true);
     if (runtime.state === "active")
