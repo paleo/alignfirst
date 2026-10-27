@@ -575,6 +575,55 @@ function workspaceLifecycle(executable = bun, runtime = "bun") {
   const probes = join(output, `${tier}-${runtime}-workspace-probes.jsonl`);
   // A Bun CLI may deliberately run a Node project command; those are separate runtime claims.
   const projectRuntime = tier === "matrix" ? node : bun;
+  prepareWorkspaceFixture(project, probes, projectRuntime);
+  const invoke = (label, args, cwd = project) =>
+    check(`${runtime}-${label}`, executable, [entries.alignfirst, ...args], { runtime, cwd });
+  for (const args of [
+    ["init", "-b", "main"],
+    ["add", "."],
+    ["commit", "-m", "workspace fixture"],
+  ])
+    check(`${runtime}-workspace-git`, "git", args, { cwd: project });
+  const before = readRecords(audit).length;
+  try {
+    invoke("workspace-guide", ["workspace", "--guide"]);
+    invoke("workspace-detached-setup", [
+      "workspace",
+      "setup",
+      "-c",
+      "runtime-child",
+      "--path",
+      linked,
+      "-d",
+    ]);
+    invoke("workspace-wait", ["workspace", "wait", linked]);
+    assert.ok(existsSync(join(linked, ".local-wt/finalized.txt")));
+    for (const path of ["package.json", "node_modules", "dist"])
+      assert.equal(existsSync(join(linked, path)), false);
+    invoke("dev-up", ["dev", "up"], linked);
+    invoke("dev-down-all", ["dev", "down", "--all"]);
+    invoke("workspace-teardown", ["workspace", "teardown", linked]);
+    invoke("workspace-reregister", ["workspace", "setup"], linked);
+    invoke("workspace-remove-from-target", ["workspace", "remove", "--force"], linked);
+    assert.equal(existsSync(linked), false);
+    assert.equal(readFileSync(join(project, ".plans/preserved.txt"), "utf8"), "preserve plans");
+    verifyWorkspaceRuntime({
+      before,
+      project,
+      linked,
+      executable,
+      runtime,
+      probes,
+      projectRuntime,
+    });
+  } finally {
+    invoke("workspace-cleanup-stop", ["dev", "down", "--all"]);
+    if (existsSync(linked))
+      invoke("workspace-cleanup-remove", ["workspace", "remove", linked, "--force"]);
+  }
+}
+
+function prepareWorkspaceFixture(project, probes, projectRuntime) {
   mkdirSync(join(project, ".plans"), { recursive: true });
   writeFileSync(join(project, ".plans/preserved.txt"), "preserve plans");
   writeFileSync(join(project, ".gitignore"), ".plans/\n.local-wt/\n");
@@ -609,72 +658,47 @@ if(process.argv[2]==='serve'){console.log('RUNTIME_READY');setInterval(()=>{},10
       },
     }),
   );
-  const invoke = (label, args, cwd = project) =>
-    check(`${runtime}-${label}`, executable, [entries.alignfirst, ...args], { runtime, cwd });
+}
+
+function verifyWorkspaceRuntime({
+  before,
+  project,
+  linked,
+  executable,
+  runtime,
+  probes,
+  projectRuntime,
+}) {
+  const observed = readRecords(audit)
+    .slice(before)
+    .filter((record) => /\/alignfirst(?:\.mjs)?$/.test(record.argv[0] ?? ""));
   for (const args of [
-    ["init", "-b", "main"],
-    ["add", "."],
-    ["commit", "-m", "workspace fixture"],
-  ])
-    check(`${runtime}-workspace-git`, "git", args, { cwd: project });
-  const before = readRecords(audit).length;
-  try {
-    invoke("workspace-guide", ["workspace", "--guide"]);
-    invoke("workspace-detached-setup", [
-      "workspace",
-      "setup",
-      "-c",
-      "runtime-child",
-      "--path",
-      linked,
-      "-d",
-    ]);
-    invoke("workspace-wait", ["workspace", "wait", linked]);
-    assert.ok(existsSync(join(linked, ".local-wt/finalized.txt")));
-    for (const path of ["package.json", "node_modules", "dist"])
-      assert.equal(existsSync(join(linked, path)), false);
-    invoke("dev-up", ["dev", "up"], linked);
-    invoke("dev-down-all", ["dev", "down", "--all"]);
-    invoke("workspace-teardown", ["workspace", "teardown", linked]);
-    invoke("workspace-reregister", ["workspace", "setup"], linked);
-    invoke("workspace-remove-from-target", ["workspace", "remove", "--force"], linked);
-    assert.equal(existsSync(linked), false);
-    assert.equal(readFileSync(join(project, ".plans/preserved.txt"), "utf8"), "preserve plans");
-    const observed = readRecords(audit)
-      .slice(before)
-      .filter((record) => /\/alignfirst(?:\.mjs)?$/.test(record.argv[0] ?? ""));
-    for (const args of [
-      ["workspace", "__finalize"],
-      ["dev", "down"],
-      ["workspace", "remove"],
-    ]) {
-      const child = observed.find(
-        (record) =>
-          record.argv.slice(1, 3).join(" ") === args.join(" ") &&
-          (args[1] === "remove" ? record.cwd === project : record.cwd === linked),
-      );
-      assert.ok(child, `missing installed child ${args.join(" ")}`);
-      assert.equal(child.runtime, runtime);
-      assert.equal(child.executable, executable);
-      assert.equal(
-        child.entry,
-        entries.alignfirst.replace("/.bin/alignfirst", "/alignfirst/bin/alignfirst.mjs"),
-      );
-    }
-    const actions = readRecords(probes);
-    for (const phase of ["finalize", "start", "stop", "purge"]) {
-      const action = actions.find((record) => record.context.phase === phase);
-      assert.ok(action, `missing project ${phase}`);
-      assert.equal(action.cwd, linked);
-      assert.equal(action.context.currentWorktree, linked);
-      assert.equal(action.context.name, `${tier} ${runtime} linked with spaces`);
-      assert.equal(action.runtime, tier === "matrix" ? "node" : "bun");
-      assert.equal(action.executable, projectRuntime);
-    }
-  } finally {
-    invoke("workspace-cleanup-stop", ["dev", "down", "--all"]);
-    if (existsSync(linked))
-      invoke("workspace-cleanup-remove", ["workspace", "remove", linked, "--force"]);
+    ["workspace", "__finalize"],
+    ["dev", "down"],
+    ["workspace", "remove"],
+  ]) {
+    const child = observed.find(
+      (record) =>
+        record.argv.slice(1, 3).join(" ") === args.join(" ") &&
+        (args[1] === "remove" ? record.cwd === project : record.cwd === linked),
+    );
+    assert.ok(child, `missing installed child ${args.join(" ")}`);
+    assert.equal(child.runtime, runtime);
+    assert.equal(child.executable, executable);
+    assert.equal(
+      child.entry,
+      entries.alignfirst.replace("/.bin/alignfirst", "/alignfirst/bin/alignfirst.mjs"),
+    );
+  }
+  const actions = readRecords(probes);
+  for (const phase of ["finalize", "start", "stop", "purge"]) {
+    const action = actions.find((record) => record.context.phase === phase);
+    assert.ok(action, `missing project ${phase}`);
+    assert.equal(action.cwd, linked);
+    assert.equal(action.context.currentWorktree, linked);
+    assert.equal(action.context.name, `${tier} ${runtime} linked with spaces`);
+    assert.equal(action.runtime, tier === "matrix" ? "node" : "bun");
+    assert.equal(action.executable, projectRuntime);
   }
 }
 

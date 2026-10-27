@@ -11,15 +11,21 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
-export function verifyPackagedWorkspaces({ executable, entry, root, env, evidence }) {
-  const python = spawnSync("python3", ["--version"], { env, encoding: "utf8" });
-  assert.ifError(python.error);
+export function verifyPackagedWorkspaces(options) {
+  const python = spawnSync("python3", ["--version"], { env: options.env, encoding: "utf8" });
+  assert.equal(python.error, undefined, "python3 is required; Python acceptance is incomplete");
   assert.equal(python.status, 0, "python3 is required; Python acceptance is incomplete");
   console.log(`Python prerequisite: ${python.stdout.trim()}`);
-  const defaults = join(root, "default consumer with spaces");
-  const project = join(root, "python monorepo with spaces");
-  const linked = join(root, "python linked with spaces");
-  const run = (cwd, args, json = false) => {
+  const run = cliRunner(options);
+  verifyDefaults(options, run);
+  verifyPythonMonorepo(options, run);
+  console.log(
+    "PASS packed default lifecycle and package-free Python monorepo: real venv/imports/API/worker, identity/cwd/env/ports, isolation, transform preservation and owned-process cleanup",
+  );
+}
+
+function cliRunner({ executable, entry, env, evidence }) {
+  return (cwd, args, json = false) => {
     const result = spawnSync(executable, [entry, ...args], {
       cwd,
       env,
@@ -36,31 +42,37 @@ export function verifyPackagedWorkspaces({ executable, entry, root, env, evidenc
     assert.equal(result.status, 0, `${args.join(" ")}: ${result.stdout}\n${result.stderr}`);
     return json ? JSON.parse(result.stdout) : result.stdout;
   };
-  prepareRepository(defaults, env);
-  const defaultChild = join(root, "default linked with spaces");
+}
+
+function verifyDefaults({ root, env }, run) {
+  const project = join(root, "default consumer with spaces");
+  const linked = join(root, "default linked with spaces");
+  prepareRepository(project, env);
   try {
-    const adopted = run(defaults, ["workspace", "setup", "--json"], true).workspace;
+    const adopted = run(project, ["workspace", "setup", "--json"], true).workspace;
     assert.equal(adopted.preparation, "ready");
     assert.equal(adopted.recipe, "defaults");
     assert.deepEqual(adopted.ports, {});
-    run(
-      defaults,
-      ["workspace", "setup", "-c", "default-child", "--path", defaultChild, "--json"],
-      true,
-    );
-    assert.equal(realpathSync(join(defaultChild, ".plans")), join(defaults, ".plans"));
-    assert.equal(run(defaults, ["workspace", "list", "--json"], true).workspaces.length, 2);
-    run(defaultChild, ["workspace", "teardown", "--json"], true);
-    assert(existsSync(defaultChild), "teardown preserves Git/files");
-    run(defaults, ["workspace", "remove", defaultChild, "--json"], true);
-    assert(!existsSync(defaultChild));
-    assert(existsSync(join(defaults, ".plans", "preserved.txt")));
-    assertNoNodeProject(defaults);
+    run(project, ["workspace", "setup", "-c", "default-child", "--path", linked, "--json"], true);
+    assert.equal(realpathSync(join(linked, ".plans")), join(project, ".plans"));
+    assert.equal(run(project, ["workspace", "list", "--json"], true).workspaces.length, 2);
+    run(linked, ["workspace", "teardown", "--json"], true);
+    assert(existsSync(linked), "teardown preserves Git/files");
+    run(project, ["workspace", "remove", linked, "--json"], true);
+    assert(!existsSync(linked));
+    assert(existsSync(join(project, ".plans", "preserved.txt")));
+    assertNoNodeProject(project);
   } finally {
-    run(defaults, ["workspace", "teardown", "--json"], true);
+    if (existsSync(linked))
+      run(project, ["workspace", "remove", linked, "--force", "--json"], true);
+    run(project, ["workspace", "teardown", "--json"], true);
   }
+}
+
+function verifyPythonMonorepo({ root, env }, run) {
+  const project = join(root, "python monorepo with spaces");
+  const linked = join(root, "python linked with spaces");
   prepareRepository(project, env, true);
-  const pids = [];
   try {
     run(project, ["workspace", "setup", "--full", "--json"], true);
     run(
@@ -72,49 +84,13 @@ export function verifyPackagedWorkspaces({ executable, entry, root, env, evidenc
       (cwd) => run(cwd, ["workspace", "status", "--json"], true).workspace,
     );
     assert.notEqual(records[0].ports.api, records[1].ports.api);
-    for (const [index, cwd] of [project, linked].entries()) {
+    const pids = [project, linked].flatMap((cwd, index) => {
       assertNoNodeProject(cwd);
       run(cwd, ["dev", "up"]);
-      const identity = JSON.parse(readFileSync(join(cwd, ".local-wt/data/identity.json"), "utf8"));
-      assert.equal(identity.name, records[index].name);
-      assert.equal(identity.currentWorktree, cwd);
-      for (const role of ["api", "worker"]) {
-        const service = JSON.parse(readFileSync(join(cwd, `.local-wt/${role}.json`), "utf8"));
-        pids.push(service.pid);
-        assert.equal(service.context.name, records[index].name);
-        assert.deepEqual(service.context.ports, records[index].ports);
-        assert.equal(service.context.currentWorktree, cwd);
-        assert.equal(service.cwd, join(cwd, "packages", role));
-        assert.equal(service.prefix, join(cwd, ".venv"));
-        assert.equal(service.role, role);
-        assert.equal(service.message, `shared:${role}`);
-      }
-      const response = JSON.parse(
-        execFileSync(
-          "python3",
-          [
-            "-c",
-            `import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:${records[index].ports.api}').read().decode())`,
-          ],
-          { env, encoding: "utf8" },
-        ),
-      );
-      assert.equal(response.context.name, records[index].name);
-      const config = join(cwd, ".local-wt/application.json");
-      writeFileSync(
-        config,
-        JSON.stringify({
-          ...JSON.parse(readFileSync(config, "utf8")),
-          local: "unrelated local edit",
-        }),
-      );
-      run(cwd, ["dev", "setup"]);
-      const once = readFileSync(config, "utf8");
-      run(cwd, ["dev", "setup"]);
-      assert.equal(readFileSync(config, "utf8"), once, "Python transform is idempotent");
-      assert.equal(JSON.parse(once).local, "unrelated local edit");
-      assert.equal(JSON.parse(once).port, records[index].ports.api);
-    }
+      const owned = verifyPythonServices(cwd, records[index], env);
+      verifyPythonTransform(cwd, records[index], run);
+      return owned;
+    });
     assert.notEqual(
       realpathSync(join(project, ".local-wt/data")),
       realpathSync(join(linked, ".local-wt/data")),
@@ -136,15 +112,58 @@ export function verifyPackagedWorkspaces({ executable, entry, root, env, evidenc
       "shared plans survive\n",
     );
   } finally {
-    // Retry cleanup before the caller removes the fixture tree, including partial startup failures.
+    // Retry cleanup before removing fixture files, including partial startup failures.
     run(project, ["dev", "down", "--all"]);
     if (existsSync(linked))
       run(project, ["workspace", "remove", linked, "--force", "--json"], true);
     run(project, ["workspace", "teardown", "--json"], true);
   }
-  console.log(
-    "PASS packed default lifecycle and package-free Python monorepo: real venv/imports/API/worker, identity/cwd/env/ports, isolation, transform preservation and owned-process cleanup",
+}
+
+function verifyPythonServices(cwd, record, env) {
+  const identity = JSON.parse(readFileSync(join(cwd, ".local-wt/data/identity.json"), "utf8"));
+  assert.equal(identity.name, record.name);
+  assert.equal(identity.currentWorktree, cwd);
+  const pids = ["api", "worker"].map((role) => {
+    const service = JSON.parse(readFileSync(join(cwd, `.local-wt/${role}.json`), "utf8"));
+    assert.equal(service.context.name, record.name);
+    assert.deepEqual(service.context.ports, record.ports);
+    assert.equal(service.context.currentWorktree, cwd);
+    assert.equal(service.cwd, join(cwd, "packages", role));
+    assert.equal(service.prefix, join(cwd, ".venv"));
+    assert.equal(service.role, role);
+    assert.equal(service.message, `shared:${role}`);
+    return service.pid;
+  });
+  const response = JSON.parse(
+    execFileSync(
+      "python3",
+      [
+        "-c",
+        `import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:${record.ports.api}').read().decode())`,
+      ],
+      { env, encoding: "utf8" },
+    ),
   );
+  assert.equal(response.context.name, record.name);
+  return pids;
+}
+
+function verifyPythonTransform(cwd, record, run) {
+  const config = join(cwd, ".local-wt/application.json");
+  writeFileSync(
+    config,
+    JSON.stringify({
+      ...JSON.parse(readFileSync(config, "utf8")),
+      local: "unrelated local edit",
+    }),
+  );
+  run(cwd, ["dev", "setup"]);
+  const once = readFileSync(config, "utf8");
+  run(cwd, ["dev", "setup"]);
+  assert.equal(readFileSync(config, "utf8"), once, "Python transform is idempotent");
+  assert.equal(JSON.parse(once).local, "unrelated local edit");
+  assert.equal(JSON.parse(once).port, record.ports.api);
 }
 
 function prepareRepository(root, env, python = false) {
