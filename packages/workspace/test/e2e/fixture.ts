@@ -132,7 +132,7 @@ function lifecycleSource(): string {
   return `import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-const ctx = JSON.parse(process.env.ALIGNFIRST_CONTEXT);
+const ctx = JSON.parse(process.env.ALIGNFIRST_WORKSPACE_CONTEXT);
 const action = process.argv[2];
 async function barrier(name) {
   const file = process.env[name];
@@ -227,7 +227,7 @@ export function installResourceRecipe(
     join(worktree, "scripts", "resource.mjs"),
     `import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-const ctx = JSON.parse(process.env.ALIGNFIRST_CONTEXT);
+const ctx = JSON.parse(process.env.ALIGNFIRST_WORKSPACE_CONTEXT);
 const action = process.argv[2];
 const version = ${JSON.stringify(version)};
 const resources = join(dirname(ctx.mainWorktree), "resources");

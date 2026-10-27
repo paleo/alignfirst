@@ -83,7 +83,7 @@ describe("resolved application launch", () => {
               run: [
                 process.execPath,
                 "-e",
-                "const fs=require('fs');fs.mkdirSync('packages/api',{recursive:true});fs.writeFileSync('prepared','yes');fs.writeFileSync('setup-context.json',process.env.ALIGNFIRST_CONTEXT)",
+                "const fs=require('fs');fs.mkdirSync('packages/api',{recursive:true});fs.writeFileSync('prepared','yes');fs.writeFileSync('setup-context.json',process.env.ALIGNFIRST_WORKSPACE_CONTEXT)",
               ],
             },
           ],
@@ -111,7 +111,7 @@ describe("resolved application launch", () => {
               },
             },
           ],
-          summary: { command: { run: "printf '%s' \"$ALIGNFIRST_CONTEXT\"" } },
+          summary: { command: { run: "printf '%s' \"$ALIGNFIRST_WORKSPACE_CONTEXT\"" } },
         },
       },
       { recipe: { kind: "defaults" }, mainWorktree: root },

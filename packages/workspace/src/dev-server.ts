@@ -84,8 +84,10 @@ export interface DevServerConfig {
   storage?: WorkspaceStorage;
   /** Per-worktree runtime directory, relative to the worktree root (e.g. `.local-wt`). */
   runtimeDir: string;
-  /** Maximum concurrent dev-servers across all worktrees. Omit for no limit. */
+  /** Maximum concurrent dev environments across worktrees. Zero or omission means unlimited. */
   maxConcurrentDevServers?: number;
+  /** Evaluated only for a real start, before any startup mutation. */
+  resolveStartSettings?: () => DevStartSettings;
   /** The project's port range and the ports declared in it. Omit for a portless dev-server. */
   ports?: DevPortsConfig;
   /**
@@ -110,6 +112,10 @@ export interface DevServerConfig {
   servers: ServerDescriptor[];
   /** Builds the post-start summary printed to stdout. Defaults to a generic layout. */
   formatSummary?: DevSummaryFormatter;
+}
+
+export interface DevStartSettings {
+  maxConcurrentDevServers?: number;
 }
 
 export type DevSummaryFormatter = (ctx: DevServerSummaryContext) => string | Promise<string>;
@@ -459,6 +465,9 @@ async function runStartChecks(
   options: StartOptions,
 ): Promise<PreparedStart | undefined> {
   const { mainWorktree, currentWorktree } = kernel.worktree;
+  if (!options.restart && (await handleAlreadyRunning(kernel, currentWorktree, false))) return;
+  const settings = kernel.config.resolveStartSettings?.();
+  if (settings) kernel.config.maxConcurrentDevServers = settings.maxConcurrentDevServers;
   const owner = await claimStartup(mainWorktree, kernel.registryDir, currentWorktree);
   let prepared: PreparedStart | undefined;
   try {
@@ -748,11 +757,9 @@ async function handleAlreadyRunning(
   cwd: string,
   restart: boolean,
 ): Promise<boolean> {
-  const entry = findOwnEntry(kernel.worktree.mainWorktree, kernel.registryDir, cwd);
+  const entry = findOwnLiveEntry(kernel.worktree.mainWorktree, kernel.registryDir, cwd);
   if (!entry) return false;
   const livePids = Object.entries(entry.pids).filter(([, pid]) => isProcessAlive(pid));
-  assertNoPendingCleanup(kernel.worktree.mainWorktree, kernel.registryDir, cwd);
-  if (livePids.length === 0) return false;
 
   if (restart) {
     kernel.output.text("Restarting dev-server in this worktree...");
@@ -777,7 +784,7 @@ async function enforceCap(kernel: DevKernel, evict: boolean): Promise<void> {
   const { config, registryDir } = kernel;
   const { mainWorktree } = kernel.worktree;
   const limit = config.maxConcurrentDevServers;
-  if (limit === undefined) return;
+  if (limit === undefined || limit === 0) return;
   const active = liveDevServers(await pruneAndPersist(mainWorktree, registryDir));
   if (active.length < limit) return;
 

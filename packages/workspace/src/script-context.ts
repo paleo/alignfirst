@@ -12,6 +12,9 @@ const scalarFields = new Set([
   "name",
   "currentWorktree",
   "mainWorktree",
+  "configurationDir",
+  "companionDir",
+  "runtimeDir",
   "isMainWorktree",
   "composeProject",
   "branch",
@@ -33,10 +36,17 @@ const conveniences = [
 
 const abiVariables = new Set([
   "ALIGNFIRST_CONTEXT",
+  "ALIGNFIRST_WORKSPACE_CONTEXT",
   ...conveniences.map(([, suffix]) => `ALIGNFIRST_${suffix}`),
 ]);
 
-export interface ScriptContext extends Omit<SetupContextBase, "signal"> {
+export interface ScriptStorageContext {
+  configurationDir?: string;
+  companionDir?: string;
+  runtimeDir: string;
+}
+
+export interface ScriptContext extends Omit<SetupContextBase, "signal">, ScriptStorageContext {
   phase: ScriptPhase;
   composeProject: string;
   branch?: string;
@@ -88,7 +98,7 @@ export interface ResolvedCommand {
 }
 
 export function scriptContext(
-  base: SetupContextBase,
+  base: SetupContextBase & ScriptStorageContext,
   phase: ScriptPhase,
   fields: ScriptContextFields = {},
 ): ScriptContext {
@@ -99,6 +109,11 @@ export function scriptContext(
     mainWorktree: resolve(base.mainWorktree),
     isMainWorktree: base.isMainWorktree,
     composeProject: composeProjectName(base.name),
+    runtimeDir: resolve(base.runtimeDir),
+    ...(base.configurationDir === undefined
+      ? {}
+      : { configurationDir: resolve(base.configurationDir) }),
+    ...(base.companionDir === undefined ? {} : { companionDir: resolve(base.companionDir) }),
   };
   if (existsSync(ctx.currentWorktree)) {
     ctx.branch = getWorktreeBranch(ctx.currentWorktree) ?? "(detached)";
@@ -166,7 +181,7 @@ export function resolveCommand(
     }
     env[key] = interpolate(value, ctx, `${field}.env.${key}`);
   }
-  env.ALIGNFIRST_CONTEXT = JSON.stringify(ctx);
+  env.ALIGNFIRST_WORKSPACE_CONTEXT = JSON.stringify(ctx);
   for (const [key, suffix] of conveniences) {
     const value = ctx[key];
     if (value !== undefined) env[`ALIGNFIRST_${suffix}`] = String(value);

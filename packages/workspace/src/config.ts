@@ -31,8 +31,13 @@ export interface DevSettings {
   runFilesInputs?: string[] | { command: Command };
   setup?: Step[];
   servers: Server[];
-  maxConcurrentDevServers?: number;
+  maxConcurrentDevServers?: number | EnvNumber;
   summary?: TextOutput;
+}
+
+export interface EnvNumber {
+  env: string;
+  default: number;
 }
 
 export interface FileEntry {
@@ -68,9 +73,14 @@ export type Server =
       exec: Command;
       port?: string | number;
       ready: { log: string };
-      error?: { log: string };
+      error?: ServerError;
     }
   | { kind: "command"; name: string; start: Command; stop?: Command };
+
+export interface ServerError {
+  preset?: "node";
+  log?: string;
+}
 
 export interface ConfigFileLocation {
   path: string;
@@ -163,6 +173,17 @@ function schemaError(error: ErrorObject): string {
 
 export function validateWorkspaceSettings(value: WorkspaceManifest, label: string): void {
   const dev = value.devServer;
+  if (dev?.maxConcurrentDevServers !== undefined) {
+    const limit = dev.maxConcurrentDevServers;
+    validateLimit(typeof limit === "number" ? limit : limit.default);
+    if (
+      typeof limit !== "number" &&
+      (!/^[A-Za-z_][A-Za-z0-9_]*(?![\s\S])/.test(limit.env) ||
+        Object.keys(limit).some((key) => key !== "env" && key !== "default"))
+    ) {
+      throw new ConfigError("devServer.maxConcurrentDevServers: invalid environment binding.");
+    }
+  }
   if (dev?.ports !== undefined) {
     try {
       resolveDevPortsConfig(dev.ports);
@@ -180,7 +201,7 @@ export function validateWorkspaceSettings(value: WorkspaceManifest, label: strin
     names.add(server.name);
     if (server.kind !== "spawn") continue;
     validateLogPattern(server.ready.log, label, `devServer.servers[${index}].ready.log`);
-    if (server.error)
+    if (server.error?.log !== undefined)
       validateLogPattern(server.error.log, label, `devServer.servers[${index}].error.log`);
     if (
       typeof server.port === "string" &&
@@ -201,6 +222,32 @@ export function validateWorkspaceSettings(value: WorkspaceManifest, label: strin
         `Invalid ${label}: devServer.runFiles[${index}].path also occurs in workspace.gitignoredFiles.`,
       );
   }
+}
+
+export function resolveDevServerLimit(
+  limit: number | EnvNumber | undefined,
+  env: NodeJS.ProcessEnv,
+): number | undefined {
+  if (limit === undefined) return;
+  if (typeof limit === "number") {
+    validateLimit(limit);
+    return limit;
+  }
+  validateLimit(limit.default);
+  const value = env[limit.env];
+  if (value === undefined) return limit.default;
+  const resolved = Number(value);
+  if (value.length === 0 || /[^0-9]/.test(value) || !Number.isSafeInteger(resolved)) {
+    throw new ConfigError(
+      `devServer.maxConcurrentDevServers: ${limit.env} must contain a nonnegative safe decimal integer.`,
+    );
+  }
+  return resolved;
+}
+
+function validateLimit(value: number): void {
+  if (!Number.isSafeInteger(value) || value < 0)
+    throw new ConfigError("devServer.maxConcurrentDevServers must be a nonnegative safe integer.");
 }
 
 function validateLogPattern(pattern: string, label: string, field: string): void {

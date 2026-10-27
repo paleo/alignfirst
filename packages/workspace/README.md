@@ -25,7 +25,7 @@ Without a manifest, readiness is synchronous and protocol-ready. No install/buil
 
 Project behavior belongs in branch-local `alignfirst-workspace.json` or `.jsonc`, with `schemaVersion: 1`. JSON is strict; JSONC allows comments/trailing commas. Ambiguous extensions, unknown properties and unsupported schemas fail without fallback. The independent project-conventions family is `alignfirst.json`/`.jsonc`; companions may select that family, never workspace recipes. The sole project range is `devServer.ports`.
 
-Commands/scripts own stack-specific preparation, pure idempotent transformations, summaries and cleanup. `ALIGNFIRST_CONTEXT` supplies phase-limited JSON while stdin remains available for transformations. Spawn services use log-regex readiness; command services own their readiness. Managed environments require a spawn process. See the [setup reference](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/workspace-setup.md) for the complete manifest, interpolation restrictions, Python examples and ABI.
+Commands/scripts own stack-specific preparation, pure idempotent transformations, summaries and cleanup. `ALIGNFIRST_WORKSPACE_CONTEXT` supplies phase-limited JSON while stdin remains available for transformations. Spawn services use log-regex readiness; command services own their readiness. Managed environments require a spawn process. See the [setup reference](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/workspace-setup.md) for the complete manifest, interpolation restrictions, Python examples and ABI.
 
 ## Ownership and recovery
 

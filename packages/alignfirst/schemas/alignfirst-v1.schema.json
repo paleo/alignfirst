@@ -139,8 +139,18 @@
           }
         },
         "maxConcurrentDevServers": {
-          "type": "integer",
-          "minimum": 1
+          "oneOf": [
+            { "$ref": "#/definitions/limit" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["env", "default"],
+              "properties": {
+                "env": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])" },
+                "default": { "$ref": "#/definitions/limit" }
+              }
+            }
+          ]
         },
         "summary": {
           "$ref": "#/definitions/text"
@@ -149,6 +159,20 @@
     }
   },
   "definitions": {
+    "limit": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "serverError": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "preset": { "const": "node" },
+        "log": { "type": "string" }
+      }
+    },
     "nonEmpty": {
       "type": "string",
       "minLength": 1
@@ -449,7 +473,7 @@
               "$ref": "#/definitions/log"
             },
             "error": {
-              "$ref": "#/definitions/log"
+              "$ref": "#/definitions/serverError"
             }
           }
         },

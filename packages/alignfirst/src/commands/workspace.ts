@@ -156,6 +156,9 @@ export async function runDevCommand(ctx: CommandContext, args: string[]): Promis
     const adapted = adaptWorkspaceManifest(selected.settings ?? {}, {
       recipe,
       mainWorktree: root.mainWorktree,
+      configurationDir: selected.configurationDir,
+      companionDir: selected.companionDir,
+      storage: selected.storage,
       env: ctx.env,
       output,
       signal: controller.signal,
@@ -313,6 +316,10 @@ function loadRecipe(
   const adapted = adaptWorkspaceManifest(manifest ?? {}, {
     recipe,
     mainWorktree,
+    configurationDir:
+      manifest === undefined ? undefined : dirname(layout.locations.alignfirst.path),
+    companionDir: layout.companion?.dir,
+    storage: layout.storage,
     env: ctx.env,
     output,
     signal,

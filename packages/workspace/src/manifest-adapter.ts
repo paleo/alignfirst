@@ -13,6 +13,7 @@ import type {
   WorkspaceManifest,
   WorkspaceSettings,
 } from "./config.js";
+import { resolveDevServerLimit } from "./config.js";
 import type { RunFilesInputsProvider } from "./dev-setup.js";
 import type {
   DevServerConfig,
@@ -28,11 +29,13 @@ import type {
   SetupContextBase,
 } from "./file-entries.js";
 import type { WorkspaceOutput } from "./operation.js";
-import { patchEnvFile } from "./helpers.js";
+import { detectCommonJsError, patchEnvFile } from "./helpers.js";
+import { runtimeDirForTarget, type WorkspaceStorage } from "./storage.js";
 import {
   interpolate,
   resolveCommand,
   type ScriptContext,
+  type ScriptContextFields,
   type ScriptPhase,
   scriptContext,
 } from "./script-context.js";
@@ -60,6 +63,9 @@ type ManifestWorkspaceHooks = Pick<
 export interface ManifestAdapterOptions {
   mainWorktree: string;
   recipe: WorkspaceRecipe;
+  configurationDir?: string;
+  companionDir?: string;
+  storage?: WorkspaceStorage;
   signal?: AbortSignal;
   env?: NodeJS.ProcessEnv;
   output?: WorkspaceOutput;
@@ -99,7 +105,7 @@ function adaptWorkspace(
         : async (ctx) => {
             await runSteps(
               settings.preSetup ?? [],
-              scriptContext(ctx, "preSetup", ctx),
+              adapterContext(ctx, "preSetup", ctx, options),
               options,
               ctx.signal,
             );
@@ -110,7 +116,7 @@ function adaptWorkspace(
         : async (ctx) => {
             await runSteps(
               settings.finalize ?? [],
-              scriptContext(ctx, "finalize", ctx),
+              adapterContext(ctx, "finalize", ctx, options),
               options,
               ctx.signal,
               ctx.progress,
@@ -128,7 +134,7 @@ function adaptWorkspace(
           ].join("\n")
         : textOutput(
             settings.summary,
-            scriptContext(ctx, "workspaceSummary", ctx),
+            adapterContext(ctx, "workspaceSummary", ctx, options),
             "workspace.summary",
             options,
             ctx.signal,
@@ -150,7 +156,7 @@ async function purge(
   const executionBase = existsSync(ctx.worktree) ? ctx.worktree : ctx.mainWorktree;
   await runSteps(
     steps,
-    scriptContext(base, "purge", ctx),
+    adapterContext(base, "purge", ctx, options),
     options,
     ctx.signal,
     undefined,
@@ -168,7 +174,13 @@ function adaptDev(
     recipe: options.recipe,
     signal: options.signal,
     ports: dev.ports,
-    maxConcurrentDevServers: dev.maxConcurrentDevServers,
+    storage: options.storage,
+    resolveStartSettings: () => ({
+      maxConcurrentDevServers: resolveDevServerLimit(
+        dev.maxConcurrentDevServers,
+        options.env ?? process.env,
+      ),
+    }),
     runFiles: (dev.runFiles ?? []).map((entry) =>
       adaptFile<RunFileContext>(entry, true, paths, options),
     ),
@@ -179,7 +191,7 @@ function adaptDev(
         : async (ctx) => {
             await runSteps(
               dev.setup ?? [],
-              scriptContext(ctx, "devSetup", ctx),
+              adapterContext(ctx, "devSetup", ctx, options),
               options,
               ctx.signal,
             );
@@ -205,7 +217,7 @@ function adaptInputs(
     }
     const output = await commandOutput(
       inputs.command,
-      scriptContext(ctx, "runFilesInputs", ctx),
+      adapterContext(ctx, "runFilesInputs", ctx, options),
       "devServer.runFilesInputs",
       options,
       ctx.signal,
@@ -261,7 +273,8 @@ function adaptServer(server: Server, options: ManifestAdapterOptions): ServerDes
       },
     };
   const ready = new RegExp(server.ready.log);
-  const error = server.error === undefined ? undefined : new RegExp(server.error.log);
+  const error = server.error?.log === undefined ? undefined : new RegExp(server.error.log);
+  const node = server.error?.preset === "node";
   return {
     kind: "spawn",
     name: server.name,
@@ -275,7 +288,10 @@ function adaptServer(server: Server, options: ManifestAdapterOptions): ServerDes
         options.env,
       ),
     detectReady: (log) => ready.test(log),
-    detectError: error === undefined ? undefined : (log) => (error.test(log) ? "error.log" : false),
+    detectError:
+      error === undefined && !node
+        ? undefined
+        : (log) => (node && detectCommonJsError(log)) || (error?.test(log) ? "error.log" : false),
   };
 }
 
@@ -296,16 +312,21 @@ function devSummaryContext(
     { name: ctx.workspace.name, cwd: ctx.workspace.worktree, ports: ctx.ports },
     options,
   );
-  return scriptContext(base, "devSummary", {
-    ports: ctx.ports,
-    servers: ctx.servers.map((result) => ({
-      name: result.server.name,
-      kind: result.server.kind === "spawn" ? "spawn" : "command",
-      ...(result.port === undefined ? {} : { port: result.port }),
-      ...(result.pid === undefined ? {} : { pid: result.pid }),
-      ...(result.logFile === undefined ? {} : { logFile: result.logFile }),
-    })),
-  });
+  return adapterContext(
+    base,
+    "devSummary",
+    {
+      ports: ctx.ports,
+      servers: ctx.servers.map((result) => ({
+        name: result.server.name,
+        kind: result.server.kind === "spawn" ? "spawn" : "command",
+        ...(result.port === undefined ? {} : { port: result.port }),
+        ...(result.pid === undefined ? {} : { pid: result.pid }),
+        ...(result.logFile === undefined ? {} : { logFile: result.logFile }),
+      })),
+    },
+    options,
+  );
 }
 
 interface AdapterFileContext extends SetupContextBase {
@@ -340,7 +361,7 @@ function adaptFileSource<C extends AdapterFileContext>(
     content: (ctx) =>
       textOutput(
         source.content,
-        fileContext(ctx, phase, entry.path),
+        fileContext(ctx, phase, entry.path, options),
         `${phase}.${entry.path}.source`,
         options,
         ctx.signal,
@@ -356,7 +377,7 @@ function adaptFilePatch<C extends AdapterFileContext>(
   const patch = entry.patch;
   if (patch === undefined) return;
   return async (content, ctx) => {
-    const current = fileContext(ctx, phase, entry.path);
+    const current = fileContext(ctx, phase, entry.path, options);
     const field = `${phase}.${entry.path}.patch`;
     if ("env" in patch)
       return patchEnvFile(
@@ -372,8 +393,13 @@ function adaptFilePatch<C extends AdapterFileContext>(
   };
 }
 
-function fileContext(ctx: AdapterFileContext, phase: ScriptPhase, file: string): ScriptContext {
-  return scriptContext(ctx, phase, { file, ports: ctx.ports });
+function fileContext(
+  ctx: AdapterFileContext,
+  phase: ScriptPhase,
+  file: string,
+  options: ManifestAdapterOptions,
+): ScriptContext {
+  return adapterContext(ctx, phase, { file, ports: ctx.ports }, options);
 }
 
 async function runSteps(
@@ -459,7 +485,28 @@ function serverScriptContext(
   phase: "start" | "stop",
   options: ManifestAdapterOptions,
 ): ScriptContext {
-  return scriptContext(serverBase(ctx, options), phase, { ports: ctx.ports });
+  return adapterContext(serverBase(ctx, options), phase, { ports: ctx.ports }, options);
+}
+
+function adapterContext(
+  base: SetupContextBase,
+  phase: ScriptPhase,
+  fields: ScriptContextFields,
+  options: ManifestAdapterOptions,
+): ScriptContext {
+  return scriptContext(
+    {
+      ...base,
+      configurationDir: options.configurationDir,
+      companionDir: options.companionDir,
+      runtimeDir: runtimeDirForTarget(
+        { runtimeDir: ".local-wt", storage: options.storage },
+        base.currentWorktree,
+      ),
+    },
+    phase,
+    fields,
+  );
 }
 
 function serverBase(ctx: ServerContext, options: ManifestAdapterOptions): SetupContextBase {

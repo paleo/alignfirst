@@ -7,6 +7,7 @@ import {
   configFamilyExists,
   readConfigFile,
   resolveConfigFamily,
+  resolveDevServerLimit,
   validateWorkspaceSettings,
   type WorkspaceManifest,
 } from "../src/config.js";
@@ -37,6 +38,49 @@ it("distinguishes absence, broken links, ambiguity and strict JSON/JSONC without
   expect(readFileSync(jsonc, "utf8")).toBe(text);
   writeFileSync(jsonc, '{"key": BROKEN}');
   expect(() => readConfigFile(jsonc)).toThrow("valid JSONC");
+});
+
+it("resolves safe nonnegative startup limits without reading ambient values", () => {
+  const binding = { env: "DEV_LIMIT", default: 5 };
+  expect(resolveDevServerLimit(undefined, {})).toBeUndefined();
+  expect(resolveDevServerLimit(0, {})).toBe(0);
+  expect(resolveDevServerLimit(binding, {})).toBe(5);
+  expect(resolveDevServerLimit(binding, { DEV_LIMIT: "0" })).toBe(0);
+  expect(resolveDevServerLimit(binding, { DEV_LIMIT: "0002" })).toBe(2);
+  expect(resolveDevServerLimit(binding, { DEV_LIMIT: String(Number.MAX_SAFE_INTEGER) })).toBe(
+    Number.MAX_SAFE_INTEGER,
+  );
+  for (const value of [
+    "",
+    "-1",
+    "+1",
+    "1.5",
+    "1e2",
+    " 1",
+    "1 ",
+    "1\n",
+    "9007199254740992",
+    "PRIVATE",
+  ]) {
+    expect(() => resolveDevServerLimit(binding, { DEV_LIMIT: value })).toThrow(
+      "maxConcurrentDevServers: DEV_LIMIT",
+    );
+    expect(() => resolveDevServerLimit(binding, { DEV_LIMIT: value })).not.toThrow("PRIVATE");
+  }
+  for (const value of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1, Number.POSITIVE_INFINITY]) {
+    expect(() =>
+      validateWorkspaceSettings(
+        { devServer: { servers: [], maxConcurrentDevServers: value } },
+        "recipe",
+      ),
+    ).toThrow("maxConcurrentDevServers");
+    expect(() =>
+      validateWorkspaceSettings(
+        { devServer: { servers: [], maxConcurrentDevServers: { ...binding, default: value } } },
+        "recipe",
+      ),
+    ).toThrow("maxConcurrentDevServers");
+  }
 });
 
 it("checks source-independent recipe semantics after structural validation", () => {

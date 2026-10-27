@@ -18,6 +18,8 @@ export type {
   WorkspaceManifest,
   WorkspaceSettings,
   DevSettings,
+  EnvNumber,
+  ServerError,
   FileEntry,
   TextOutput,
   Command,
@@ -36,6 +38,7 @@ export type { ExecuteCommandOptions } from "./command-executor.js";
 export { scriptContext, interpolate, resolveCommand } from "./script-context.js";
 export type {
   ScriptContext,
+  ScriptStorageContext,
   ScriptContextFields,
   ScriptPhase,
   ScriptServerResult,
@@ -153,6 +156,7 @@ export { recoverStartupForCleanup } from "./startup-ownership.js";
 export { runDevServer } from "./dev-server.js";
 export type {
   DevServerConfig,
+  DevStartSettings,
   DevServerSummaryContext,
   DevSummaryFormatter,
   ServerDescriptor,

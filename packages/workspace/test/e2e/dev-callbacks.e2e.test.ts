@@ -129,6 +129,10 @@ describe("registered callback identity (e2e)", () => {
     async () => {
       const target = prepareTarget();
       const { fx, root, nested, ctx } = target;
+      const file = join(root, "alignfirst.json");
+      const manifest = JSON.parse(readFileSync(file, "utf8"));
+      manifest.devServer.maxConcurrentDevServers = { env: "E2E_DEV_LIMIT", default: 0 };
+      writeFileSync(file, JSON.stringify(manifest));
       const started = runDev(root, ["up"], ENV, nested);
       expect(started.status, started.stderr).toBe(0);
       expect(started.stdout).toContain(`Workspace: ${ctx.name}`);
@@ -152,12 +156,12 @@ describe("registered callback identity (e2e)", () => {
       expect(status.status, status.stderr).toBe(0);
       expect(status.stdout).toContain("status: UP");
       expect(status.stdout).toContain(`log: ${log}`);
-      const noop = runDev(root, ["up"], ENV, nested);
+      const noop = runDev(root, ["up"], { ...ENV, E2E_DEV_LIMIT: "invalid" }, nested);
       expect(noop.status, noop.stderr).toBe(0);
       expect(noop.stdout).toContain("already running");
       expect(spawns(fx)).toHaveLength(1);
 
-      const attached = foreground(target);
+      const attached = foreground(target, { E2E_DEV_LIMIT: "invalid" });
       await waitUntil(() => attached.output.includes("FIXTURE_READY"), "root log replay");
       attached.child.kill("SIGINT");
       await exited(attached, 0);
@@ -179,6 +183,67 @@ describe("registered callback identity (e2e)", () => {
       expect(runDev(root, ["status"], ENV, nested).stdout).toContain("status: DOWN");
       expect(runDev(root, ["down"], ENV, nested).status).toBe(0);
       expect(stops(fx)).toEqual(expectedStops(ctx));
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "rejects startup overrides before claims, setup, file writes or stopping a live instance",
+    async () => {
+      const { fx, root } = prepareTarget(false);
+      const file = join(root, "alignfirst.json");
+      const manifest = JSON.parse(readFileSync(file, "utf8"));
+      manifest.devServer.maxConcurrentDevServers = { env: "E2E_DEV_LIMIT", default: 1 };
+      writeFileSync(file, JSON.stringify(manifest));
+      const invalid = { ...ENV, E2E_DEV_LIMIT: "PRIVATE" };
+      const paths = [
+        ...["workspaces.json", "dev-servers.json", "dev-startups.json"].map((name) =>
+          join(fx.repo, ".local-wt/workspace-registry", name),
+        ),
+        join(root, "setup-runs.log"),
+        join(root, "ports.env"),
+        join(root, "ports.txt"),
+      ];
+      const bytes = () =>
+        paths.map((path) => (existsSync(path) ? readFileSync(path, "utf8") : undefined));
+      const before = bytes();
+      const failed = runDev(root, ["up"], invalid);
+      expect(failed.status, failed.stderr).toBe(1);
+      expect(failed.stderr).toContain("maxConcurrentDevServers: E2E_DEV_LIMIT");
+      expect(failed.stderr).not.toContain("PRIVATE");
+      expect(bytes()).toEqual(before);
+      // Zero overrides a finite default and permits more than one live environment.
+      expect(runDev(fx.repo, ["up"], ENV).status).toBe(0);
+      expect(runDev(root, ["up"], { ...ENV, E2E_DEV_LIMIT: "0" }).status).toBe(0);
+      const pid = spawns(fx).find((event) => event.cwd === root)?.pid;
+      if (pid === undefined) throw new Error("Missing target PID");
+      writeFileSync(join(root, "ports.env"), "hand edited\n");
+      const runningBytes = bytes();
+      for (const args of [["restart"], ["up", "--restart"], ["--restart"]]) {
+        const rejected = runDev(root, args, invalid);
+        expect(rejected.status, rejected.stderr).toBe(1);
+        expect(rejected.stderr).toContain("maxConcurrentDevServers: E2E_DEV_LIMIT");
+        expect(isAlive(pid)).toBe(true);
+        expect(bytes()).toEqual(runningBytes);
+      }
+      expect(runDev(root, ["status"], invalid).status).toBe(0);
+      expect(runDev(root, ["list"], invalid).status).toBe(0);
+      const report = JSON.parse(
+        execFileSync(cliExecutable, [alignfirstBin, "config", "--json"], {
+          cwd: root,
+          encoding: "utf8",
+          env: { ...process.env, HOME: join(fx.root, "home"), ...invalid },
+        }),
+      );
+      expect(report.config.devServer.maxConcurrentDevServers).toEqual({
+        env: "E2E_DEV_LIMIT",
+        default: 1,
+      });
+      expect(runDev(root, ["down"], invalid).status).toBe(0);
+      await waitUntil(() => !isAlive(pid), "down with invalid startup override");
+      expect(runDev(root, ["setup", "--force"], invalid).status).toBe(0);
+      expect(runCli(root, ["setup", "--full", "--force"], invalid).status).toBe(0);
+      expect(runDev(fx.repo, ["down"], ENV).status).toBe(0);
     },
     TIMEOUT_MS,
   );

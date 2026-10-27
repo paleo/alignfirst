@@ -123,7 +123,7 @@ describe("project config", () => {
     {
       devServer: {
         servers: [{ kind: "spawn", name: "app", exec: { run: "true" }, ready: { log: "ready" } }],
-        maxConcurrentDevServers: 0,
+        maxConcurrentDevServers: -1,
       },
     },
   ])("rejects malformed merged recipes without exposing values %#", (settings) => {
@@ -134,6 +134,84 @@ describe("project config", () => {
       "PRIVATE",
     );
   });
+
+  it.each([
+    0,
+    Number.MAX_SAFE_INTEGER,
+    { env: "DEV_LIMIT", default: 0 },
+    { env: "DEV_LIMIT", default: Number.MAX_SAFE_INTEGER },
+  ])("retains authored concurrency limits %#", (maxConcurrentDevServers) => {
+    const devServer = {
+      servers: [
+        {
+          kind: "spawn",
+          name: "app",
+          exec: { run: "true" },
+          ready: { log: "ready" },
+          error: { preset: "node" },
+        },
+      ],
+      maxConcurrentDevServers,
+    };
+    expect(
+      validateProjectConfig({ schemaVersion: 1, devServer }, "config").devServer
+        ?.maxConcurrentDevServers,
+    ).toEqual(maxConcurrentDevServers);
+  });
+
+  it.each([
+    -1,
+    0.5,
+    Number.MAX_SAFE_INTEGER + 1,
+    { env: "", default: 1 },
+    { env: "BAD-NAME", default: 1 },
+    { env: "LIMIT\n", default: 1 },
+    { env: "DEV_LIMIT" },
+    { env: "DEV_LIMIT", default: -1 },
+    { env: "DEV_LIMIT", default: 0.5 },
+    { env: "DEV_LIMIT", default: Number.MAX_SAFE_INTEGER + 1 },
+    { env: "DEV_LIMIT", default: 1, extra: true },
+  ])("rejects malformed authored concurrency limits %#", (maxConcurrentDevServers) => {
+    expect(() =>
+      validateProjectConfig(
+        {
+          schemaVersion: 1,
+          devServer: {
+            servers: [
+              { kind: "spawn", name: "app", exec: { run: "true" }, ready: { log: "ready" } },
+            ],
+            maxConcurrentDevServers,
+          },
+        },
+        "config",
+      ),
+    ).toThrow("maxConcurrentDevServers");
+  });
+
+  it.each([{}, { preset: "python" }, { preset: "node", log: "[" }, { log: "[" }])(
+    "rejects invalid error descriptors %#",
+    (error) => {
+      expect(() =>
+        validateProjectConfig(
+          {
+            schemaVersion: 1,
+            devServer: {
+              servers: [
+                {
+                  kind: "spawn",
+                  name: "app",
+                  exec: { run: "true" },
+                  ready: { log: "ready" },
+                  error,
+                },
+              ],
+            },
+          },
+          "config",
+        ),
+      ).toThrow("error");
+    },
+  );
 
   it.each(["json", "jsonc"])("rejects literal __proto__ in %s without rewriting", (extension) => {
     const path = configPath(extension);

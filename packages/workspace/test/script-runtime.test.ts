@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { executeCommand } from "../src/command-executor.js";
-import type { Command, WorkspaceManifest } from "../src/config.js";
+import type { Command, ServerError, WorkspaceManifest } from "../src/config.js";
 import { seedFiles, type SetupContextBase } from "../src/file-entries.js";
 import { adaptWorkspaceManifest } from "../src/manifest-adapter.js";
 import { isProcessAlive, killProcessGroup } from "../src/process-control.js";
@@ -22,13 +22,15 @@ import {
   interpolate,
   resolveCommand,
   type ScriptContextFields,
+  type ScriptStorageContext,
   type ScriptPhase,
   scriptContext,
 } from "../src/script-context.js";
 import { resolveServers } from "../src/server-descriptor.js";
+import { resolveWorkspaceStorage } from "../src/storage.js";
 
 let root: string;
-let base: SetupContextBase;
+let base: SetupContextBase & ScriptStorageContext;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "script-runtime-"));
@@ -38,6 +40,7 @@ beforeEach(() => {
     currentWorktree: root,
     mainWorktree: root,
     isMainWorktree: true,
+    runtimeDir: join(root, ".local-wt"),
   };
 });
 
@@ -74,6 +77,26 @@ describe("script ABI and executor", () => {
     ];
     for (const [phase, expected] of phases) {
       const context = scriptContext(base, phase, fields);
+      expect(context.runtimeDir).toBe(join(root, ".local-wt"));
+      expect(context).not.toHaveProperty("configurationDir");
+      expect(context).not.toHaveProperty("companionDir");
+      const configured = scriptContext(
+        {
+          ...base,
+          configurationDir: join(root, "config"),
+          companionDir: join(root, "missing-companion"),
+        },
+        phase,
+        fields,
+      );
+      expect(
+        interpolate(
+          "${{ configurationDir }}|${{ companionDir }}|${{ runtimeDir }}",
+          configured,
+          "paths",
+        ),
+      ).toBe(`${root}/config|${root}/missing-companion|${root}/.local-wt`);
+      expect(existsSync(join(root, "missing-companion"))).toBe(false);
       expect(
         Object.keys(context)
           .filter((key) => Object.hasOwn(fields, key))
@@ -85,6 +108,7 @@ describe("script ABI and executor", () => {
     mkdirSync(join(root, "package"));
     vi.stubEnv("ALIGNFIRST_FORCE", "stale");
     vi.stubEnv("ALIGNFIRST_CONTEXT", "stale");
+    vi.stubEnv("ALIGNFIRST_WORKSPACE_CONTEXT", "also stale");
     vi.stubEnv("ALIGNFIRST_VERBOSE", "stale");
     const ctx = scriptContext(base, "start", {
       ports: JSON.parse('{"__proto__":8200,"fo-api":8201}'),
@@ -114,9 +138,11 @@ describe("script ABI and executor", () => {
     expect(Reflect.get(output.env, "__proto__")).toBe("literal env key");
     expect(output.env.ALIGNFIRST_NAME).toBe(base.name);
     expect(output.env.ALIGNFIRST_IS_MAIN_WORKTREE).toBe("true");
-    expect(JSON.parse(output.env.ALIGNFIRST_CONTEXT)).toEqual(ctx);
+    expect(JSON.parse(output.env.ALIGNFIRST_WORKSPACE_CONTEXT)).toEqual(ctx);
+    expect(output.env.ALIGNFIRST_CONTEXT).toBeUndefined();
     expect(Object.getOwnPropertyDescriptor(ctx.ports, "__proto__")?.value).toBe(8200);
     expect(process.env.ALIGNFIRST_CONTEXT).toBe("stale");
+    expect(process.env.ALIGNFIRST_WORKSPACE_CONTEXT).toBe("also stale");
     expect(existsSync(join(root, "package/injected"))).toBe(false);
   });
 
@@ -138,6 +164,10 @@ describe("script ABI and executor", () => {
       { run: ["touch", "${{ ports.web }}"] },
       { run: ["touch", "${{ constructor }}"] },
       { run: ["touch", "${{ branch.name }}"] },
+      { run: ["touch", "${{ configurationDir }}"] },
+      { run: ["touch", "${{ companionDir }}"] },
+      { run: ["touch"], env: { ALIGNFIRST_CONTEXT: "legacy" } },
+      { run: ["touch"], env: { ALIGNFIRST_WORKSPACE_CONTEXT: "current" } },
       { run: ["touch"], env: { ALIGNFIRST_NAME: "override" } },
       { run: ["touch"], env: { "bad-name": "value" } },
       { run: ["touch"], env: { VALUE: "\0" } },
@@ -219,6 +249,181 @@ setInterval(() => {}, 1000);
 });
 
 describe("manifest adapters", () => {
+  it("supplies selected storage paths through every adapter phase without provisioning them", async () => {
+    const companionDir = join(root, "uncreated-companion");
+    const configurationDir = join(root, "configuration");
+    const storage = resolveWorkspaceStorage(
+      { in: "companion", mainWorktree: root, companionDir },
+      root,
+    );
+    const command: Command = {
+      run: [
+        process.execPath,
+        "-e",
+        [
+          "const fs=require('fs');const text=process.env.ALIGNFIRST_WORKSPACE_CONTEXT;",
+          "const ctx=JSON.parse(text);fs.appendFileSync('contexts.jsonl',text+'\\n');",
+          "process.stdout.write(ctx.phase==='runFilesInputs'?JSON.stringify({context:text}):text);",
+        ].join(""),
+      ],
+    };
+    const file = (path: string) => ({
+      path,
+      source: { kind: "content" as const, content: { command } },
+      patch: { command },
+    });
+    const { workspace, devServer: dev } = adaptWorkspaceManifest(
+      {
+        workspace: {
+          preSetup: [{ name: "pre", ...command }],
+          finalize: [{ name: "finalize", ...command }],
+          purge: [{ name: "purge", ...command }],
+          summary: { command },
+          gitignoredFiles: [file("workspace.out")],
+        },
+        devServer: {
+          setup: [{ name: "setup", ...command }],
+          runFiles: [file("run.out")],
+          runFilesInputs: { command },
+          summary: { command },
+          servers: [{ kind: "command", name: "service", start: command, stop: command }],
+        },
+      },
+      {
+        mainWorktree: root,
+        recipe: { kind: "defaults" },
+        companionDir,
+        configurationDir,
+        storage,
+        output: { text: () => {}, diagnostic: () => {}, write: () => {}, isTTY: false },
+      },
+    );
+    if (!dev) throw new Error("Missing dev adapter");
+    const setup = { ...base, force: false, verbose: false, log: () => {}, ports: {} };
+    await workspace.preSetup?.(setup);
+    await workspace.finalizeWorkspace?.({ ...setup, branch: "main", progress: () => {} });
+    await workspace.purgeInfrastructure?.({
+      name: base.name,
+      worktree: root,
+      mainWorktree: root,
+      recipe: { kind: "defaults" },
+      verbose: false,
+    });
+    await workspace.formatSummary({ ...base, branch: "main", status: "ready" });
+    await dev.setup?.(setup);
+    const log = { tee: () => {}, verbose: () => {} };
+    await seedFiles({ entries: workspace.gitignoredFiles, ctx: setup, existing: "patch", log });
+    await seedFiles({ entries: dev.runFiles ?? [], ctx: setup, existing: "patch", log });
+    await dev.runFilesInputs?.(setup);
+    const server = dev.servers[0];
+    if (server?.kind !== "callback") throw new Error("Missing command adapter");
+    const serverContext = { name: base.name, cwd: root, ports: {} };
+    await server.start(serverContext);
+    await server.stop(serverContext);
+    await dev.formatSummary?.({
+      workspace: { name: base.name, worktree: root },
+      ports: {},
+      servers: [],
+    });
+    const contexts: {
+      phase: string;
+      runtimeDir: string;
+      configurationDir: string;
+      companionDir: string;
+    }[] = readFileSync(join(root, "contexts.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect([...new Set(contexts.map((ctx) => ctx.phase))].sort()).toEqual(
+      [
+        "preSetup",
+        "finalize",
+        "purge",
+        "devSetup",
+        "workspaceFileContent",
+        "workspaceFilePatch",
+        "runFileContent",
+        "runFilePatch",
+        "runFilesInputs",
+        "start",
+        "stop",
+        "workspaceSummary",
+        "devSummary",
+      ].sort(),
+    );
+    for (const ctx of contexts)
+      expect(ctx).toMatchObject({ runtimeDir: storage.runtimeDir, configurationDir, companionDir });
+    expect(existsSync(companionDir)).toBe(false);
+    expect(existsSync(configurationDir)).toBe(false);
+  });
+
+  it("invokes a companion helper beside configuration while retaining target cwd", async () => {
+    const configurationDir = join(root, "companion");
+    mkdirSync(configurationDir);
+    writeFileSync(
+      join(configurationDir, "helper.cjs"),
+      "require('fs').writeFileSync('helper-context.json',process.env.ALIGNFIRST_WORKSPACE_CONTEXT)",
+    );
+    const adapters = adaptWorkspaceManifest(
+      {
+        workspace: {
+          preSetup: [
+            {
+              name: "helper",
+              run: [process.execPath, "${{ configurationDir }}/helper.cjs"],
+            },
+          ],
+        },
+      },
+      {
+        recipe: { kind: "defaults" },
+        mainWorktree: root,
+        configurationDir,
+        companionDir: configurationDir,
+      },
+    );
+    await adapters.workspace.preSetup?.({ ...base, force: false, verbose: false, log: () => {} });
+    expect(JSON.parse(readFileSync(join(root, "helper-context.json"), "utf8"))).toMatchObject({
+      currentWorktree: root,
+      configurationDir,
+      companionDir: configurationDir,
+      runtimeDir: join(root, ".local-wt"),
+    });
+    expect(existsSync(join(configurationDir, "helper-context.json"))).toBe(false);
+  });
+
+  it.each([
+    [{ preset: "node" }, "SyntaxError: broken", "SyntaxError"],
+    [{ log: "\\[ExceptionHandler\\]" }, "[ExceptionHandler] broken", "error.log"],
+    [{ log: "CUSTOM" }, "SyntaxError: broken", false],
+    [{ preset: "node", log: "CUSTOM" }, "SyntaxError: broken", "SyntaxError"],
+    [{ preset: "node", log: "CUSTOM" }, "CUSTOM", "error.log"],
+  ] satisfies [ServerError, string, string | false][])(
+    "wires startup error detection %#",
+    (error, log, marker) => {
+      const adapter = adaptWorkspaceManifest(
+        {
+          devServer: {
+            servers: [
+              {
+                kind: "spawn",
+                name: "app",
+                exec: { run: "true" },
+                ready: { log: "READY" },
+                error,
+              },
+            ],
+          },
+        },
+        { mainWorktree: root, recipe: { kind: "defaults" } },
+      );
+      const server = adapter.devServer?.servers[0];
+      if (server?.kind !== "spawn") throw new Error("Missing spawn adapter");
+      expect(server.detectError?.(log)).toBe(marker);
+      expect(server.detectError?.("ordinary output")).toBe(false);
+    },
+  );
+
   it("awaits transforms twice, preserves local edits and rejects canonical aliases across file lists", async () => {
     const manifest: WorkspaceManifest = {
       workspace: {
@@ -283,19 +488,31 @@ describe("manifest adapters", () => {
       {
         workspace: {
           finalize: [
-            { name: "install", run: "printf '%s' \"$ALIGNFIRST_CONTEXT\" > context.json" },
+            {
+              name: "install",
+              run: "printf '%s' \"$ALIGNFIRST_WORKSPACE_CONTEXT\" > context.json",
+            },
             { name: "build", run: "test -f context.json" },
           ],
           summary: { command: { run: "printf '%s:%s' \"$ALIGNFIRST_NAME\" pending" } },
           purge: [
             {
               name: "clean",
-              run: "pwd > purge-cwd; printf '%s' \"$ALIGNFIRST_CONTEXT\" > purge-context.json",
+              run: "pwd > purge-cwd; printf '%s' \"$ALIGNFIRST_WORKSPACE_CONTEXT\" > purge-context.json",
             },
           ],
         },
       },
-      { recipe: { kind: "defaults" }, mainWorktree: root },
+      {
+        recipe: { kind: "defaults" },
+        mainWorktree: root,
+        configurationDir: join(root, "configuration"),
+        companionDir: join(root, "missing-companion"),
+        storage: resolveWorkspaceStorage(
+          { in: "companion", mainWorktree: root, companionDir: join(root, "missing-companion") },
+          root,
+        ),
+      },
     );
     if (!adapters.workspace.finalizeWorkspace) throw new Error("Missing finalizer");
     await adapters.workspace.finalizeWorkspace({
@@ -326,6 +543,17 @@ describe("manifest adapters", () => {
     });
     const purge = JSON.parse(readFileSync(join(root, "purge-context.json"), "utf8"));
     expect(purge.currentWorktree).toBe(join(root, "missing"));
+    expect(purge.configurationDir).toBe(join(root, "configuration"));
+    expect(purge.companionDir).toBe(join(root, "missing-companion"));
+    const orphanStorage = resolveWorkspaceStorage(
+      { in: "companion", mainWorktree: root, companionDir: join(root, "missing-companion") },
+      join(root, "missing"),
+    );
+    expect(purge.runtimeDir).toBe(orphanStorage.runtimeDir);
+    expect(purge.runtimeDir).not.toBe(
+      JSON.parse(readFileSync(join(root, "context.json"), "utf8")).runtimeDir,
+    );
+    expect(existsSync(join(root, "missing-companion"))).toBe(false);
     expect(purge.branch).toBeUndefined();
     expect(purge.force).toBeUndefined();
     expect(readFileSync(join(root, "purge-cwd"), "utf8").trim()).toBe(root);
@@ -357,6 +585,28 @@ describe("manifest adapters", () => {
     const server = adapters.devServer?.servers[0];
     if (server?.kind !== "callback") throw new Error("Missing command adapter");
     await server.stop({ name: base.name, cwd: root, ports: {} });
+  });
+
+  it("resolves numeric bindings lazily from the supplied invocation environment", () => {
+    vi.stubEnv("DEV_LIMIT", "invalid-parent");
+    const manifest: WorkspaceManifest = {
+      devServer: {
+        servers: [],
+        maxConcurrentDevServers: { env: "DEV_LIMIT", default: 5 },
+      },
+    };
+    const adapter = (env?: NodeJS.ProcessEnv) =>
+      adaptWorkspaceManifest(manifest, {
+        mainWorktree: root,
+        recipe: { kind: "defaults" },
+        env,
+      }).devServer;
+    expect(adapter({})?.resolveStartSettings?.()).toEqual({ maxConcurrentDevServers: 5 });
+    expect(adapter({ DEV_LIMIT: "2" })?.resolveStartSettings?.()).toEqual({
+      maxConcurrentDevServers: 2,
+    });
+    const inherited = adapter();
+    expect(() => inherited?.resolveStartSettings?.()).toThrow("DEV_LIMIT");
   });
 
   it("selects defined invocation inputs and uses the parent environment only as a default", async () => {
@@ -423,7 +673,7 @@ describe("manifest adapters", () => {
               },
             },
           ],
-          summary: { command: { run: "printf '%s' \"$ALIGNFIRST_CONTEXT\"" } },
+          summary: { command: { run: "printf '%s' \"$ALIGNFIRST_WORKSPACE_CONTEXT\"" } },
         },
       },
       { recipe: { kind: "defaults" }, mainWorktree: root },
