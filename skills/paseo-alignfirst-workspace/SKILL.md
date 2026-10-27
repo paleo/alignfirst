@@ -1,10 +1,10 @@
 ---
 name: paseo-alignfirst-workspace
-description: Register an existing worktree or an AlignFirst workspace, as a Paseo workspace, and remove it. Use it when the user works with Paseo.
+description: Register or archive an AlignFirst workspace or an existing worktree as a Paseo workspace. Read it before creating or removing any workspace or worktree when the session runs inside Paseo.
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.3.0"
+  version: "0.3.1"
   repository: https://github.com/paleo/alignfirst
 ---
 
