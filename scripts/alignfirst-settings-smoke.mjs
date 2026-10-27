@@ -95,6 +95,8 @@ function checkUnknownSettings(f) {
   writeJson(f.config, config);
   writeJson(f.registry, {
     extra: secret,
+    "unknown\n\u001b\u202e\u2028": secret,
+    ["__proto__"]: { secret },
     root: secret,
     paths: { [secret]: { docs: true } },
     projects: {
@@ -125,6 +127,7 @@ function checkUnknownSettings(f) {
     assert.ok(result.stderr.includes(`setting ${field}.`), field);
   assert.match(result.stderr, /convert paths manually/);
   assert.match(result.stderr, /Use a symlink/);
+  assert.ok(result.stderr.includes("\\n\\u001b\\u202e\\u2028"));
   for (const control of ["\u001b", "\u202e", "\u2028"])
     assert.equal(result.stderr.includes(control), false);
   assert.equal(result.stderr.includes("~/project"), false);
