@@ -298,6 +298,7 @@ describe("manifest adapters", () => {
       },
       { mainWorktree: root },
     );
+    if (!adapters.workspace.finalizeWorkspace) throw new Error("Missing finalizer");
     await adapters.workspace.finalizeWorkspace({
       ...base,
       branch: "(detached)",
@@ -320,6 +321,7 @@ describe("manifest adapters", () => {
     await adapters.workspace.purgeInfrastructure?.({
       name: base.name,
       worktree: join(root, "missing"),
+      recipe: { kind: "defaults" },
       mainWorktree: root,
       verbose: true,
     });
@@ -348,6 +350,7 @@ describe("manifest adapters", () => {
       adapters.workspace.purgeInfrastructure?.({
         name: base.name,
         worktree: root,
+        recipe: { kind: "defaults" },
         mainWorktree: root,
         verbose: false,
       }),

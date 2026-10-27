@@ -24,7 +24,6 @@ import {
   readWorkspaces,
   runCli,
   runDev,
-  writeWorkspaces,
 } from "./fixture.js";
 
 const TEST_TIMEOUT_MS = 60_000;
@@ -234,7 +233,7 @@ describe("workspace teardown (e2e)", () => {
   );
 
   it.each(["ready", "finalizeFailure", "partial"])(
-    "purges %s setup with its recorded name and legacy data; a thrown purge retains registration",
+    "purges %s setup with its recorded name; a thrown purge retains registration",
     (state) => {
       const fx = fixture({ fallbackSeeding: true });
       const linked = addWorktree(fx, "managed/review", "review");
@@ -246,14 +245,11 @@ describe("workspace teardown (e2e)", () => {
             : undefined;
       expect(runCli(fx.repo, ["setup"], env, linked).status).toBe(state === "ready" ? 0 : 1);
       const target = requiredEntry(fx.repo, linked);
-      const registry = readWorkspaces(fx.repo);
-      registry.workspaces[target.name].purgeData = { legacy: state };
-      writeWorkspaces(fx.repo, registry);
       writeDevEntries(fx.repo, [devEntry("stale-dev-name", linked)]);
       const failed = runCli(fx.repo, ["teardown", linked], { E2E_PURGE_FAIL: "1" });
       expect(failed.status).not.toBe(0);
       expect(failed.stderr).toContain("e2e purge boom");
-      expect(requiredEntry(fx.repo, linked).entry.purgeData).toEqual({ legacy: state });
+      expect(requiredEntry(fx.repo, linked).name).toBe(target.name);
       expect(devEntries(fx.repo)).toEqual([]);
       expect(runCli(fx.repo, ["teardown", linked]).status).toBe(0);
       expect(entryAt(fx.repo, linked)).toBeUndefined();
@@ -262,7 +258,6 @@ describe("workspace teardown (e2e)", () => {
           name: target.name,
           worktree: linked,
           mainWorktree: fx.repo,
-          purgeData: { legacy: state },
           verbose: false,
         })),
       );

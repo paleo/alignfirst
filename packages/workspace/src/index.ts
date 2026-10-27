@@ -49,7 +49,57 @@ export type {
   SpawnCommand,
 } from "./server-descriptor.js";
 export { runWorkspace } from "./workspace.js";
-export { defaultWorktreeDirName } from "./worktree.js";
+export type { WorkspaceOutcome } from "./workspace.js";
+export { parseWorkspaceArgs, parseDevArgs, renderWorkspaceHelp, renderDevHelp } from "./cli.js";
+export type {
+  WorkspaceCommand,
+  WorkspaceSelector,
+  ParsedWorkspaceArgs,
+  DevCommand,
+} from "./cli.js";
+export { renderWorkspaceCommands, installedCliCommand, defaultCommands } from "./invocation.js";
+export type { InstalledCliInvocation, WorkspaceCommands } from "./invocation.js";
+export { consoleWorkspaceOutput } from "./operation.js";
+export type {
+  WorkspaceOperation,
+  WorkspaceOutput,
+  WorkspaceHost,
+  SharedDirectoryProtection,
+} from "./operation.js";
+export {
+  readWorkspaces,
+  updateWorkspaces,
+  registerWorkspace,
+  findWorkspaceByPath,
+  allocateWorkspaceName,
+  registryDirFor,
+  markWorkspaceReady,
+  markWorkspaceFailed,
+  workspaceRecipe,
+  assertWorkspaceRecipe,
+} from "./workspaces.js";
+export type {
+  WorkspacesRegistry,
+  WorkspaceEntry,
+  WorkspaceRecipe,
+  WorkspaceStatus,
+  RunFilesBasis,
+} from "./workspaces.js";
+export {
+  readDevServers,
+  findOwnEntry,
+  hasLiveSpawnPids,
+  liveDevServers,
+  liveWorktrees,
+  markDevServerCleanupPending,
+  completeDevServerCleanup,
+  assertNoPendingCleanup,
+  updateDevServers,
+  registerDevServer,
+  pruneAndPersist,
+} from "./dev-servers-registry.js";
+export type { DevServerEntry, DevServersData } from "./dev-servers-registry.js";
+export { defaultWorktreeDirName, detectWorktree } from "./worktree.js";
 export type { WorktreeDirNameFn } from "./worktree.js";
 export type {
   WorkspaceConfig,

@@ -15,6 +15,7 @@ import {
   registerWorkspace,
   registryDirFor,
   updateWorkspaces,
+  workspaceRecipe,
 } from "../src/workspaces.js";
 
 const fingerprintA = "sha256:559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd";
@@ -29,6 +30,13 @@ beforeEach(() => {
   mkdirSync(mainWorktree);
   input = {
     worktree: { currentWorktree: mainWorktree, mainWorktree, isMainWorktree: true },
+    recipe: { kind: "defaults" },
+    output: {
+      text: (message) => console.log(message),
+      diagnostic: (message) => console.warn(message),
+      write: () => {},
+      isTTY: false,
+    },
     registryDir: registryDirFor(".wt"),
     runtimeDir: ".wt",
     runFiles: [],
@@ -264,6 +272,21 @@ describe("computed run-file inputs", () => {
 });
 
 describe("registered main identity", () => {
+  it("records the selected recipe on automatic main creation and refuses a missing registered manifest", async () => {
+    const path = join(input.worktree.mainWorktree, "alignfirst-workspace.json");
+    writeFileSync(path, '{"schemaVersion":1}');
+    input.recipe = workspaceRecipe(input.worktree.mainWorktree);
+    await runDevSetup(input);
+    expect(currentEntry().recipe).toEqual({ kind: "manifest", file: "alignfirst-workspace.json" });
+    renameSync(path, `${path}c`);
+    input.recipe = workspaceRecipe(input.worktree.mainWorktree);
+    await runDevSetup(input);
+    rmSync(`${path}c`);
+    input.recipe = { kind: "defaults" };
+    await expect(runDevSetup(input)).rejects.toThrow("manifest recipe is missing");
+    expect(currentEntry().recipe.kind).toBe("manifest");
+  });
+
   it("shares allocation with registration and preserves a suffix, ports and setup state", async () => {
     input.ports = resolveDevPortsConfig({ first: 8200, last: 8299, declare: ["web"] });
     const { mainWorktree } = input.worktree;
@@ -272,6 +295,7 @@ describe("registered main identity", () => {
       mainWorktree,
       registryDir: input.registryDir,
       isMainWorktree: false,
+      recipe: { kind: "defaults" },
     });
     const provisioned: string[] = [];
     input.setup = (ctx) => {
@@ -299,6 +323,7 @@ describe("registered main identity", () => {
     const registered = await registerWorkspace({
       ...input.worktree,
       registryDir: input.registryDir,
+      recipe: { kind: "defaults" },
     });
     expect(registered).toEqual({ name: first.workspace.name, status: "pending" });
     expect(currentEntry().neverFinalized).toBeUndefined();

@@ -27,6 +27,7 @@ import type {
   SeededFile,
   SetupContextBase,
 } from "./file-entries.js";
+import type { WorkspaceOutput } from "./operation.js";
 import { patchEnvFile } from "./helpers.js";
 import {
   interpolate,
@@ -58,6 +59,8 @@ type ManifestWorkspaceHooks = Pick<
 export interface ManifestAdapterOptions {
   mainWorktree: string;
   signal?: AbortSignal;
+  env?: NodeJS.ProcessEnv;
+  output?: WorkspaceOutput;
 }
 
 /** Pure wiring: commands and context lookups stay lazy until their kernel phase. */
@@ -99,15 +102,18 @@ function adaptWorkspace(
               ctx.signal,
             );
           },
-    finalizeWorkspace: async (ctx) => {
-      await runSteps(
-        settings.finalize ?? [],
-        scriptContext(ctx, "finalize", ctx),
-        options,
-        ctx.signal,
-        ctx.progress,
-      );
-    },
+    finalizeWorkspace:
+      settings.finalize === undefined || settings.finalize.length === 0
+        ? undefined
+        : async (ctx) => {
+            await runSteps(
+              settings.finalize ?? [],
+              scriptContext(ctx, "finalize", ctx),
+              options,
+              ctx.signal,
+              ctx.progress,
+            );
+          },
     purgeInfrastructure:
       settings.purge === undefined ? undefined : (ctx) => purge(settings.purge ?? [], ctx, options),
     formatSummary: async (ctx) =>
@@ -256,6 +262,8 @@ function adaptServer(server: Server, options: ManifestAdapterOptions): ServerDes
         server.exec,
         serverScriptContext(ctx, "start", options),
         `servers.${server.name}.exec`,
+        undefined,
+        options.env,
       ),
     detectReady: (log) => ready.test(log),
     detectError: error === undefined ? undefined : (log) => (error.test(log) ? "error.log" : false),
@@ -423,11 +431,12 @@ async function commandOutput(
   stdout: "capture" | "stream" = "capture",
   executionBase?: string,
 ): Promise<string> {
-  return executeCommand(resolveCommand(command, ctx, field, executionBase), {
+  return executeCommand(resolveCommand(command, ctx, field, executionBase, options.env), {
     label: field,
     signal: invocationSignal(options.signal, signal),
     stdin,
     stdout,
+    output: options.output,
   });
 }
 

@@ -1,16 +1,85 @@
-import { createHash, randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
 
-import { wsCmd } from "./package-manager.js";
+import { loadWorkspaceManifest, resolveConfigFamily, WORKSPACE_CONFIG_FAMILY } from "./config.js";
+import { WorkspaceError } from "./errors.js";
+import { wsCmd } from "./invocation.js";
+import { readRegistry, writeRegistry } from "./registry-storage.js";
 import { withRegistryLock } from "./registry-lock.js";
-import { detectWorktree } from "./worktree.js";
 
 export const REGISTRY_SUBDIR = "workspace-registry";
 
 const WORKSPACES_FILENAME = "workspaces.json";
-/** The registry format with on-demand ports. A file without `version` was written by 0.36 or older. */
-const REGISTRY_VERSION = 2;
+const REGISTRY_VERSION = 3;
+const PORTS_SCHEMA = {
+  type: "object",
+  additionalProperties: { type: "integer", minimum: 1, maximum: 65535 },
+};
+const FAILURE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["at", "message"],
+  properties: { at: { type: "string", format: "date-time" }, message: { type: "string" } },
+};
+const REGISTRY_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["version", "workspaces"],
+  properties: {
+    version: { const: REGISTRY_VERSION },
+    workspaces: {
+      type: "object",
+      additionalProperties: {
+        type: "object",
+        additionalProperties: false,
+        required: ["worktree", "createdAt", "status", "recipe"],
+        properties: {
+          worktree: { type: "string", pattern: "^/" },
+          createdAt: { type: "string", format: "date-time" },
+          status: { enum: ["pending", "ready", "failed"] },
+          recipe: {
+            oneOf: [
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["kind"],
+                properties: { kind: { const: "defaults" } },
+              },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["kind", "file"],
+                properties: {
+                  kind: { const: "manifest" },
+                  file: { enum: ["alignfirst-workspace.json", "alignfirst-workspace.jsonc"] },
+                },
+              },
+            ],
+          },
+          failure: FAILURE_SCHEMA,
+          main: { type: "boolean" },
+          neverFinalized: { type: "boolean" },
+          ports: PORTS_SCHEMA,
+          devSetupAt: { type: "string", format: "date-time" },
+          devSetupFailure: FAILURE_SCHEMA,
+          runFilesWrittenWith: {
+            type: "object",
+            additionalProperties: false,
+            required: ["ports", "inputs"],
+            properties: {
+              ports: PORTS_SCHEMA,
+              inputs: {
+                type: "object",
+                additionalProperties: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
 
 /** One entry per normalized worktree path, keyed by its opaque registered workspace name. */
 export interface WorkspacesRegistry {
@@ -35,9 +104,12 @@ export interface WorkspaceEntry {
   devSetupAt?: string;
   /** The last `dev setup` failure. Cleared by a successful `dev setup`. */
   devSetupFailure?: { at: string; message: string };
-  /** Legacy: the blob an old `finalizeWorkspace` returned. Carried over; new code never sets it. */
-  purgeData?: unknown;
+  recipe: WorkspaceRecipe;
 }
+
+export type WorkspaceRecipe =
+  | { kind: "defaults" }
+  | { kind: "manifest"; file: "alignfirst-workspace.json" | "alignfirst-workspace.jsonc" };
 
 export type WorkspaceStatus = "pending" | "ready" | "failed";
 
@@ -49,14 +121,8 @@ export interface RunFilesBasis {
 
 /** The registry as `workspaces.json` holds it. */
 interface StoredRegistry {
-  /** Absent on a registry written by 0.36 or older. */
-  version?: number;
-  workspaces: Record<string, StoredWorkspaceEntry>;
-}
-
-interface StoredWorkspaceEntry extends WorkspaceEntry {
-  /** Legacy: the port block index of the old port scheme. Dropped at read time. */
-  portIndex?: number;
+  version: 3;
+  workspaces: Record<string, WorkspaceEntry>;
 }
 
 /** The workspace a command acts on, resolved from the cwd. */
@@ -76,13 +142,7 @@ export function workspacesFilePath(mainWorktree: string, registryDir: string): s
   return join(mainWorktree, registryDir, WORKSPACES_FILENAME);
 }
 
-/**
- * Reads the registry, repairing each `worktree` in memory into an absolute path: the main entry
- * points to the current main worktree, a relative path is resolved against the main worktree, and
- * missing linked paths remain orphans. The next locked update persists the repair.
- * A legacy `portIndex` is dropped: those workspaces get
- * new ports at their next `dev setup`.
- */
+/** Main relocation is in-memory until the next locked write; linked orphans retain identity. */
 export function readWorkspaces(mainWorktree: string, registryDir: string): WorkspacesRegistry {
   return loadWorkspaces(mainWorktree, registryDir).registry;
 }
@@ -94,57 +154,38 @@ interface LoadedRegistry {
 
 function loadWorkspaces(mainWorktree: string, registryDir: string): LoadedRegistry {
   const filePath = workspacesFilePath(mainWorktree, registryDir);
-  if (!existsSync(filePath)) return { registry: { workspaces: {} } };
-  const stored = JSON.parse(readFileSync(filePath, "utf-8")) as StoredRegistry;
-  const legacy = stored.version === undefined;
-  const workspaces: Record<string, WorkspaceEntry> = {};
+  const retired = join(mainWorktree, registryDir, "slots.json");
+  if (existsSync(retired))
+    throw new WorkspaceError(
+      `Unsupported retired registry ${retired}. Account for its services and resources before explicitly upgrading state.`,
+    );
+  const stored = readRegistry<StoredRegistry>(filePath, REGISTRY_SCHEMA, {
+    version: 3,
+    workspaces: {},
+  });
+  const workspaces: Record<string, WorkspaceEntry> = Object.create(null);
+  let mainCount = 0;
   for (const [name, entry] of Object.entries(stored.workspaces)) {
-    workspaces[name] = loadEntry(entry, mainWorktree, legacy);
+    if (entry.main === true) ++mainCount;
+    workspaces[name] = {
+      ...entry,
+      worktree: entry.main === true ? resolve(mainWorktree) : resolve(entry.worktree),
+    };
   }
-  dropDuplicateMainEntries(workspaces, mainWorktree);
+  if (
+    mainCount > 1 ||
+    new Set(Object.values(workspaces).map((entry) => entry.worktree)).size !==
+      Object.keys(workspaces).length
+  ) {
+    throw new WorkspaceError(
+      `Invalid registry ${filePath}: duplicate worktree identities. Repair explicitly before mutation.`,
+    );
+  }
   const main = Object.entries(workspaces).find(([, entry]) => entry.main === true);
   return {
     registry: { workspaces },
     originalMainPath: main === undefined ? undefined : stored.workspaces[main[0]].worktree,
   };
-}
-
-function loadEntry(
-  stored: StoredWorkspaceEntry,
-  mainWorktree: string,
-  legacy: boolean,
-): WorkspaceEntry {
-  const { portIndex, ...fields } = stored;
-  const entry: WorkspaceEntry = { ...fields, worktree: repairWorktree(stored, mainWorktree) };
-  // The old `finalizeWorkspace` of a ready legacy entry already provisioned its infrastructure.
-  if (legacy && entry.status === "ready") entry.devSetupAt ??= entry.createdAt;
-  return entry;
-}
-
-function repairWorktree(stored: StoredWorkspaceEntry, mainWorktree: string): string {
-  if (stored.main === true) return resolve(mainWorktree);
-  // Missing paths remain orphans: a same-named directory need not belong to this repository.
-  return resolve(mainWorktree, stored.worktree);
-}
-
-/**
- * An old bug left one main entry per name the main directory ever had. Keeps the entry keyed by the
- * current name when it exists, otherwise the newest.
- */
-function dropDuplicateMainEntries(
-  workspaces: Record<string, WorkspaceEntry>,
-  mainWorktree: string,
-): void {
-  const mains = Object.entries(workspaces).filter(([, entry]) => entry.main === true);
-  if (mains.length < 2) return;
-  const currentName = basename(mainWorktree);
-  const kept =
-    workspaces[currentName]?.main === true
-      ? currentName
-      : mains.reduce((a, b) => (a[1].createdAt >= b[1].createdAt ? a : b))[0];
-  for (const [name] of mains) {
-    if (name !== kept) delete workspaces[name];
-  }
 }
 
 /**
@@ -157,11 +198,8 @@ export function writeWorkspaces(
   registry: WorkspacesRegistry,
 ): void {
   const stored: StoredRegistry = { version: REGISTRY_VERSION, workspaces: registry.workspaces };
-  mkdirSync(join(mainWorktree, registryDir), { recursive: true });
-  const filePath = workspacesFilePath(mainWorktree, registryDir);
-  const tempPath = `${filePath}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
-  writeFileSync(tempPath, `${JSON.stringify(stored, undefined, 2)}\n`);
-  renameSync(tempPath, filePath);
+  loadWorkspaces(mainWorktree, registryDir);
+  writeRegistry(workspacesFilePath(mainWorktree, registryDir), stored, REGISTRY_SCHEMA);
 }
 
 /** Reads, mutates and writes the registry under the registry lock. */
@@ -179,11 +217,33 @@ export async function updateWorkspaces<T>(
   });
 }
 
+/** Resolves the logical family afresh, allowing extension changes but never missing manifests. */
+export function workspaceRecipe(worktree: string): WorkspaceRecipe {
+  const location = resolveConfigFamily(worktree, WORKSPACE_CONFIG_FAMILY);
+  if (!location.exists) return { kind: "defaults" };
+  loadWorkspaceManifest(worktree);
+  return {
+    kind: "manifest",
+    file: location.path.endsWith(".jsonc")
+      ? "alignfirst-workspace.jsonc"
+      : "alignfirst-workspace.json",
+  };
+}
+
+export function assertWorkspaceRecipe(worktree: string, recipe: WorkspaceRecipe): void {
+  if (recipe.kind !== "manifest") return;
+  if (workspaceRecipe(worktree).kind === "manifest") return;
+  throw new WorkspaceError(
+    `Registered manifest recipe is missing in ${worktree}. Restore alignfirst-workspace.json or .jsonc before preparation or cleanup.`,
+  );
+}
+
 export interface RegisterWorkspaceInput {
   currentWorktree: string;
   mainWorktree: string;
   registryDir: string;
   isMainWorktree: boolean;
+  recipe: WorkspaceRecipe;
   /** When `true`, an existing `ready` workspace is reset to `pending` so the re-finalize is observable. */
   force?: boolean;
 }
@@ -197,10 +257,12 @@ export async function registerWorkspace(
   input: RegisterWorkspaceInput,
 ): Promise<RegisteredWorkspace> {
   const worktree = resolve(input.currentWorktree);
+  assertWorkspaceRecipe(worktree, input.recipe);
   return updateWorkspaces(input.mainWorktree, input.registryDir, (registry) => {
     const found = findWorkspaceByPath(registry, worktree);
     const name = found?.name ?? allocateWorkspaceName(registry.workspaces, worktree);
     const existing = found?.entry;
+    if (existing) assertWorkspaceRecipe(worktree, existing.recipe);
 
     const entry: WorkspaceEntry = {
       worktree,
@@ -213,7 +275,7 @@ export async function registerWorkspace(
       runFilesWrittenWith: existing?.runFilesWrittenWith,
       devSetupAt: existing?.devSetupAt,
       // A `devSetupFailure` is dropped: `workspace wait` reports only this setup's dev failure.
-      purgeData: existing?.purgeData,
+      recipe: input.recipe,
     };
     if (input.isMainWorktree) entry.main = true;
     registry.workspaces[name] = entry;
@@ -234,7 +296,7 @@ function reconcileMainIdentity(
   const found = Object.entries(registry.workspaces).find(([, entry]) => entry.main === true);
   if (!found || originalMainPath === undefined) return;
   const [oldName, entry] = found;
-  const oldBasename = isAbsolute(originalMainPath) ? basename(originalMainPath) : oldName;
+  const oldBasename = basename(originalMainPath);
   if (oldBasename === basename(mainWorktree)) return;
   delete registry.workspaces[oldName];
   const newName = allocateWorkspaceName(registry.workspaces, mainWorktree);
@@ -337,7 +399,7 @@ export function storedPortsOf(
 export function resolveCurrentWorkspace(
   mainWorktree: string,
   registryDir: string,
-  currentWorktree: string = detectWorktree().currentWorktree,
+  currentWorktree: string,
 ): ResolvedWorkspace {
   const found = findWorkspaceByPath(readWorkspaces(mainWorktree, registryDir), currentWorktree);
   const workspace: ResolvedWorkspace | undefined = found
@@ -346,8 +408,7 @@ export function resolveCurrentWorkspace(
       ? { name: basename(mainWorktree), worktree: resolve(mainWorktree), main: true }
       : undefined;
   if (!workspace) {
-    console.error(`Error: No workspace here. Run \`${wsCmd("setup")}\` first.`);
-    process.exit(1);
+    throw new WorkspaceError(`No workspace here. Run \`${wsCmd("setup")}\` first.`);
   }
   return workspace;
 }

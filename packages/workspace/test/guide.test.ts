@@ -2,18 +2,14 @@ import { scriptCommand } from "@alignfirst/docmap/invocation";
 import { describe, expect, it } from "vitest";
 
 import { type GuideLayout, renderGuide } from "../src/guide.js";
-import type { PackageManagerCommands } from "../src/package-manager.js";
+import type { WorkspaceCommands } from "../src/invocation.js";
 
-const NPM: PackageManagerCommands = {
-  install: "npm install",
-  runtime: "node",
+const NPM: WorkspaceCommands = {
   workspace: { base: "npm run workspace", withArgs: "npm run workspace --" },
   dev: { base: "npm run dev", withArgs: "npm run dev --" },
 };
 
-const PNPM: PackageManagerCommands = {
-  install: "pnpm i",
-  runtime: "node",
+const PNPM: WorkspaceCommands = {
   workspace: { base: "pnpm workspace", withArgs: "pnpm workspace" },
   dev: { base: "pnpm dev", withArgs: "pnpm dev" },
 };
@@ -112,15 +108,18 @@ describe("renderGuide", () => {
   it.each([NPM, PNPM])("renders external hooks and teardown in both modes: %j", (pm) => {
     for (const layout of [LAYOUT, SETUP_ONLY]) {
       const guide = renderGuide(pm, layout);
-      expect(guide).toContain(`${pm.install} && ${pm.workspace.withArgs} setup`);
+      expect(guide).toContain(`${pm.workspace.withArgs} setup`);
       expect(guide).toContain(`${pm.workspace.withArgs} teardown <registered-name>`);
       expect(guide).toContain(`${pm.workspace.withArgs} teardown ../my-worktree`);
       expect(guide).toContain("Paths select exactly; there is no basename-search fallback");
       expect(guide).toContain("names, collision suffixes and ports are not reserved");
-      expect(guide).toContain('node "$main_worktree/<path-to>/workspace.mjs" setup');
+      expect(guide).toContain(
+        "Internal finalization and dev-setup children retain that CLI installation and runtime",
+      );
+      expect(guide).not.toContain("workspace.mjs");
       expect(guide).toContain("Main-worktree teardown preserves the shared registry");
       if (layout.hasDevServer) {
-        expect(guide).toContain(`${pm.install} && ${pm.workspace.withArgs} setup --full`);
+        expect(guide).toContain(`${pm.workspace.withArgs} setup --full`);
         expect(guide).toContain("stops dev processes and configured callbacks");
       } else {
         expect(guide).not.toContain("--full");

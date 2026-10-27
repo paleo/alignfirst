@@ -11,6 +11,7 @@ export const WORKSPACE_CONFIG_FAMILY = "alignfirst-workspace";
 const validators = new WeakMap<object, ValidateFunction>();
 const ajv = new Ajv({ allErrors: true, ownProperties: true });
 ajv.addFormat("uri", fullFormats.uri);
+ajv.addFormat("date-time", fullFormats["date-time"]);
 const manifestSchema: object = JSON.parse(
   readFileSync(new URL("../schemas/workspace-v1.schema.json", import.meta.url), "utf8"),
 );

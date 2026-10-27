@@ -10,11 +10,14 @@ import {
   seedFiles,
 } from "./file-entries.js";
 import { formatDuration, setupLogPath } from "./helpers.js";
-import { devCmd, type PackageManagerCommands, packageManagerCommands } from "./package-manager.js";
+import { defaultCommands, devCmd, type WorkspaceCommands } from "./invocation.js";
+import { consoleWorkspaceOutput, type WorkspaceOutput } from "./operation.js";
 import { formatPorts, isPortFree, type ResolvedDevPorts, reconcilePorts } from "./ports.js";
 import { isProcessAlive } from "./process-control.js";
 import {
   allocateWorkspaceName,
+  assertWorkspaceRecipe,
+  type WorkspaceRecipe,
   findWorkspaceByPath,
   readWorkspaces,
   resolveCurrentWorkspace,
@@ -37,6 +40,9 @@ export interface DevSetupContext extends SetupContextBase {
 
 export interface DevSetupInput {
   worktree: WorktreeContext;
+  recipe: WorkspaceRecipe;
+  output?: WorkspaceOutput;
+  commands?: WorkspaceCommands;
   registryDir: string;
   runtimeDir: string;
   /** Omit for a portless dev-server. */
@@ -78,12 +84,14 @@ export async function runDevSetup(input: DevSetupInput): Promise<DevSetupResult>
   input.signal?.throwIfAborted();
   const { worktree, registryDir, options } = input;
   const { mainWorktree } = worktree;
+  assertWorkspaceRecipe(worktree.currentWorktree, input.recipe);
   if (options.resetPorts) refuseWhileRunning(mainWorktree, registryDir, worktree.currentWorktree);
   const workspace = worktree.isMainWorktree
-    ? await ensureMainEntry(mainWorktree, registryDir)
+    ? await ensureMainEntry(mainWorktree, registryDir, input.recipe)
     : resolveCurrentWorkspace(mainWorktree, registryDir, worktree.currentWorktree);
   const entry = readWorkspaces(mainWorktree, registryDir).workspaces[workspace.name];
   if (!entry) throw new WorkspaceError(`No workspace "${workspace.name}" in the registry.`);
+  assertWorkspaceRecipe(workspace.worktree, entry.recipe);
   checkReady(input, workspace, entry);
 
   try {
@@ -98,7 +106,13 @@ export async function runDevSetup(input: DevSetupInput): Promise<DevSetupResult>
     await writeRunFiles(input, { ...base, ports }, entry.runFilesWrittenWith);
     await runSetupHook(
       input,
-      { ...base, ports, force: options.force, verbose: options.verbose ?? false, log: console.log },
+      {
+        ...base,
+        ports,
+        force: options.force,
+        verbose: options.verbose ?? false,
+        log: outputOf(input).text,
+      },
       entry,
     );
     return { workspace, ports };
@@ -121,10 +135,12 @@ function refuseWhileRunning(mainWorktree: string, registryDir: string, worktree:
 async function ensureMainEntry(
   mainWorktree: string,
   registryDir: string,
+  recipe: WorkspaceRecipe,
 ): Promise<ResolvedWorkspace> {
   return updateWorkspaces(mainWorktree, registryDir, (registry) => {
     const existing = findWorkspaceByPath(registry, mainWorktree);
     if (existing?.entry.main === true) {
+      assertWorkspaceRecipe(mainWorktree, existing.entry.recipe);
       return { name: existing.name, worktree: existing.entry.worktree, main: true };
     }
     const name = allocateWorkspaceName(registry.workspaces, mainWorktree);
@@ -134,6 +150,7 @@ async function ensureMainEntry(
       status: "ready",
       main: true,
       neverFinalized: true,
+      recipe,
     };
     return { name, worktree: mainWorktree, main: true };
   });
@@ -150,12 +167,11 @@ function checkReady(
     runtimeDir: input.runtimeDir,
     entry,
     now: Date.now(),
-    pm: packageManagerCommands(),
+    pm: input.commands ?? defaultCommands,
     acceptPending: input.options.fromFinalize,
   });
   if (result.ok) return;
-  console.error(result.message);
-  process.exit(1);
+  throw new WorkspaceError(result.message);
 }
 
 export type WorktreeReadyCheck = { ok: true } | { ok: false; message: string };
@@ -170,7 +186,7 @@ export function buildWorktreeReadyMessage(input: {
   runtimeDir: string;
   entry: WorkspaceEntry;
   now: number;
-  pm: PackageManagerCommands;
+  pm: WorkspaceCommands;
   acceptPending?: boolean;
 }): WorktreeReadyCheck {
   const { name, worktreePath, runtimeDir, entry, now, pm } = input;
@@ -232,7 +248,7 @@ async function reconcileWorkspacePorts(
       return { ports: next, changed: !sameValues(previous, next) };
     },
   );
-  if (changed) console.log(`Ports: ${formatPorts(ports)}`);
+  if (changed) outputOf(input).text(`Ports: ${formatPorts(ports)}`);
   return ports;
 }
 
@@ -273,8 +289,8 @@ async function writeRunFiles(
   const rewrite = !beforeStart || changed;
   const entries = rewrite ? regeneratedRunFiles(input.runFiles, ctx) : input.runFiles;
   const tee = beforeStart
-    ? (msg: string) => console.warn(rewriteWarning(written, basis, msg))
-    : console.log;
+    ? (msg: string) => outputOf(input).diagnostic(rewriteWarning(written, basis, msg))
+    : outputOf(input).text;
   await storeRunFilesBasis(input, ctx.currentWorktree, undefined);
   await seedFiles({
     entries,
@@ -360,6 +376,10 @@ async function storeRunFilesBasis(
 }
 
 function noop(): void {}
+
+function outputOf(input: DevSetupInput): WorkspaceOutput {
+  return input.output ?? consoleWorkspaceOutput();
+}
 
 /**
  * Runs the hook when the workspace was never set up, or with `--force`, then stores `devSetupAt`.

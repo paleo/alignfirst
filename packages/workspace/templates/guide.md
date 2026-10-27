@@ -40,7 +40,7 @@ Configure these generic hooks in the tool that creates and deletes your worktree
 {{COMMANDS:hooks}}
 ```
 
-Installation-first works when dependencies do not need seeded files. It uses the new branch's own wrapper. Blocking setup is the hook default; detached setup is an explicit alternative that must be joined with `wait` before cleanup.
+The installed CLI loads the target worktree's manifest. Blocking setup is the hook default; detached setup must be joined with `wait` before cleanup.
 
 ### Recovery from a failed setup
 
@@ -50,15 +50,7 @@ If setup fails (check the setup log), do **not** delete the worktree. From insid
 {{COMMANDS:recovery}}
 ```
 
-When seeding must precede installation, or local dependencies are missing after a failure, stay inside the target worktree and discover the main wrapper through Git:
-
-```sh
-common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
-main_worktree=$(dirname "$common_dir")
-{{RUNTIME}} "$main_worktree/<path-to>/workspace.mjs" setup
-```
-
-Replace `<path-to>` with this project's wrapper location and apply its runtime selection. The main wrapper needs usable installed dependencies/build output. This fallback runs the **main worktree's recipe** against the target, rather than the new branch's recipe.
+Run the installed CLI from the target worktree even when project dependencies are missing. Internal finalization and dev-setup children retain that CLI installation and runtime, and load the target's recipe.
 
 ## Inspecting workspaces
 
@@ -108,7 +100,7 @@ Removal refuses on uncommitted changes. Pass `--force` to discard them. When rem
 
 ### Healing orphaned workspaces
 
-A workspace is **orphaned** when its worktree dir was deleted out-of-band (manual `rm -rf`, bare `git worktree remove`). `list` auto-drops the safe ones (no live dev-server and no failed state). Explicit `prune` also recovers abandoned pending setup whose worktree is gone:
+A workspace is **orphaned** when its worktree dir was deleted out-of-band (manual `rm -rf`, bare `git worktree remove`). `list` retains its registered cleanup identity. Explicit `prune` also recovers abandoned pending setup whose worktree is gone:
 
 ```sh
 {{COMMANDS:prune}}

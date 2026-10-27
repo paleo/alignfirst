@@ -1,10 +1,19 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  assertNoPendingCleanup,
+  completeDevServerCleanup,
+  devServersFilePath,
+  findOwnEntry,
+  liveDevServers,
+  markDevServerCleanupPending,
+  pruneAndPersist,
+  registerDevServer,
+  stopAllRegistered,
   evictOldest,
   liveWorktrees,
   pruneDeadServers,
@@ -42,6 +51,15 @@ describe("pruneDeadServers", () => {
   it("keeps entries with any live PID", () => {
     const data = { servers: [entry("a", { main: 1, helper: 2 })] };
     expect(pruneDeadServers(data, isAlive).servers).toHaveLength(1);
+  });
+
+  it("retains dead cleanup targets without counting them as live", () => {
+    const dead = { ...entry("dead", { app: 1 }), cleanupPending: true } as const;
+    const live = { ...entry("live", { app: 2 }), cleanupPending: true } as const;
+    const data = { servers: [dead, live] };
+    expect(pruneDeadServers(data, isAlive).servers).toEqual([dead, live]);
+    expect(liveDevServers(data, isAlive)).toEqual([live]);
+    expect(liveWorktrees(data, isAlive)).toEqual(new Set([live.worktree]));
   });
 
   it("preserves order", () => {
@@ -87,6 +105,96 @@ describe("evictOldest", () => {
 
   afterEach(() => {
     rmSync(mainWorktree, { recursive: true, force: true });
+  });
+
+  it.each([undefined, 0, 2])(
+    "rejects unsupported dev version %s without overwriting bytes",
+    async (version) => {
+      mkdirSync(join(mainWorktree, registryDir), { recursive: true });
+      const path = devServersFilePath(mainWorktree, registryDir);
+      const before = JSON.stringify({ version, servers: [entry("old", { app: 1 })] });
+      writeFileSync(path, before);
+      expect(() => readDevServers(mainWorktree, registryDir)).toThrow("unsupported registry");
+      await expect(
+        registerDevServer(mainWorktree, registryDir, entry("new", { app: process.pid })),
+      ).rejects.toThrow();
+      expect(readFileSync(path, "utf8")).toBe(before);
+    },
+  );
+
+  it("marks fresh unpruned dead state and creates pre-registration rollback identities", async () => {
+    const old = entry("dead", { app: 99999999 });
+    writeDevServers(mainWorktree, registryDir, { servers: [old] });
+    await markDevServerCleanupPending(mainWorktree, registryDir, old.worktree);
+    const rollback = entry("rollback", {});
+    await markDevServerCleanupPending(mainWorktree, registryDir, rollback.worktree, rollback);
+    await pruneAndPersist(mainWorktree, registryDir, () => false);
+    expect(readDevServers(mainWorktree, registryDir).servers).toEqual([
+      { ...old, cleanupPending: true },
+      { ...rollback, cleanupPending: true },
+    ]);
+    expect(findOwnEntry(mainWorktree, registryDir, old.worktree)?.name).toBe(old.name);
+    expect(() => assertNoPendingCleanup(mainWorktree, registryDir, old.worktree)).toThrow(
+      "Cleanup is pending",
+    );
+    await expect(registerDevServer(mainWorktree, registryDir, old)).rejects.toThrow(
+      "Cleanup is pending",
+    );
+    await completeDevServerCleanup(mainWorktree, registryDir, old.worktree);
+    expect(findOwnEntry(mainWorktree, registryDir, rollback.worktree)?.cleanupPending).toBe(true);
+    expect(
+      JSON.parse(readFileSync(devServersFilePath(mainWorktree, registryDir), "utf8")).version,
+    ).toBe(1);
+    expect(readdirSync(join(mainWorktree, registryDir))).toEqual(["dev-servers.json"]);
+  });
+
+  it("preserves child/sibling mutations during cross-target eviction", async () => {
+    const victim = entry("victim", { app: 2 });
+    const sibling = entry("sibling", { app: process.pid });
+    writeDevServers(mainWorktree, registryDir, { servers: [victim] });
+    await evictOldest({
+      mainWorktree,
+      registryDir,
+      count: 1,
+      isAlive,
+      stop,
+      portsOf,
+      callbackServers: [
+        {
+          kind: "callback",
+          name: "child dispatch",
+          start: async () => {},
+          stop: async () => {
+            await completeDevServerCleanup(mainWorktree, registryDir, victim.worktree);
+            await registerDevServer(mainWorktree, registryDir, sibling);
+          },
+        },
+      ],
+    });
+    expect(readDevServers(mainWorktree, registryDir).servers).toEqual([sibling]);
+  });
+
+  it("down-all removes only captured paths and retains a child-created sibling", async () => {
+    const victim = entry("victim", {});
+    victim.cleanupPending = true;
+    writeDevServers(mainWorktree, registryDir, { servers: [victim] });
+    const sibling = entry("sibling", { app: process.pid });
+    await stopAllRegistered({
+      mainWorktree,
+      registryDir,
+      portsOf,
+      callbackServers: [
+        {
+          kind: "callback",
+          name: "child",
+          start: async () => {},
+          stop: async () => {
+            await registerDevServer(mainWorktree, registryDir, sibling);
+          },
+        },
+      ],
+    });
+    expect(readDevServers(mainWorktree, registryDir).servers).toEqual([sibling]);
   });
 
   it("selects the entry with the smallest startedAt", async () => {

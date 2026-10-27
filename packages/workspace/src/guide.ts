@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { type PackageManagerCommands, packageManagerCommands } from "./package-manager.js";
+import type { WorkspaceCommands } from "./invocation.js";
 import { REGISTRY_SUBDIR } from "./workspaces.js";
 
 // One combined operating guide for the `workspace` and `dev` scripts, printed by `workspace
@@ -19,7 +19,7 @@ export interface GuideLayout {
   runtimeDir: string;
   /** The shared (symlinked-from-main) dir names (config `sharedDirs`). */
   sharedDirs: string[];
-  /** `true` when the config declares `devServerScript`. */
+  /** Whether the manifest declares managed dev services. */
   hasDevServer: boolean;
 }
 
@@ -47,10 +47,7 @@ function renderSnippet(lines: (CommandRow | string)[]): string {
     .join("\n");
 }
 
-function commandBlocks(
-  pm: PackageManagerCommands,
-  layout: GuideLayout,
-): Record<string, CommandRow[]> {
+function commandBlocks(pm: WorkspaceCommands, layout: GuideLayout): Record<string, CommandRow[]> {
   const ws = pm.workspace.withArgs;
   const dev = pm.dev.withArgs;
   return {
@@ -105,13 +102,13 @@ function commandBlocks(
     ],
     hooks: [
       {
-        command: `${pm.install} && ${ws} setup`,
-        comment: "post-creation: install, then adopt the current worktree",
+        command: `${ws} setup`,
+        comment: "post-creation: adopt and prepare the current worktree",
       },
       ...(layout.hasDevServer
         ? [
             {
-              command: `${pm.install} && ${ws} setup --full`,
+              command: `${ws} setup --full`,
               comment: "also provision dev infrastructure",
             },
           ]
@@ -179,7 +176,7 @@ function commandBlocks(
   };
 }
 
-function driveDevSnippet(pm: PackageManagerCommands): string {
+function driveDevSnippet(pm: WorkspaceCommands): string {
   const dev = pm.dev.withArgs;
   return renderSnippet([
     { command: "git worktree list", comment: "1. find the worktree directory" },
@@ -197,7 +194,7 @@ function renderSharedLayout(sharedDirs: string[]): string {
   return `- Shared across worktrees, symlinked from the main worktree: ${names}.`;
 }
 
-export function renderGuide(pm: PackageManagerCommands, layout: GuideLayout): string {
+export function renderGuide(pm: WorkspaceCommands, layout: GuideLayout): string {
   const template = readFileSync(new URL("../templates/guide.md", import.meta.url), "utf-8");
   let out = applySection(template, "DEV", layout.hasDevServer);
   for (const [name, rows] of Object.entries(commandBlocks(pm, layout))) {
@@ -208,7 +205,6 @@ export function renderGuide(pm: PackageManagerCommands, layout: GuideLayout): st
     .replaceAll("{{DEV_BASE}}", () => pm.dev.base)
     .replaceAll("{{WS}}", () => pm.workspace.withArgs)
     .replaceAll("{{DEV}}", () => pm.dev.withArgs)
-    .replaceAll("{{RUNTIME}}", () => pm.runtime)
     .replaceAll("{{RUNTIME_DIR}}", () => layout.runtimeDir)
     .replaceAll("{{REGISTRY_SUBDIR}}", () => REGISTRY_SUBDIR)
     .replaceAll("{{LAYOUT:shared}}", () => renderSharedLayout(layout.sharedDirs))
@@ -224,11 +220,4 @@ function applySection(text: string, name: string, present: boolean): string {
   return text.replace(block, (_, sigil: string, body: string) =>
     (sigil === "#") === present ? body : "",
   );
-}
-
-export function printGuide(
-  layout: GuideLayout,
-  commands: PackageManagerCommands = packageManagerCommands(),
-): void {
-  console.log(renderGuide(commands, layout));
 }

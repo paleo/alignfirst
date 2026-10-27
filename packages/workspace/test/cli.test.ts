@@ -225,8 +225,8 @@ describe("parseWorkspaceArgs", () => {
     expect(() => parseWorkspaceArgs(["__finalize", "8110"])).toThrow(ConfigError);
   });
 
-  it("parses `migrate-registry-0.30`", () => {
-    expect(parseWorkspaceArgs(["migrate-registry-0.30"]).command).toEqual({ kind: "migrate" });
+  it("rejects the retired migration command", () => {
+    expect(() => parseWorkspaceArgs(["migrate-registry-0.30"])).toThrow(ConfigError);
   });
 
   it("rejects a positional on `migrate-registry-0.30`", () => {
@@ -268,7 +268,7 @@ describe("renderWorkspaceHelp", () => {
 describe("renderDevHelp", () => {
   it("documents `dev setup` and its public options, not the internal one", () => {
     const help = renderDevHelp();
-    expect(help).toContain("npm run dev -- setup [--force] [--reset-ports]");
+    expect(help).toContain("alignfirst dev setup [--force] [--reset-ports]");
     expect(help).toContain("--reset-ports");
     expect(help).not.toContain("--from-finalize");
   });

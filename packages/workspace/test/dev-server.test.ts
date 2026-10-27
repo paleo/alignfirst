@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runDevServer, toCallbackStartupError, watchForExternalStop } from "../src/dev-server.js";
 import { StartupError } from "../src/errors.js";
 import { handleStartupFailure } from "../src/log-polling.js";
+import { consoleWorkspaceOutput } from "../src/operation.js";
 import { adaptWorkspaceManifest } from "../src/manifest-adapter.js";
 
 describe("watchForExternalStop", () => {
@@ -71,7 +72,6 @@ describe("resolved application launch", () => {
   it("spawns the late-bound command in package cwd with ABI env, while logs stay under the root", async () => {
     const root = mkdtempSync(join(tmpdir(), "resolved-launch-"));
     execFileSync("git", ["init", "-q", root]);
-    const argv = process.argv;
     const cwd = vi.spyOn(process, "cwd").mockReturnValue(root);
     const output = vi.spyOn(console, "log").mockImplementation(() => {});
     const { devServer } = adaptWorkspaceManifest(
@@ -119,8 +119,13 @@ describe("resolved application launch", () => {
     );
     if (!devServer) throw new Error("Missing dev adapter");
     try {
-      process.argv = [process.execPath, join(root, "dev.mjs"), "up"];
-      await runDevServer(devServer);
+      await runDevServer(devServer, {
+        cwd: root,
+        env: process.env,
+        output: consoleWorkspaceOutput(),
+        invocation: { executable: process.execPath, entryPoint: join(root, "alignfirst.mjs") },
+        command: { kind: "up", evict: false, restart: false },
+      });
       const logFile = join(root, ".local-wt/logs/api%2Fname.log");
       expect(readFileSync(logFile, "utf8")).toContain(
         JSON.stringify({ cwd: join(root, "packages/api"), value: root.split("/").at(-1) }),
@@ -140,8 +145,19 @@ describe("resolved application launch", () => {
           logFile: join(root, ".local-wt/logs/__proto__.log"),
         },
       ]);
-      process.argv = [process.execPath, join(root, "dev.mjs"), "setup", "--force", "--verbose"];
-      await runDevServer(devServer);
+      await runDevServer(devServer, {
+        cwd: root,
+        env: process.env,
+        output: consoleWorkspaceOutput(),
+        invocation: { executable: process.execPath, entryPoint: join(root, "alignfirst.mjs") },
+        command: {
+          kind: "setup",
+          force: true,
+          resetPorts: false,
+          fromFinalize: false,
+          verbose: true,
+        },
+      });
       expect(JSON.parse(readFileSync(join(root, "setup-context.json"), "utf8"))).toMatchObject({
         phase: "devSetup",
         force: true,
@@ -149,9 +165,13 @@ describe("resolved application launch", () => {
         ports: {},
       });
     } finally {
-      process.argv = [process.execPath, join(root, "dev.mjs"), "down"];
-      await runDevServer(devServer);
-      process.argv = argv;
+      await runDevServer(devServer, {
+        cwd: root,
+        env: process.env,
+        output: consoleWorkspaceOutput(),
+        invocation: { executable: process.execPath, entryPoint: join(root, "alignfirst.mjs") },
+        command: { kind: "down", all: false },
+      });
       cwd.mockRestore();
       output.mockRestore();
       rmSync(root, { recursive: true, force: true });

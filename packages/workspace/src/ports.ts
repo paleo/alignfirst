@@ -1,7 +1,7 @@
 import { createServer } from "node:net";
 
 import { ConfigError, WorkspaceError } from "./errors.js";
-import { devCmd, wsCmd } from "./package-manager.js";
+import { devCmd, wsCmd } from "./invocation.js";
 
 /** The Fetch Standard's bad ports: browsers refuse to load them. Never allocated. */
 export const BAD_PORTS: ReadonlySet<number> = new Set([

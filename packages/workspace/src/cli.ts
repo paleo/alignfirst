@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { ConfigError } from "./errors.js";
-import { devCmd, packageManagerCommands, wsCmd } from "./package-manager.js";
+import { defaultCommands, devCmd, type WorkspaceCommands, wsCmd } from "./invocation.js";
 
 export type WorkspaceCommand =
   | {
@@ -22,7 +22,6 @@ export type WorkspaceCommand =
   | { kind: "prune" }
   | { kind: "status"; selector: WorkspaceSelector }
   | { kind: "wait"; selector: WorkspaceSelector }
-  | { kind: "migrate" }
   | { kind: "finalize"; force: boolean; full: boolean }
   | { kind: "guide" }
   | { kind: "help" }
@@ -39,7 +38,7 @@ export interface ParsedWorkspaceArgs {
   verbose: boolean;
 }
 
-export function parseWorkspaceArgs(argv: string[] = process.argv.slice(2)): ParsedWorkspaceArgs {
+export function parseWorkspaceArgs(argv: string[]): ParsedWorkspaceArgs {
   const [subcommand, ...tokens] = argv;
   if (subcommand === "--help" || subcommand === "-h") {
     return { command: { kind: "help" }, verbose: false };
@@ -75,8 +74,6 @@ function parseSubcommand(subcommand: string, tokens: string[]): ParsedWorkspaceA
       return parseStatus(tokens);
     case "wait":
       return parseWait(tokens);
-    case "migrate-registry-0.30":
-      return parseMigrate(tokens);
     case "__finalize":
       return parseFinalize(tokens);
     default:
@@ -217,17 +214,6 @@ function parseWait(tokens: string[]): ParsedWorkspaceArgs {
   };
 }
 
-function parseMigrate(tokens: string[]): ParsedWorkspaceArgs {
-  const { values, positionals } = parseArgs({
-    args: tokens,
-    options: { verbose: { type: "boolean" } },
-    allowPositionals: true,
-    strict: true,
-  });
-  rejectPositionals(positionals, "migrate-registry-0.30");
-  return { command: { kind: "migrate" }, verbose: values.verbose ?? false };
-}
-
 function parseFinalize(tokens: string[]): ParsedWorkspaceArgs {
   const { values, positionals } = parseArgs({
     args: tokens,
@@ -259,13 +245,9 @@ function rejectPositionals(positionals: string[], command: string): void {
   }
 }
 
-export function printWorkspaceHelp(): void {
-  console.log(renderWorkspaceHelp());
-}
-
-export function renderWorkspaceHelp(): string {
+export function renderWorkspaceHelp(commands: WorkspaceCommands = defaultCommands): string {
   return [
-    `Usage: ${packageManagerCommands().workspace.withArgs} <command> [options]`,
+    `Usage: ${commands.workspace.withArgs} <command> [options]`,
     "",
     "Manage workspaces: a git worktree plus its own dev setup (config files, and optionally",
     "ports, database, dev server).",
@@ -302,9 +284,6 @@ export function renderWorkspaceHelp(): string {
     "      Selected by path or registered name; the current worktree when omitted.",
     "  wait [<dir>]",
     "      Block until setup reaches READY (exit 0) or FAILED (exit 1).",
-    "  migrate-registry-0.30",
-    "      Convert an old registry (slots.json) to workspaces.json, in place.",
-    "      Run it once from the main worktree after upgrading the package.",
     "",
     "Global options:",
     "      --verbose       Show intermediate output.",
@@ -314,12 +293,12 @@ export function renderWorkspaceHelp(): string {
   ].join("\n");
 }
 
-export function printWorkspaceVersion(): void {
+export function workspaceVersion(): string {
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as {
     version?: string;
   };
   if (!pkg.version) throw new ConfigError("workspace: package.json is missing 'version'");
-  console.log(pkg.version);
+  return pkg.version;
 }
 
 export type DevCommand =
@@ -332,7 +311,7 @@ export type DevCommand =
   | { kind: "setup"; force: boolean; resetPorts: boolean; fromFinalize: boolean; verbose?: boolean }
   | { kind: "help" };
 
-export function parseDevArgs(argv: string[] = process.argv.slice(2)): DevCommand {
+export function parseDevArgs(argv: string[]): DevCommand {
   const [first] = argv;
   if (first === "--help" || first === "-h") return { kind: "help" };
   try {
@@ -460,18 +439,14 @@ function rejectDevPositionals(positionals: string[], command: string): void {
   }
 }
 
-export function printDevHelp(): void {
-  console.log(renderDevHelp());
-}
-
-export function renderDevHelp(): string {
+export function renderDevHelp(commands: WorkspaceCommands = defaultCommands): string {
   return [
-    `Usage: ${packageManagerCommands().dev.withArgs} [command] [options]`,
+    `Usage: ${commands.dev.withArgs} [command] [options]`,
     "",
     "Start, stop, or list dev-server processes for worktree-based environments.",
     "",
     "Commands:",
-    `  ${packageManagerCommands().dev.base}               Start in the foreground, streaming logs from startup; CTRL+C stops it.`,
+    `  ${commands.dev.base}               Start in the foreground, streaming logs from startup; CTRL+C stops it.`,
     "                    If one is already running here, attach to its logs instead.",
     "  dev up            Start in the background and return once ready.",
     "  dev restart       Stop this worktree's dev-server if running, then start in the background.",
@@ -492,6 +467,6 @@ export function renderDevHelp(): string {
     "  --reset-ports  Allocate this workspace's ports again. Refused while its dev-server runs.",
     "  --verbose      Enable verbose project setup output.",
   ]
-    .map((line) => line.replace(/^ {2}dev(?=\s)/, `  ${packageManagerCommands().dev.withArgs}`))
+    .map((line) => line.replace(/^ {2}dev(?=\s)/, `  ${commands.dev.withArgs}`))
     .join("\n");
 }

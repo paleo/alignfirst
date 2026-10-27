@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 
 import { WorkspaceError } from "./errors.js";
 import { stopProcessGroup } from "./process-control.js";
+import type { WorkspaceOutput } from "./operation.js";
 import type { ResolvedCommand } from "./script-context.js";
 
 export interface ExecuteCommandOptions {
@@ -9,6 +10,7 @@ export interface ExecuteCommandOptions {
   stdin?: string;
   stdout?: "capture" | "stream";
   label: string;
+  output?: WorkspaceOutput;
 }
 
 /** Resolves only after close (including output draining) and cancellation cleanup. */
@@ -21,7 +23,7 @@ export async function executeCommand(
     cwd: command.cwd,
     env: command.env,
     detached: true,
-    stdio: ["pipe", "pipe", "inherit"],
+    stdio: ["pipe", "pipe", "pipe"],
   });
   let output = "";
   let launchError: Error | undefined;
@@ -30,10 +32,17 @@ export async function executeCommand(
   const abort = (): void => {
     if (child.pid !== undefined) stopping ??= stopProcessGroup(child.pid, 1000);
   };
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk: string) => {
+    if (options.output) options.output.diagnostic(chunk.trimEnd());
+    else process.stderr.write(chunk);
+  });
   child.stdout.setEncoding("utf8");
   child.stdout.on("data", (chunk: string) => {
-    if (options.stdout === "stream") process.stdout.write(chunk);
-    else output += chunk;
+    if (options.stdout === "stream") {
+      if (options.output) options.output.write(chunk);
+      else process.stdout.write(chunk);
+    } else output += chunk;
   });
   child.on("error", (error) => {
     launchError = error;
