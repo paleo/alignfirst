@@ -46,7 +46,8 @@
     "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
-    "@alignfirst/docmap": "~0.12.0"
+    "@alignfirst/docmap": "~0.12.0",
+    "@alignfirst/workspace": "~0.41.0"
   },
   "devDependencies": {
     "@types/node": "~26.6.5",

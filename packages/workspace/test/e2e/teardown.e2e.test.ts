@@ -81,13 +81,14 @@ describe("workspace teardown (e2e)", () => {
       const original = entryAt(fx.repo, first);
       const target = requiredEntry(fx.repo, second);
       expect(target.name).toMatch(/^same-[a-f0-9]{8}$/);
-      writeFileSync(join(second, "scripts", "workspace.mjs"), "// dirty tracked file\n");
+      writeFileSync(join(second, "scripts", "ready-server.mjs"), "// dirty tracked file\n");
       writeFileSync(join(second, "untracked.txt"), "untracked content\n");
       mkdirSync(join(second, "node_modules", "fake"), { recursive: true });
       writeFileSync(join(second, "node_modules", "fake", "index.js"), "installed\n");
-      writeFileSync(join(second, ".wt", "logs", "app.log"), "runtime log\n");
+      writeFileSync(join(second, ".local-wt", "logs", "app.log"), "runtime log\n");
       writeFileSync(join(fx.repo, ".shared", "note"), "shared content\n");
       mkdirSync(join(second, "nested", "inside"), { recursive: true });
+      git(second, ["config", "extensions.worktreeConfig", "true"]);
       git(second, ["config", "--worktree", "fixture.local", "preserved"]);
       const before = preservationSnapshot(fx.repo, second);
       const cwd =
@@ -146,7 +147,7 @@ describe("workspace teardown (e2e)", () => {
       expect(entryAt(fx.repo, linked)).toEqual(original);
       expect(entryAt(fx.repo, fx.repo)).toBeUndefined();
       expect(realpathSync(join(linked, ".shared"))).toBe(join(fx.repo, ".shared"));
-      expect(realpathSync(join(linked, ".wt", "workspace-registry"))).toBe(
+      expect(realpathSync(join(linked, ".local-wt", "workspace-registry"))).toBe(
         dirname(registryFile(fx.repo, "workspaces.json")),
       );
       expect(readFileSync(join(linked, "ports.env"), "utf-8")).toContain("WEB_PORT=");
@@ -543,6 +544,9 @@ describe("workspace teardown (e2e)", () => {
       ).toBe(0);
       await waitForFile(`${barrier}.entered`);
       const finalizer = Number(readFileSync(`${barrier}.entered`, "utf-8"));
+      const owner = Number(readFileSync(`${barrier}.owner`, "utf8"));
+      process.kill(owner, "SIGKILL");
+      await waitForExit(owner);
       process.kill(finalizer, "SIGKILL");
       await waitForExit(finalizer);
       const before = requiredEntry(fx.repo, linked);
@@ -589,7 +593,7 @@ describe("workspace teardown (e2e)", () => {
   );
 
   it(
-    "list removes only safe orphan bookkeeping and never invokes purge or stops live PIDs",
+    "list retains every orphan without invoking purge or stopping live PIDs",
     () => {
       const fx = fixture();
       const safe = addWorktree(fx, "one/review", "one");
@@ -605,13 +609,15 @@ describe("workspace teardown (e2e)", () => {
       expect(result.status).toBe(0);
       expect(result.stdout).toContain(name);
       expect(result.stdout).toContain("prune");
-      expect(entryAt(fx.repo, safe)).toBeUndefined();
+      expect(entryAt(fx.repo, safe)).toBeDefined();
       expect(entryAt(fx.repo, live)).toBeDefined();
       expect(isAlive(pid)).toBe(true);
       expect(purges(fx.repo)).toEqual([]);
       expect(runCli(fx.repo, ["prune"]).status).toBe(0);
       expect(isAlive(pid)).toBe(false);
-      expect(purges(fx.repo)[0].name).toBe(name);
+      expect(purges(fx.repo).map((entry) => entry.name)).toEqual(
+        expect.arrayContaining(["review", name]),
+      );
     },
     TEST_TIMEOUT_MS,
   );
@@ -704,7 +710,7 @@ function entryAt(
 }
 
 function registryFile(repo: string, file: string): string {
-  return join(repo, ".wt", "workspace-registry", file);
+  return join(repo, ".local-wt", "workspace-registry", file);
 }
 
 function devEntry(name: string, worktree: string, pid?: number): DevServerEntry {
@@ -717,7 +723,7 @@ function devEntry(name: string, worktree: string, pid?: number): DevServerEntry 
 }
 
 function writeDevEntries(repo: string, servers: DevServerEntry[]): void {
-  writeFileSync(registryFile(repo, "dev-servers.json"), JSON.stringify({ servers }));
+  writeFileSync(registryFile(repo, "dev-servers.json"), JSON.stringify({ version: 1, servers }));
 }
 
 function devEntries(repo: string): DevServerEntry[] {
@@ -741,7 +747,7 @@ function readJsonLines<T>(file: string): T[] {
 
 function preservationSnapshot(repo: string, worktree: string): object {
   const files = [
-    "scripts/workspace.mjs",
+    "scripts/ready-server.mjs",
     "untracked.txt",
     "node_modules/fake/index.js",
     "workspace.local",
@@ -750,15 +756,15 @@ function preservationSnapshot(repo: string, worktree: string): object {
     "setup-runs.log",
     "finalized.txt",
     "finalize-context.json",
-    ".wt/logs/workspace-setup.log",
-    ".wt/logs/app.log",
+    ".local-wt/logs/workspace-setup.log",
+    ".local-wt/logs/app.log",
     ".git",
   ];
   return {
     files: Object.fromEntries(
       files.map((file) => [file, readFileSync(join(worktree, file), "utf-8")]),
     ),
-    links: [".shared", ".wt/workspace-registry"].map((link) => ({
+    links: [".shared", ".local-wt/workspace-registry"].map((link) => ({
       target: readlinkSync(join(worktree, link)),
       real: realpathSync(join(worktree, link)),
     })),

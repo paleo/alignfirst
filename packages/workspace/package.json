@@ -31,6 +31,10 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
+    "./git": {
+      "types": "./dist/git.d.ts",
+      "import": "./dist/git.js"
+    },
     "./config": {
       "types": "./dist/config.d.ts",
       "import": "./dist/config.js"

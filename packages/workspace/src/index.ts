@@ -42,12 +42,16 @@ export type {
   ScriptServerResult,
   ResolvedCommand,
 } from "./script-context.js";
+export { assertDistinctDestinations } from "./file-destinations.js";
+export { validateRuntimeStorage } from "./preparation.js";
 export { resolveServers } from "./server-descriptor.js";
 export type {
   ResolvedServerDescriptor,
   ResolvedSpawnServer,
   SpawnCommand,
 } from "./server-descriptor.js";
+export { readWorkspaceInventory, selectWorkspaceRecord } from "./inventory.js";
+export type { WorkspaceInventory, WorkspaceRecord } from "./inventory.js";
 export { runWorkspace } from "./workspace.js";
 export type { WorkspaceOutcome } from "./workspace.js";
 export { parseWorkspaceArgs, parseDevArgs, renderWorkspaceHelp, renderDevHelp } from "./cli.js";

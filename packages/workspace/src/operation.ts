@@ -1,4 +1,5 @@
 import type { InstalledCliInvocation, WorkspaceCommands } from "./invocation.js";
+import type { WorkspaceConfig } from "./workspace.js";
 
 export interface WorkspaceOperation {
   cwd: string;
@@ -19,6 +20,7 @@ export interface WorkspaceOutput {
 
 /** AlignFirst supplies these services; the kernel does not discover or spawn its host. */
 export interface WorkspaceHost {
+  loadWorkspace?: (worktree: string) => WorkspaceConfig;
   validateWorkFiles: (worktree: string) => void | Promise<void>;
   sharedDirectoryProtection: (
     worktree: string,

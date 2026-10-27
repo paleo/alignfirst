@@ -8,6 +8,7 @@ import type { DevServerEntry } from "../../src/dev-servers-registry.js";
 import type { ServerContext } from "../../src/server-descriptor.js";
 import {
   cliExecutable,
+  alignfirstBin,
   createFixtureRepo,
   type FixtureRepo,
   readWorkspaces,
@@ -128,17 +129,22 @@ describe("registered callback identity (e2e)", () => {
       const started = runDev(root, ["up"], ENV, nested);
       expect(started.status, started.stderr).toBe(0);
       expect(started.stdout).toContain(`Workspace: ${ctx.name}`);
-      const log = join(root, ".wt", "logs", "ready.log");
+      const log = join(root, ".local-wt", "logs", "ready.log");
       expect(started.stdout).toContain(`log: ${log}`);
       expect(readFileSync(log, "utf-8")).toContain("FIXTURE_READY");
-      expect(existsSync(join(nested, ".wt"))).toBe(false);
+      expect(existsSync(join(nested, ".local-wt"))).toBe(false);
       expect(spawns(fx).map((event) => event.cwd)).toEqual([root]);
       expect(devEntries(fx)[0]).toMatchObject({ name: ctx.name, worktree: root });
       expect(callbacks(fx).filter((event) => event.event === "start")).toEqual([
         { event: "start", ...ctx, label: "docker" },
         { event: "start", ...ctx, label: "cache" },
       ]);
-      expect(callbacks(fx)).toContainEqual({ event: "legacyStart", cwd: root, ports: ctx.ports });
+      expect(callbacks(fx)).toContainEqual({
+        event: "legacyStart",
+        name: ctx.name,
+        cwd: root,
+        ports: ctx.ports,
+      });
       const status = runDev(root, ["status"], ENV, nested);
       expect(status.status, status.stderr).toBe(0);
       expect(status.stdout).toContain("status: UP");
@@ -159,7 +165,12 @@ describe("registered callback identity (e2e)", () => {
       const stopped = runDev(root, ["down"], ENV, nested);
       expect(stopped.status, stopped.stderr).toBe(0);
       expect(stops(fx)).toEqual(expectedStops(ctx));
-      expect(callbacks(fx)).toContainEqual({ event: "legacyStop", cwd: root, ports: ctx.ports });
+      expect(callbacks(fx)).toContainEqual({
+        event: "legacyStop",
+        name: ctx.name,
+        cwd: root,
+        ports: ctx.ports,
+      });
       expect(devEntries(fx)).toEqual([]);
       await waitUntil(() => !isAlive(spawns(fx)[0].pid), "local down");
       expect(runDev(root, ["status"], ENV, nested).stdout).toContain("status: DOWN");
@@ -247,9 +258,11 @@ describe("registered callback identity (e2e)", () => {
       const barrier = newBarrier(target.fx, "setup.release");
       const running = foreground(target, { E2E_DEV_SETUP_BARRIER: barrier });
       await waitUntil(() => existsSync(`${barrier}.entered`), "unresolved setup");
-      expect(Number(readFileSync(`${barrier}.entered`, "utf-8"))).toBe(running.child.pid);
+      const setupPid = Number(readFileSync(`${barrier}.entered`, "utf-8"));
+      expect(setupPid).not.toBe(running.child.pid);
       running.child.kill("SIGINT");
       await exited(running, 130);
+      await waitUntil(() => !isAlive(setupPid), "cancelled setup command");
       writeFileSync(barrier, "release\n");
       expect(callbacks(target.fx)).toEqual([]);
       expect(spawns(target.fx)).toEqual([]);
@@ -310,7 +323,11 @@ describe("registered callback identity (e2e)", () => {
     () => {
       const { fx, root, ctx } = prepareTarget();
       expect(runDev(root, ["up"], ENV).status).toBe(0);
-      const result = runDev(fx.repo, ["up", "--evict"], { ...ENV, E2E_DEV_CAP: "1" });
+      const path = join(fx.repo, "alignfirst-workspace.json");
+      const manifest = JSON.parse(readFileSync(path, "utf8"));
+      manifest.devServer.maxConcurrentDevServers = 1;
+      writeFileSync(path, JSON.stringify(manifest));
+      const result = runDev(fx.repo, ["up", "--evict"], ENV);
       expect(result.status, result.stderr).toBe(0);
       expect(stops(fx)).toEqual(expectedStops(ctx));
       expect(devEntries(fx).map((entry) => entry.name)).toEqual(["fixrepo"]);
@@ -351,9 +368,9 @@ function addWorktree(fx: FixtureRepo, path: string, branch: string): string {
 }
 
 function foreground(target: Target, env: Record<string, string> = {}): RunningChild {
-  const child = spawn(cliExecutable, [join(target.root, "scripts", "dev-server.mjs")], {
+  const child = spawn(cliExecutable, [alignfirstBin, "dev"], {
     cwd: target.nested,
-    env: { ...process.env, ...ENV, ...env },
+    env: { ...process.env, HOME: join(target.fx.root, "home"), ...ENV, ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
   const running: RunningChild = { child, output: "", closed: false };
@@ -407,7 +424,7 @@ function jsonLines<T>(path: string): T[] {
 }
 
 function devEntries(fx: FixtureRepo): DevServerEntry[] {
-  const file = join(fx.repo, ".wt", "workspace-registry", "dev-servers.json");
+  const file = join(fx.repo, ".local-wt", "workspace-registry", "dev-servers.json");
   return existsSync(file) ? JSON.parse(readFileSync(file, "utf-8")).servers : [];
 }
 

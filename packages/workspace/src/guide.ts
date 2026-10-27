@@ -2,8 +2,7 @@ import { readFileSync } from "node:fs";
 import type { WorkspaceCommands } from "./invocation.js";
 import { REGISTRY_SUBDIR } from "./workspaces.js";
 
-// One combined operating guide for the `workspace` and `dev` scripts, printed by `workspace
-// --guide` (only the `workspace` script knows the full config — `sharedDirs` included). The prose
+// Combined guide for the manifest-backed workspace/dev commands. The prose
 // lives in `templates/guide.md` (easy to edit); the command tables stay here so we can align their
 // `#` comments vertically whatever the package-manager prefix length. Tags in the template:
 //   {{COMMANDS:<name>}} — an aligned command block (see commandBlocks)
@@ -67,7 +66,11 @@ function commandBlocks(pm: WorkspaceCommands, layout: GuideLayout): Record<strin
       { command: `${ws} setup my-branch`, comment: "new worktree on an existing branch" },
       {
         command: `${ws} setup`,
-        comment: "set up the current worktree (idempotent; bootstrap + retry path)",
+        comment: "adopt the current root, including from nested directories",
+      },
+      {
+        command: `${ws} setup --path ../external-worktree`,
+        comment: "adopt an exact externally created root (preserve branch and index)",
       },
       ...(layout.hasDevServer
         ? [
@@ -87,7 +90,7 @@ function commandBlocks(pm: WorkspaceCommands, layout: GuideLayout): Record<strin
     inspect: [
       {
         command: `${ws} list`,
-        comment: "all registered workspaces (name, status, branch, path, created)",
+        comment: "Git worktrees plus registrations, including unprepared trees and orphans",
       },
       {
         command: `${ws} status`,
@@ -188,10 +191,10 @@ function driveDevSnippet(pm: WorkspaceCommands): string {
 
 function renderSharedLayout(sharedDirs: string[]): string {
   if (sharedDirs.length === 0) {
-    return "- No dirs are shared across worktrees.";
+    return "- Effective plans are shared; usable untracked `.local/` is shared when present.";
   }
   const names = sharedDirs.map((dir) => `\`${dir}/\``).join(", ");
-  return `- Shared across worktrees, symlinked from the main worktree: ${names}.`;
+  return `- Effective plans and optional untracked \`.local/\` are shared. Additional shared directories: ${names}.`;
 }
 
 export function renderGuide(pm: WorkspaceCommands, layout: GuideLayout): string {

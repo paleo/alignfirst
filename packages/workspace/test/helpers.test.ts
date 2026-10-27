@@ -332,27 +332,38 @@ describe("copyAndPatchFile", () => {
     expect(readFileSync(target, "utf-8")).toBe("orig\n");
   });
 
-  it("rejects tracked paths with literal pathspecs, including a tracked parent link", async () => {
-    const cur = tmp();
-    execFileSync("git", ["init", "-q", cur]);
-    writeFileSync(join(cur, "[literal]"), "original");
-    mkdirSync(join(cur, "inside"));
-    symlinkSync("inside", join(cur, "link"));
-    execFileSync("git", ["add", "--", "[literal]", "link"], { cwd: cur });
-    for (const path of ["[literal]", "link/out.txt"]) {
-      await expect(
-        copyAndPatchFile({
-          currentWorktree: cur,
-          relPath: path,
-          resolveSource: source({ content: "overwrite" }),
-          existing: "reseed",
-          optional: false,
-        }),
-      ).rejects.toThrow(/tracked/);
-    }
-    expect(readFileSync(join(cur, "[literal]"), "utf8")).toBe("original");
-    expect(existsSync(join(cur, "inside/out.txt"))).toBe(false);
-  });
+  it.each(["index", "stagedDeletion"])(
+    "rejects paths tracked in %s with literal pathspecs, including a tracked parent link",
+    async (state) => {
+      const cur = tmp();
+      execFileSync("git", ["init", "-q", cur]);
+      writeFileSync(join(cur, "[literal]"), "original");
+      mkdirSync(join(cur, "inside"));
+      symlinkSync("inside", join(cur, "link"));
+      execFileSync("git", ["add", "--", "[literal]", "link"], { cwd: cur });
+      if (state === "stagedDeletion") {
+        execFileSync(
+          "git",
+          ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "fixture"],
+          { cwd: cur },
+        );
+        execFileSync("git", ["rm", "--cached", "--", "[literal]", "link"], { cwd: cur });
+      }
+      for (const path of ["[literal]", "link/out.txt"]) {
+        await expect(
+          copyAndPatchFile({
+            currentWorktree: cur,
+            relPath: path,
+            resolveSource: source({ content: "overwrite" }),
+            existing: "reseed",
+            optional: false,
+          }),
+        ).rejects.toThrow(/tracked/);
+      }
+      expect(readFileSync(join(cur, "[literal]"), "utf8")).toBe("original");
+      expect(existsSync(join(cur, "inside/out.txt"))).toBe(false);
+    },
+  );
 
   it("rejects logical and canonical escapes and rechecks links after awaited work", async () => {
     const cur = tmp();

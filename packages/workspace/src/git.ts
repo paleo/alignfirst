@@ -1,8 +1,8 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import { errorMessage, isNodeError } from "../errors.js";
+import { errorMessage } from "./errors.js";
 
 export interface GitContext {
   cwd: string;
@@ -49,7 +49,7 @@ export function isProjectTrackedDirectory(
   path: string,
   identity: string,
 ): boolean {
-  const root = realpathSync(git(ctx, "rev-parse", "--show-toplevel").trim());
+  const root = worktreeRoot(ctx);
   const logicalPath = join(realpathSync(dirname(path)), basename(path));
   if (
     isInside(root, logicalPath) &&
@@ -59,13 +59,33 @@ export function isProjectTrackedDirectory(
   const resolved = realpathSync(path);
   const source = { ...ctx, cwd: resolved };
   if (optionalRepositoryIdentity(source) !== identity) return false;
-  const sourceRoot = git(source, "rev-parse", "--show-toplevel").trim();
+  const sourceRoot = worktreeRoot(source);
   return hasTrackedFiles({ ...ctx, cwd: sourceRoot }, relative(sourceRoot, resolved));
 }
 
 function hasTrackedFiles(ctx: GitContext, path: string): boolean {
+  const candidate = path === "" ? "." : path;
+  if (git(ctx, "--literal-pathspecs", "ls-files", "-z", "--", candidate).length > 0) return true;
+  const head = spawnSync("git", ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"], {
+    cwd: ctx.cwd,
+    env: ctx.env,
+    encoding: "utf8",
+  });
+  if (head.status === 1) return false;
+  if (head.status !== 0)
+    throw head.error ?? new Error(`Cannot inspect tracked source: ${path}. ${head.stderr}`);
   return (
-    git(ctx, "--literal-pathspecs", "ls-files", "-z", "--", path === "" ? "." : path).length > 0
+    git(
+      ctx,
+      "--literal-pathspecs",
+      "ls-tree",
+      "-r",
+      "--name-only",
+      "-z",
+      head.stdout.trim(),
+      "--",
+      candidate,
+    ).length > 0
   );
 }
 
@@ -105,6 +125,10 @@ function parseWorktree(record: string, mainWorktree: string): Worktree {
   };
 }
 
+export function worktreeRoot(ctx: GitContext): string {
+  return canonicalPath(git(ctx, "rev-parse", "--show-toplevel").replace(/\n$/u, ""));
+}
+
 export function canonicalPath(path: string): string {
   try {
     return realpathSync(path);
@@ -128,6 +152,10 @@ export function pathExists(path: string): boolean {
 export function isInside(parent: string, path: string): boolean {
   const child = relative(parent, path);
   return child === "" || (!isAbsolute(child) && child !== ".." && !child.startsWith(`..${sep}`));
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
 }
 
 export function git(ctx: GitContext, ...args: string[]): string {

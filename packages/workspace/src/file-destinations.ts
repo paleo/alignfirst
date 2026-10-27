@@ -68,6 +68,12 @@ function assertUntracked(root: string, path: string): void {
     }
     return;
   }
+  const head = spawnSync("git", ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  if (head.error || head.signal !== null || (head.status !== 0 && head.status !== 1))
+    throw new ConfigError(`Cannot inspect tracked destination: ${path}.`);
   let candidate = path;
   while (candidate !== ".") {
     const tracked = spawnSync("git", ["--literal-pathspecs", "ls-files", "-z", "--", candidate], {
@@ -75,9 +81,29 @@ function assertUntracked(root: string, path: string): void {
       encoding: "utf8",
     });
     if (tracked.status !== 0) throw new ConfigError(`Cannot inspect tracked destination: ${path}.`);
-    if (tracked.stdout.length > 0) {
+    const committed =
+      head.status === 0
+        ? spawnSync(
+            "git",
+            [
+              "--literal-pathspecs",
+              "ls-tree",
+              "-r",
+              "--name-only",
+              "-z",
+              head.stdout.trim(),
+              "--",
+              candidate,
+            ],
+            { cwd: root, encoding: "utf8" },
+          )
+        : undefined;
+    if (committed && committed.status !== 0)
+      throw new ConfigError(`Cannot inspect tracked destination: ${path}.`);
+    const files = tracked.stdout + (committed?.stdout ?? "");
+    if (files.length > 0) {
       // Ancestors must reject tracked files/links, without rejecting unrelated tracked siblings.
-      const entries = tracked.stdout.split("\0");
+      const entries = files.split("\0");
       if (candidate === path || entries.includes(candidate)) {
         throw new ConfigError(`Refusing tracked file destination: ${path}.`);
       }

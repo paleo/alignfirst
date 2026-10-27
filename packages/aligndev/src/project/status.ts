@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { basename } from "node:path";
 
-import { readWorktrees } from "../worktree/git.js";
+import { readWorktrees } from "@alignfirst/workspace/git";
 import type { DiscoveredProject, ProjectInventory } from "./discovery.js";
 import { errorMessage, isNodeError } from "../errors.js";
 import type {

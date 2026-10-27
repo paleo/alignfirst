@@ -7,14 +7,17 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
-  readlinkSync,
+  realpathSync,
   rmSync,
   statSync,
   symlinkSync,
-  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import { canonicalPath, readRepository, worktreeRoot } from "./git.js";
+import { assertDeletionSafe } from "./deletion-safety.js";
+import { readWorkspaceInventory, selectWorkspaceRecord } from "./inventory.js";
+import { assertReservedCommit, planPreparation, validateMainBaseline } from "./preparation.js";
 
 import {
   renderWorkspaceHelp,
@@ -381,12 +384,46 @@ async function runSetup(
   run: RunCtx,
   kernel: Kernel,
 ): Promise<{ name: string; worktree: string; status: WorkspaceStatus }> {
-  const { config, registryDir } = kernel;
-  if (command.full && !config.hasDevServer) {
-    throw new WorkspaceError("`--full` requires declared dev services in the workspace manifest.");
+  const { registryDir } = kernel;
+  const protection =
+    kernel.host === undefined
+      ? undefined
+      : await validateMainBaseline(ctx, kernel.host, kernel.env);
+  const beforeCreate =
+    protection === undefined
+      ? undefined
+      : (commit: string): void => {
+          assertReservedCommit({ cwd: ctx.currentWorktree, env: kernel.env }, commit, protection);
+        };
+  const setupCtx = ensureWorktree(command, ctx, run, kernel.config.worktreeDirName, beforeCreate);
+  let config = kernel.config;
+  try {
+    config = kernel.host?.loadWorkspace?.(setupCtx.currentWorktree) ?? config;
+    kernel.config = config;
+    const existing = findWorkspaceByPath(
+      readWorkspaces(setupCtx.mainWorktree, registryDir),
+      setupCtx.currentWorktree,
+    );
+    if (existing) assertWorkspaceRecipe(setupCtx.currentWorktree, existing.entry.recipe);
+    refuseIfFinalizePending(setupCtx, registryDir, command.force);
+    if (command.full && !config.hasDevServer)
+      throw new WorkspaceError(
+        "`--full` requires declared dev services in the workspace manifest.",
+      );
+    if (kernel.host) {
+      const preparation = await planPreparation(
+        setupCtx,
+        kernel.host,
+        kernel.env,
+        config.sharedDirs,
+        config.gitignoredFiles.map(({ path }) => path),
+        kernel.output.diagnostic,
+      );
+      await preparation.apply();
+    }
+  } catch (error) {
+    throw setupRetry(error, setupCtx.currentWorktree);
   }
-  const setupCtx = ensureWorktree(command, ctx, run, config.worktreeDirName);
-  refuseIfFinalizePending(setupCtx, registryDir, command.force);
   const branch = getWorktreeBranch(setupCtx.currentWorktree) ?? "(detached)";
   const { name, status } = await registerWorkspace({
     currentWorktree: setupCtx.currentWorktree,
@@ -418,7 +455,7 @@ async function runSetup(
         message,
       );
     }
-    throw err;
+    throw setupRetry(err, setupCtx.currentWorktree);
   }
 
   log.tee(`WORKSPACE_CREATED path=${setupCtx.currentWorktree} branch=${branch}`);
@@ -463,6 +500,13 @@ async function runSetup(
     closeSync(log.fd);
   }
   return { name, worktree: setupCtx.currentWorktree, status };
+}
+
+function setupRetry(error: unknown, worktree: string): WorkspaceError {
+  return new WorkspaceError(
+    `${errorMessage(error)}\nRetained worktree ${worktree} and its Git state. Repair the reported problem, then retry with \`${wsCmd("setup")} --path '${worktree.replaceAll("'", "'\\''")}'\`. No rollback was attempted.`,
+    { cause: error },
+  );
 }
 
 interface SetupLog {
@@ -523,8 +567,10 @@ async function prepareWorktree(input: PrepareWorktreeInput): Promise<void> {
       log: log.tee,
     });
   }
-  linkSharedDirectories(setupCtx, config.sharedDirs, log.verbose);
-  linkWorkspaceRegistry(setupCtx, config.runtimeDir, log.verbose);
+  if (!kernel.host) {
+    linkSharedDirectories(setupCtx, config.sharedDirs, log.verbose);
+    linkWorkspaceRegistry(setupCtx, config.runtimeDir, log.verbose);
+  }
   const patchCtx: PatchContext = {
     name,
     mainWorktree: setupCtx.mainWorktree,
@@ -575,6 +621,10 @@ async function runFinalize(
   const { config, registryDir } = kernel;
   const logPath = setupLogPath(ctx.currentWorktree, config.runtimeDir);
   const progressPath = setupProgressPath(ctx.currentWorktree, config.runtimeDir);
+  if (kernel.host) {
+    await validateMainBaseline(ctx, kernel.host, kernel.env);
+    await kernel.host.validateWorkFiles(ctx.currentWorktree);
+  }
   mkdirSync(dirname(logPath), { recursive: true });
   const appendLog = (message: string): void => {
     appendFileSync(logPath, `${message}\n`);
@@ -783,46 +833,69 @@ type StatusCommand = Extract<WorkspaceCommand, { kind: "status" }>;
 
 async function runStatus(command: StatusCommand, kernel: Kernel): Promise<void> {
   const ctx = detectWorktree(kernel.cwd);
-  const target = resolveTarget(command.selector, ctx, kernel.registryDir, kernel.cwd);
-  await printWorktreeInfo(kernel, target, target.worktree);
+  const inventory = readWorkspaceInventory(
+    { cwd: kernel.cwd, env: kernel.env },
+    kernel.registryDir,
+  );
+  const record = selectWorkspaceRecord(
+    inventory,
+    ctx.currentWorktree,
+    command.selector.dir === undefined
+      ? undefined
+      : resolveSelector(command.selector.dir, kernel.cwd, inventory.workspaces),
+  );
+  if (record.preparation === "unprepared") {
+    kernel.output.text(`${record.path}: unprepared (${record.branch ?? "detached"})`);
+    return;
+  }
+  if (kernel.host?.loadWorkspace && record.exists)
+    kernel.config = kernel.host.loadWorkspace(record.path);
+  await printWorktreeInfo(
+    kernel,
+    { name: record.name ?? "", worktree: record.path, main: record.main },
+    record.path,
+  );
 }
 
 async function runList(kernel: Kernel): Promise<void> {
   const { registryDir } = kernel;
   const ctx = detectWorktree(kernel.cwd);
   const retainedOrphans = findOrphanNames(readWorkspaces(ctx.mainWorktree, registryDir));
-  const entries = sortedEntries(readWorkspaces(ctx.mainWorktree, registryDir));
+  const inventory = readWorkspaceInventory({ cwd: kernel.cwd, env: kernel.env }, registryDir);
+  const entries = inventory.workspaces;
   if (entries.length === 0) {
-    kernel.output.text("No workspaces registered.");
+    kernel.output.text("No worktrees found.");
     hintRetainedOrphans(retainedOrphans, kernel.output);
     return;
   }
   const liveSet = liveWorktrees(readDevServers(ctx.mainWorktree, registryDir));
-  const showPorts = entries.some(([, entry]) => hasPorts(entry));
+  const showPorts = entries.some((entry) => Object.keys(entry.ports).length > 0);
   const headers = ["NAME", "TYPE", "STATUS", "DEV"];
   if (showPorts) headers.push("PORTS");
-  headers.push("BRANCH", "PATH", "CREATED");
-  const rows = entries.map(([name, entry]) => {
+  headers.push("BRANCH", "PATH");
+  const rows = entries.map((entry) => {
     const cells = [
-      name,
+      entry.name ?? "-",
       entry.main ? "main" : "linked",
-      entry.status,
-      liveSet.has(resolve(entry.worktree)) ? "up" : "-",
+      entry.preparation,
+      liveSet.has(resolve(entry.path)) ? "up" : "-",
     ];
-    if (showPorts) cells.push(hasPorts(entry) ? Object.values(entry.ports).join(",") : "-");
-    cells.push(getWorktreeBranch(entry.worktree) ?? "(detached)", entry.worktree, entry.createdAt);
+    if (showPorts) cells.push(Object.values(entry.ports).join(",") || "-");
+    cells.push(entry.branch ?? "(detached)", entry.path);
     return cells;
   });
   for (const line of renderTable(headers, rows)) kernel.output.text(line);
   hintRetainedOrphans(retainedOrphans, kernel.output);
 }
 
-/** Main worktree first, then by workspace name. */
-function sortedEntries(registry: WorkspacesRegistry): [string, WorkspaceEntry][] {
-  return Object.entries(registry.workspaces).sort(([nameA, a], [nameB, b]) => {
-    if (a.main !== b.main) return a.main ? -1 : 1;
-    return nameA.localeCompare(nameB);
-  });
+function resolveSelector(
+  selector: string,
+  cwd: string,
+  records: { name: string | null }[],
+): string {
+  return records.some((record) => record.name === selector)
+    ? selector
+    : canonicalPath(resolve(cwd, selector));
 }
 
 function renderTable(headers: string[], rows: string[][]): string[] {
@@ -1278,10 +1351,10 @@ async function handleRemove(
   kernel: Kernel,
 ): Promise<void> {
   const { registryDir } = kernel;
-  const registry = readWorkspaces(ctx.mainWorktree, registryDir);
-  const target = resolveTarget(command.selector, ctx, registryDir, kernel.cwd);
-  const name = target.name;
+  const target = resolveCleanupTarget(command.selector, ctx, registryDir, kernel.cwd);
+  const name = target.identity?.name ?? target.worktree;
   const worktree = target.worktree;
+  await assertDeletionSafe({ cwd: kernel.cwd, env: kernel.env }, worktree, kernel.host);
   if (resolve(worktree) === resolve(ctx.mainWorktree)) {
     throw new WorkspaceError("Cannot remove the main worktree.");
   }
@@ -1305,19 +1378,21 @@ async function handleRemove(
   const branch = getWorktreeBranch(worktree) ?? "(detached)";
 
   refusePendingCleanup(ctx, registryDir, worktree);
-  const cleanup: PurgeContext = {
-    worktree,
-    mainWorktree: ctx.mainWorktree,
-    name,
-    recipe: registry.workspaces[name].recipe,
-    verbose: run.verbose,
-  };
+  const cleanup: PurgeContext | undefined =
+    target.identity === undefined
+      ? undefined
+      : {
+          worktree,
+          mainWorktree: ctx.mainWorktree,
+          ...target.identity,
+          verbose: run.verbose,
+        };
 
   if (!existsSync(worktree)) {
     kernel.output.diagnostic(
       `Warning: Worktree directory ${worktree} not found. Cleaning up registry only.`,
     );
-    await cleanupTarget(kernel, ctx, cleanup);
+    if (cleanup) await cleanupTarget(kernel, ctx, cleanup);
     pruneGitWorktrees(ctx.mainWorktree);
     kernel.output.text(`Removed registry entry for workspace ${name} (branch "${branch}").`);
     return;
@@ -1329,7 +1404,7 @@ async function handleRemove(
     );
   }
 
-  await cleanupTarget(kernel, ctx, cleanup);
+  if (cleanup) await cleanupTarget(kernel, ctx, cleanup);
 
   removeWorktree(worktree, { ...run, cwd: ctx.mainWorktree });
 
@@ -1342,16 +1417,33 @@ function ensureWorktree(
   ctx: WorktreeContext,
   run: RunCtx,
   dirNameFn: WorktreeDirNameFn | undefined,
+  beforeCreate?: (commit: string) => void,
 ): WorktreeContext {
-  if (command.branch === undefined) return ctx;
+  if (command.branch === undefined) {
+    if (command.path === undefined) return ctx;
+    const source = { cwd: run.cwd ?? ctx.currentWorktree, env: run.env ?? process.env };
+    const repo = readRepository(source);
+    const path = canonicalPath(resolve(source.cwd, command.path));
+    const tree = repo.worktrees.find((tree) => tree.path === path && tree.exists);
+    if (!tree || worktreeRoot({ ...source, cwd: path }) !== path)
+      throw new WorkspaceError(
+        `Setup requires an exact existing registered worktree root of this repository: ${path}`,
+      );
+    return { currentWorktree: path, mainWorktree: repo.mainWorktree, isMainWorktree: tree.main };
+  }
   if (command.newBranch) {
     return createBranch(command.branch, ctx, run, {
       dirNameFn,
       from: command.from,
       dedupe: command.dedupe,
+      path: command.path,
+      beforeCreate,
     });
   }
-  return useExistingBranch(command.branch, ctx, run, dirNameFn);
+  return useExistingBranch(command.branch, ctx, run, dirNameFn, {
+    path: command.path,
+    beforeCreate,
+  });
 }
 
 export function linkSharedDirectories(
@@ -1375,10 +1467,11 @@ export function linkSharedDirectories(
     if (ctx.isMainWorktree) continue;
     const link = join(ctx.currentWorktree, dirName);
     const linkStat = lstatSync(link, { throwIfNoEntry: false });
-    if (linkStat !== undefined && !linkNeedsRepair(link, linkStat.isSymbolicLink(), mainDir)) {
+    if (linkStat !== undefined) {
+      if (!linkStat.isSymbolicLink() || realpathSync(link) !== realpathSync(mainDir))
+        throw new WorkspaceError(`Conflicting shared directory destination: ${link}`);
       log(`Skipped ${dirName} symlink (already exists).`);
     } else {
-      if (linkStat !== undefined) unlinkSync(link);
       mkdirSync(dirname(link), { recursive: true });
       const relTarget = relative(dirname(link), mainDir);
       symlinkSync(relTarget, link);
@@ -1386,11 +1479,6 @@ export function linkSharedDirectories(
     }
   }
   if (!ctx.isMainWorktree) excludeSharedLinks(ctx.currentWorktree, dirs, log);
-}
-
-function linkNeedsRepair(link: string, symbolicLink: boolean, mainDir: string): boolean {
-  if (!symbolicLink) return false;
-  return resolve(dirname(link), readlinkSync(link)) !== resolve(mainDir);
 }
 
 /**
@@ -1477,15 +1565,14 @@ function linkWorkspaceRegistry(
   // make symlinkSync throw EEXIST. A broken symlink is recreated even without `force`.
   const linkStat = lstatSync(link, { throwIfNoEntry: false });
   if (linkStat) {
-    if (!linkStat.isSymbolicLink()) {
-      log("Skipped workspace-registry symlink (a real directory exists here).");
-      return;
-    }
-    if (existsSync(link)) {
-      log("Skipped workspace-registry symlink (already exists).");
-      return;
-    }
-    rmSync(link);
+    if (
+      !linkStat.isSymbolicLink() ||
+      !existsSync(link) ||
+      realpathSync(link) !== realpathSync(mainDir)
+    )
+      throw new WorkspaceError(`Conflicting workspace-registry destination: ${link}`);
+    log("Skipped workspace-registry symlink (already exists).");
+    return;
   }
   symlinkSync(relative(runtimeRoot, mainDir), link);
   log("Created workspace-registry symlink → main worktree.");

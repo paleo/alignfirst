@@ -3,7 +3,7 @@ import { isAbsolute } from "node:path";
 import { runAlignfirst } from "../alignfirst-cli.js";
 import type { CommandForms } from "../command-form.js";
 import { errorMessage } from "../errors.js";
-import type { GitContext } from "../worktree/git.js";
+import type { GitContext } from "@alignfirst/workspace/git";
 import { type ProjectReport, readProjectReport } from "./layout.js";
 
 export interface PlansContext extends GitContext {

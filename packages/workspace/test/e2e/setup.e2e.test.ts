@@ -1,13 +1,11 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { delimiter, dirname, join } from "node:path";
+import { join } from "node:path";
 
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import type { WorkspaceEntry } from "../../src/workspaces.js";
 import {
-  cliExecutable,
-  cliRuntime,
   createFixtureRepo,
   DEV_PORTS,
   type FixtureOptions,
@@ -46,67 +44,78 @@ afterEach(async () => {
         }
       }
     }
+    runDev(repo, ["down", "--all"]);
     rmSync(root, { recursive: true, force: true });
   }
 });
 
 describe("workspace setup (e2e)", () => {
-  // The custom name `ws` tells a verified script apart from the default `workspace` fallback.
-  it("keeps a verified custom-named project script in the guide despite an npm lockfile", () => {
+  it(
+    "loads every preparation phase from the target branch and keeps noisy JSON output pure",
+    () => {
+      const { repo } = fixture();
+      const manifestPath = join(repo, "alignfirst-workspace.json");
+      const caller = readFileSync(manifestPath, "utf8");
+      const target = JSON.parse(caller);
+      target.workspace.preSetup = [
+        { name: "target preflight", run: "echo noisy-pre; printf target > pre-target.txt" },
+      ];
+      target.workspace.gitignoredFiles = [
+        { path: "target.local", source: { kind: "content", content: "target branch content" } },
+      ];
+      target.workspace.finalize = [
+        {
+          name: "target finalize",
+          run: "echo noisy-finalize; printf target > finalized-target.txt",
+        },
+      ];
+      target.workspace.summary = { command: { run: "echo noisy-summary" } };
+      writeFileSync(manifestPath, JSON.stringify(target));
+      execFileSync("git", ["add", "alignfirst-workspace.json"], { cwd: repo });
+      execFileSync("git", ["commit", "-m", "target recipe"], { cwd: repo, stdio: "pipe" });
+      execFileSync("git", ["branch", "target-recipe"], { cwd: repo });
+      writeFileSync(manifestPath, caller);
+      execFileSync("git", ["commit", "-am", "caller recipe"], { cwd: repo, stdio: "pipe" });
+      const result = runCli(repo, ["setup", "-c", "selected", "--from", "target-recipe", "--json"]);
+      expect(result.status, result.stderr).toBe(0);
+      const record = JSON.parse(result.stdout).workspace;
+      expect(record).toMatchObject({
+        preparation: "ready",
+        recipe: "manifest",
+        branch: "selected",
+      });
+      expect(result.stderr).toContain("noisy-pre");
+      expect(result.stderr).toContain("noisy-summary");
+      expect(readFileSync(join(record.path, "pre-target.txt"), "utf8")).toBe("target");
+      expect(readFileSync(join(record.path, "target.local"), "utf8")).toBe("target branch content");
+      expect(readFileSync(join(record.path, "finalized-target.txt"), "utf8")).toBe("target");
+      expect(existsSync(join(record.path, "finalized.txt"))).toBe(false);
+      const failed = runCli(repo, ["setup", "-c", "json-failure", "--json"], {
+        E2E_FINALIZE_FAIL: "1",
+      });
+      expect(failed.status).toBe(1);
+      expect(failed.stdout).toBe("");
+      expect(failed.stderr).toContain("Setup failed:");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it("renders direct workspace/dev commands despite unrelated npm scripts and lockfiles", () => {
     const { repo } = fixture();
-    const runtime = cliRuntime.bun === undefined ? "node" : "bun";
     writeFileSync(
       join(repo, "package.json"),
-      JSON.stringify({
-        scripts: {
-          ws: `${runtime} scripts/workspace.mjs`,
-          dev: `${runtime} scripts/dev-server.mjs`,
-        },
-      }),
+      JSON.stringify({ scripts: { workspace: "exit 99", dev: "exit 99" } }),
     );
     writeFileSync(join(repo, "package-lock.json"), "{}");
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      PATH: `${dirname(cliExecutable)}${delimiter}${process.env.PATH}`,
-    };
-    // A new launcher must not inherit the npm test runner's launcher evidence.
-    for (const key of Object.keys(env)) if (key.startsWith("npm_")) delete env[key];
-    const result = spawnSync(
-      cliRuntime.bun === undefined ? "npm" : cliExecutable,
-      cliRuntime.bun === undefined
-        ? ["run", "ws", "--", "--guide"]
-        : ["--bun", "run", "ws", "--guide"],
-      {
-        cwd: repo,
-        encoding: "utf8",
-        timeout: 15_000,
-        env,
-      },
-    );
-    expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain(
-      cliRuntime.bun === undefined ? "npm run ws -- setup" : "bun --bun run ws setup",
-    );
-    if (cliRuntime.bun !== undefined) expect(result.stdout).not.toContain("npm run");
-  });
-
-  it("uses the actual invocation for workspace/dev unknown-command recovery and help", () => {
-    const { repo } = fixture();
-    for (const [name, script, result] of [
-      ["workspace", "workspace.mjs", runCli(repo, ["unknown"])],
-      ["dev", "dev-server.mjs", runDev(repo, ["unknown"])],
-    ] as const) {
-      expect(result.status, result.stderr).toBe(1);
-      if (cliRuntime.bun !== undefined) {
-        expect(result.stderr).toContain(
-          `${cliRuntime.executable} ${join(repo, "scripts", script)} --help`,
-        );
-        expect(result.stdout).toContain(`Usage: ${cliRuntime.executable}`);
-        expect(result.stdout + result.stderr).not.toContain("npm run");
-      } else {
-        expect(result.stderr).toContain(`npm run ${name} -- --help`);
-        expect(result.stdout).toContain(`Usage: npm run ${name} --`);
-      }
+    const guide = runCli(repo, ["--guide"]);
+    expect(guide.status, guide.stderr).toBe(0);
+    expect(guide.stdout).toContain("alignfirst workspace setup");
+    expect(guide.stdout).not.toContain("npm run");
+    for (const result of [runCli(repo, ["unknown"]), runDev(repo, ["unknown"])]) {
+      expect(result.status).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain("alignfirst");
+      expect(result.stderr).toContain("--help");
     }
   });
 
@@ -155,9 +164,9 @@ describe("workspace setup (e2e)", () => {
       const output = result.stdout + result.stderr;
 
       expect(result.status).toBe(1);
-      expect(output).toContain("FAILED");
-      expect(output).toContain("e2e boom");
-      expect(output).toContain("ran the workspace scripts of another worktree");
+      expect(output).toContain("Setup failed:");
+      expect(setupLog(repo, "fixrepo-feat-z")).toContain("e2e boom");
+      expect(output).toContain("finalize step-one");
       expect(entryFor(repo, "fixrepo-feat-z").status).toBe("failed");
     },
     TEST_TIMEOUT_MS,
@@ -174,7 +183,8 @@ describe("workspace setup (e2e)", () => {
       const output = retry.stdout + retry.stderr;
 
       expect(retry.status).toBe(1);
-      expect(output).toContain("e2e boom");
+      expect(output).toContain("finalize step-one");
+      expect(setupLog(repo, "fixrepo-feat-r")).toContain("e2e boom");
       expect(output).not.toContain("ran the workspace scripts of another worktree");
     },
     TEST_TIMEOUT_MS,
@@ -263,7 +273,7 @@ describe("workspace setup (e2e)", () => {
       const { repo } = fixture({ oldConfig: true });
       const result = runCli(repo, ["setup"]);
       expect(result.status).toBe(1);
-      expect(result.stderr).toContain("The workspace config declares `ports`, removed in 0.37.0.");
+      expect(result.stderr).toContain('"/ports" must NOT have additional properties');
     },
     TEST_TIMEOUT_MS,
   );
@@ -302,7 +312,7 @@ describe("portless workspace (e2e)", () => {
       const { repo } = fixture({ portless: true });
       const result = runCli(repo, ["setup", "--full"]);
       expect(result.status).toBe(1);
-      expect(result.stderr).toContain("declares no `devServerScript`");
+      expect(result.stderr).toContain("requires declared dev services");
       expect(existsSync(registryFile(repo))).toBe(false);
     },
     TEST_TIMEOUT_MS,
@@ -478,7 +488,7 @@ describe("dev setup (e2e)", () => {
       execFileSync("git", ["worktree", "add", "-b", "bare", bare], { cwd: repo, stdio: "pipe" });
       const result = runDev(bare, ["setup"]);
       expect(result.status).toBe(1);
-      expect(result.stderr).toContain("No workspace here");
+      expect(result.stderr).toContain("workspace setup");
     },
     TEST_TIMEOUT_MS,
   );
@@ -528,24 +538,20 @@ describe("workspace setup --full (e2e)", () => {
       const failing = { E2E_DEV_SETUP_FAIL: "1" };
       const result = runCli(repo, ["setup", "-c", "feat-fail", "--full"], failing);
       expect(result.status).toBe(1);
-      expect(result.stderr).toContain(
-        `Workspace ready; dev setup failed: e2e dev boom. Run \`${
-          cliRuntime.bun === undefined
-            ? "npm run dev -- setup"
-            : `${cliRuntime.executable} ${join(repo, "scripts", "dev-server.mjs")} setup`
-        }\` to retry.`,
-      );
+      expect(result.stderr).toContain("Workspace ready; dev setup failed: devSetup infrastructure");
       const entry = entryFor(repo, "fixrepo-feat-fail");
       expect(entry.status).toBe("ready");
-      expect(entry.devSetupFailure?.message).toBe("e2e dev boom.");
+      expect(entry.devSetupFailure?.message).toContain("devSetup infrastructure");
       expect(entry.devSetupAt).toBeUndefined();
-      expect(setupLog(repo, "fixrepo-feat-fail")).toContain("DEV SETUP FAILED: e2e dev boom");
+      expect(setupLog(repo, "fixrepo-feat-fail")).toContain(
+        "DEV SETUP FAILED: devSetup infrastructure",
+      );
 
       const waited = runCli(repo, ["wait", "fixrepo-feat-fail"]);
       expect(waited.status).toBe(1);
-      expect(waited.stderr).toContain("dev setup failed: e2e dev boom");
+      expect(waited.stderr).toContain("dev setup failed: devSetup infrastructure");
       const status = runCli(repo, ["status", "fixrepo-feat-fail"]);
-      expect(status.stdout).toContain("Dev setup failed: e2e dev boom");
+      expect(status.stdout).toContain("Dev setup failed: devSetup infrastructure");
 
       const linked = sibling(repo, "fixrepo-feat-fail");
       expect(runDev(linked, ["setup"]).status).toBe(0);
@@ -558,15 +564,17 @@ describe("workspace setup --full (e2e)", () => {
   );
 
   it(
-    "records the exit code when the dev setup exits without recording its failure",
+    "records the failing lifecycle command's exit code",
     () => {
       const { repo } = fixture();
       const result = runCli(repo, ["setup", "-c", "feat-exit", "--full"], { E2E_DEV_EXIT: "1" });
       expect(result.status).toBe(1);
-      expect(result.stderr).toContain("dev setup failed: dev setup exited with code 3");
+      expect(result.stderr).toContain(
+        "dev setup failed: devSetup infrastructure: exited with code 3",
+      );
       const entry = entryFor(repo, "fixrepo-feat-exit");
       expect(entry.status).toBe("ready");
-      expect(entry.devSetupFailure?.message).toBe("dev setup exited with code 3");
+      expect(entry.devSetupFailure?.message).toBe("devSetup infrastructure: exited with code 3.");
     },
     TEST_TIMEOUT_MS,
   );
@@ -601,7 +609,7 @@ describe("workspace setup --full (e2e)", () => {
 
 describe("workspace remove (e2e)", () => {
   it(
-    "kills the recorded dev-server processes when `dev down` fails",
+    "retains the workspace when target-owned stop fails after killing recorded processes",
     () => {
       const { repo } = fixture();
       expect(runCli(repo, ["setup", "-c", "feat-rm"]).status).toBe(0);
@@ -609,8 +617,9 @@ describe("workspace remove (e2e)", () => {
       const pid = startOrphanableSleeper();
       try {
         writeFileSync(
-          join(repo, ".wt", "workspace-registry", "dev-servers.json"),
+          join(repo, ".local-wt", "workspace-registry", "dev-servers.json"),
           JSON.stringify({
+            version: 1,
             servers: [
               {
                 name: "fixrepo-feat-rm",
@@ -622,20 +631,20 @@ describe("workspace remove (e2e)", () => {
           }),
         );
 
-        // `E2E_DEV_EXIT=1` makes `dev down` exit 3 before stopping anything, like a refused config.
         const removed = runCli(repo, ["remove", "fixrepo-feat-rm", "--force"], {
-          E2E_DEV_EXIT: "1",
+          E2E_CALLBACK_RECORD: "1",
+          E2E_CALLBACK_STOP_FAIL: "1",
         });
-        expect(removed.status).toBe(0);
-        expect(removed.stderr).toContain("dev down exited with code 3");
-        expect(removed.stderr).toContain("Killed 1 dev-server process(es) left running");
+        expect(removed.status).toBe(1);
+        expect(removed.stderr).toContain("stop");
         expect(isAlive(pid)).toBe(false);
         const devServers = readFileSync(
-          join(repo, ".wt", "workspace-registry", "dev-servers.json"),
+          join(repo, ".local-wt", "workspace-registry", "dev-servers.json"),
           "utf-8",
         );
-        expect(JSON.parse(devServers)).toEqual({ servers: [] });
-        expect(existsSync(linked)).toBe(false);
+        expect(JSON.parse(devServers).servers).toHaveLength(1);
+        expect(existsSync(linked)).toBe(true);
+        expect(entryFor(repo, "fixrepo-feat-rm").worktree).toBe(linked);
       } finally {
         if (isAlive(pid)) process.kill(pid, "SIGKILL");
       }
@@ -719,11 +728,14 @@ function isAlive(pid: number): boolean {
 }
 
 function registryFile(repo: string): string {
-  return join(repo, ".wt", "workspace-registry", "workspaces.json");
+  return join(repo, ".local-wt", "workspace-registry", "workspaces.json");
 }
 
 function setupLog(repo: string, worktreeDir: string): string {
-  return readFileSync(join(repo, "..", worktreeDir, ".wt", "logs", "workspace-setup.log"), "utf-8");
+  return readFileSync(
+    join(repo, "..", worktreeDir, ".local-wt", "logs", "workspace-setup.log"),
+    "utf-8",
+  );
 }
 
 // Rebuild `dist/` only when it is missing or older than the newest `src/` file, so a second `vitest`

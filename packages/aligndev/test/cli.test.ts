@@ -42,12 +42,7 @@ describe("aligndev", () => {
     for (const flag of ["--help", "-h"]) {
       const result = await run([flag]);
       expect(result.code).toBe(0);
-      for (const command of [
-        "aligndev code",
-        "aligndev project",
-        "aligndev worktree",
-        "aligndev guide",
-      ]) {
+      for (const command of ["aligndev code", "aligndev project", "aligndev guide"]) {
         expect(result.stdout).toContain(command);
       }
       expect(result.stdout).not.toContain("aligndev plans");
@@ -55,29 +50,15 @@ describe("aligndev", () => {
     }
   });
 
-  it.each([false, true])(
-    "prints setup help without a repository or valid coding settings (npx=%s)",
-    async (viaNpx) => {
-      const env = viaNpx
-        ? {
-            npm_config_user_agent: "npm/11.19.0 node/v26.8.1 linux x64",
-            npm_command: "exec",
-            npm_lifecycle_event: "npx",
-          }
-        : {};
-      const command = viaNpx ? "npx -y aligndev" : "aligndev";
-      for (const args of [
-        ["worktree", "--help"],
-        ["worktree", "setup", "--help"],
-        ["worktree", "setup", "-h"],
-      ]) {
-        const result = await run(args, { code: { agent: "invalid" } }, env);
-        expect(result.code, result.stderr).toBe(0);
-        expect(result.stderr).toBe("");
-        expect(result.stdout).toContain(`${command} worktree setup [<path>] [--json]`);
-      }
-    },
-  );
+  it("rejects retired worktree commands without loading coding settings or offering an alias", async () => {
+    for (const args of [["worktree"], ["worktree", "--help"], ["worktree", "setup", "--json"]]) {
+      const result = await run(args, { code: { agent: "invalid" } });
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain('unknown command "worktree"');
+      expect(result.stderr).not.toContain("aligndev worktree");
+    }
+  });
 
   it("prints the package version", async () => {
     const { version } = JSON.parse(readFileSync(PACKAGE_JSON, "utf8")) as { version: string };
@@ -118,10 +99,6 @@ describe("aligndev", () => {
     const project = await run(["project", "--help"]);
     expect(project.code).toBe(0);
     expect(project.stdout).toContain("aligndev project list [--json] [--root <path>]");
-
-    const worktree = await run(["worktree", "--help"]);
-    expect(worktree.code).toBe(0);
-    expect(worktree.stdout).toContain("aligndev worktree add <path> <branch> [--json]");
 
     const guide = await run(["guide", "--help"], {
       platform: "openclaw",

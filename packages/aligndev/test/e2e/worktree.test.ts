@@ -39,7 +39,12 @@ interface Fixture {
 }
 
 beforeAll(() => {
-  for (const workspace of ["@alignfirst/docmap", "alignfirst", "aligndev"]) {
+  for (const workspace of [
+    "@alignfirst/docmap",
+    "@alignfirst/workspace",
+    "alignfirst",
+    "aligndev",
+  ]) {
     execFileSync("npm", ["run", "build", "--workspace", workspace], { cwd: root, stdio: "pipe" });
   }
 }, 60_000);
@@ -203,22 +208,22 @@ describe("built worktree CLI lifecycle", () => {
       const head = git(destination, env, "rev-parse", "HEAD");
       const nested = join(destination, "nested", "directory");
       mkdirSync(nested, { recursive: true });
-      const setup = () => cli(aligndev, nested, env, "worktree", "setup", "--json");
+      const setup = () => cli(alignfirst, nested, env, "workspace", "setup", "--json");
       const first = setup();
       expect(first.status, first.stderr).toBe(0);
-      expect(first.stderr).toBe("");
       const report = JSON.parse(first.stdout);
-      expect(report.worktree.path).toBe(destination);
-      expect(report.worktree.branch).toBe("side-1/external");
-      expect(report.directories[".plans"].mode).toBe(
-        mode === "companion" ? "companion" : "symlink",
-      );
-      expect(report.directories[".local"].mode).toBe("symlink");
+      expect(report.workspace).toMatchObject({
+        path: destination,
+        branch: "side-1/external",
+        preparation: "ready",
+        recipe: "defaults",
+      });
+      if (mode !== "companion") expect(realpathSync(join(destination, ".plans"))).toBe(plans);
+      expect(realpathSync(join(destination, ".local"))).toBe(local);
       const exclude = join(repo, ".git", "info", "exclude");
       const exclusions = readFileSync(exclude, "utf8");
       const repeated = setup();
       expect(repeated.status, repeated.stderr).toBe(0);
-      expect(repeated.stderr).toBe("");
       expect(JSON.parse(repeated.stdout)).toEqual(report);
       expect(readFileSync(exclude, "utf8")).toBe(exclusions);
 
@@ -271,23 +276,23 @@ describe("built worktree CLI lifecycle", () => {
       const { repo, destination, plans, sessions, env } = fixture;
       const mainBranch = git(repo, env, "branch", "--show-current");
       const added = cli(
-        aligndev,
+        alignfirst,
         repo,
         env,
-        "worktree",
-        "add",
+        "workspace",
+        "setup",
+        "--path",
         destination,
-        "-b",
+        "-c",
         "side-1/work",
+        "--from",
         "main",
         "--json",
       );
       expect(added.status, added.stderr).toBe(0);
       const addition = JSON.parse(added.stdout);
-      expect(addition.worktree.branch).toBe("side-1/work");
-      expect(addition.directories[".plans"].mode).toBe(
-        mode === "companion" ? "companion" : "symlink",
-      );
+      expect(addition.workspace.branch).toBe("side-1/work");
+      if (mode !== "companion") expect(realpathSync(join(destination, ".plans"))).toBe(plans);
       expect(git(repo, env, "branch", "--show-current")).toBe(mainBranch);
       expect(git(destination, env, "status", "--porcelain")).toBe("");
       if (mode === "companion") {
@@ -382,15 +387,23 @@ describe("built worktree CLI lifecycle", () => {
         expect(git(dirname(plans), env, "status", "--porcelain")).toBe("");
         expect(git(dirname(plans), env, "log", "-1", "--format=%s")).not.toBe("initial");
       }
-      const removed = cli(aligndev, destination, env, "worktree", "remove", destination, "--json");
+      const removed = cli(
+        alignfirst,
+        destination,
+        env,
+        "workspace",
+        "remove",
+        destination,
+        "--json",
+      );
       expect(removed.status, removed.stderr).toBe(0);
-      expect(JSON.parse(removed.stdout).removed).toBe(true);
+      expect(JSON.parse(removed.stdout).completed).toBe(true);
       expect(existsSync(destination)).toBe(false);
       expect(existsSync(record)).toBe(true);
       expect(existsSync(join(plans, "side-1", "B1-request.md"))).toBe(true);
       expect(git(repo, env, "branch", "--list", "side-1/work")).toContain("side-1/work");
-      const listed = cli(aligndev, repo, env, "worktree", "list", "--json");
-      expect(JSON.parse(listed.stdout).worktrees).toHaveLength(1);
+      const listed = cli(alignfirst, repo, env, "workspace", "list", "--json");
+      expect(JSON.parse(listed.stdout).workspaces).toHaveLength(1);
     },
   );
 });
@@ -498,6 +511,9 @@ import(${JSON.stringify(alignfirst)});
 `,
     { mode: 0o755 },
   );
+  writeFileSync(join(repo, ".gitignore"), "/.plans\n/.local\n/.local-wt/\n");
+  git(repo, env, "add", ".gitignore");
+  git(repo, env, "commit", "--quiet", "-m", "workspace baseline");
   env.TEST_PLANS = plans;
   return { home, repo, destination, plans, sessions, env };
 }

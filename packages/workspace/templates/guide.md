@@ -16,17 +16,23 @@ A **workspace** is a git worktree (with its branch) plus its own dev setup: syml
 {{/DEV}}
 ## Setting up a workspace
 
+Use `npx -y alignfirst workspace` on Node or `bunx --bun alignfirst workspace` on Bun. No project wrapper, package manifest or local JavaScript dependencies are required. The branch-local `alignfirst-workspace.json` or `.jsonc` manifest supplies optional project commands.
+
+Setup requires usable effective `.plans` and ignored, untracked `.local-wt` storage before branch creation. Prepare local/shared work files or select a companion separately. Setup never provisions plans, registers a companion or edits tracked ignore rules.
+
+Without a manifest, setup shares effective plans and usable untracked `.local` when present, then completes synchronously. This means protocol-ready; dependencies and applications are not prepared. Additional `sharedDirs` do not replace these defaults. Tracked `.local` stays branch-local.
+
 ```sh
 {{COMMANDS:setup}}
 ```
 
 With `-c`, the new branch starts at the current worktree's HEAD (like `git switch -c`); `--from <ref>` accepts any commit-ish as the base. New branches have no upstream; set one when you first push. When the branch name is already taken, `setup -c` errors; add `--dedupe` to append `-2`, `-3`… instead.
 
-With a branch argument, `setup` creates a worktree. Without one, it adopts the current Git worktree, including externally created worktrees under any parent directory. It preserves the path and branch, links shared directories, seeds config files, then runs the project's finalize step: install dependencies and build.
+With a branch argument, `setup` creates a worktree. Without one, it adopts the current Git worktree, including externally created worktrees under any parent directory. It preserves the path, branch and index, links shared directories, seeds declared config files, then runs any declared finalize steps. `--path <path>` selects an exact existing root without a branch, or a new disjoint destination with one. An explicit destination is never suffixed.
 
-It streams to the setup log and **blocks until the log ends with `READY:` or `FAILED:`**, showing a progress ticker (`--verbose` follows the full log instead). Pass `-d`/`--detached` to return as soon as the worktree exists and continue the setup in the background; join it later with `wait`.
+Declared finalize steps stream to the setup log. Setup blocks until preparation reaches `ready` or `failed`, showing a progress ticker (`--verbose` follows the full log instead). Pass `-d`/`--detached` to return as soon as the worktree exists and continue the setup in the background; join it later with `wait`.
 
-**Main worktree:** from a fresh clone, run `setup` once on the main worktree before creating linked worktrees.
+Main work-files and runtime protection must be ready before creating linked worktrees. Main-worktree setup itself is optional.
 
 {{#DEV}}
 `setup --full` also runs the dev setup once the workspace is ready: ports, run files and infrastructure. A dev failure leaves the workspace ready and makes the command exit 1; `{{DEV}} setup` retries it.
@@ -60,7 +66,9 @@ Run the installed CLI from the target worktree even when project dependencies ar
 
 Names in `list` are opaque **registered names**, usually directory basenames and suffixed when another path already owns that name. Paths select exactly; there is no basename-search fallback. A registered name also selects an orphan whose directory is gone. Independent clones have independent registries.
 
-All participating duplicate-basename worktrees need the upgraded package. Consumer Compose wrappers must explicitly select the registered project before relying on this isolation. Ordinary names and default resource names stay compatible; there is no automatic bulk upgrade or teardown.
+Listing combines Git worktrees with registrations. Unprepared trees have no registered name. Detached, locked, missing/prunable trees and registered orphans remain visible; listing never adopts or deletes them.
+
+`setup`, `list`, `status`, `wait`, `teardown`, `remove` and `prune` accept `--json`. stdout contains one result document; progress and diagnostics use stderr. Failures exit nonzero without a success document. `--enter` and `--json` cannot be combined.
 
 ## Cleaning up without deletion
 

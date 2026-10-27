@@ -7,6 +7,7 @@ export type WorkspaceCommand =
   | {
       kind: "setup";
       branch?: string;
+      path?: string;
       newBranch: boolean;
       from?: string;
       force: boolean;
@@ -34,11 +35,27 @@ export interface WorkspaceSelector {
 }
 
 export interface ParsedWorkspaceArgs {
+  json?: boolean;
   command: WorkspaceCommand;
   verbose: boolean;
 }
 
 export function parseWorkspaceArgs(argv: string[]): ParsedWorkspaceArgs {
+  const json = argv.includes("--json");
+  const parsed = parseWorkspaceTokens(argv.filter((token) => token !== "--json"));
+  if (!json) return parsed;
+  if (
+    !["setup", "list", "status", "wait", "teardown", "remove", "prune"].includes(
+      parsed.command.kind,
+    )
+  )
+    throw new ConfigError("--json is not supported for this operation.");
+  if (parsed.command.kind === "setup" && parsed.command.enter)
+    throw new ConfigError("--enter cannot be combined with --json.");
+  return { ...parsed, json: true };
+}
+
+function parseWorkspaceTokens(argv: string[]): ParsedWorkspaceArgs {
   const [subcommand, ...tokens] = argv;
   if (subcommand === "--help" || subcommand === "-h") {
     return { command: { kind: "help" }, verbose: false };
@@ -87,6 +104,7 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
     options: {
       "new-branch": { type: "boolean", short: "c" },
       from: { type: "string" },
+      path: { type: "string" },
       force: { type: "boolean" },
       enter: { type: "boolean" },
       dedupe: { type: "boolean" },
@@ -117,6 +135,7 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
     command: {
       kind: "setup",
       branch,
+      ...(values.path === undefined ? {} : { path: values.path }),
       newBranch,
       from: values.from,
       force: values.force ?? false,
@@ -253,7 +272,10 @@ export function renderWorkspaceHelp(commands: WorkspaceCommands = defaultCommand
     "ports, database, dev server).",
     "",
     "Commands:",
-    "  setup [-c|--new-branch] [<branch>] [--dedupe] [--from <ref>] [--force] [-d|--detached] [--enter] [--full]",
+    "  setup [-c|--new-branch] [<branch>] [--path <path>] [--dedupe] [--from <ref>] [--force] [-d|--detached] [--enter] [--full]",
+    "      --path selects a new destination with a branch, or an exact existing root without one.",
+    "      Requires usable effective plans and ignored, untracked .local-wt runtime storage.",
+    "      Without a manifest, preparation is synchronous and protocol-ready only.",
     "      Set up the workspace. With <branch>, create a sibling worktree for it",
     "      (add -c to create the branch first). Without, set up the current worktree",
     "      (idempotent; bootstrap and retry path).",
@@ -275,7 +297,7 @@ export function renderWorkspaceHelp(commands: WorkspaceCommands = defaultCommand
     "      Keep worktree files and Git registration. Select by path or registered name;",
     "      the current worktree when omitted. Supports main and linked worktrees.",
     "  list",
-    "      List all registered workspaces (name, status, branch, path, created).",
+    "      List Git worktrees and registered workspaces, including unprepared trees and orphans.",
     "  prune",
     "      Heal orphaned workspaces (worktree deleted out-of-band): stop their dev-servers",
     "      and drop their registry entries, then run `git worktree prune`.",
@@ -287,6 +309,8 @@ export function renderWorkspaceHelp(commands: WorkspaceCommands = defaultCommand
     "",
     "Global options:",
     "      --verbose       Show intermediate output.",
+    "      --json          One result document (setup/list/status/wait/teardown/remove/prune).",
+
     "      --guide         Print the full workspace + dev-server operating guide.",
     "  -h, --help          Show this help message.",
     "  -v, --version       Print the workspace version.",

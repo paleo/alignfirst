@@ -23,7 +23,7 @@ afterEach(async () => {
   for (const fixture of fixtures.splice(0)) {
     // Join detached finalizers even when an assertion failed before the scenario's explicit wait.
     try {
-      const registry = join(fixture.repo, ".wt", "workspace-registry", "workspaces.json");
+      const registry = join(fixture.repo, ".local-wt", "workspace-registry", "workspaces.json");
       if (existsSync(registry)) {
         for (const entry of Object.values(readWorkspaces(fixture.repo).workspaces)) {
           const waited = runCli(fixture.repo, ["wait", entry.worktree]);
@@ -84,8 +84,8 @@ describe("externally created same-basename worktrees", () => {
           "customized-main\nworktree=linked\n",
         );
         expect(realpathSync(join(worktree, ".shared"))).toBe(join(repo, ".shared"));
-        expect(realpathSync(join(worktree, ".wt", "workspace-registry"))).toBe(
-          join(repo, ".wt", "workspace-registry"),
+        expect(realpathSync(join(worktree, ".local-wt", "workspace-registry"))).toBe(
+          join(repo, ".local-wt", "workspace-registry"),
         );
       }
       const list = runCli(repo, ["list"]);
@@ -178,14 +178,16 @@ describe("externally created same-basename worktrees", () => {
       const name = entryAt(fixture, second).name;
       const wait = runCli(repo, ["wait", name]);
       expect(wait.status).toBe(1);
-      expect(wait.stderr).toContain("e2e boom");
+      expect(wait.stderr).toContain("finalize step-one");
       expect(entryAt(fixture, second).entry.status).toBe("failed");
-      expect(runCli(repo, ["status", name]).stdout).toContain("Failure: e2e boom");
+      expect(runCli(repo, ["status", name]).stdout).toContain("Failure: finalize step-one");
       expect(runCli(repo, ["status", "same"]).stdout).not.toContain("Failure:");
       const seedFailure = runCli(repo, ["setup"], { E2E_SEED_FAIL: "1" }, second);
       expect(seedFailure.status).toBe(1);
       expect(entryAt(fixture, second).entry.status).toBe("failed");
-      expect(entryAt(fixture, second).entry.failure?.message).toContain("missing.template");
+      expect(entryAt(fixture, second).entry.failure?.message).toContain(
+        "workspaceFilePatch.required.local",
+      );
       expect(runCli(repo, ["setup"], undefined, second).status).toBe(0);
       expect(entryAt(fixture, second).name).toBe(name);
       expect(entryAt(fixture, second).entry.failure).toBeUndefined();
@@ -203,10 +205,10 @@ describe("externally created same-basename worktrees", () => {
       const original = entryAt(fixture, first).entry;
       const failed = runCli(repo, ["setup", "--full"], { E2E_DEV_SETUP_FAIL: "1" }, second);
       expect(failed.status).toBe(1);
-      expect(failed.stderr).toContain("Workspace ready; dev setup failed: e2e dev boom");
+      expect(failed.stderr).toContain("Workspace ready; dev setup failed: devSetup infrastructure");
       const { name, entry } = entryAt(fixture, second);
       expect(entry.status).toBe("ready");
-      expect(entry.devSetupFailure?.message).toContain("e2e dev boom");
+      expect(entry.devSetupFailure?.message).toContain("devSetup infrastructure");
       expect(entry.devSetupAt).toBeUndefined();
       const originalPorts = Object.values(original.ports ?? {});
       const failedPorts = Object.values(entry.ports ?? {});
