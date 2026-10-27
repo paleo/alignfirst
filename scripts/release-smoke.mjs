@@ -138,21 +138,21 @@ function verifyInvocationConsumers(root) {
   execFileSync(
     process.execPath,
     [
+      "--experimental-import-meta-resolve",
       "--input-type=module",
       "--eval",
       `import assert from "node:assert/strict";
        import { realpathSync } from "node:fs";
        import { join } from "node:path";
-       import { fileURLToPath } from "node:url";
-       import { createRequire } from "node:module";
+       import { fileURLToPath, pathToFileURL } from "node:url";
        import { createCommand, renderCommand } from "@alignfirst/docmap/invocation";
        assert.equal(renderCommand(createCommand("bunx", ["--bun", "alignfirst"])),
          "bunx --bun alignfirst");
        assert.equal(realpathSync(fileURLToPath(import.meta.resolve("@alignfirst/docmap/invocation"))),
          join(process.cwd(), "node_modules/@alignfirst/docmap/dist/invocation.js"));
        for (const consumer of ["alignfirst", "aligndev"]) {
-         const require = createRequire(join(process.cwd(), "node_modules", consumer, "package.json"));
-         assert.equal(realpathSync(require.resolve("@alignfirst/workspace")),
+         const parent = pathToFileURL(join(process.cwd(), "node_modules", consumer, "package.json"));
+         assert.equal(realpathSync(fileURLToPath(import.meta.resolve("@alignfirst/workspace", parent))),
            join(process.cwd(), "node_modules/@alignfirst/workspace/dist/index.js"));
        }`,
     ],
