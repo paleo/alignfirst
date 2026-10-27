@@ -107,7 +107,7 @@ describe("readProjectReport", () => {
       const warnings = [
         "Warning: ignoring unknown companion registry setting projects[<entry>].aligndev.extra. Remove it or check its spelling.",
       ];
-      const error = "Invalid .alignfirst.json: git.commit.style must be conventionalCommit";
+      const error = "Invalid alignfirst.json: git.commit.style must be conventionalCommit";
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const log = vi.spyOn(console, "log").mockImplementation(() => {});
       const f = executableFixture(

@@ -357,7 +357,7 @@ async function settingsChecks(f) {
 }
 
 async function consumerWarningChecks(f) {
-  const projectSettings = join(f.project, ".alignfirst.json");
+  const projectSettings = join(f.project, "alignfirst.json");
   const inventoryMarker = join(f.home, ".alignfirst-projects.json");
   const registryBefore = readFileSync(f.registry);
   const staleRegistry = JSON.parse(registryBefore);
@@ -373,12 +373,8 @@ async function consumerWarningChecks(f) {
     writeJson(f.registry, staleRegistry);
     writeJson(projectSettings, {
       schemaVersion: 1,
-      unknownProject: "private-consumer-value",
-      plans: { folder: "alignfirst", unknownPlans: "private-consumer-value" },
-      git: {
-        unknownGit: "private-consumer-value",
-        commit: { style: "conventionalCommit", unknownCommit: "private-consumer-value" },
-      },
+      plans: { repositoryFolder: "alignfirst" },
+      git: { commit: { style: "conventionalCommit" } },
     });
     const settingsBytes = readFileSync(projectSettings);
     const registryBytes = readFileSync(f.registry);
@@ -391,17 +387,12 @@ async function consumerWarningChecks(f) {
       ]) {
         const result = await command(f, f.project, executable, args);
         for (const field of [
-          "unknownProject",
-          "plans.unknownPlans",
-          "git.unknownGit",
-          "git.commit.unknownCommit",
           "unknownRegistry",
           "projects[<entry>].unknownEntry",
           "projects[<entry>].aligndev.unknownSelection",
           "projects[<entry>].items.unknownItem",
         ])
           assert(result.stderr.includes(field), `${executable} must warn about ${field}`);
-        assert.match(result.stderr, /plans.folder is deprecated/);
         assert.equal(result.stdout.includes("Warning:"), false);
         assert.equal(`${result.stdout}${result.stderr}`.includes("private-consumer-value"), false);
         assert.equal(result.stderr.includes("~/app"), false);
@@ -412,17 +403,22 @@ async function consumerWarningChecks(f) {
       }
     });
     const validProject = JSON.parse(settingsBytes);
-    for (const source of ["project", "registry"]) {
+    for (const source of ["project", "unknownProject", "registry"]) {
       const invalidProject = structuredClone(validProject);
       const invalidRegistry = structuredClone(staleRegistry);
       if (source === "project") invalidProject.git.commit.style = "private-invalid-consumer-value";
+      else if (source === "unknownProject") invalidProject.extra = "private-invalid-consumer-value";
       else invalidRegistry.projects["~/app"].aligndev.profile = ["private-invalid-consumer-value"];
       writeJson(projectSettings, invalidProject);
       writeJson(f.registry, invalidRegistry);
       const invalidSettingsBytes = readFileSync(projectSettings);
       const invalidRegistryBytes = readFileSync(f.registry);
-      const failure = source === "project" ? /git.commit.style must be/ : /profile must be/;
-      const warning = source === "project" ? /unknownProject/ : /unknownRegistry/;
+      const failure =
+        source === "project"
+          ? /style.*constant/
+          : source === "unknownProject"
+            ? /unknown property|additional properties/i
+            : /profile must be/;
       await readOnly(f, async () => {
         for (const [executable, args] of [
           ["alignfirst", ["config", "--json"]],
@@ -432,7 +428,7 @@ async function consumerWarningChecks(f) {
         ]) {
           const inventory = args[0] === "project";
           const result = await command(f, f.project, executable, args, inventory ? 0 : 1);
-          assert.match(result.stderr, warning);
+          assert.match(result.stderr, /unknownRegistry/);
           if (inventory) {
             const report = JSON.parse(result.stdout);
             const issue = report.issues.find((entry) => entry.path === f.project);
@@ -457,7 +453,7 @@ async function consumerWarningChecks(f) {
     rmSync(inventoryMarker, { force: true });
   }
   console.log(
-    "PASS: project/nested registry warnings reach help, guide and JSON inventory on success and failure; real validation errors remain visible, values private and source bytes unchanged",
+    "PASS: tolerant nested registry warnings reach help/guide/inventory; strict project unknown/invalid properties fail, values stay private and source bytes unchanged",
   );
 }
 
@@ -469,7 +465,13 @@ async function profileOnlyChecks(f) {
       assert.equal(report.companion, null);
       for (const [item, location] of Object.entries(report.locations)) {
         assert.equal(location.in, "project");
-        assert.equal(location.path, join(cwd, item === "_aligndev" ? ".plans" : item));
+        assert.equal(
+          location.path,
+          join(
+            cwd,
+            item === "_aligndev" ? ".plans" : item === "alignfirst" ? "alignfirst.json" : item,
+          ),
+        );
       }
       const text = await command(f, cwd, "alignfirst", ["config"]);
       assert.match(text.stdout, /AlignDev profile: a/);
@@ -607,7 +609,13 @@ async function companionChecks(f) {
     assert.equal(report.companion.exists, false);
     for (const [item, location] of Object.entries(report.locations)) {
       assert.equal(location.in, "companion");
-      assert.equal(location.path, join(f.companion, item === "_aligndev" ? ".plans" : item));
+      assert.equal(
+        location.path,
+        join(
+          f.companion,
+          item === "_aligndev" ? ".plans" : item === "alignfirst" ? "alignfirst.json" : item,
+        ),
+      );
     }
     await selectionHelp(f, f.companionProject, "b");
   });
