@@ -45,6 +45,12 @@ The tooling runs through the `alignfirst` CLI built in this workspace, so run `n
 
 In the main worktree, `.plans` is a symlink to the `alignfirst/` folder in a clone of the work-files repository. The folder is shared with the team and never committed here.
 
+## Packaged acceptance
+
+After building, run `fnm exec --using=.nvmrc npm run release:smoke -- --cli-only`. It installs checkout tarballs, including the workspace kernel, into an isolated CLI tree and exercises separate package-free disposable consumers. Python acceptance requires `python3` with stdlib `venv`; it uses no pip/network installer. The fixture proves two-package shared imports, virtual-environment/data/port isolation, a real HTTP API, a portless worker and Python content/transform/summary scripts. It does not exercise uv, FastAPI, Celery or Docker.
+
+Run `BUN_BIN=$(command -v bun) fnm exec --using=.nvmrc npm run test:cli-runtimes` with Bun **1.4.4** and usable `bwrap`. Missing prerequisites fail acceptance rather than skip a tier. `CLI_RUNTIME_KEEP=1` retains disposable consumers; the runner prints the artifact directory with exact commands and executable/runtime/cwd audit records. The matrix covers Node/Bun launchers and installed-child finalize/stop/removal, restricted PATH and filesystem-proven Node absence. Project commands retain their selected toolchain independently of the CLI runtime. Harness checks use a fake Docker executable and offline native shims, not production services or providers.
+
 ## OpenClaw regression policy
 
 After upgrades, select a few representative scenarios for the changed behavior. The full matrix is never the default. Investigate and fix unexpected errors before expanding coverage, and record the reason for any additional scenarios, surfaces or iterations. Conversation-model tests use Terra only; the judge uses Haiku through OpenRouter. See [Running the OpenClaw Tests](docs/aligndev-openclaw/running-openclaw-tests.md#scenario-selection) for selection and commands.
