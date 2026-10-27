@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { lstatSync, readdirSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 
@@ -29,33 +29,54 @@ export interface RuntimeDisposal {
 /** Persist ownership before hooks or log creation. A retained path starts a new generation. */
 export async function claimRuntime(storage: WorkspaceStorage): Promise<RuntimeOwner | undefined> {
   assertStorage(storage);
-  return updateWorkspaces(storage.mainWorktree, storage.registryDir, (registry) => {
-    if (storage.in === "project") return;
-    assertWorkspaceCleanupComplete(findWorkspaceByPath(registry, storage.currentWorktree)?.entry);
-    registry.runtimeOwners ??= {};
-    const owners = registry.runtimeOwners;
-    const id = basename(storage.runtimeDir);
-    const existing = owners[id];
-    if (existing?.state === "deletionPending") throw pendingError(storage);
-    if (existing?.state === "active") return { ...existing };
-    if (existing) assertQuiescent(storage, registry, true);
-    else if (
-      lstatSync(storage.runtimeDir, { throwIfNoEntry: false }) !== undefined &&
-      readdirSync(storage.runtimeDir).length !== 0
-    )
-      throw new WorkspaceError(
-        `Nonempty unowned runtime destination: ${storage.runtimeDir}. Preserve files and recover explicitly.`,
-      );
-    const owner: RuntimeOwner = {
-      worktree: storage.currentWorktree,
-      runtimeDir: storage.runtimeDir,
-      main: storage.currentWorktree === storage.mainWorktree,
-      generation: randomUUID(),
-      state: "active",
-    };
-    owners[id] = owner;
-    return { ...owner };
-  });
+  return updateWorkspaces(storage.mainWorktree, storage.registryDir, (registry) =>
+    claimRuntimeRecord(storage, registry),
+  );
+}
+
+/** Caller holds the shared lock and publishes a resource/preparation identity in this mutation. */
+export function claimRuntimeInRegistry(
+  storage: WorkspaceStorage,
+  registry: WorkspacesRegistry,
+): RuntimeOwner | undefined {
+  const runtime = registry.runtimeOwners?.[basename(storage.runtimeDir)];
+  if (runtime?.state === "active" && !findWorkspaceByPath(registry, storage.currentWorktree))
+    throw new WorkspaceError(
+      `Missing durable workspace recipe identity for active runtime ${storage.currentWorktree}. Preserve state and recover its registration before setup/start.`,
+    );
+  return claimRuntimeRecord(storage, registry);
+}
+
+function claimRuntimeRecord(
+  storage: WorkspaceStorage,
+  registry: WorkspacesRegistry,
+): RuntimeOwner | undefined {
+  assertStorage(storage);
+  if (storage.in === "project") return;
+  assertWorkspaceCleanupComplete(findWorkspaceByPath(registry, storage.currentWorktree)?.entry);
+  registry.runtimeOwners ??= {};
+  const owners = registry.runtimeOwners;
+  const id = basename(storage.runtimeDir);
+  const existing = owners[id];
+  if (existing?.state === "deletionPending") throw pendingError(storage);
+  if (existing?.state === "active") return { ...existing };
+  if (existing) assertQuiescent(storage, registry, true);
+  else if (
+    lstatSync(storage.runtimeDir, { throwIfNoEntry: false }) !== undefined &&
+    readdirSync(storage.runtimeDir).length !== 0
+  )
+    throw new WorkspaceError(
+      `Nonempty unowned runtime destination: ${storage.runtimeDir}. Preserve files and recover explicitly.`,
+    );
+  const owner: RuntimeOwner = {
+    worktree: storage.currentWorktree,
+    runtimeDir: storage.runtimeDir,
+    main: storage.currentWorktree === storage.mainWorktree,
+    generation: randomUUID(),
+    state: "active",
+  };
+  owners[id] = owner;
+  return { ...owner };
 }
 
 /** Validate ownership and log destinations immediately before runtime writes. Creates nothing. */
@@ -153,6 +174,10 @@ export async function disposeRuntime(
     });
     signal?.throwIfAborted();
     assertStorage(storage);
+    if (storage.currentWorktree === storage.mainWorktree || existsSync(storage.currentWorktree))
+      throw new WorkspaceError(
+        `Runtime disposal requires an absent non-main worktree: ${storage.currentWorktree}.`,
+      );
     await rm(storage.runtimeDir, { recursive: true, force: true });
     signal?.throwIfAborted();
     await updateWorkspaces(storage.mainWorktree, storage.registryDir, (registry) => {

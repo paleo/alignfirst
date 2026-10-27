@@ -22,6 +22,8 @@ export interface WorkspaceOutput {
 export interface WorkspaceHost {
   /** Target-selected settings, recipe provenance, configuration directory and storage addresses. */
   loadWorkspace?: (worktree: string) => WorkspaceConfig;
+  /** Fresh registration read under the runtime lock; never acquires a companion lock. */
+  assertLifecycleAdmission?: () => void;
   validateWorkFiles: (worktree: string) => void | Promise<void>;
   sharedDirectoryProtection: (
     worktree: string,

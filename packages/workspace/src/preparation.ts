@@ -23,6 +23,8 @@ import {
   type GitContext,
 } from "./git.js";
 import type { SharedDirectoryProtection, WorkspaceHost } from "./operation.js";
+import { resolveWorkspaceStorage, type WorkspaceStorage } from "./storage.js";
+import { assertDirectoryPath } from "./registry-ownership.js";
 import type { WorktreeContext } from "./worktree.js";
 
 export interface Preparation {
@@ -38,12 +40,13 @@ export async function validateMainBaseline(
   ctx: WorktreeContext,
   host: WorkspaceHost,
   env: NodeJS.ProcessEnv,
+  storage?: WorkspaceStorage,
 ): Promise<SharedDirectoryProtection> {
   await host.validateWorkFiles(ctx.mainWorktree);
   const protection = await host.sharedDirectoryProtection(ctx.mainWorktree);
   const source = { cwd: ctx.mainWorktree, env };
   if (protection.plans.in === "project") assertIgnored(source, ".plans");
-  validateRuntimeStorage(source);
+  validateRuntimeStorage(source, storage);
   const local = join(ctx.mainWorktree, ".local");
   if (
     pathExists(local) &&
@@ -68,8 +71,12 @@ export function assertReservedCommit(
   commit: string | undefined,
   protection: SharedDirectoryProtection,
   includeIndex = false,
+  storage?: WorkspaceStorage,
 ): void {
-  for (const name of [".local-wt", ...(protection.plans.in === "project" ? [".plans"] : [])]) {
+  for (const name of [
+    ...(storage?.in === "companion" ? [] : [".local-wt"]),
+    ...(protection.plans.in === "project" ? [".plans"] : []),
+  ]) {
     if (targetTracks(source, commit, name, includeIndex))
       throw new WorkspaceError(
         `Target commit${includeIndex ? " or index" : ""} tracks ${name}. Untrack and ignore it before workspace setup.`,
@@ -99,14 +106,15 @@ export async function planPreparation(
   filePaths: string[],
   diagnostic: (message: string) => void,
   registryDir = join(ctx.mainWorktree, ".local-wt", "workspace-registry"),
+  storage?: WorkspaceStorage,
 ): Promise<Preparation> {
   const protection = await host.sharedDirectoryProtection(ctx.mainWorktree);
   const source = { cwd: ctx.mainWorktree, env };
   const target = { cwd: ctx.currentWorktree, env };
   const mainCommit = preparationCommit(source);
   const targetCommit = ctx.isMainWorktree ? mainCommit : preparationCommit(target);
-  assertReservedCommit(target, targetCommit, protection, true);
-  validateRuntimeStorage(target);
+  assertReservedCommit(target, targetCommit, protection, true, storage);
+  validateRuntimeStorage(target, storage);
   const repo = readRepository(source);
   const links: Link[] = [];
   const createSources: string[] = [];
@@ -123,7 +131,9 @@ export async function planPreparation(
         main === ctx.mainWorktree ||
         [
           join(ctx.mainWorktree, ".plans"),
-          join(ctx.mainWorktree, ".local-wt"),
+          storage?.in === "companion"
+            ? resolve(storage.registryDir, "..")
+            : join(ctx.mainWorktree, ".local-wt"),
           protection.plans.path,
           registryDir,
         ].some(
@@ -155,7 +165,10 @@ export async function planPreparation(
         links.push({ path: resolve(ctx.currentWorktree, name), source: main });
       continue;
     }
-    const runtime = canonicalPath(join(ctx.mainWorktree, ".local-wt"));
+    const runtime =
+      storage?.in === "companion"
+        ? resolve(storage.registryDir, "..")
+        : canonicalPath(join(ctx.mainWorktree, ".local-wt"));
     if (isInside(runtime, canonicalPath(main)) || isInside(canonicalPath(main), runtime))
       throw new WorkspaceError(`Shared directory overlaps runtime storage: ${main}`);
     if (isProjectTrackedDirectory(source, main, repo.commonDir)) {
@@ -168,13 +181,13 @@ export async function planPreparation(
       throw new WorkspaceError(`Source is not a usable directory: ${main}`);
     if (!ctx.isMainWorktree) links.push({ path: resolve(ctx.currentWorktree, name), source: main });
   }
-  const mainRegistry = join(ctx.mainWorktree, ".local-wt", "workspace-registry");
+  const mainRegistry = registryDir;
   if (
     pathExists(mainRegistry) &&
     (lstatSync(mainRegistry).isSymbolicLink() || !statSync(mainRegistry).isDirectory())
   )
     throw new WorkspaceError(`Conflicting main registry destination: ${mainRegistry}`);
-  if (!ctx.isMainWorktree)
+  if (!ctx.isMainWorktree && storage?.in !== "companion")
     links.push({
       path: join(ctx.currentWorktree, ".local-wt", "workspace-registry"),
       source: mainRegistry,
@@ -191,14 +204,14 @@ export async function planPreparation(
   for (const path of filePaths) {
     const destination = assertFileDestination(ctx.currentWorktree, path, registryDir);
     if (
-      isInside(resolve(ctx.currentWorktree, ".local-wt"), destination) ||
+      isInside(storage?.runtimeDir ?? resolve(ctx.currentWorktree, ".local-wt"), destination) ||
       links.some((link) => isInside(link.path, destination) || isInside(destination, link.path))
     )
       throw new WorkspaceError(`File destination overlaps shared or runtime storage: ${path}`);
   }
   return {
     apply: async () => {
-      mkdirSync(join(ctx.currentWorktree, ".local-wt"), { recursive: true });
+      mkdirSync(storage?.runtimeDir ?? join(ctx.currentWorktree, ".local-wt"), { recursive: true });
       mkdirSync(mainRegistry, { recursive: true });
       for (const source of createSources) mkdirSync(source, { recursive: true });
       for (const link of links) {
@@ -209,7 +222,9 @@ export async function planPreparation(
         }
       }
       const shared = links.filter(
-        (link) => !isInside(join(ctx.currentWorktree, ".local-wt"), link.path),
+        (link) =>
+          storage?.in === "companion" ||
+          !isInside(join(ctx.currentWorktree, ".local-wt"), link.path),
       );
       ensureExclusions(
         source,
@@ -221,9 +236,14 @@ export async function planPreparation(
   };
 }
 
-export function validateRuntimeStorage(source: GitContext): void {
-  const path = join(source.cwd, ".local-wt");
-  if (targetTracks(source, preparationCommit(source), ".local-wt"))
+export function validateRuntimeStorage(source: GitContext, storage?: WorkspaceStorage): void {
+  const selected = storage && resolveWorkspaceStorage(storage, source.cwd);
+  if (selected?.in === "companion") {
+    assertDirectoryPath(resolve(selected.registryDir, "../.."), selected.runtimeDir);
+    assertDirectoryPath(resolve(selected.registryDir, "../.."), selected.registryDir);
+  }
+  const path = selected?.runtimeDir ?? join(source.cwd, ".local-wt");
+  if (selected?.in !== "companion" && targetTracks(source, preparationCommit(source), ".local-wt"))
     throw new WorkspaceError(`Runtime storage is tracked: ${path}`);
   const stat = lstatSync(path, { throwIfNoEntry: false });
   if (stat && (!stat.isDirectory() || stat.isSymbolicLink()))
@@ -240,7 +260,7 @@ export function validateRuntimeStorage(source: GitContext): void {
     }
   }
   // Directory-only ignore rules count before the directory exists; symlinks never do.
-  assertIgnored(source, ".local-wt/");
+  if (selected?.in !== "companion") assertIgnored(source, ".local-wt/");
 }
 
 function assertIgnored(source: GitContext, path: string): void {

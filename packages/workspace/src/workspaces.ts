@@ -374,6 +374,8 @@ export interface RegisterWorkspaceInput {
   isMainWorktree: boolean;
   recipe: WorkspaceRecipe;
   preparationOwner?: OwnershipClaim;
+  /** Runs under the shared lock before publication; no hooks or nested locks. */
+  admit?: (registry: WorkspacesRegistry) => void;
   /** When `true`, an existing `ready` workspace is reset to `pending` so the re-finalize is observable. */
   force?: boolean;
 }
@@ -416,6 +418,7 @@ export async function registerWorkspace(
       preparationOwner: input.preparationOwner,
     };
     if (input.isMainWorktree) entry.main = true;
+    input.admit?.(registry);
     registry.workspaces[name] = entry;
     return { name, status: entry.status };
   });

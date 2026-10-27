@@ -1,14 +1,10 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { resolveWorkspaceStorage } from "./storage.js";
 
 import { WorkspaceError } from "./errors.js";
 import { canonicalPath, readRepository, type GitContext } from "./git.js";
-import {
-  findWorkspaceByPath,
-  readWorkspaces,
-  type RuntimeOwner,
-  type WorkspacesRegistry,
-} from "./workspaces.js";
+import { findWorkspaceByPath, readWorkspaces, type WorkspacesRegistry } from "./workspaces.js";
 
 export interface WorkspaceInventory {
   mainWorktree: string;
@@ -27,7 +23,8 @@ export interface WorkspaceRecord {
   recipe: "defaults" | "manifest" | null;
   ports: Record<string, number>;
   devSetupFailure: string | null;
-  runtime?: RuntimeOwner;
+  runtimeDir: string | null;
+  runtimeState: "active" | "retained" | "deletionPending" | null;
 }
 
 /** A read-only exact-path union; neither Git nor workspace registrations are repaired. */
@@ -61,7 +58,13 @@ export function readWorkspaceInventory(
         recipe: entry?.recipe.kind ?? null,
         ports: entry?.ports ?? {},
         devSetupFailure: entry?.devSetupFailure?.message ?? null,
-        runtime,
+        runtimeDir:
+          runtime?.runtimeDir ??
+          (registry.storage?.in !== "companion" && (entry || existsSync(resolve(path, ".local-wt")))
+            ? resolveWorkspaceStorage({ in: "project", mainWorktree: repo.mainWorktree }, path)
+                .runtimeDir
+            : null),
+        runtimeState: runtime?.state ?? null,
       };
     })
     .sort((a, b) => Number(b.main) - Number(a.main) || a.path.localeCompare(b.path));

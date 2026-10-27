@@ -10,6 +10,7 @@ import {
   assertWorkspaceCleanupComplete,
   findWorkspaceByPath,
   readWorkspaces,
+  type WorkspacesRegistry,
 } from "./workspaces.js";
 
 const FILENAME = "dev-startups.json";
@@ -50,8 +51,10 @@ export async function claimStartup(
   mainWorktree: string,
   registryDir: string,
   worktree: string,
+  admit?: () => void,
 ): Promise<StartupOwner> {
   return withRegistryLock(mainWorktree, registryDir, () => {
+    admit?.();
     const data = readStartupOwners(mainWorktree, registryDir);
     const path = resolve(worktree);
     const registry = readWorkspaces(mainWorktree, registryDir);
@@ -114,12 +117,13 @@ export function recoverStartupForCleanup(
   mainWorktree: string,
   registryDir: string,
   worktree: string,
+  gatedRegistry?: WorkspacesRegistry,
 ): void {
   const data = readStartupOwners(mainWorktree, registryDir);
   const owner = data.owners.find((entry) => entry.worktree === resolve(worktree));
   if (!owner) return;
   if (isProcessAlive(owner.pid)) throw new WorkspaceError(`Live startup owns ${worktree}.`);
-  const registry = readWorkspaces(mainWorktree, registryDir);
+  const registry = gatedRegistry ?? readWorkspaces(mainWorktree, registryDir);
   const entry = findWorkspaceByPath(registry, worktree)?.entry;
   const runtime = Object.values(registry.runtimeOwners ?? {}).find(
     (record) => record.worktree === resolve(worktree),

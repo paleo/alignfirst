@@ -4,10 +4,13 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { resolveWorkspaceStorage } from "../../src/storage.js";
 import type { WorkspaceEntry } from "../../src/workspaces.js";
 import {
   createFixtureRepo,
   type FixtureRepo,
+  type FixtureOptions,
+  fixtureRegistryDir,
   installResourceRecipe,
   resourceEvents,
   readWorkspaces,
@@ -31,7 +34,7 @@ afterEach(async () => {
   for (const fixture of fixtures.splice(0)) {
     // Join detached finalizers even when an assertion failed before the scenario's explicit wait.
     try {
-      const registry = join(fixture.repo, ".local-wt", "workspace-registry", "workspaces.json");
+      const registry = join(fixtureRegistryDir(fixture.repo), "workspaces.json");
       if (existsSync(registry)) {
         for (const entry of Object.values(readWorkspaces(fixture.repo).workspaces)) {
           const waited = runCli(fixture.repo, ["wait", entry.worktree]);
@@ -63,6 +66,69 @@ afterEach(async () => {
 });
 
 describe("externally created same-basename worktrees", () => {
+  it(
+    "uses independent companion runtimes for detached finalization, cross-target wait and status",
+    async () => {
+      const fx = externalFixture({ companionRuntime: true, companionRecipe: true });
+      const companion = join(fx.root, "companion");
+      const file = join(companion, "alignfirst.json");
+      const manifest = JSON.parse(readFileSync(file, "utf8"));
+      manifest.workspace.preSetup = [
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Manifest interpolation syntax.
+        { name: "companion helper", run: [process.execPath, "${{ configurationDir }}/helper.mjs"] },
+      ];
+      writeFileSync(file, JSON.stringify(manifest));
+      writeFileSync(
+        join(companion, "helper.mjs"),
+        `import { writeFileSync } from "node:fs"; const ctx = JSON.parse(process.env.ALIGNFIRST_WORKSPACE_CONTEXT); writeFileSync("helper-context.json", JSON.stringify({ cwd: process.cwd(), ctx }));`,
+      );
+      const barrier = join(fx.root, "finalizer.release");
+      barriers.push(barrier);
+      expect(runCli(fx.repo, ["setup", "--path", fx.first]).status).toBe(0);
+      const detached = runCli(fx.repo, ["setup", "--path", fx.second, "--detached"], {
+        E2E_FINALIZE_BARRIER: barrier,
+      });
+      expect(detached.status, detached.stderr).toBe(0);
+      await waitForFile(`${barrier}.entered`);
+      const owner = Number(readFileSync(`${barrier}.owner`, "utf8"));
+      expect(entryAt(fx, fx.second).entry.preparationOwner?.pid).toBe(owner);
+      const firstRuntime = resolveWorkspaceStorage(
+        { in: "companion", mainWorktree: fx.repo, companionDir: companion },
+        fx.first,
+      ).runtimeDir;
+      const secondRuntime = resolveWorkspaceStorage(
+        { in: "companion", mainWorktree: fx.repo, companionDir: companion },
+        fx.second,
+      ).runtimeDir;
+      expect(firstRuntime).not.toBe(secondRuntime);
+      expect(detached.stdout).toContain(join(secondRuntime, "logs/workspace-setup.log"));
+      const status = runCli(fx.repo, ["status", fx.second, "--json"]);
+      expect(JSON.parse(status.stdout).workspace).toMatchObject({
+        runtimeDir: secondRuntime,
+        runtimeState: "active",
+        preparation: "pending",
+      });
+      const refused = runCli(fx.repo, ["__finalize"], undefined, fx.second);
+      expect(refused.status).toBe(1);
+      expect(refused.stderr).toContain("ownership lost");
+      expect(entryAt(fx, fx.second).entry.preparationOwner?.pid).toBe(owner);
+      const helper = JSON.parse(readFileSync(join(fx.second, "helper-context.json"), "utf8"));
+      expect(helper).toMatchObject({
+        cwd: fx.second,
+        ctx: { configurationDir: companion, companionDir: companion, runtimeDir: secondRuntime },
+      });
+      writeFileSync(barrier, "release");
+      const waited = runCli(fx.repo, ["wait", fx.second, "--verbose"]);
+      expect(waited.status, waited.stderr).toBe(0);
+      expect(entryAt(fx, fx.second).entry.preparationOwner).toBeUndefined();
+      for (const target of [fx.first, fx.second])
+        expect(existsSync(join(target, ".local-wt"))).toBe(false);
+      for (const runtime of [firstRuntime, secondRuntime])
+        expect(readFileSync(join(runtime, "logs/workspace-setup.log"), "utf8")).toContain("READY:");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it(
     "tears down through the external target's current recipe and re-adopts without Git deletion",
     () => {
@@ -287,8 +353,8 @@ function git(cwd: string, args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8" });
 }
 
-function externalFixture(): ExternalFixture {
-  const fixture = createFixtureRepo({ fallbackSeeding: true, sharedDirs: [".shared"] });
+function externalFixture(options: FixtureOptions = {}): ExternalFixture {
+  const fixture = createFixtureRepo({ fallbackSeeding: true, sharedDirs: [".shared"], ...options });
   const first = join(fixture.root, "managed", "one", "same");
   const second = join(fixture.root, "external", "nested", "two", "same");
   mkdirSync(join(fixture.root, "managed", "one"), { recursive: true });

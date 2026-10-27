@@ -9,6 +9,7 @@ import {
   type DevSetupOptions,
   type RunFilesInputsProvider,
   runDevSetup,
+  admitDevWorkspace,
 } from "./dev-setup.js";
 import {
   type DevServerEntry,
@@ -160,10 +161,6 @@ export async function runDevServer(
   }
   if (["foreground", "up", "restart", "setup"].includes(operation.command.kind)) {
     assertWorkspaceCleanupComplete(registered?.entry);
-    if (config.storage)
-      assertRuntimeOwnership(
-        resolveWorkspaceStorage(config.storage, kernel.worktree.currentWorktree),
-      );
   }
   await dispatch(operation.command, kernel);
 }
@@ -262,6 +259,8 @@ function devSetupInput(kernel: DevKernel, options: DevSetupOptions): DevSetupInp
     output: kernel.output,
     commands: kernel.commands,
     registryDir: kernel.registryDir,
+    storage: kernel.config.storage,
+    assertLifecycleAdmission: kernel.host?.assertLifecycleAdmission,
     runtimeDir: runtimeDirForTarget(kernel.config, kernel.worktree.currentWorktree),
     ports: kernel.ports,
     runFiles: kernel.config.runFiles ?? [],
@@ -468,7 +467,20 @@ async function runStartChecks(
   if (!options.restart && (await handleAlreadyRunning(kernel, currentWorktree, false))) return;
   const settings = kernel.config.resolveStartSettings?.();
   if (settings) kernel.config.maxConcurrentDevServers = settings.maxConcurrentDevServers;
-  const owner = await claimStartup(mainWorktree, kernel.registryDir, currentWorktree);
+  await admitDevWorkspace(
+    devSetupInput(kernel, {
+      force: false,
+      resetPorts: false,
+      fromFinalize: false,
+      beforeStart: true,
+    }),
+  );
+  const owner = await claimStartup(
+    mainWorktree,
+    kernel.registryDir,
+    currentWorktree,
+    kernel.host?.assertLifecycleAdmission,
+  );
   let prepared: PreparedStart | undefined;
   try {
     prepared = await prepareStart(kernel, options, owner);
@@ -579,6 +591,7 @@ async function spawnAndAwait(
     ctx.signal?.throwIfAborted();
     config.output.text(`Starting ${server.name} dev server...`);
     if (server.kind === "spawn") {
+      if (config.storage) assertRuntimeOwnership(resolveWorkspaceStorage(config.storage, ctx.cwd));
       state.spawnPids[server.name] = await spawnServer(
         server,
         runtimeDirForTarget(config, ctx.cwd),

@@ -18,20 +18,19 @@ Setup requires usable effective `.plans`, untracked by the product repository. P
 
 Main can be adopted before its initial commit. Staged plans/runtime paths, shared sources and generated-file destinations remain protected. Make an initial commit before creating a linked workspace; commit templates before relying on committed-source recipes.
 
-`.local-wt/` is always per-worktree runtime storage. It must be ignored, untracked and free of conflicting files or symlinks. Setup creates it when absent. Its kernel-owned `workspace-registry/` subtree is local to main; linked worktrees link only to their own main's registry. Preserve and repair conflicting or redirected registry state before retrying. Use tracked `.gitignore` rules with approval, or root-anchored rules in `git rev-parse --git-path info/exclude` when project files must stay unchanged. Local exclusions still change Git metadata; workspace setup is not filesystem-untouched companion mode.
+Project placement uses per-worktree `.local-wt/`, ignored, untracked and free of conflicting files or symlinks. Setup creates it when absent. Its kernel-owned `workspace-registry/` subtree is local to main; linked worktrees link only to their own main's registry. Effective companion `workspaceRuntime` placement instead uses `<companion>/.local-wt/workspace-registry` and a separate path-derived directory below `<companion>/.local-wt/worktrees/` for each real worktree. It creates no checkout runtime placeholder, registry link or runtime ignore rule. Preserve and repair conflicting or redirected registry state before retrying. Use tracked `.gitignore` rules with approval, or root-anchored rules in `git rev-parse --git-path info/exclude` when project files must stay unchanged. Local exclusions still change Git metadata; companion placement does not suppress explicit shared-directory links, project hooks, generated application files or Git operations.
 
 Setup never provisions missing plans, selects companions or edits tracked ignore rules. Prepare these separately through [plans setup](plans-setup.md) or [companion setup](companion-setup.md). For an assistant, the separately authorized `aligndev guide work-files-setup` procedure precedes ticket reservation, request capture and coding effects.
 
 Without a manifest, setup is synchronous and protocol-ready: Git, work files and runtime storage. It installs nothing, seeds no application configuration, allocates no ports and starts no services. `--full` and dev startup require declared services. Usable untracked `.local` is shared by default when present; tracked `.local` stays branch-local. Explicit `workspace.sharedDirs` adds project directories and cannot override plans/runtime policies.
 
-## Configuration families
+## Configuration
 
-- `alignfirst.json` or `alignfirst.jsonc`: project conventions, `plans.repositoryFolder`, `plans.autoArchive` and Git settings. A companion may select this logical family with `items.alignfirst`.
-- `alignfirst-workspace.json` or `alignfirst-workspace.jsonc`: branch-local recipes. A companion supplies neither recipes nor runtime storage.
+One selected `alignfirst.json` or `alignfirst.jsonc` contains `conventions`, `plans`, optional `developerInstructions`, `workspace` and `devServer`. A companion may select this complete family with `items.alignfirst`; sections are never merged across sources. Project-selected recipes remain branch-local. Commands still default to the target checkout as cwd.
 
-Each requires `schemaVersion: 1` and accepts optional `$schema`. `.json` is strict JSON; `.jsonc` accepts comments and trailing commas. Both extensions in one selected location are an error. Unknown properties and unsupported schema majors fail with upgrade guidance; invalid files never select defaults. Discovery starts at the current Git worktree root, including from nested cwd. Outside Git, project settings use the caller directory.
+The document requires `schemaVersion: 1` and accepts optional `$schema`. `.json` is strict JSON; `.jsonc` accepts comments and trailing commas. Both extensions in one selected location are an error. Unknown properties and unsupported schema majors fail with upgrade guidance; invalid files never select defaults. Discovery starts at the current Git worktree root, including from nested cwd. Outside Git, project settings use the caller directory.
 
-Editor schemas ship at `alignfirst/schemas/alignfirst-v1.schema.json` and `@alignfirst/workspace/schemas/workspace-v1.schema.json`. Validation uses local packaged schemas without network requests. Each family has an independent schema major. Compatible additions retain the major; future breaking majors require sequential in-memory converters retained for the CLI major. Reading never rewrites committed files. There is no converter for retired wrappers or `.alignfirst.json`.
+The editor schema ships at `alignfirst/schemas/alignfirst-v1.schema.json`. Validation uses the packaged schema without network requests. Compatible additions retain the major; future breaking majors require sequential in-memory converters retained for the CLI major. Reading never rewrites committed files. There is no converter for retired wrappers or `.alignfirst.json`.
 
 ## Manifest and project scripts
 
@@ -109,11 +108,11 @@ The same CLI can prepare isolated `.venv`, per-worktree databases and multiple p
 
 ## Cleanup and external owners
 
-`workspace setup -c <branch> --from <ref>` creates; `workspace setup <branch>` reuses; `--path <path>` chooses a destination. Without branch/path, setup adopts the current registered Git root without switching branches. `workspace list --json` combines Git and registry state, including unprepared and orphan entries, without adopting or cleaning them.
+`workspace setup -c <branch> --from <ref>` creates; `workspace setup <branch>` reuses; `--path <path>` chooses a destination. Without branch/path, setup adopts the current registered Git root without switching branches. `workspace list --json` combines Git, resource registrations and external runtime owners without adopting or cleaning them. Rows expose nullable `runtimeDir` and `runtimeState` (`active`, `retained` or `deletionPending`). Runtime-only rows have null names/recipes, no ports and unprepared status.
 
 Paseo or another external owner runs `workspace setup` inside its checkout, then `workspace teardown` before its own deletion. Preserve Paseo's archive-before-removal procedure. Adoption does not transfer Git deletion ownership.
 
-`dev down` stops owned processes and command services. `workspace teardown` additionally runs destructive purge and releases identity/ports, preserving files, dependencies, links and Git state. `workspace remove` adds protected Git deletion and preserves branches. `workspace prune` explicitly cleans orphans before pruning Git metadata. Wait for pending finalizers first. Force bypasses dirtiness only; it never bypasses protected targets or failed cleanup.
+`dev down` stops owned processes and command services. `workspace teardown` additionally runs destructive purge and releases identity/ports, preserving files, dependencies, links and Git state. `workspace remove` adds protected Git deletion and preserves branches. `workspace prune` explicitly cleans orphans before pruning Git metadata. Companion teardown retains runtime files and ownership after releasing resource names/ports. Remove disposes the target runtime after Git succeeds. Prune also disposes clean runtime-only orphans after external Git deletion, without another purge. Deletion failure retains discoverable deletionPending state; retry handles missing runtime directories. Live preparation/finalizers and startup claims block cleanup, even with a missing checkout. Wait for their owners first. Force bypasses dirtiness only; it never bypasses protected targets or failed cleanup.
 
 ### Teardown by name
 
@@ -125,4 +124,4 @@ In `AGENTS.md` and, for an assistant, `DEVELOPERS.md`, describe the project's re
 
 ## The AlignDev Contract
 
-An assistant always uses `alignfirst workspace` for preparation, with or without a manifest. Default readiness is protocol-ready. Coding delegation and its native permissions remain separate; shared symlinks grant no sandbox access. For a companion-only project, a default workspace still needs local runtime storage and exclusions. Obtain approval for that footprint rather than promising an untouched filesystem.
+An assistant always uses `alignfirst workspace` for preparation, with or without a manifest. Default readiness is protocol-ready. Coding delegation and its native permissions remain separate; shared symlinks grant no sandbox access. A companion runtime needs no checkout runtime directory or exclusions. Explicit shared directories, project commands and Git metadata remain independently writable. Before changing placement, clean resources under the old selection. CLI unregister refuses outstanding resources/disposal, including force; plain unregister can retain clean data and reports the absolute paths whose automatic discovery is being removed. Manual registry edits have no placement-history recovery.

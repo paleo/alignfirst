@@ -36,7 +36,12 @@ import { CliError } from "../cli-error.js";
 import type { CommandContext } from "../context.js";
 import { resolvePlansMode } from "../plans/mode.js";
 import { resolveProjectConfig } from "../project-config.js";
-import { resolveProjectLayout, projectRoot, type ProjectLayout } from "../project-layout.js";
+import {
+  assertCompanionLifecycleAdmission,
+  resolveProjectLayout,
+  projectRoot,
+  type ProjectLayout,
+} from "../project-layout.js";
 
 export async function runWorkspaceCommand(ctx: CommandContext, args: string[]): Promise<number> {
   const controller = new AbortController();
@@ -54,26 +59,33 @@ export async function runWorkspaceCommand(ctx: CommandContext, args: string[]): 
       return 0;
     }
     const root = detectWorktree(ctx.cwd);
-    assertRegistryOwnership(root.mainWorktree, root.currentWorktree, registryDirFor(".local-wt"));
     const config = loadRecipe(ctx, root.currentWorktree, output, controller.signal, ctx.layout);
     const informational = ["help", "guide", "version", "list", "status"].includes(
       parsed.command.kind,
     );
-    if (!informational) assertRegisteredRecipe(root.currentWorktree, config.recipe);
+    const registryDir = config.storage?.registryDir ?? registryDirFor(config.runtimeDir);
+    assertRegistryOwnership(root.mainWorktree, root.currentWorktree, registryDir);
+    if (!informational) assertRegisteredRecipe(root.currentWorktree, config.recipe, registryDir);
     const before =
       parsed.json === true && ["teardown", "remove", "prune"].includes(parsed.command.kind)
-        ? readWorkspaceInventory({ cwd: ctx.cwd, env: ctx.env }, registryDirFor(config.runtimeDir))
+        ? readWorkspaceInventory({ cwd: ctx.cwd, env: ctx.env }, registryDir)
         : undefined;
     const outcome = await runWorkspace(config, { ...operation, ...parsed });
     if (parsed.json !== true) return 0;
     const command = parsed.command;
     if (command.kind === "prune") {
-      const remaining = readWorkspaces(root.mainWorktree, registryDirFor(config.runtimeDir));
+      const remaining = readWorkspaceInventory({ cwd: ctx.cwd, env: ctx.env }, registryDir);
       const pruned =
         before?.workspaces
           .filter(
             (entry) =>
-              !entry.exists && entry.name !== null && !findWorkspaceByPath(remaining, entry.path),
+              !entry.exists &&
+              !entry.main &&
+              (entry.name !== null || entry.runtimeState !== null) &&
+              !remaining.workspaces.some(
+                (row) =>
+                  row.path === entry.path && (row.name !== null || row.runtimeState !== null),
+              ),
           )
           .map(({ path, name }) => ({ path, name })) ?? [];
       ctx.stdout.write(`${JSON.stringify({ mainWorktree: root.mainWorktree, pruned })}\n`);
@@ -91,10 +103,7 @@ export async function runWorkspaceCommand(ctx: CommandContext, args: string[]): 
       );
       return 0;
     }
-    const inventory = readWorkspaceInventory(
-      { cwd: root.mainWorktree, env: ctx.env },
-      registryDirFor(config.runtimeDir),
-    );
+    const inventory = readWorkspaceInventory({ cwd: root.mainWorktree, env: ctx.env }, registryDir);
     if (command.kind === "list") ctx.stdout.write(`${JSON.stringify(inventory)}\n`);
     else {
       const selector =
@@ -149,10 +158,11 @@ export async function runDevCommand(ctx: CommandContext, args: string[]): Promis
     const output = workspaceOutput(ctx, false);
     const operation = workspaceOperation(ctx, output, controller.signal);
     const root = detectWorktree(ctx.cwd);
-    assertRegistryOwnership(root.mainWorktree, root.currentWorktree, registryDirFor(".local-wt"));
     const selected = operation.host?.loadWorkspace?.(root.currentWorktree);
     if (selected === undefined) throw new WorkspaceError("Missing workspace configuration host.");
     const recipe = selected.recipe;
+    const registryDir = selected.storage?.registryDir ?? registryDirFor(selected.runtimeDir);
+    assertRegistryOwnership(root.mainWorktree, root.currentWorktree, registryDir);
     const adapted = adaptWorkspaceManifest(selected.settings ?? {}, {
       recipe,
       mainWorktree: root.mainWorktree,
@@ -168,7 +178,7 @@ export async function runDevCommand(ctx: CommandContext, args: string[]): Promis
       throw new WorkspaceError("No dev services declared in the workspace manifest.");
     if (needsServices) {
       const registered = findWorkspaceByPath(
-        readWorkspaces(root.mainWorktree, registryDirFor(".local-wt")),
+        readWorkspaces(root.mainWorktree, registryDir),
         root.currentWorktree,
       );
       assertWorkspaceCleanupComplete(registered?.entry);
@@ -176,14 +186,15 @@ export async function runDevCommand(ctx: CommandContext, args: string[]): Promis
         throw new WorkspaceError(
           "No workspace here. Run alignfirst workspace setup before dev setup/start.",
         );
-      assertRegisteredRecipe(root.currentWorktree, recipe);
-      validateRuntimeStorage({ cwd: root.mainWorktree, env: ctx.env });
-      validateRuntimeStorage({ cwd: root.currentWorktree, env: ctx.env });
+      assertRegisteredRecipe(root.currentWorktree, recipe, registryDir);
+      validateRuntimeStorage({ cwd: root.mainWorktree, env: ctx.env }, selected.storage);
+      validateRuntimeStorage({ cwd: root.currentWorktree, env: ctx.env }, selected.storage);
       await operation.host?.validateWorkFiles(root.currentWorktree);
     }
     await runDevServer(
       adapted.devServer ?? {
         runtimeDir: ".local-wt",
+        storage: selected.storage,
         recipe,
         servers: [],
         signal: controller.signal,
@@ -243,6 +254,8 @@ function alignfirstWorkspaceHost(
     return layout;
   };
   return {
+    assertLifecycleAdmission: () =>
+      assertCompanionLifecycleAdmission(ctx.home, layoutFor(callerRoot)),
     loadWorkspace: (worktree) => {
       const layout = layoutFor(worktree);
       const manifest = resolveProjectConfig(layout)?.config;
@@ -252,6 +265,7 @@ function alignfirstWorkspaceHost(
           ...(manifest?.workspace?.gitignoredFiles ?? []),
           ...(manifest?.devServer?.runFiles ?? []),
         ].map((entry) => entry.path),
+        layout.storage.registryDir,
       );
       return loadRecipe(ctx, worktree, output, signal, layout);
     },
@@ -348,10 +362,14 @@ function selectedRecipe(layout: ProjectLayout): WorkspaceRecipe {
   };
 }
 
-function assertRegisteredRecipe(worktree: string, recipe: WorkspaceRecipe): void {
+function assertRegisteredRecipe(
+  worktree: string,
+  recipe: WorkspaceRecipe,
+  registryDir: string,
+): void {
   const root = detectWorktree(worktree);
   const found = findWorkspaceByPath(
-    readWorkspaces(root.mainWorktree, registryDirFor(".local-wt")),
+    readWorkspaces(root.mainWorktree, registryDir),
     root.currentWorktree,
   );
   if (found) assertWorkspaceRecipe(root.currentWorktree, found.entry.recipe, recipe);

@@ -23,7 +23,7 @@ export type WorkspaceCommand =
   | { kind: "prune" }
   | { kind: "status"; selector: WorkspaceSelector }
   | { kind: "wait"; selector: WorkspaceSelector }
-  | { kind: "finalize"; force: boolean; full: boolean }
+  | { kind: "finalize"; force: boolean; full: boolean; preparationToken?: string }
   | { kind: "guide" }
   | { kind: "help" }
   | { kind: "version" };
@@ -237,6 +237,7 @@ function parseFinalize(tokens: string[]): ParsedWorkspaceArgs {
   const { values, positionals } = parseArgs({
     args: tokens,
     options: {
+      "preparation-token": { type: "string" },
       force: { type: "boolean" },
       full: { type: "boolean" },
       verbose: { type: "boolean" },
@@ -246,7 +247,12 @@ function parseFinalize(tokens: string[]): ParsedWorkspaceArgs {
   });
   rejectPositionals(positionals, "__finalize");
   return {
-    command: { kind: "finalize", force: values.force ?? false, full: values.full ?? false },
+    command: {
+      kind: "finalize",
+      force: values.force ?? false,
+      full: values.full ?? false,
+      preparationToken: values["preparation-token"],
+    },
     verbose: values.verbose ?? false,
   };
 }

@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { resolveWorkspaceStorage } from "../../src/storage.js";
 import type { WorkspaceManifest } from "../../src/config.js";
 import type { DevServerEntry } from "../../src/dev-servers-registry.js";
 import type { ServerContext } from "../../src/server-descriptor.js";
@@ -14,6 +15,7 @@ import {
   installResourceRecipe,
   resourceEvents,
   type FixtureRepo,
+  fixtureRegistryDir,
   readWorkspaces,
   runCli,
   runDev,
@@ -124,10 +126,10 @@ describe("registered callback identity (e2e)", () => {
     TIMEOUT_MS,
   );
 
-  it(
-    "starts, reports, attaches and stops from a nested directory using root logs",
-    async () => {
-      const target = prepareTarget();
+  it.each([false, true])(
+    "starts, reports, attaches and stops from nested cwd (companion runtime=%s)",
+    async (companionRuntime) => {
+      const target = prepareTarget(true, companionRuntime);
       const { fx, root, nested, ctx } = target;
       const file = join(root, "alignfirst.json");
       const manifest = JSON.parse(readFileSync(file, "utf8"));
@@ -136,7 +138,15 @@ describe("registered callback identity (e2e)", () => {
       const started = runDev(root, ["up"], ENV, nested);
       expect(started.status, started.stderr).toBe(0);
       expect(started.stdout).toContain(`Workspace: ${ctx.name}`);
-      const log = join(root, ".local-wt", "logs", "ready.log");
+      const runtime = resolveWorkspaceStorage(
+        {
+          in: companionRuntime ? "companion" : "project",
+          mainWorktree: fx.repo,
+          companionDir: join(fx.root, "companion"),
+        },
+        root,
+      ).runtimeDir;
+      const log = join(runtime, "logs", "ready.log");
       expect(started.stdout).toContain(`log: ${log}`);
       expect(readFileSync(log, "utf-8")).toContain("FIXTURE_READY");
       expect(existsSync(join(nested, ".local-wt"))).toBe(false);
@@ -427,10 +437,10 @@ describe("registered callback identity (e2e)", () => {
     TIMEOUT_MS,
   );
 
-  it.each(["manifest", "defaults"])(
+  it.each(["manifest", "defaults", "companionRuntime"])(
     "down --all from %s executes victim-only scripts with their recorded identities",
     (caller) => {
-      const target = prepareTarget();
+      const target = prepareTarget(true, caller === "companionRuntime");
       const { fx, root, ctx } = target;
       const other = addWorktree(fx, "three/review", "three");
       setup(fx, other);
@@ -445,7 +455,7 @@ describe("registered callback identity (e2e)", () => {
       expect(name).toMatch(/^review-[a-f0-9]{8}$/);
       expect(name).not.toBe(ctx.name);
       const otherCtx = { name, cwd: other, ports: entry.ports ?? {} };
-      if (caller === "manifest") {
+      if (caller !== "defaults") {
         installResourceRecipe(fx.repo, "caller-version", { service: false });
         expect(runDev(fx.repo, ["setup"]).status).toBe(0);
         expect(readWorkspaces(fx.repo).workspaces.fixrepo.main).toBe(true);
@@ -473,10 +483,13 @@ describe("registered callback identity (e2e)", () => {
     TIMEOUT_MS,
   );
 
-  it.each([false, true])(
-    "eviction uses the victim recipe and refuses replacement on cleanup failure=%s",
-    (fail) => {
-      const { fx, root, ctx } = prepareTarget();
+  it.each([
+    { fail: false, companionRuntime: false },
+    { fail: true, companionRuntime: true },
+  ])(
+    "eviction uses the victim recipe and preserves failed stop ownership ($fail, companion=$companionRuntime)",
+    ({ fail, companionRuntime }) => {
+      const { fx, root, ctx } = prepareTarget(true, companionRuntime);
       installResourceRecipe(root, "victim-version");
       installResourceRecipe(fx.repo, "caller-version", { service: false });
       expect(runDev(root, ["up"], ENV).status).toBe(0);
@@ -593,8 +606,8 @@ describe("registered callback identity (e2e)", () => {
   );
 });
 
-function prepareTarget(devSetup = true): Target {
-  const fx = createFixtureRepo();
+function prepareTarget(devSetup = true, companionRuntime = false): Target {
+  const fx = createFixtureRepo({ companionRuntime });
   fixtures.push(fx);
   const first = addWorktree(fx, "one/review", "one");
   const root = addWorktree(fx, "two/review", "two");
@@ -684,7 +697,7 @@ function jsonLines<T>(path: string): T[] {
 }
 
 function devEntries(fx: FixtureRepo): DevServerEntry[] {
-  const file = join(fx.repo, ".local-wt", "workspace-registry", "dev-servers.json");
+  const file = join(fixtureRegistryDir(fx.repo), "dev-servers.json");
   return existsSync(file) ? JSON.parse(readFileSync(file, "utf-8")).servers : [];
 }
 

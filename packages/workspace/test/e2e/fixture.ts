@@ -30,6 +30,8 @@ export interface FixtureOptions {
   fallbackSeeding?: boolean;
   oldConfig?: boolean;
   sharedDirs?: string[];
+  companionRuntime?: boolean;
+  companionRecipe?: boolean;
 }
 
 /** Disposable Git, home and project-owned scripts. No consumer wrapper or local dependencies. */
@@ -53,6 +55,32 @@ export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
     join(repo, "alignfirst.json"),
     JSON.stringify({ schemaVersion: 1, ...manifest, ...(options.oldConfig ? { ports: {} } : {}) }),
   );
+  if (options.companionRuntime || options.companionRecipe) {
+    const companion = join(root, "companion");
+    mkdirSync(join(companion, ".plans"), { recursive: true });
+    const registry = join(root, "home/.alignfirst/companions");
+    mkdirSync(registry, { recursive: true });
+    writeFileSync(
+      join(registry, "registry.json"),
+      JSON.stringify({
+        projects: {
+          [repo]: {
+            dir: companion,
+            defaultLocation: "companion",
+            items: {
+              alignfirst: options.companionRecipe ? "companion" : "project",
+              workspaceRuntime: options.companionRuntime ? "companion" : "project",
+            },
+          },
+        },
+      }),
+    );
+    if (options.companionRecipe)
+      writeFileSync(
+        join(companion, "alignfirst.json"),
+        readFileSync(join(repo, "alignfirst.json")),
+      );
+  }
   git(repo, ["init", "-b", "main"]);
   git(repo, ["config", "user.email", "e2e@example.com"]);
   git(repo, ["config", "user.name", "E2E"]);
@@ -129,7 +157,7 @@ function fixtureManifest(options: FixtureOptions): WorkspaceManifest {
 }
 
 function lifecycleSource(): string {
-  return `import { spawn } from "node:child_process";
+  return `import { spawn, execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 const ctx = JSON.parse(process.env.ALIGNFIRST_WORKSPACE_CONTEXT);
@@ -171,9 +199,10 @@ if (action === "finalize") {
   if (process.env.E2E_DEV_SETUP_FAIL === "1") throw new Error("e2e dev boom.");
   appendFileSync(join(ctx.currentWorktree, "setup-runs.log"), "force=" + ctx.force + "\\n");
 } else if (action === "purge") {
-  appendFileSync(join(ctx.mainWorktree, "purge-runs.jsonl"), JSON.stringify({ name: ctx.name, worktree: ctx.currentWorktree, mainWorktree: ctx.mainWorktree, verbose: ctx.verbose }) + "\\n");
+  appendFileSync(join(ctx.mainWorktree, "purge-runs.jsonl"), JSON.stringify({ name: ctx.name, worktree: ctx.currentWorktree, mainWorktree: ctx.mainWorktree, runtimeDir: ctx.runtimeDir, verbose: ctx.verbose }) + "\\n");
   if (process.env.E2E_PURGE_FAIL === "1") throw new Error("e2e purge boom");
   if (process.env.E2E_PURGE_RECREATE_WORKTREE === "1") mkdirSync(ctx.currentWorktree, { recursive: true });
+  if (process.env.E2E_PURGE_LOCK_WORKTREE === "1") execFileSync("git", ["worktree", "lock", ctx.currentWorktree], { cwd: ctx.mainWorktree });
 } else {
   const [event, label] = action.split(":");
   if (process.env.E2E_CALLBACK_LIFECYCLE !== "1" && process.env.E2E_CALLBACK_RECORD !== "1") process.exit(0);
@@ -323,6 +352,20 @@ export function writeWorkspaces(repo: string, registry: WorkspacesRegistry): voi
   writeFileSync(registryPath(repo), JSON.stringify(registry, undefined, 2));
 }
 
+export function fixtureRegistryDir(repo: string): string {
+  return dirname(registryPath(repo));
+}
+
 function registryPath(repo: string): string {
-  return join(repo, ".local-wt", "workspace-registry", "workspaces.json");
+  const selected = join(dirname(repo), "home/.alignfirst/companions/registry.json");
+  const external =
+    existsSync(selected) &&
+    JSON.parse(readFileSync(selected, "utf8")).projects[repo]?.items.workspaceRuntime ===
+      "companion";
+  return join(
+    external ? join(dirname(repo), "companion") : repo,
+    ".local-wt",
+    "workspace-registry",
+    "workspaces.json",
+  );
 }

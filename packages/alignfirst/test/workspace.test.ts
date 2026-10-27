@@ -35,6 +35,102 @@ afterEach(() => {
 });
 
 describe("unified workspace inventory and defaults", () => {
+  it("prepares companion defaults without checkout runtime/plans placeholders or a runtime ignore rule", async () => {
+    const fx = fixture();
+    const companion = join(fx.root, "companion");
+    mkdirSync(join(companion, ".plans"), { recursive: true });
+    writeFileSync(join(fx.repo, ".gitignore"), "");
+    commit(fx.repo);
+    writeRegistry(fx.home, {
+      projects: { [fx.repo]: { dir: companion, defaultLocation: "companion" } },
+    });
+    const nested = join(fx.repo, "nested");
+    mkdirSync(nested);
+    const setup = await runMain(
+      ["workspace", "setup", "-c", "external", "--path", fx.target, "--json"],
+      { cwd: nested, home: fx.home },
+    );
+    expect(setup.code, setup.stderr).toBe(0);
+    const row = JSON.parse(setup.stdout).workspace;
+    expect(row).toMatchObject({ recipe: "defaults", preparation: "ready", runtimeState: "active" });
+    expect(row.runtimeDir.startsWith(join(companion, ".local-wt/worktrees/"))).toBe(true);
+    for (const tree of [fx.repo, fx.target]) {
+      expect(existsSync(join(tree, ".local-wt"))).toBe(false);
+    }
+    expect(existsSync(join(fx.target, ".plans"))).toBe(false);
+    expect(existsSync(join(row.runtimeDir, "workspace-registry"))).toBe(false);
+    expect(readFileSync(join(fx.target, ".gitignore"), "utf8")).toBe("");
+    const registry = join(companion, ".local-wt/workspace-registry/workspaces.json");
+    const previous = Object.values(JSON.parse(readFileSync(registry, "utf8")).runtimeOwners);
+    expect((await run(fx, ["teardown", fx.target])).code).toBe(0);
+    const readopted = await run(fx, ["setup", "--path", fx.target]);
+    expect(readopted.code, readopted.stderr).toBe(0);
+    expect(Object.values(JSON.parse(readFileSync(registry, "utf8")).runtimeOwners)).not.toEqual(
+      previous,
+    );
+    symlinkSync(row.runtimeDir, join(fx.repo, ".local"));
+    const overlapping = await run(fx, ["setup"]);
+    expect(overlapping.code).toBe(1);
+    expect(overlapping.stderr).toContain("overlaps runtime storage");
+  });
+
+  it("publishes project recipe and external cleanup identity before mutable preparation can fail", async () => {
+    const fx = fixture();
+    const companion = join(fx.root, "companion");
+    mkdirSync(join(companion, ".plans"), { recursive: true });
+    const marker = join(fx.root, "purged");
+    writeRegistry(fx.home, {
+      projects: {
+        [fx.repo]: {
+          dir: companion,
+          defaultLocation: "companion",
+          items: { alignfirst: "project" },
+        },
+      },
+    });
+    writeFileSync(
+      join(fx.repo, "alignfirst.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        workspace: {
+          preSetup: [
+            {
+              name: "fail after publication",
+              run: [process.execPath, "-e", "throw new Error('mutable preparation failed')"],
+            },
+          ],
+          purge: [
+            {
+              name: "purge",
+              run: [
+                process.execPath,
+                "-e",
+                `require('fs').writeFileSync(${JSON.stringify(marker)}, process.cwd())`,
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    commit(fx.repo);
+    const failed = await run(fx, ["setup", "-c", "failure", "--path", fx.target]);
+    expect(failed.code).toBe(1);
+    const registry = join(companion, ".local-wt/workspace-registry/workspaces.json");
+    const state = JSON.parse(readFileSync(registry, "utf8"));
+    expect(Object.values(state.workspaces)).toMatchObject([
+      { status: "failed", recipe: { kind: "manifest", in: "project" } },
+    ]);
+    expect(Object.values(state.workspaces)).not.toContainEqual(
+      expect.objectContaining({ preparationOwner: expect.anything() }),
+    );
+    expect(Object.values(state.runtimeOwners)).toMatchObject([
+      { worktree: fx.target, state: "active" },
+    ]);
+    const cleaned = await run(fx, ["teardown", fx.target]);
+    expect(cleaned.code, cleaned.stderr).toBe(0);
+    expect(readFileSync(marker, "utf8")).toBe(fx.target);
+  });
+
   it("uses companion recipes in target cwd and refuses source substitution before cleanup", async () => {
     const fx = fixture();
     const companion = join(fx.root, "companion");
@@ -245,6 +341,8 @@ describe("unified workspace inventory and defaults", () => {
         recipe: "defaults",
         ports: {},
         devSetupFailure: null,
+        runtimeDir: join(fx.target, ".local-wt"),
+        runtimeState: null,
       },
     });
     expect(result.stderr).not.toContain("continuing in background");

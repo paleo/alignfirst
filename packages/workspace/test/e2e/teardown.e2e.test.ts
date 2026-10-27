@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import {
   existsSync,
+  chmodSync,
   lstatSync,
   mkdirSync,
   readFileSync,
@@ -15,6 +16,7 @@ import { dirname, join, relative } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { resolveWorkspaceStorage } from "../../src/storage.js";
 import type { DevServerEntry } from "../../src/dev-servers-registry.js";
 import type { PurgeContext } from "../../src/workspace.js";
 import type { WorkspaceEntry, WorkspacesRegistry } from "../../src/workspaces.js";
@@ -22,6 +24,7 @@ import {
   createFixtureRepo,
   type FixtureOptions,
   type FixtureRepo,
+  fixtureRegistryDir,
   readWorkspaces,
   runCli,
   runDev,
@@ -73,6 +76,93 @@ afterEach(async () => {
 });
 
 describe("workspace teardown (e2e)", () => {
+  it(
+    "retains companion runtime through teardown and prunes runtime-only orphans without another purge",
+    () => {
+      const fx = fixture({ companionRuntime: true, companionRecipe: true, portless: true });
+      const linked = addWorktree(fx, "outside/review", "review");
+      const sibling = addWorktree(fx, "sibling/review", "sibling");
+      setup(fx.repo, linked);
+      setup(fx.repo, sibling);
+      const runtime = externalStorage(fx, linked);
+      const other = externalStorage(fx, sibling);
+      expect(runtime.runtimeDir).not.toBe(other.runtimeDir);
+      expect(existsSync(join(linked, ".local-wt"))).toBe(false);
+      expect(existsSync(join(linked, ".plans"))).toBe(false);
+      const name = requiredEntry(fx.repo, linked).name;
+      expect(runCli(fx.repo, ["teardown", linked]).status).toBe(0);
+      expect(runCli(fx.repo, ["teardown", linked]).status).toBe(0);
+      expect(purges(fx.repo)).toMatchObject([{ name, runtimeDir: runtime.runtimeDir }]);
+      expect(existsSync(join(runtime.runtimeDir, "logs/workspace-setup.log"))).toBe(true);
+      git(fx.repo, ["worktree", "remove", linked]);
+      const listed = runCli(fx.repo, ["list", "--json"]);
+      expect(listed.status, listed.stderr).toBe(0);
+      expect(JSON.parse(listed.stdout).workspaces).toContainEqual(
+        expect.objectContaining({
+          path: linked,
+          name: null,
+          ports: {},
+          recipe: null,
+          preparation: "unprepared",
+          runtimeDir: runtime.runtimeDir,
+          runtimeState: "retained",
+        }),
+      );
+      expect(runCli(fx.repo, ["status", linked]).stdout).toContain("retained runtime");
+      const pruned = runCli(fx.repo, ["prune", "--json"]);
+      expect(pruned.status, pruned.stderr).toBe(0);
+      expect(JSON.parse(pruned.stdout).pruned).toEqual([{ path: linked, name: null }]);
+      expect(purges(fx.repo)).toHaveLength(1);
+      expect(existsSync(runtime.runtimeDir)).toBe(false);
+      for (const path of [other.runtimeDir, runtime.registryDir, join(fx.root, "companion/.plans")])
+        expect(existsSync(path)).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "keeps failed cleanup and Git/runtime deletion retryable without purging a cleaned generation again",
+    () => {
+      const fx = fixture({ companionRuntime: true, portless: true });
+      const linked = addWorktree(fx, "outside/review", "review");
+      setup(fx.repo, linked);
+      const runtime = externalStorage(fx, linked);
+      const failed = runCli(fx.repo, ["remove", linked, "--json"], { E2E_PURGE_FAIL: "1" });
+      expect(failed.status).toBe(1);
+      expect(failed.stdout).toBe("");
+      expect(requiredEntry(fx.repo, linked).entry.cleanupPending).toBe(true);
+      expect(existsSync(runtime.runtimeDir)).toBe(true);
+      expect(existsSync(linked)).toBe(true);
+      const gitFailure = runCli(fx.repo, ["remove", linked], { E2E_PURGE_LOCK_WORKTREE: "1" });
+      expect(gitFailure.status).toBe(1);
+      expect(existsSync(linked)).toBe(true);
+      expect(entryAt(fx.repo, linked)).toBeUndefined();
+      expect(Object.values(readWorkspaces(fx.repo).runtimeOwners ?? {})).toMatchObject([
+        { state: "deletionPending" },
+      ]);
+      expect(runCli(fx.repo, ["setup", "--path", linked]).stderr).toContain("deletion pending");
+      git(fx.repo, ["worktree", "unlock", linked]);
+      chmodSync(dirname(runtime.runtimeDir), 0o500);
+      try {
+        const deletion = runCli(fx.repo, ["remove", linked, "--json"]);
+        expect(deletion.status).toBe(1);
+        expect(deletion.stdout).toBe("");
+        expect(existsSync(linked)).toBe(false);
+        expect(existsSync(runtime.runtimeDir)).toBe(true);
+        expect(Object.values(readWorkspaces(fx.repo).runtimeOwners ?? {})).toMatchObject([
+          { state: "deletionPending" },
+        ]);
+      } finally {
+        chmodSync(dirname(runtime.runtimeDir), 0o700);
+      }
+      const retry = runCli(fx.repo, ["prune", "--json"]);
+      expect(retry.status, retry.stderr).toBe(0);
+      expect(existsSync(runtime.runtimeDir)).toBe(false);
+      expect(purges(fx.repo)).toHaveLength(2);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it(
     "prunes orphans using main scripts, retaining identity and ports until purge succeeds",
     () => {
@@ -265,6 +355,7 @@ describe("workspace teardown (e2e)", () => {
           name: target.name,
           worktree: second,
           mainWorktree: fx.repo,
+          runtimeDir: join(second, ".local-wt"),
           verbose: true,
         },
       ]);
@@ -332,6 +423,7 @@ describe("workspace teardown (e2e)", () => {
           name: oldName,
           worktree: renamed,
           mainWorktree: renamed,
+          runtimeDir: join(renamed, ".local-wt"),
           verbose: false,
         },
       ]);
@@ -408,6 +500,7 @@ describe("workspace teardown (e2e)", () => {
           name: target.name,
           worktree: linked,
           mainWorktree: fx.repo,
+          runtimeDir: join(linked, ".local-wt"),
           verbose: false,
         })),
       );
@@ -574,6 +667,7 @@ describe("workspace teardown (e2e)", () => {
           name: "recorded-dev-only",
           worktree: linked,
           mainWorktree: fx.repo,
+          runtimeDir: join(linked, ".local-wt"),
           verbose: false,
         },
       ]);
@@ -715,10 +809,10 @@ describe("workspace teardown (e2e)", () => {
     TEST_TIMEOUT_MS,
   );
 
-  it(
-    "prunes an abandoned pending orphan after its detached finalizer is killed",
-    async () => {
-      const fx = fixture();
+  it.each([false, true])(
+    "prunes an abandoned pending orphan only after its finalizer exits (companion runtime=%s)",
+    async (companionRuntime) => {
+      const fx = fixture({ companionRuntime });
       const linked = addWorktree(fx, "outside/review", "review");
       const barrier = join(fx.root, "finalize.release");
       barriers.push(barrier);
@@ -728,28 +822,26 @@ describe("workspace teardown (e2e)", () => {
       await waitForFile(`${barrier}.entered`);
       const finalizer = Number(readFileSync(`${barrier}.entered`, "utf-8"));
       const owner = Number(readFileSync(`${barrier}.owner`, "utf8"));
-      process.kill(owner, "SIGKILL");
-      await waitForExit(owner);
-      process.kill(finalizer, "SIGKILL");
-      await waitForExit(finalizer);
       const before = requiredEntry(fx.repo, linked);
       const pid = startSleeper(fx.repo);
       writeDevEntries(fx.repo, [devEntry(before.name, linked, pid)]);
       rmSync(linked, { recursive: true, force: true });
-      for (const command of [
-        ["teardown", before.name],
-        ["remove", before.name],
-      ]) {
-        expect(runCli(fx.repo, command).stderr).toContain("still in progress");
+      for (const command of [["teardown", before.name], ["remove", before.name], ["prune"]]) {
+        expect(runCli(fx.repo, command).stderr).toContain("still owns");
         expect(isAlive(pid)).toBe(true);
         expect(purges(fx.repo)).toEqual([]);
       }
+      process.kill(owner, "SIGKILL");
+      await waitForExit(owner);
+      process.kill(finalizer, "SIGKILL");
+      await waitForExit(finalizer);
       const failed = runCli(fx.repo, ["prune"], { E2E_PURGE_FAIL: "1" });
       expect(failed.status).toBe(1);
       expect(failed.stderr).toContain("e2e purge boom");
+      const { preparationOwner: _owner, ...abandoned } = before.entry;
       expect(requiredEntry(fx.repo, linked)).toEqual({
         ...before,
-        entry: { ...before.entry, cleanupPending: true },
+        entry: { ...abandoned, cleanupPending: true },
       });
       const result = runCli(fx.repo, ["prune"]);
       expect(result.status, result.stderr).toBe(0);
@@ -757,6 +849,10 @@ describe("workspace teardown (e2e)", () => {
       expect(devEntries(fx.repo)).toEqual([]);
       expect(entryAt(fx.repo, linked)).toBeUndefined();
       expect(purges(fx.repo).map((ctx) => ctx.name)).toEqual([before.name, before.name]);
+      if (companionRuntime)
+        expect(purges(fx.repo)).toMatchObject(
+          Array.from({ length: 2 }, () => ({ runtimeDir: externalStorage(fx, linked).runtimeDir })),
+        );
       expect(git(fx.repo, ["worktree", "list", "--porcelain"])).not.toContain(linked);
     },
     TEST_TIMEOUT_MS,
@@ -771,8 +867,12 @@ describe("workspace teardown (e2e)", () => {
       const before = requiredEntry(fx.repo, linked);
       rmSync(linked, { recursive: true, force: true });
       const result = runCli(fx.repo, ["prune"], { E2E_PURGE_RECREATE_WORKTREE: "1" });
-      expect(result.status, result.stderr).toBe(0);
-      expect(requiredEntry(fx.repo, linked)).toEqual(before);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("no longer orphaned");
+      expect(requiredEntry(fx.repo, linked)).toEqual({
+        ...before,
+        entry: { ...before.entry, cleanupPending: true },
+      });
       expect(purges(fx.repo)[0].name).toBe(before.name);
     },
     TEST_TIMEOUT_MS,
@@ -857,6 +957,13 @@ describe("workspace teardown (e2e)", () => {
   );
 });
 
+function externalStorage(fx: FixtureRepo, target: string) {
+  return resolveWorkspaceStorage(
+    { in: "companion", mainWorktree: fx.repo, companionDir: join(fx.root, "companion") },
+    target,
+  );
+}
+
 function fixture(options?: FixtureOptions): FixtureRepo {
   const fx = createFixtureRepo(options);
   fixtures.push(fx);
@@ -896,7 +1003,7 @@ function entryAt(
 }
 
 function registryFile(repo: string, file: string): string {
-  return join(repo, ".local-wt", "workspace-registry", file);
+  return join(fixtureRegistryDir(repo), file);
 }
 
 function devEntry(name: string, worktree: string, pid?: number): DevServerEntry {

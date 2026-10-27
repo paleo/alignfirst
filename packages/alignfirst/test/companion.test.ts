@@ -1,5 +1,6 @@
 import {
   existsSync,
+  chmodSync,
   mkdirSync,
   readFileSync,
   realpathSync,
@@ -8,6 +9,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { withRegistryLock } from "@alignfirst/workspace";
+import { resolveProjectLayout } from "../src/project-layout.js";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -279,6 +282,110 @@ describe("companion register", () => {
 });
 
 describe("companion unregister", () => {
+  it("refuses active/failed resources even with force and retains clean runtime paths on plain unregister", async () => {
+    const { home, project } = makeHome();
+    const companion = companionOf(home);
+    mkdirSync(join(companion, ".plans"), { recursive: true });
+    writeRegistry(home, {
+      projects: {
+        "~/projects/app": {
+          dir: "projects_app",
+          defaultLocation: "companion",
+          aligndev: { profile: "work" },
+          unrelated: 7,
+        },
+      },
+    });
+    const setup = await runMain(["workspace", "setup"], { cwd: project, home });
+    expect(setup.code, setup.stderr).toBe(0);
+    for (const flags of [[], ["--remove-dir", "--force"]]) {
+      const refused = await runMain(["companion", "unregister", ...flags], { cwd: project, home });
+      expect(refused.code).toBe(1);
+      expect(refused.stderr).toContain("workspace resources");
+      expect(existsSync(companion)).toBe(true);
+    }
+    const runtime = resolveProjectLayout(project, home).storage.runtimeDir;
+    expect((await runMain(["workspace", "teardown"], { cwd: project, home })).code).toBe(0);
+    const removed = await runMain(["companion", "unregister"], { cwd: project, home });
+    expect(removed.code, removed.stderr).toBe(0);
+    expect(removed.stdout).toContain(`Retained runtime: ${runtime}`);
+    expect(removed.stdout).toContain("Automatic discovery is being removed");
+    expect(existsSync(runtime)).toBe(true);
+    expect(JSON.parse(readFileSync(registryOf(home), "utf8")).projects["~/projects/app"]).toEqual({
+      aligndev: { profile: "work" },
+      unrelated: 7,
+    });
+  });
+
+  it("keeps registration when authorized directory deletion fails", async () => {
+    const { home, project } = makeHome();
+    await runMain(["companion", "register", "--create-dir"], { cwd: project, home });
+    const bytes = readFileSync(registryOf(home), "utf8");
+    writeFileSync(join(companionOf(home), "retained"), "evidence");
+    chmodSync(companionOf(home), 0o500);
+    try {
+      const failed = await runMain(["companion", "unregister", "--remove-dir", "--force"], {
+        cwd: project,
+        home,
+      });
+      expect(failed.code).toBe(1);
+      expect(failed.stderr).toContain("EACCES");
+    } finally {
+      chmodSync(companionOf(home), 0o700);
+    }
+    expect(readFileSync(registryOf(home), "utf8")).toBe(bytes);
+    expect(
+      (
+        await runMain(["companion", "unregister", "--remove-dir", "--force"], {
+          cwd: project,
+          home,
+        })
+      ).code,
+    ).toBe(0);
+  });
+
+  it("gates setup while unregister waits for the selected runtime lock", async () => {
+    const { home, project } = makeHome();
+    const companion = companionOf(home);
+    mkdirSync(join(companion, ".plans"), { recursive: true });
+    writeRegistry(home, {
+      projects: { "~/projects/app": { dir: "projects_app", defaultLocation: "companion" } },
+    });
+    const storage = resolveProjectLayout(project, home).storage;
+    let release!: () => void;
+    let entered!: () => void;
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const locked = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const holding = withRegistryLock(project, storage.registryDir, async () => {
+      entered();
+      await barrier;
+    });
+    await locked;
+    const unregister = runMain(["companion", "unregister"], { cwd: project, home });
+    await expect
+      .poll(
+        () =>
+          JSON.parse(readFileSync(registryOf(home), "utf8")).projects["~/projects/app"].removalClaim
+            ?.pid,
+      )
+      .toBe(process.pid);
+    const setup = runMain(["workspace", "setup"], { cwd: project, home });
+    release();
+    await holding;
+    const [removed, refused] = await Promise.all([unregister, setup]);
+    expect(removed.code, removed.stderr).toBe(0);
+    expect(refused.code).toBe(1);
+    expect(refused.stderr).toMatch(/removal is in progress|selection changed/);
+    expect(existsSync(storage.runtimeDir)).toBe(false);
+    const state = JSON.parse(readFileSync(join(storage.registryDir, "workspaces.json"), "utf8"));
+    expect(state.workspaces).toEqual({});
+    expect(state.runtimeOwners).toEqual({});
+  });
+
   it("keeps combined entries unchanged on refusal and removes items while preserving profiles", async () => {
     const { home, project } = makeHome();
     const aligndev = { profile: "work" };

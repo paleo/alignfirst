@@ -1,5 +1,12 @@
 import { configFamilyExists, resolveConfigFamily } from "@alignfirst/workspace/config";
-import { resolveWorkspaceStorage, type WorkspaceStorage } from "@alignfirst/workspace";
+import {
+  inspectKnownWorkspaceState,
+  withRegistryLock,
+  resolveWorkspaceStorage,
+  type WorkspaceStorage,
+} from "@alignfirst/workspace";
+import { randomUUID } from "node:crypto";
+import { withCompanionRegistryLock, processAlive } from "./companion-registry-lock.js";
 import { canonicalPath } from "@alignfirst/workspace/git";
 import {
   existsSync,
@@ -21,6 +28,7 @@ import { errorMessage } from "./errors.js";
 import { findMainWorktree, gitOutput, optionalRepositoryId } from "./git.js";
 import {
   literal,
+  integerBetween,
   nonEmptyString,
   object,
   optional,
@@ -53,6 +61,12 @@ const registryProjectShape = object<RegistryProject>(
   {
     dir: optional(dirValue),
     defaultLocation: optional(itemSetting),
+    removalClaim: optional(
+      object<RemovalClaim>({
+        pid: integerBetween(1, Number.MAX_SAFE_INTEGER),
+        token: nonEmptyString,
+      }),
+    ),
     aligndev: optional(
       object<AligndevProjectSettings>({ profile: profileValue }, warnUnknownRegistrySetting),
     ),
@@ -135,6 +149,12 @@ interface RegistryProject {
   items?: RegistryItems;
   defaultLocation?: ItemSetting;
   aligndev?: AligndevProjectSettings;
+  removalClaim?: RemovalClaim;
+}
+
+interface RemovalClaim {
+  pid: number;
+  token: string;
 }
 
 interface RegistryItems {
@@ -549,7 +569,18 @@ export interface CompanionRegistrationOptions {
  * Registers the main worktree of `cwd` with every item on `"auto"`, unless it is registered.
  * Creates the registry when it is missing, and the companion directory with `createDir`.
  */
-export function registerCompanion(
+export async function registerCompanion(
+  cwd: string,
+  home: string,
+  options: CompanionRegistrationOptions,
+): Promise<CompanionRegistration> {
+  requireMainWorktree(cwd);
+  return withCompanionRegistryLock(registryPath(home), () =>
+    registerCompanionLocked(cwd, home, options),
+  );
+}
+
+function registerCompanionLocked(
   cwd: string,
   home: string,
   options: CompanionRegistrationOptions,
@@ -562,6 +593,7 @@ export function registerCompanion(
     raw: { projects: {} },
   };
   const registered = findEntry(registry, mainWorktree, realHome);
+  assertNoCompanionRemoval(registered);
   const existing =
     registered?.project.dir === undefined
       ? undefined
@@ -702,6 +734,7 @@ export interface CompanionUnregistration {
   /** `removeDir` kept the directory: it is outside the companions root. */
   keptOutsideRoot: boolean;
   aligndev: AligndevProjectSettings | null;
+  retainedRuntimePaths: string[];
 }
 
 /**
@@ -709,10 +742,96 @@ export interface CompanionUnregistration {
  * removes its directory inside the companions root: a non-empty one requires `force`.
  * Fails before any change.
  */
-export function unregisterCompanion(
+export async function unregisterCompanion(
+  cwd: string,
+  home: string,
+  options: { removeDir: boolean; force: boolean },
+): Promise<CompanionUnregistration> {
+  const path = registryPath(home);
+  const claim = { pid: process.pid, token: randomUUID() };
+  const mainWorktree = requireMainWorktree(cwd);
+  let original: string | undefined;
+  const key = await withCompanionRegistryLock(path, () => {
+    const registry = readRegistry(home);
+    const entry = registry && findEntry(registry, requireMainWorktree(cwd), realOrResolved(home));
+    if (!registry || !entry) throw new CliError(`${mainWorktree} is not registered in ${path}.`);
+    if (entry.project.dir === undefined)
+      throw new CliError(`${entry.key} has no companion in ${path}.`);
+    assertNoCompanionRemoval(entry);
+    original = readFileSync(path, "utf8");
+    writeRegistry(registry, {
+      ...registry.raw.projects,
+      [entry.key]: { ...registry.raw.projects[entry.key], removalClaim: claim },
+    });
+    return entry.key;
+  });
+  try {
+    const layout = resolveProjectLayout(cwd, home);
+    const inspect = () =>
+      inspectKnownWorkspaceState(layout.storage.mainWorktree, layout.storage.registryDir);
+    const state = pathExists(layout.storage.registryDir)
+      ? await withRegistryLock(layout.storage.mainWorktree, layout.storage.registryDir, inspect)
+      : inspect();
+    if (state.requiresCleanup)
+      throw new CliError(
+        "Companion still owns workspace resources or incomplete cleanup. Complete teardown/removal under the current selection before unregistering, including with --force.",
+      );
+    const removal = await withCompanionRegistryLock(path, () => {
+      const registry = readRegistry(home);
+      if (registry?.projects[key]?.removalClaim?.token !== claim.token)
+        throw new CliError("Companion removal ownership lost.");
+      return planCompanionUnregistration(
+        cwd,
+        home,
+        options,
+        state.retainedWorktrees.map(
+          (worktree) => resolveWorkspaceStorage(layout.storage, worktree).runtimeDir,
+        ),
+      );
+    });
+    if (removal.removed) rmSync(removal.dir, { recursive: true, force: true });
+    await withCompanionRegistryLock(path, () => {
+      const registry = readRegistry(home);
+      if (registry?.projects[key]?.removalClaim?.token !== claim.token)
+        throw new CliError("Companion removal ownership lost.");
+      const projects = { ...registry.raw.projects };
+      const {
+        dir: _dir,
+        items: _items,
+        defaultLocation: _default,
+        removalClaim: _claim,
+        ...remaining
+      } = projects[key];
+      if (registry.projects[key].aligndev) projects[key] = remaining;
+      else delete projects[key];
+      writeRegistry(registry, projects);
+    });
+    return removal;
+  } finally {
+    await withCompanionRegistryLock(path, () => {
+      const registry = readRegistry(home);
+      if (registry?.projects[key]?.removalClaim?.token !== claim.token) return;
+      const raw = { ...registry.raw.projects[key] };
+      delete raw.removalClaim;
+      const projects = { ...registry.raw.projects, [key]: raw };
+      const restored = { ...registry.raw, projects };
+      if (
+        original !== undefined &&
+        JSON.stringify(JSON.parse(original)) === JSON.stringify(restored)
+      ) {
+        const temporary = `${path}.${randomUUID()}.tmp`;
+        writeFileSync(temporary, original);
+        renameSync(temporary, path);
+      } else writeRegistry(registry, projects);
+    });
+  }
+}
+
+function planCompanionUnregistration(
   cwd: string,
   home: string,
   { removeDir, force }: { removeDir: boolean; force: boolean },
+  retainedRuntimePaths: string[],
 ): CompanionUnregistration {
   const mainWorktree = requireMainWorktree(cwd);
   const realHome = realOrResolved(home);
@@ -731,20 +850,8 @@ export function unregisterCompanion(
   const deletable = removeDir && isSameOrInside(dir, root);
   if (deletable)
     assertRemovableDir(registry, companionEntry, entries, { force, mainWorktree, realHome });
-  const { [entry.key]: _removed, ...projects } = registry.raw.projects;
   const aligndev = entry.project.aligndev ?? null;
-  if (aligndev !== null) {
-    const {
-      dir: _dir,
-      items: _items,
-      defaultLocation: _defaultLocation,
-      ...remaining
-    } = registry.raw.projects[entry.key];
-    projects[entry.key] = remaining;
-  }
-  writeRegistry(registry, projects);
   const removed = deletable && entries !== undefined;
-  if (removed) rmSync(dir, { recursive: true, force: true });
   return {
     registry: path,
     key: entry.key,
@@ -753,7 +860,30 @@ export function unregisterCompanion(
     removed,
     keptOutsideRoot: removeDir && !deletable && entries !== undefined,
     aligndev,
+    retainedRuntimePaths: removed ? [] : retainedRuntimePaths,
   };
+}
+
+function assertNoCompanionRemoval(entry: RegistryEntry | undefined): void {
+  const claim = entry?.project.removalClaim;
+  if (claim && processAlive(claim.pid))
+    throw new CliError("Companion removal is in progress. Retry after it completes.");
+}
+
+/** Called inside the selected runtime lock. It only reads the companion registry. */
+export function assertCompanionLifecycleAdmission(home: string, selected: ProjectLayout): void {
+  const registry = readRegistry(home);
+  const realHome = realOrResolved(home);
+  const entry = registry && findEntry(registry, selected.storage.mainWorktree, realHome);
+  assertNoCompanionRemoval(entry);
+  const current = registry && entry ? resolveCompanion(registry, entry, realHome) : null;
+  if (
+    current?.dir !== selected.companion?.dir ||
+    ITEM_NAMES.some((item) => current?.items[item] !== selected.companion?.items[item])
+  )
+    throw new CliError(
+      "Companion selection changed during workspace admission. Retry with the current selection; clean old resources before manually changing registration.",
+    );
 }
 
 function assertRemovableDir(

@@ -156,6 +156,8 @@ describe("installed CLI boundary", () => {
           operation.invocation.entryPoint,
           "workspace",
           "__finalize",
+          "--preparation-token",
+          expect.any(String),
           "--force",
           "--full",
           "--verbose",
@@ -166,7 +168,9 @@ describe("installed CLI boundary", () => {
   );
 
   it("finalize reports step progress and records a dev failure without failing preparation", async () => {
+    const preparationOwner = { pid: process.pid, token: "test-handoff" };
     await registerWorkspace({
+      preparationOwner,
       currentWorktree: root,
       mainWorktree: root,
       registryDir: registryDirFor(config.runtimeDir),
@@ -181,7 +185,14 @@ describe("installed CLI boundary", () => {
     operation.env.CHILD_EXIT = "9";
     await runWorkspace(config, {
       ...operation,
-      ...parseWorkspaceArgs(["__finalize", "--full", "--force", "--verbose"]),
+      ...parseWorkspaceArgs([
+        "__finalize",
+        "--preparation-token",
+        preparationOwner.token,
+        "--full",
+        "--force",
+        "--verbose",
+      ]),
     });
     expect(verbose).toBe(true);
     expect(captured().argv).toEqual([

@@ -133,6 +133,7 @@ export type {
   RunFileContext,
 } from "./file-entries.js";
 
+export { withRegistryLock } from "./registry-lock.js";
 export { assertRegistryOwnership } from "./registry-ownership.js";
 export type { RegistryOwner } from "./registry-ownership.js";
 export {
