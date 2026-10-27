@@ -231,14 +231,18 @@ function parseMigrate(tokens: string[]): ParsedWorkspaceArgs {
 function parseFinalize(tokens: string[]): ParsedWorkspaceArgs {
   const { values, positionals } = parseArgs({
     args: tokens,
-    options: { force: { type: "boolean" }, full: { type: "boolean" } },
+    options: {
+      force: { type: "boolean" },
+      full: { type: "boolean" },
+      verbose: { type: "boolean" },
+    },
     allowPositionals: true,
     strict: true,
   });
   rejectPositionals(positionals, "__finalize");
   return {
     command: { kind: "finalize", force: values.force ?? false, full: values.full ?? false },
-    verbose: false,
+    verbose: values.verbose ?? false,
   };
 }
 
@@ -325,7 +329,7 @@ export type DevCommand =
   | { kind: "down"; all: boolean }
   | { kind: "list" }
   | { kind: "status" }
-  | { kind: "setup"; force: boolean; resetPorts: boolean; fromFinalize: boolean }
+  | { kind: "setup"; force: boolean; resetPorts: boolean; fromFinalize: boolean; verbose?: boolean }
   | { kind: "help" };
 
 export function parseDevArgs(argv: string[] = process.argv.slice(2)): DevCommand {
@@ -435,6 +439,7 @@ function parseDevSetup(tokens: string[]): DevCommand {
       force: { type: "boolean" },
       "reset-ports": { type: "boolean" },
       "from-finalize": { type: "boolean" },
+      verbose: { type: "boolean" },
     },
     allowPositionals: true,
     strict: true,
@@ -445,6 +450,7 @@ function parseDevSetup(tokens: string[]): DevCommand {
     force: values.force ?? false,
     resetPorts: values["reset-ports"] ?? false,
     fromFinalize: values["from-finalize"] ?? false,
+    verbose: values.verbose,
   };
 }
 
@@ -472,7 +478,7 @@ export function renderDevHelp(): string {
     "  dev down [--all]  Stop this worktree's dev-server, or every dev-server with --all.",
     "  dev list          List active dev-servers across all worktrees.",
     "  dev status        Report whether this worktree's dev-server is UP or DOWN.",
-    "  dev setup [--force] [--reset-ports]",
+    "  dev setup [--force] [--reset-ports] [--verbose]",
     "                    Allocate this workspace's ports, write its run files, and provision its",
     "                    infrastructure once. Also runs before every start.",
     "  dev --help        Show this help message (alias: -h).",
@@ -484,6 +490,7 @@ export function renderDevHelp(): string {
     "Options (dev setup):",
     "  --force        Provision the infrastructure again (the setup hook must be idempotent).",
     "  --reset-ports  Allocate this workspace's ports again. Refused while its dev-server runs.",
+    "  --verbose      Enable verbose project setup output.",
   ]
     .map((line) => line.replace(/^ {2}dev(?=\s)/, `  ${packageManagerCommands().dev.withArgs}`))
     .join("\n");

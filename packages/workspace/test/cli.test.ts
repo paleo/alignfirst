@@ -213,6 +213,7 @@ describe("parseWorkspaceArgs", () => {
       force: false,
       full: false,
     });
+    expect(parseWorkspaceArgs(["__finalize", "--verbose"]).verbose).toBe(true);
     expect(parseWorkspaceArgs(["__finalize", "--force", "--full"]).command).toEqual({
       kind: "finalize",
       force: true,
@@ -336,6 +337,10 @@ describe("parseDevArgs", () => {
       resetPorts: true,
       fromFinalize: true,
     });
+  });
+
+  it("passes dev setup verbosity to its hook", () => {
+    expect(parseDevArgs(["setup", "--verbose"])).toMatchObject({ kind: "setup", verbose: true });
   });
 
   it("rejects positionals and unknown flags on `setup`", () => {

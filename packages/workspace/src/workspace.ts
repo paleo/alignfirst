@@ -76,6 +76,7 @@ const UPGRADE_POINTER =
 
 /** Configuration accepted by {@link runWorkspace}. */
 export interface WorkspaceConfig {
+  signal?: AbortSignal;
   /**
    * Absolute path to the wrapper script that calls `runWorkspace`. The package re-spawns this
    * file as a detached child for the finalize phase, so it must point at a runnable Node entrypoint
@@ -132,7 +133,7 @@ export interface WorkspaceConfig {
    */
   purgeInfrastructure?: (ctx: PurgeContext) => Promise<void> | void;
   /** Builds the post-setup summary printed to stdout. */
-  formatSummary: (ctx: SummaryContext) => string;
+  formatSummary: (ctx: SummaryContext) => string | Promise<string>;
   /**
    * Optional override for the worktree directory basename. Receives `{ branch, repoName }` and
    * returns the basename (e.g. `myrepo-feat-ABC-123`). Defaults to {@link defaultWorktreeDirName},
@@ -146,6 +147,7 @@ export interface WorkspaceConfig {
 export interface PreSetupContext extends SetupContextBase {
   /** Mirrors `--force`. Hooks may use it to overwrite previously bootstrapped files. */
   force: boolean;
+  verbose: boolean;
   /** Writes to stdout and the setup log. */
   log: (msg: string) => void;
 }
@@ -180,6 +182,7 @@ export interface SummaryContext extends SetupContextBase {
 
 /** Context passed to {@link WorkspaceConfig.purgeInfrastructure}. */
 export interface PurgeContext {
+  signal?: AbortSignal;
   /** The target worktree. May no longer exist on disk when purging an orphan: tear down by name. */
   worktree: string;
   mainWorktree: string;
@@ -259,13 +262,13 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
 
     switch (command.kind) {
       case "finalize":
-        await runFinalize(command, kernel, ctx);
+        await runFinalize(command, kernel, ctx, verbose);
         return;
       case "wait":
         await runWait(command, kernel, verbose);
         return;
       case "status":
-        runStatus(command, kernel);
+        await runStatus(command, kernel);
         return;
       case "list":
         await runList(kernel);
@@ -299,7 +302,8 @@ export async function runWorkspace(config: WorkspaceConfig): Promise<void> {
             full: command.full && !devStepHere,
           });
         }
-        if (devStepHere) await runDevStepHere(kernel, ctx.mainWorktree, worktree);
+        if (devStepHere)
+          await runDevStepHere(kernel, ctx.mainWorktree, worktree, command.force, run.verbose);
         // The worktree exists once `runSetup` returns, so `--enter` can enter in either mode.
         if (command.enter) enterWorktree(worktree);
         return;
@@ -329,12 +333,16 @@ async function runDevStepHere(
   kernel: Kernel,
   mainWorktree: string,
   worktree: string,
+  force: boolean,
+  verbose: boolean,
 ): Promise<void> {
   const failure = await runDevSetupChild({
     kernel,
     mainWorktree,
     worktree,
     fromFinalize: false,
+    force,
+    verbose,
   });
   if (failure === undefined) return;
   console.error(devSetupFailedMessage(failure));
@@ -351,6 +359,8 @@ interface DevSetupChildInput {
   worktree: string;
   /** Passes `--from-finalize`, so the dev setup accepts the `pending` workspace. */
   fromFinalize: boolean;
+  force: boolean;
+  verbose: boolean;
 }
 
 /**
@@ -365,6 +375,8 @@ async function runDevSetupChild(input: DevSetupChildInput): Promise<string | und
   const startedAt = new Date().toISOString();
   const args = [devServerScript, "setup"];
   if (input.fromFinalize) args.push("--from-finalize");
+  if (input.force) args.push("--force");
+  if (input.verbose) args.push("--verbose");
   const result = spawnSync(process.execPath, args, { cwd: worktree, stdio: "inherit" });
   if (result.status === 0) return;
   const fallback = result.error
@@ -432,8 +444,10 @@ async function runSetup(
   // An error in this phase must not leave the entry `pending`: a plain `setup` retries a `failed` one.
   // A `ready` entry stays `ready`: the finalize outcome is unchanged and nothing forces a re-finalize.
   try {
-    await prepareWorktree({ command, setupCtx, kernel, name, log });
-    log.tee(config.formatSummary({ ...setupCtx, name, branch, status }));
+    await prepareWorktree({ command, setupCtx, kernel, name, log, verbose: run.verbose });
+    log.tee(
+      await config.formatSummary({ ...setupCtx, name, branch, status, signal: config.signal }),
+    );
   } catch (err) {
     const message = errorMessage(err);
     log.append(`FAILED: ${message}`);
@@ -459,6 +473,7 @@ async function runSetup(
   const finalizeArgs = [config.workspaceScript, "__finalize"];
   if (command.force) finalizeArgs.push("--force");
   if (command.full) finalizeArgs.push("--full");
+  if (run.verbose) finalizeArgs.push("--verbose");
   const child = spawn(process.execPath, finalizeArgs, {
     detached: true,
     stdio: ["ignore", log.fd, log.fd],
@@ -505,6 +520,7 @@ interface PrepareWorktreeInput {
   kernel: Kernel;
   name: string;
   log: SetupLog;
+  verbose: boolean;
 }
 
 /** The pre-finalize phase: hooks and file writes between registration and the summary. */
@@ -512,7 +528,14 @@ async function prepareWorktree(input: PrepareWorktreeInput): Promise<void> {
   const { command, setupCtx, kernel, name, log } = input;
   const { config } = kernel;
   if (config.preSetup) {
-    await config.preSetup({ ...setupCtx, name, force: command.force, log: log.tee });
+    await config.preSetup({
+      ...setupCtx,
+      name,
+      force: command.force,
+      verbose: input.verbose,
+      signal: config.signal,
+      log: log.tee,
+    });
   }
   linkSharedDirectories(setupCtx, config.sharedDirs, log.verbose);
   linkWorkspaceRegistry(setupCtx, config.runtimeDir, log.verbose);
@@ -521,6 +544,7 @@ async function prepareWorktree(input: PrepareWorktreeInput): Promise<void> {
     mainWorktree: setupCtx.mainWorktree,
     currentWorktree: setupCtx.currentWorktree,
     isMainWorktree: setupCtx.isMainWorktree,
+    signal: config.signal,
   };
   await seedFiles({
     entries: config.gitignoredFiles,
@@ -561,6 +585,7 @@ async function runFinalize(
   command: FinalizeCommand,
   kernel: Kernel,
   ctx: WorktreeContext,
+  verbose: boolean,
 ): Promise<void> {
   const { config, registryDir } = kernel;
   const logPath = setupLogPath(ctx.currentWorktree, config.runtimeDir);
@@ -597,7 +622,8 @@ async function runFinalize(
     name,
     branch,
     force: command.force,
-    verbose: false,
+    verbose,
+    signal: config.signal,
     progress,
   };
 
@@ -627,6 +653,8 @@ async function runFinalize(
       mainWorktree: ctx.mainWorktree,
       worktree: ctx.currentWorktree,
       fromFinalize: true,
+      force: command.force,
+      verbose,
     });
     if (failure !== undefined) appendLog(`DEV SETUP FAILED: ${failure}`);
   }
@@ -684,7 +712,11 @@ export function matchWorktreeByDir(
   );
 }
 
-function printWorktreeInfo(kernel: Kernel, target: ResolvedTarget, worktreeForLog: string): void {
+async function printWorktreeInfo(
+  kernel: Kernel,
+  target: ResolvedTarget,
+  worktreeForLog: string,
+): Promise<void> {
   const { config, registryDir } = kernel;
   const ctx = detectWorktree();
   const found = findWorkspaceByPath(readWorkspaces(ctx.mainWorktree, registryDir), target.worktree);
@@ -697,13 +729,14 @@ function printWorktreeInfo(kernel: Kernel, target: ResolvedTarget, worktreeForLo
   const targetWorktree = entry?.worktree ?? ctx.currentWorktree;
   const branch = getWorktreeBranch(targetWorktree) ?? "(detached)";
   console.log(
-    config.formatSummary({
+    await config.formatSummary({
       name: found?.name ?? target.name,
       branch,
       currentWorktree: targetWorktree,
       mainWorktree: ctx.mainWorktree,
       isMainWorktree,
       status,
+      signal: config.signal,
     }),
   );
   if (status === "failed") {
@@ -757,16 +790,18 @@ function printDevServerBlock(
   console.log(`Dev-server: running, started ${elapsed} ago`);
   for (const [name, pid] of liveEntries) {
     console.log(`  ${name}: PID ${pid}`);
-    console.log(`    log: ${join(targetWorktree, config.runtimeDir, "logs", `${name}.log`)}`);
+    console.log(
+      `    log: ${join(targetWorktree, config.runtimeDir, "logs", `${encodeURIComponent(name)}.log`)}`,
+    );
   }
 }
 
 type StatusCommand = Extract<WorkspaceCommand, { kind: "status" }>;
 
-function runStatus(command: StatusCommand, kernel: Kernel): void {
+async function runStatus(command: StatusCommand, kernel: Kernel): Promise<void> {
   const ctx = detectWorktree();
   const target = resolveTarget(command.selector, ctx, kernel.registryDir);
-  printWorktreeInfo(kernel, target, target.worktree);
+  await printWorktreeInfo(kernel, target, target.worktree);
 }
 
 async function runList(kernel: Kernel): Promise<void> {
@@ -982,7 +1017,9 @@ async function killRecordedDevServer(
 }
 
 async function runPurgeInfrastructure(config: WorkspaceConfig, ctx: PurgeContext): Promise<void> {
-  if (config.purgeInfrastructure) await config.purgeInfrastructure(ctx);
+  if (config.purgeInfrastructure) {
+    await config.purgeInfrastructure({ ...ctx, signal: ctx.signal ?? config.signal });
+  }
 }
 
 /** Runs after the teardown, on a fresh read: the lock never spans a callback, git or Docker. */
@@ -1091,7 +1128,7 @@ async function waitForWorkspace(
           worktree: entry.worktree,
           main: entry.main ?? false,
         };
-        printWorktreeInfo(kernel, target, entry.worktree);
+        await printWorktreeInfo(kernel, target, entry.worktree);
       }
       return;
     }

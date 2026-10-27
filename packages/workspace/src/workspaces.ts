@@ -43,7 +43,7 @@ export type WorkspaceStatus = "pending" | "ready" | "failed";
 
 export interface RunFilesBasis {
   ports: Record<string, number>;
-  /** The defined values of `DevServerConfig.runFilesInputs`. */
+  /** Per-key `sha256:<64 lowercase hex>` of defined UTF-8 values; absent keys stay absent. */
   inputs: Record<string, string>;
 }
 

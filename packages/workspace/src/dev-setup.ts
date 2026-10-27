@@ -1,4 +1,7 @@
+import { createHash } from "node:crypto";
+
 import { findOwnEntry } from "./dev-servers-registry.js";
+import { assertFileDestination } from "./file-destinations.js";
 import { ConfigError, errorMessage, WorkspaceError } from "./errors.js";
 import {
   type RunFileContext,
@@ -28,6 +31,7 @@ export interface DevSetupContext extends SetupContextBase {
   ports: Record<string, number>;
   /** Mirrors `dev setup --force`. */
   force: boolean;
+  verbose: boolean;
   log: (msg: string) => void;
 }
 
@@ -38,10 +42,15 @@ export interface DevSetupInput {
   /** Omit for a portless dev-server. */
   ports?: ResolvedDevPorts;
   runFiles: RunFileEntry[];
-  runFilesInputs?: () => Record<string, string | undefined>;
+  runFilesInputs?: RunFilesInputsProvider;
+  signal?: AbortSignal;
   setup?: (ctx: DevSetupContext) => Promise<void> | void;
   options: DevSetupOptions;
 }
+
+export type RunFilesInputsProvider = (
+  ctx: RunFileContext,
+) => Record<string, string | undefined> | Promise<Record<string, string | undefined>>;
 
 export interface DevSetupOptions {
   /** Reruns `setup`. */
@@ -52,6 +61,7 @@ export interface DevSetupOptions {
   fromFinalize: boolean;
   /** Set by the implicit `dev setup` of a start: existing run files follow a changed basis only. */
   beforeStart: boolean;
+  verbose?: boolean;
 }
 
 export interface DevSetupResult {
@@ -65,6 +75,7 @@ export interface DevSetupResult {
  * workspace. A failure after the ready check is recorded as the entry's `devSetupFailure`.
  */
 export async function runDevSetup(input: DevSetupInput): Promise<DevSetupResult> {
+  input.signal?.throwIfAborted();
   const { worktree, registryDir, options } = input;
   const { mainWorktree } = worktree;
   if (options.resetPorts) refuseWhileRunning(mainWorktree, registryDir, worktree.currentWorktree);
@@ -76,15 +87,20 @@ export async function runDevSetup(input: DevSetupInput): Promise<DevSetupResult>
   checkReady(input, workspace, entry);
 
   try {
-    const ports = await reconcileWorkspacePorts(input, workspace, entry);
+    const ports = await reconcileWorkspacePorts(input, workspace);
     const base: SetupContextBase = {
       name: workspace.name,
       currentWorktree: workspace.worktree,
       mainWorktree,
       isMainWorktree: workspace.main === true,
+      signal: input.signal,
     };
     await writeRunFiles(input, { ...base, ports }, entry.runFilesWrittenWith);
-    await runSetupHook(input, { ...base, ports, force: options.force, log: console.log }, entry);
+    await runSetupHook(
+      input,
+      { ...base, ports, force: options.force, verbose: options.verbose ?? false, log: console.log },
+      entry,
+    );
     return { workspace, ports };
   } catch (err) {
     await recordDevSetupFailure(mainWorktree, registryDir, workspace.worktree, errorMessage(err));
@@ -186,15 +202,13 @@ export function buildWorktreeReadyMessage(input: {
 
 /**
  * Reconciles and stores the workspace's ports under the registry lock; the listen probes run
- * inside it. Without a `ports` group, the stored ports are returned untouched.
+ * inside it. Removing the `ports` group clears the stored allocation.
  */
 async function reconcileWorkspacePorts(
   input: DevSetupInput,
   workspace: ResolvedWorkspace,
-  entry: WorkspaceEntry,
 ): Promise<Record<string, number>> {
   const config = input.ports;
-  if (config === undefined) return entry.ports ?? {};
   const { mainWorktree } = input.worktree;
   const { ports, changed } = await updateWorkspaces(
     mainWorktree,
@@ -204,13 +218,16 @@ async function reconcileWorkspacePorts(
       if (!found) throw new WorkspaceError(`Workspace "${workspace.name}" left the registry.`);
       const current = found.entry;
       const previous = current.ports ?? {};
-      const next = await reconcilePorts({
-        config,
-        isMainWorktree: workspace.main === true,
-        stored: input.options.resetPorts ? {} : previous,
-        others: portsOfOtherEntries(registry, found.name),
-        isFree: isPortFree,
-      });
+      const next =
+        config === undefined
+          ? {}
+          : await reconcilePorts({
+              config,
+              isMainWorktree: workspace.main === true,
+              stored: input.options.resetPorts ? {} : previous,
+              others: portsOfOtherEntries(registry, found.name),
+              isFree: isPortFree,
+            });
       current.ports = next;
       return { ports: next, changed: !sameValues(previous, next) };
     },
@@ -231,7 +248,9 @@ function sameValues<T>(a: Record<string, T>, b: Record<string, T>): boolean {
 
 function changedKeys<T>(a: Record<string, T>, b: Record<string, T>): string[] {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-  return [...keys].filter((key) => a[key] !== b[key]);
+  return [...keys].filter(
+    (key) => Object.hasOwn(a, key) !== Object.hasOwn(b, key) || a[key] !== b[key],
+  );
 }
 
 /**
@@ -246,7 +265,7 @@ async function writeRunFiles(
   written: RunFilesBasis | undefined,
 ): Promise<void> {
   const { beforeStart } = input.options;
-  const basis: RunFilesBasis = { ports: ctx.ports, inputs: definedValues(input.runFilesInputs) };
+  const basis: RunFilesBasis = { ports: ctx.ports, inputs: await inputFingerprints(input, ctx) };
   const changed =
     written === undefined ||
     !sameValues(written.ports, basis.ports) ||
@@ -266,12 +285,21 @@ async function writeRunFiles(
   await storeRunFilesBasis(input, ctx.currentWorktree, basis);
 }
 
-/** The inputs without their `undefined` values, as the registry stores them. */
-function definedValues(runFilesInputs: DevSetupInput["runFilesInputs"]): Record<string, string> {
-  const inputs: Record<string, string> = {};
-  for (const [key, value] of Object.entries(runFilesInputs?.() ?? {})) {
-    if (value !== undefined) inputs[key] = value;
-  }
+/** Absent keys stay absent; even an empty value has a fingerprint. Never persist input values. */
+async function inputFingerprints(
+  input: DevSetupInput,
+  ctx: RunFileContext,
+): Promise<Record<string, string>> {
+  const values = (await input.runFilesInputs?.(ctx)) ?? {};
+  const inputs = Object.fromEntries(
+    Object.entries(values).flatMap(([key, value]) => {
+      if (value === undefined) return [];
+      if (typeof value !== "string")
+        throw new ConfigError("runFilesInputs must return string values.");
+      return [[key, `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`]];
+    }),
+  );
+  ctx.signal?.throwIfAborted();
   return inputs;
 }
 
@@ -286,6 +314,9 @@ async function* regeneratedRunFiles(
       yield entry;
       continue;
     }
+    ctx.signal?.throwIfAborted();
+    assertFileDestination(ctx.currentWorktree, entry.path);
+    entry.validateDestination?.(ctx);
     const content =
       typeof source.content === "function" ? await source.content(ctx) : source.content;
     yield { ...entry, source: { kind: "content", content }, patch: () => content };
@@ -303,12 +334,16 @@ function rewriteWarning(
   }
   const changes: string[] = [];
   const moves = changedKeys(written.ports, basis.ports).map(
-    (name) => `${name} ${written.ports[name] ?? "none"} → ${basis.ports[name] ?? "none"}`,
+    (name) => `${name} ${portLabel(written.ports, name)} → ${portLabel(basis.ports, name)}`,
   );
   if (moves.length > 0) changes.push(`the ports moved (${moves.join(", ")})`);
   const inputs = changedKeys(written.inputs, basis.inputs);
   if (inputs.length > 0) changes.push(`the run-file inputs changed (${inputs.join(", ")})`);
   return `Warning: ${changes.join("; ")}. ${updatedLine}`;
+}
+
+function portLabel(ports: Record<string, number>, name: string): number | "none" {
+  return Object.hasOwn(ports, name) ? ports[name] : "none";
 }
 
 async function storeRunFilesBasis(
@@ -337,7 +372,9 @@ async function runSetupHook(
 ): Promise<void> {
   const { setup } = input;
   const runs = setup !== undefined && (entry.devSetupAt === undefined || ctx.force);
+  ctx.signal?.throwIfAborted();
   if (runs) await setup(ctx);
+  ctx.signal?.throwIfAborted();
   if (!runs && entry.devSetupFailure === undefined) return;
   await updateWorkspaces(input.worktree.mainWorktree, input.registryDir, (registry) => {
     const current = findWorkspaceByPath(registry, ctx.currentWorktree)?.entry;

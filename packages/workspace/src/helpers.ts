@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { WorkspaceError } from "./errors.js";
+import { assertFileDestination } from "./file-destinations.js";
 import { devCmd, wsCmd } from "./package-manager.js";
 
 export function setupLogPath(worktreeRoot: string, runtimeDir: string): string {
@@ -100,7 +101,9 @@ export interface CopyAndPatchOptions {
   relPath: string;
   /** Called only when the target is (re)seeded from its source. */
   resolveSource: () => Promise<ResolvedFileSource>;
-  patch?: (content: string) => string;
+  patch?: (content: string) => string | Promise<string>;
+  validateDestination?: () => void;
+  signal?: AbortSignal;
   existing: ExistingFilePolicy;
   optional: boolean;
 }
@@ -119,11 +122,17 @@ export type CopyAndPatchOutcome =
 export async function copyAndPatchFile(options: CopyAndPatchOptions): Promise<CopyAndPatchOutcome> {
   const { relPath, patch } = options;
   const targetPath = join(options.currentWorktree, relPath);
+  const validate = (): void => {
+    options.signal?.throwIfAborted();
+    assertFileDestination(options.currentWorktree, relPath);
+    options.validateDestination?.();
+  };
+  validate();
   const alreadyExists = existsSync(targetPath);
 
   if (alreadyExists && options.existing !== "reseed") {
     if (options.existing === "keep" || patch === undefined) return { kind: "keptExisting" };
-    return reconcileExistingFile(targetPath, relPath, patch);
+    return reconcileExistingFile(targetPath, relPath, patch, validate);
   }
 
   const source = await options.resolveSource();
@@ -143,7 +152,8 @@ export async function copyAndPatchFile(options: CopyAndPatchOptions): Promise<Co
     content = readFileSync(source.path, "utf-8");
   }
 
-  const patched = patch === undefined ? content : applyPatch(relPath, patch, content);
+  const patched = patch === undefined ? content : await applyPatch(relPath, patch, content);
+  validate();
   mkdirSync(dirname(targetPath), { recursive: true });
   writeFileSync(targetPath, patched);
   return { kind: alreadyExists ? "overwritten" : "created" };
@@ -154,22 +164,28 @@ export async function copyAndPatchFile(options: CopyAndPatchOptions): Promise<Co
  * customizations survive. The source is never resolved, and the file is rewritten only when the
  * result differs.
  */
-function reconcileExistingFile(
+async function reconcileExistingFile(
   targetPath: string,
   relPath: string,
-  patch: (content: string) => string,
-): CopyAndPatchOutcome {
+  patch: (content: string) => string | Promise<string>,
+  validate: () => void,
+): Promise<CopyAndPatchOutcome> {
   const content = readFileSync(targetPath, "utf-8");
-  const patched = applyPatch(relPath, patch, content);
+  const patched = await applyPatch(relPath, patch, content);
+  validate();
   if (patched === content) return { kind: "upToDate" };
   writeFileSync(targetPath, patched);
   return { kind: "updated" };
 }
 
 /** Returns the patched content. Throws when the patch is not idempotent. */
-function applyPatch(relPath: string, patch: (content: string) => string, content: string): string {
-  const patched = patch(content);
-  if (patch(patched) !== patched) {
+async function applyPatch(
+  relPath: string,
+  patch: (content: string) => string | Promise<string>,
+  content: string,
+): Promise<string> {
+  const patched = await patch(content);
+  if ((await patch(patched)) !== patched) {
     throw new WorkspaceError(
       `patch of ${relPath} is not idempotent: applying it twice gives a different result. ` +
         "A patch must rewrite only the keys it owns.",
@@ -207,8 +223,7 @@ export function formatDuration(ms: number): string {
 
 /**
  * Detects common fatal JS startup failures in a log buffer. Returns a short marker string
- * naming the matched pattern, or `false` when none match. Used as the default `detectError`
- * for spawn servers that don't supply one. A custom `detectError` can compose with this:
+ * naming the matched pattern, or `false` when none match. A custom `detectError` can opt in:
  * `detectError: (log) => myDetector(log) || helpers.detectCommonJsError(log)`.
  */
 export function detectCommonJsError(log: string): string | false {

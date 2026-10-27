@@ -1,5 +1,8 @@
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
+  mkdirSync,
+  symlinkSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -191,7 +194,7 @@ describe("copyAndPatchFile", () => {
       currentWorktree: cur,
       relPath: "out.txt",
       resolveSource: source({ path: src }),
-      patch: (c) => c.replace("1", "2"),
+      patch: async (c) => c.replace("1", "2"),
       existing: "patch",
       optional: false,
     });
@@ -289,7 +292,7 @@ describe("copyAndPatchFile", () => {
       currentWorktree: cur,
       relPath: "out.txt",
       resolveSource: noSource(),
-      patch: (c) => `${c}x\n`,
+      patch: async (c) => `${c}x\n`,
       existing: "patch",
       optional: false,
     });
@@ -327,6 +330,81 @@ describe("copyAndPatchFile", () => {
     });
     await expect(run).rejects.toThrow(/not idempotent/);
     expect(readFileSync(target, "utf-8")).toBe("orig\n");
+  });
+
+  it("rejects tracked paths with literal pathspecs, including a tracked parent link", async () => {
+    const cur = tmp();
+    execFileSync("git", ["init", "-q", cur]);
+    writeFileSync(join(cur, "[literal]"), "original");
+    mkdirSync(join(cur, "inside"));
+    symlinkSync("inside", join(cur, "link"));
+    execFileSync("git", ["add", "--", "[literal]", "link"], { cwd: cur });
+    for (const path of ["[literal]", "link/out.txt"]) {
+      await expect(
+        copyAndPatchFile({
+          currentWorktree: cur,
+          relPath: path,
+          resolveSource: source({ content: "overwrite" }),
+          existing: "reseed",
+          optional: false,
+        }),
+      ).rejects.toThrow(/tracked/);
+    }
+    expect(readFileSync(join(cur, "[literal]"), "utf8")).toBe("original");
+    expect(existsSync(join(cur, "inside/out.txt"))).toBe(false);
+  });
+
+  it("rejects logical and canonical escapes and rechecks links after awaited work", async () => {
+    const cur = tmp();
+    const outside = tmp();
+    symlinkSync(outside, join(cur, "escape"));
+    for (const path of ["../escape.txt", "escape/out.txt", join(outside, "out.txt")]) {
+      await expect(
+        copyAndPatchFile({
+          currentWorktree: cur,
+          relPath: path,
+          resolveSource: source({ content: "overwrite" }),
+          existing: "reseed",
+          optional: false,
+        }),
+      ).rejects.toThrow(/escapes/);
+    }
+    await expect(
+      copyAndPatchFile({
+        currentWorktree: cur,
+        relPath: "later/out.txt",
+        resolveSource: async () => {
+          await Promise.resolve();
+          symlinkSync(outside, join(cur, "later"));
+          return { content: "overwrite" };
+        },
+        existing: "patch",
+        optional: false,
+      }),
+    ).rejects.toThrow(/escapes/);
+    expect(existsSync(join(outside, "out.txt"))).toBe(false);
+  });
+
+  it("rechecks tracked destinations after an awaited transform without writing", async () => {
+    const cur = tmp();
+    execFileSync("git", ["init", "-q", cur]);
+    const target = join(cur, "out.txt");
+    writeFileSync(target, "original");
+    await expect(
+      copyAndPatchFile({
+        currentWorktree: cur,
+        relPath: "out.txt",
+        resolveSource: noSource(),
+        patch: async () => {
+          await Promise.resolve();
+          execFileSync("git", ["add", "out.txt"], { cwd: cur });
+          return "updated";
+        },
+        existing: "patch",
+        optional: false,
+      }),
+    ).rejects.toThrow(/tracked/);
+    expect(readFileSync(target, "utf8")).toBe("original");
   });
 
   it("reseeds an existing target from its source", async () => {

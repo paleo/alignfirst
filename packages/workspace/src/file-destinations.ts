@@ -1,0 +1,87 @@
+import { spawnSync } from "node:child_process";
+import { lstatSync, realpathSync } from "node:fs";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+
+import { ConfigError } from "./errors.js";
+
+export function assertFileDestination(root: string, path: string): string {
+  const target = resolve(root, path);
+  if (path.includes("\0") || isAbsolute(path) || !isWithin(resolve(root), target)) {
+    throw new ConfigError(`File destination escapes worktree: ${path}.`);
+  }
+  if (relative(resolve(root), target).split(sep)[0] === ".git") {
+    throw new ConfigError(`Refusing Git metadata destination: ${path}.`);
+  }
+  const canonical = canonicalDestination(target);
+  if (!isWithin(realpathSync(root), canonical)) {
+    throw new ConfigError(`File destination escapes worktree through a link: ${path}.`);
+  }
+  assertUntracked(root, relative(root, target));
+  const canonicalRelative = relative(realpathSync(root), canonical);
+  if (canonicalRelative.split(sep)[0] === ".git") {
+    throw new ConfigError(`Refusing Git metadata destination: ${path}.`);
+  }
+  assertUntracked(root, canonicalRelative);
+  return canonical;
+}
+
+export function assertDistinctDestinations(root: string, paths: string[]): void {
+  const destinations = new Set<string>();
+  for (const path of paths) {
+    const target = assertFileDestination(root, path);
+    if (destinations.has(target)) throw new ConfigError(`Overlapping file destination: ${path}.`);
+    destinations.add(target);
+  }
+}
+
+function canonicalDestination(path: string): string {
+  const entry = lstatSync(path, { throwIfNoEntry: false });
+  if (entry !== undefined) {
+    if (entry.isSymbolicLink()) {
+      try {
+        return realpathSync(path);
+      } catch {
+        throw new ConfigError(`Unusable file destination link: ${path}.`);
+      }
+    }
+    return realpathSync(path);
+  }
+  const parent = dirname(path);
+  if (parent === path) return path;
+  return resolve(canonicalDestination(parent), relative(parent, path));
+}
+
+function isWithin(root: string, target: string): boolean {
+  const path = relative(root, target);
+  return path !== "" && path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path);
+}
+
+function assertUntracked(root: string, path: string): void {
+  // Helpers also support non-Git scratch directories. Within Git, inspection must fail closed.
+  const repository = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  if (repository.status !== 0) {
+    if (repository.error || lstatSync(resolve(root, ".git"), { throwIfNoEntry: false })) {
+      throw new ConfigError(`Cannot inspect tracked destination: ${path}.`);
+    }
+    return;
+  }
+  let candidate = path;
+  while (candidate !== ".") {
+    const tracked = spawnSync("git", ["--literal-pathspecs", "ls-files", "-z", "--", candidate], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    if (tracked.status !== 0) throw new ConfigError(`Cannot inspect tracked destination: ${path}.`);
+    if (tracked.stdout.length > 0) {
+      // Ancestors must reject tracked files/links, without rejecting unrelated tracked siblings.
+      const entries = tracked.stdout.split("\0");
+      if (candidate === path || entries.includes(candidate)) {
+        throw new ConfigError(`Refusing tracked file destination: ${path}.`);
+      }
+    }
+    candidate = dirname(candidate);
+  }
+}

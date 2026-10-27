@@ -20,6 +20,14 @@ The binless package runs through configured thin wrappers on Node or Bun. `src/p
 
 Detached finalization, configured dev-wrapper calls and removal re-execution use `process.execPath`, preserving Node or Bun, including executable paths containing spaces. Guide bootstrap commands quote that same runtime. Project install/build callbacks and external tools keep their configured commands; selecting Bun for the kernel does not rewrite a real npm build callback.
 
+## Manifest execution seam
+
+`manifest-adapter.ts` exposes `adaptWorkspaceManifest(manifest, { mainWorktree, signal? })`. It accepts a validated manifest and returns workspace hooks plus an optional dev config. Discovery, required shared directories, default-only preparation and target-recipe selection belong to the host lifecycle.
+
+`script-context.ts` constructs phase-limited `ALIGNFIRST_CONTEXT`, scalar environment conveniences and single-pass interpolation. `resolveCommand` keeps shell source literal and resolves argv, cwd and declared env. `command-executor.ts` streams lifecycle stdout or captures data stdout, supplies transform stdin, and awaits process close/output draining. Cancellation stops its detached process group before rejecting. Hooks accept an invocation `AbortSignal`; an explicit hook signal overrides the adapter's default, allowing rollback to use a fresh cleanup lifetime.
+
+`resolveServers` runs after `runDevSetup`. Its resolved descriptors carry command/args, cwd, env, port and readiness detectors through conflict checking, spawning and summaries. Service logs remain under the worktree runtime directory, regardless of package cwd; labels are URI-encoded in filenames. Manifest log regexes have no stateful flags, and omitted `error.log` means no implicit JavaScript error detector.
+
 ## Setup modes
 
 `workspace setup` synchronously creates or adopts a Git worktree, then runs `finalizeWorkspace` (install, build) in a **detached child** that streams to `<runtimeDir>/logs/workspace-setup.log`. Ordinary setup waits for the child.
@@ -125,7 +133,7 @@ An entry in `dev-servers.json` is **live** when at least one of its spawn PIDs i
 2. A stored port is kept when the config still allows it for its name and nothing reserves it. An allowed port is inside the range, not excluded, not a bad port, and inside the name's dedicated range, or outside every dedicated range for a name without one. A port is reserved when it is pinned, already assigned to another name of the workspace, or, in a linked workspace, stored on another entry.
 3. Each missing name gets the lowest port of its scope that is allowed for it, neither pinned nor assigned, stored on no other entry, and free according to the probe. The scope is the name's dedicated range, or the project range. Each scope keeps its own cursor, so a rejected port is never probed twice.
 
-An undeclared name is not carried over, so its port is freed. An exhausted scope is a `WorkspaceError` that names the range and points at `workspace remove`. For a dedicated range, it adds that ports held there under other names are freed at those workspaces' next `dev setup`. `--reset-ports` passes no stored port, so every port is allocated again, pins excepted. It refuses first while the worktree's dev-server runs. When the ports change, they are printed as one `Ports: …` line.
+An undeclared name is not carried over, so its port is freed. Removing the entire ports declaration stores an empty map. An exhausted scope is a `WorkspaceError` that names the range and points at `workspace remove`. For a dedicated range, it adds that ports held there under other names are freed at those workspaces' next `dev setup`. `--reset-ports` passes no stored port, so every port is allocated again, pins excepted. It refuses first while the worktree's dev-server runs. When the ports change, they are printed as one `Ports: …` line.
 
 ### Lock and probe
 
@@ -149,11 +157,19 @@ Adding a dedicated range moves no port of another workspace from the outside. Ea
 
 ### Run files
 
-`seedFiles` ([`file-entries.ts`](../packages/workspace/src/file-entries.ts)) writes both file lists through `copyAndPatchFile`: `workspace setup` the `gitignoredFiles` with a `PatchContext`, `dev setup` the `runFiles` with a `RunFileContext`, which adds `ports`. Its `existing` policy decides the fate of an existing file. `reseed` writes it again from its source. `patch` re-applies its `patch` and rewrites it only when the result differs. `keep` leaves it. `copyAndPatchFile` refuses a patch that is not idempotent, on a seed as on a re-apply, before writing. The rewritten files are reported in one `Updated <paths>` line, printed even when a later entry fails.
+`seedFiles` ([`file-entries.ts`](../packages/workspace/src/file-entries.ts)) writes both file lists through `copyAndPatchFile`: `workspace setup` the `gitignoredFiles` with a `PatchContext`, `dev setup` the `runFiles` with a `RunFileContext`, which adds `ports`.
+
+Content producers and patches may be asynchronous. Destination checks reject tracked paths, Git metadata and logical/canonical escapes before generation and again after awaited work, before writing. Manifest file lists also reject canonical aliases across lists.
+
+The `existing` policy decides the fate of an existing file. `reseed` writes it again from its source. `patch` re-applies its `patch` and rewrites it only when the result differs. `keep` leaves it. `copyAndPatchFile` refuses a patch that is not idempotent, on a seed as on a re-apply, before writing. The rewritten files are reported in one `Updated <paths>` line, printed even when a later entry fails.
 
 `workspace setup` uses `patch`, and `reseed` with `--force`. `dev setup` never reseeds a run file: a deleted one is created again. An explicit `dev setup` uses `patch`.
 
-Before a start, `dev setup` uses `keep`, so a hand edit survives a restart. It switches to `patch` when the basis of the run files changed: the ports, and the defined values of `DevServerConfig.runFilesInputs`. The workspace entry stores that basis as `runFilesWrittenWith: { ports, inputs }` in `<mainWorktree>/<runtimeDir>/workspace-registry/workspaces.json`, alongside its allocated `ports`. The basis is cleared before a write batch and saved after every file succeeds; an entry without one counts as changed, so a failed batch is reconciled at the next start. The `Updated` line then becomes a warning naming the moved ports and the changed input keys, without the input values.
+Before a start, `dev setup` uses `keep`, so a hand edit survives a restart. It switches to `patch` when the basis of the run files changed: the ports, and the defined values of `DevServerConfig.runFilesInputs`. The workspace entry stores that basis as `runFilesWrittenWith: { ports, inputs }` in `<mainWorktree>/<runtimeDir>/workspace-registry/workspaces.json`, alongside its allocated `ports`.
+
+`runFilesInputs(ctx)` may be asynchronous and runs after port reconciliation. Each defined UTF-8 input value is stored as `sha256:<64 lowercase hex characters>` under its literal key; values are never stored in plaintext. Missing keys remain absent, distinct from an empty string's fingerprint.
+
+The basis is cleared before a write batch and saved after every file succeeds; an entry without one counts as changed, so a failed batch is reconciled at the next start. The `Updated` line then becomes a warning naming the moved ports and the changed input keys, without the input values.
 
 A generated run file, a `content` source without `patch`, would never follow a port move. `writeRunFiles` turns its generated content into its `patch`, so each rewrite regenerates it. Sources are evaluated in entry order, after earlier files have been written.
 

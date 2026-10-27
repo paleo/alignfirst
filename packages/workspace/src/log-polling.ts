@@ -21,6 +21,7 @@ export interface AwaitOptions {
   timeoutMs?: number;
   pollIntervalMs?: number;
   isAlive?: (pid: number) => boolean;
+  signal?: AbortSignal;
 }
 
 export async function awaitAllReady(
@@ -60,6 +61,7 @@ async function waitForReady(
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
+    options.signal?.throwIfAborted();
     if (!isAlive(pid)) {
       throw new StartupError(server.name, "process exited unexpectedly", server.logFile);
     }

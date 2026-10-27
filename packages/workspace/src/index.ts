@@ -30,6 +30,24 @@ export type {
   ConfigFileLocation,
   WorkspaceConfigReport,
 } from "./config.js";
+export { adaptWorkspaceManifest } from "./manifest-adapter.js";
+export type { ManifestAdapters, ManifestAdapterOptions } from "./manifest-adapter.js";
+export { executeCommand } from "./command-executor.js";
+export type { ExecuteCommandOptions } from "./command-executor.js";
+export { scriptContext, interpolate, resolveCommand } from "./script-context.js";
+export type {
+  ScriptContext,
+  ScriptContextFields,
+  ScriptPhase,
+  ScriptServerResult,
+  ResolvedCommand,
+} from "./script-context.js";
+export { resolveServers } from "./server-descriptor.js";
+export type {
+  ResolvedServerDescriptor,
+  ResolvedSpawnServer,
+  SpawnCommand,
+} from "./server-descriptor.js";
 export { runWorkspace } from "./workspace.js";
 export { defaultWorktreeDirName } from "./worktree.js";
 export type { WorktreeDirNameFn } from "./worktree.js";
@@ -56,12 +74,13 @@ export { runDevServer } from "./dev-server.js";
 export type {
   DevServerConfig,
   DevServerSummaryContext,
+  DevSummaryFormatter,
   ServerDescriptor,
   ServerContext,
   SpawnServer,
   CallbackServer,
 } from "./dev-server.js";
-export type { DevSetupContext } from "./dev-setup.js";
+export type { DevSetupContext, RunFilesInputsProvider } from "./dev-setup.js";
 export type { DeclaredPort, DevPortsConfig, PortRange } from "./ports.js";
 
 export type { ResolvedWorkspace } from "./workspaces.js";
