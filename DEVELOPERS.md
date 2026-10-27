@@ -4,13 +4,24 @@ The everyday workflow of this repository. Run `npm run docmap` for the design do
 
 ## Stack and layout
 
-An npm-workspaces monorepo of TypeScript packages (ESM only, `strict: true`), published under `@alignfirst/*`, plus the unscoped `alignfirst` and `aligndev`. Each package lives in `packages/<name>`; the AlignDev for OpenClaw tests live at the repository root, and agent skills live in `skills/`. Development uses Node 26 (`nvm install 26 && nvm use`); the version is in `.nvmrc`. Lint and format with Biome, test with Vitest, release with Changesets.
+An npm-workspaces monorepo of TypeScript packages (ESM only, `strict: true`), published under `@alignfirst/*`, plus the unscoped `alignfirst` and `aligndev`. Each package lives in `packages/<name>`; the AlignDev for OpenClaw tests live at the repository root, and agent skills live in `skills/`. Development uses Node 26 through fnm (`fnm exec --using=.nvmrc`); the version is in `.nvmrc`. Lint and format with Biome, test with Vitest, release with Changesets.
 
 ## Workspaces
 
-A workspace is a git worktree plus its setup: `.plans` and `.local` symlinked to the main worktree, `.vscode/settings.json` copied, then `npm install` and `npm run build`. This repository has no dev server, so the tooling runs portless: nothing to start, no `dev` script.
+A workspace is a Git worktree plus its setup. `alignfirst.json` holds conventions; `alignfirst-workspace.json` shares effective plans, usable untracked `.local` and harness artifacts, optionally seeds editor/harness settings, then finalizes with named `npm install` and `npm run build` steps. `.local-wt` stays local. This repository has no dev server or `dev` script.
 
-Run `npm run workspace -- --guide` to learn the full procedures.
+A fresh main clone needs `fnm exec --using=.nvmrc npm install` and `fnm exec --using=.nvmrc npm run build` first. Prepare ignored effective plans separately before workspace setup. A fresh linked worktree has neither dependencies nor `dist/`; retain its cwd and invoke the already built main-checkout entry:
+
+```sh
+main=$(git worktree list --porcelain | awk '/^worktree / {sub(/^worktree /, ""); print; exit}')
+fnm exec --using="$main/.nvmrc" node "$main/packages/alignfirst/bin/alignfirst.mjs" workspace setup
+```
+
+The same absolute entry/runtime handles children while loading the target branch's recipe. Do not bootstrap pre-release worktrees with an unqualified package-runner download or target-local missing `dist/`. Once built, `fnm exec --using=.nvmrc npm run workspace -- --guide` shows the procedures.
+
+Paseo owns Git deletion. Archive its workspace first, then run `workspace teardown` through the built main entry before Paseo removes it. Do not substitute `workspace remove` for external-owner deletion.
+
+Existing participating worktrees with old runtime registries, including the side-32 implementation session, remain pending an explicitly coordinated [upgrade](docs/upgrading-multi-stack-workspaces.md). Account for services/finalizers/resources across all worktrees before converting state. Reading configuration/context or syncing work files does not require lifecycle adoption; never test new lifecycle commands against that live old state.
 
 ## Conventions
 

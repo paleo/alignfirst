@@ -7,7 +7,7 @@
   ],
   "scripts": {
     "docmap": "alignfirst docmap",
-    "workspace": "node scripts/workspace.mjs",
+    "workspace": "alignfirst workspace",
     "plans:setup": "alignfirst plans setup",
     "plans:sync": "alignfirst sync",
     "lint": "biome check",
