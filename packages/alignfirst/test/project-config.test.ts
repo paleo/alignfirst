@@ -1,26 +1,22 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { readProjectConfig, validateProjectConfig } from "../src/project-config.js";
 import { makeTempDir } from "./helpers.js";
 
 const dirs: string[] = [];
-
 afterEach(() => {
-  vi.restoreAllMocks();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
 describe("project config", () => {
-  it("accepts the full shape and a minimal config", () => {
+  it("accepts the retained fields and minimal settings", () => {
     const full = {
       schemaVersion: 1,
-      cli: ">=0.1.0 <0.2.0",
+      $schema: "https://cdn.jsdelivr.net/npm/alignfirst/schemas/alignfirst-v1.schema.json",
       ticketIdPattern: "^\\d+$",
       plans: { repositoryFolder: "project", autoArchive: true },
-      portRange: { first: 8100, last: 8199 },
       git: {
         defaultBranch: "main",
         branchNameTemplate: "{TICKET_ID}/{slug}",
@@ -29,83 +25,22 @@ describe("project config", () => {
       },
     };
     expect(validateProjectConfig(full, "config")).toEqual(full);
-    expect(validateProjectConfig({ schemaVersion: 1 }, "config")).toEqual({ schemaVersion: 1 });
-    expect(validateProjectConfig({ schemaVersion: 1, plans: {} }, "config")).toEqual({
+    expect(validateProjectConfig({ schemaVersion: 1, plans: {}, git: {} }, "config")).toEqual({
       schemaVersion: 1,
       plans: {},
+      git: {},
     });
-    expect(
-      validateProjectConfig({ schemaVersion: 1, plans: { autoArchive: true } }, "config"),
-    ).toEqual({ schemaVersion: 1, plans: { autoArchive: true } });
-  });
-
-  it("warns and ignores unknown properties at every settings level without exposing values", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const secret = "PRIVATE-SETTING-VALUE";
-    const value = {
-      schemaVersion: 1,
-      extra: { nested: secret },
-      ticketPattern: secret,
-      project: secret,
-      plans: { repositoryFolder: "work", extra: secret },
-      portRange: { first: 8100, last: 8199, extra: secret },
-      git: {
-        extra: secret,
-        commit: { style: "conventionalCommit", extra: secret },
-      },
-    };
-    const before = JSON.stringify(value);
-    expect(validateProjectConfig(value, "config")).toEqual({
-      schemaVersion: 1,
-      plans: { repositoryFolder: "work" },
-      portRange: { first: 8100, last: 8199 },
-      git: { commit: { style: "conventionalCommit" } },
-    });
-    const warnings = warn.mock.calls.flat().join("\n");
-    expect(warn).toHaveBeenCalledTimes(7);
-    for (const field of [
-      "extra",
-      "ticketPattern",
-      "project",
-      "plans.extra",
-      "portRange.extra",
-      "git.extra",
-      "git.commit.extra",
-    ])
-      expect(warnings).toContain(`setting ${field}.`);
-    expect(warnings).toContain("Use ticketIdPattern");
-    expect(warnings).not.toContain(secret);
-    expect(JSON.stringify(value)).toBe(before);
-  });
-
-  it("ignores unknown values of any shape and escapes control characters in keys", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    for (const extra of [null, false, 42, "PRIVATE", [], { nested: "PRIVATE" }])
-      expect(validateProjectConfig({ schemaVersion: 1, extra }, "config")).toEqual({
-        schemaVersion: 1,
-      });
-    const key = "unknown\n\u001b\u202e\u2028";
-    const value = JSON.parse('{"schemaVersion":1,"__proto__":{"secret":"PRIVATE"}}');
-    value[key] = "PRIVATE";
-    expect(validateProjectConfig(value, "config")).toEqual({ schemaVersion: 1 });
-    const warnings = warn.mock.calls.flat().join("|");
-    expect(warnings).toContain("__proto__");
-    expect(warnings).toContain("\\n\\u001b\\u202e\\u2028");
-    for (const control of ["\n", "\u001b", "\u202e", "\u2028"])
-      expect(warnings).not.toContain(control);
-    expect(warnings).not.toContain("PRIVATE");
   });
 
   it.each([
-    [null, "must be an object"],
-    [[], "must be an object"],
+    [null, "object"],
+    [[], "object"],
     [{}, "schemaVersion"],
     [{ schemaVersion: 2 }, "schemaVersion"],
+    [{ schemaVersion: 1, $schema: "not a URI" }, "$schema"],
     [{ schemaVersion: 1, plans: [] }, "plans"],
     [{ schemaVersion: 1, plans: { autoArchive: "PRIVATE" } }, "autoArchive"],
     [{ schemaVersion: 1, plans: { repositoryFolder: false } }, "repositoryFolder"],
-    [{ schemaVersion: 1, portRange: { first: 0, last: 2 } }, "first"],
-    [{ schemaVersion: 1, portRange: { first: 1 } }, "last"],
     [{ schemaVersion: 1, git: null }, "git"],
     [{ schemaVersion: 1, git: { agentCoauthoring: "PRIVATE" } }, "agentCoauthoring"],
     [{ schemaVersion: 1, git: { commit: [] } }, "commit"],
@@ -116,110 +51,75 @@ describe("project config", () => {
       },
       "ticketReference",
     ],
-    [{ schemaVersion: 1, cli: "not a range" }, "supported version range"],
-    [{ schemaVersion: 1, ticketIdPattern: "[" }, "regular expression"],
-    [{ schemaVersion: 1, ticketIdPattern: "^ABC-\\d+$|^XYZ-\\d+$" }, "one anchored expression"],
-    [{ schemaVersion: 1, portRange: { first: 2, last: 1 } }, "must not exceed"],
     [{ schemaVersion: 1, git: { commit: { style: "other" } } }, "style"],
     [{ schemaVersion: 1, git: { commit: {} } }, "style"],
-  ])("rejects invalid config %#", (value, message) => {
+    [{ schemaVersion: 1, ticketIdPattern: "[PRIVATE" }, "regular expression"],
+    [{ schemaVersion: 1, ticketIdPattern: "^ABC-\\d+$|^XYZ-\\d+$" }, "one anchored expression"],
+  ])("rejects malformed retained fields %# without values", (value, message) => {
     expect(() => validateProjectConfig(value, "config")).toThrow(message);
+    expect(() => validateProjectConfig(value, "config")).not.toThrow("PRIVATE");
   });
 
-  it("still validates recognized fields alongside unknown properties, without leaking values", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    for (const known of [
-      { cli: "PRIVATE-INVALID-RANGE" },
-      { ticketIdPattern: "[PRIVATE-INVALID-PATTERN" },
-      { git: { agentCoauthoring: "PRIVATE-INVALID-BOOLEAN", extra: "PRIVATE" } },
-    ]) {
-      expect(() =>
-        validateProjectConfig({ schemaVersion: 1, extra: "PRIVATE", ...known }, "config"),
-      ).toThrow(/^Invalid config:/);
-      try {
-        validateProjectConfig({ schemaVersion: 1, ...known }, "config");
-      } catch (error) {
-        expect(String(error)).not.toContain("PRIVATE");
-      }
-    }
-    expect(warn).toHaveBeenCalled();
-    expect(warn.mock.calls.flat().join("\n")).not.toContain("PRIVATE");
-  });
-
-  it("reads unknown settings without rewriting the config file", () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    const dir = makeTempDir();
-    dirs.push(dir);
-    const path = join(dir, ".alignfirst.json");
-    const content = '{ "schemaVersion": 1, "extra": "PRIVATE" }\n';
-    writeFileSync(path, content);
-    expect(readProjectConfig(path).config).toEqual({ schemaVersion: 1 });
-    expect(readFileSync(path, "utf-8")).toBe(content);
-    writeFileSync(path, '{"extra":"PRIVATE", BROKEN}');
-    expect(() => readProjectConfig(path)).toThrow("must contain valid JSON");
-    expect(() => readProjectConfig(path)).not.toThrow("PRIVATE");
-  });
-
-  it("reads the deprecated plans.folder as plans.repositoryFolder", () => {
-    expect(
-      validateProjectConfig(
-        { schemaVersion: 1, plans: { folder: "x", autoArchive: true } },
-        "config",
-      ),
-    ).toEqual({ schemaVersion: 1, plans: { repositoryFolder: "x", autoArchive: true } });
-  });
-
-  it("rejects plans.folder alongside plans.repositoryFolder", () => {
-    expect(() =>
-      validateProjectConfig(
-        { schemaVersion: 1, plans: { folder: "x", repositoryFolder: "x" } },
-        "config",
-      ),
-    ).toThrow("remove plans.folder");
+  it.each([
+    { cli: ">=1" },
+    { portRange: { first: 8100, last: 8199 } },
+    { ticketPattern: "PRIVATE" },
+    { extra: "PRIVATE" },
+    { plans: { folder: "PRIVATE" } },
+    { plans: { typo: "PRIVATE" } },
+    { git: { typo: "PRIVATE" } },
+    { git: { commit: { style: "conventionalCommit", typo: "PRIVATE" } } },
+  ])("rejects retired and unknown settings with update guidance %#", (settings) => {
+    expect(() => validateProjectConfig({ schemaVersion: 1, ...settings }, "config")).toThrow(
+      "update alignfirst",
+    );
+    expect(() => validateProjectConfig({ schemaVersion: 1, ...settings }, "config")).not.toThrow(
+      "PRIVATE",
+    );
   });
 
   it.each(["^(ABC|XYZ)-\\d+$", "^[^/]+$", "^\\$\\d+$", "\\d+"])(
-    "accepts ticketIdPattern %s",
+    "accepts pattern %s",
     (ticketIdPattern) => {
-      expect(validateProjectConfig({ schemaVersion: 1, ticketIdPattern }, "config")).toEqual({
-        schemaVersion: 1,
-        ticketIdPattern,
-      });
+      expect(
+        validateProjectConfig({ schemaVersion: 1, ticketIdPattern }, "config").ticketIdPattern,
+      ).toBe(ticketIdPattern);
     },
   );
 
-  it("reads a file and reports invalid JSON", () => {
-    const dir = makeTempDir();
-    dirs.push(dir);
-    const path = join(dir, ".alignfirst.json");
-    writeFileSync(path, '{"schemaVersion":1}');
-    expect(readProjectConfig(path)).toEqual({ config: { schemaVersion: 1 }, deprecations: [] });
-    writeFileSync(path, "{");
-    expect(() => readProjectConfig(path)).toThrow(`Invalid ${path}`);
+  it.each(["json", "jsonc"])("rejects literal __proto__ in %s without rewriting", (extension) => {
+    const path = configPath(extension);
+    const text = '{"schemaVersion":1,"__proto__":{"secret":"PRIVATE"}}';
+    writeFileSync(path, text);
+    expect(() => readProjectConfig(path)).toThrow("__proto__");
+    expect(() => readProjectConfig(path)).not.toThrow("PRIVATE");
+    expect(readFileSync(path, "utf8")).toBe(text);
   });
 
-  it("reports plans.folder as a deprecation, only on a valid config", () => {
-    const dir = makeTempDir();
-    dirs.push(dir);
-    const path = join(dir, ".alignfirst.json");
-    writeFileSync(path, JSON.stringify({ schemaVersion: 1, plans: { folder: "x" } }));
-    const { deprecations } = readProjectConfig(path);
-    expect(deprecations).toEqual([
-      expect.stringContaining(
-        `${path}: plans.folder is deprecated; rename it to plans.repositoryFolder`,
-      ),
-    ]);
-    writeFileSync(
-      path,
-      JSON.stringify({ schemaVersion: 1, ticketIdPattern: "[", plans: { folder: "x" } }),
-    );
-    expect(() => readProjectConfig(path)).toThrow("regular expression");
+  it("uses strict JSON and permits comments/trailing commas only in JSONC", () => {
+    const json = configPath("json");
+    const jsonc = configPath("jsonc");
+    for (const text of ['{/* comment */ "schemaVersion":1}', '{"schemaVersion":1,}']) {
+      writeFileSync(json, text);
+      writeFileSync(jsonc, text);
+      expect(() => readProjectConfig(json)).toThrow("valid JSON");
+      expect(readProjectConfig(jsonc)).toEqual({ config: { schemaVersion: 1 } });
+      expect(readFileSync(jsonc, "utf8")).toBe(text);
+    }
+    writeFileSync(jsonc, '{"schemaVersion":1 BROKEN}');
+    expect(() => readProjectConfig(jsonc)).toThrow("valid JSONC");
   });
 
-  it("rejects a directory in place of the config file", () => {
-    const dir = makeTempDir();
-    dirs.push(dir);
-    mkdirSync(join(dir, ".alignfirst.json"));
-    expect(() => readProjectConfig(join(dir, ".alignfirst.json"))).toThrow("Invalid");
+  it("rejects unreadable and non-file destinations", () => {
+    const path = configPath("json");
+    expect(() => readProjectConfig(path)).toThrow("cannot read");
+    mkdirSync(path);
+    expect(() => readProjectConfig(path)).toThrow("cannot read");
   });
 });
+
+function configPath(extension: string): string {
+  const dir = makeTempDir();
+  dirs.push(dir);
+  return join(dir, `alignfirst.${extension}`);
+}

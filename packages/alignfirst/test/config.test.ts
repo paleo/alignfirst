@@ -1,192 +1,159 @@
-import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
   configureGit,
   initRepository,
+  makeCompanionProject,
   makeTempDir,
-  packageVersion,
   runMain,
   writeRegistry,
 } from "./helpers.js";
 
 const dirs: string[] = [];
-
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
 describe("config command", () => {
-  it("reports no config in text and JSON", async () => {
+  it("reports missing families without creating files", async () => {
     const cwd = temp();
-    expect((await runMain(["config"], { cwd })).stdout).toBe(
-      [
-        "Source: none",
-        "CLI range: none",
-        "Companion: none",
-        "AlignDev profile: none",
-        `.alignfirst.json: ${join(cwd, ".alignfirst.json")} (project, missing)`,
-        `.alignfirst-instructions: ${join(cwd, ".alignfirst-instructions")} (project, missing)`,
-        `DEVELOPERS.md: ${join(cwd, "DEVELOPERS.md")} (project, missing)`,
-        `docs: ${join(cwd, "docs")} (project, missing)`,
-        `.plans: ${join(cwd, ".plans")} (project, missing)`,
-        `_aligndev: ${join(cwd, ".plans")} (project, missing)`,
-        "",
-      ].join("\n"),
-    );
-    const report = JSON.parse((await runMain(["config", "--json"], { cwd })).stdout);
+    const before = readdirSync(cwd);
+    const result = await runMain(["config", "--json"], { cwd });
+    expect(result.code).toBe(0);
+    const report = JSON.parse(result.stdout);
     expect(report).toMatchObject({
       source: null,
-      cli: null,
       config: null,
       companion: null,
       aligndev: null,
+      workspace: {
+        location: { path: join(cwd, "alignfirst-workspace.json"), in: "project", exists: false },
+        schemaVersion: null,
+        portRange: null,
+        hasDevServer: false,
+      },
+      locations: {
+        alignfirst: { path: join(cwd, "alignfirst.json"), in: "project", exists: false },
+      },
     });
-    expect(report.locations.docs).toEqual({
-      path: join(cwd, "docs"),
-      in: "project",
-      exists: false,
-    });
+    expect(report).not.toHaveProperty("cli");
+    expect(readdirSync(cwd)).toEqual(before);
+    const text = await runMain(["config"], { cwd });
+    expect(text.stdout).toContain(`alignfirst: ${join(cwd, "alignfirst.json")} (project, missing)`);
+    expect(text.stdout).not.toContain("CLI range");
   });
 
-  it("reports a project config and its unsatisfied range without failing", async () => {
+  it("reports validated metadata from the worktree root without executing or exposing commands", async () => {
     const cwd = temp();
+    configureGit(cwd);
+    initRepository(cwd);
+    const nested = join(cwd, "packages", "app");
+    mkdirSync(nested, { recursive: true });
+    const sentinel = join(cwd, "executed");
     writeFileSync(
-      join(cwd, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, cli: ">=1.0.0", ticketIdPattern: "^\\d+$" }),
+      join(cwd, "alignfirst.jsonc"),
+      '{/* conventions */ "schemaVersion":1,"ticketIdPattern":"^TASK-\\\\d+$",}',
     );
-    const result = await runMain(["config", "--json"], { cwd });
+    writeFileSync(
+      join(cwd, "alignfirst-workspace.jsonc"),
+      JSON.stringify({
+        schemaVersion: 1,
+        workspace: {
+          finalize: [{ name: "sentinel", run: `touch '${sentinel}'`, env: { SECRET: "PRIVATE" } }],
+        },
+        devServer: {
+          ports: { first: 8100, last: 8199, declare: ["api"] },
+          servers: [
+            {
+              kind: "spawn",
+              name: "api",
+              exec: { run: ["python", "app.py"], env: { SECRET: "PRIVATE" } },
+              port: "api",
+              ready: { log: "ready" },
+            },
+          ],
+        },
+      }),
+    );
+    const result = await runMain(["config", "--json"], { cwd: nested });
     expect(result.code).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({
       source: "project",
-      cli: { installed: packageVersion, range: ">=1.0.0", satisfied: false },
-      config: { schemaVersion: 1, cli: ">=1.0.0", ticketIdPattern: "^\\d+$" },
+      workspace: {
+        location: { path: join(cwd, "alignfirst-workspace.jsonc"), in: "project", exists: true },
+        schemaVersion: 1,
+        portRange: { first: 8100, last: 8199 },
+        hasDevServer: true,
+      },
+      locations: { alignfirst: { path: join(cwd, "alignfirst.jsonc") } },
     });
+    expect(result.stdout).not.toContain("PRIVATE");
+    expect(result.stdout).not.toContain("touch");
+    expect(existsSync(sentinel)).toBe(false);
+    expect(existsSync(join(cwd, ".local-wt"))).toBe(false);
   });
 
-  it("reports a deprecated plans.folder as plans.repositoryFolder, warning on stderr", async () => {
-    const cwd = temp();
-    writeFileSync(
-      join(cwd, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, plans: { folder: "project" } }),
+  it("selects conventions independently from the branch-local manifest and profile", async () => {
+    const { root, home, project, companion } = makeCompanionProject(
+      { alignfirst: "companion" },
+      "work",
     );
-    const result = await runMain(["config", "--json"], { cwd });
-    expect(result.code).toBe(0);
-    expect(JSON.parse(result.stdout).config).toEqual({
-      schemaVersion: 1,
-      plans: { repositoryFolder: "project" },
-    });
-    expect(result.stderr).toMatch(/^Warning: .*plans\.folder is deprecated.*\n$/);
-  });
-
-  it("reports the companion, its config and every location", async () => {
-    const home = temp();
-    configureGit(home);
-    const project = join(home, "projects", "app");
-    initRepository(project);
-    const companion = join(home, ".alignfirst", "companions", "projects_app");
+    dirs.push(root);
     mkdirSync(companion, { recursive: true });
-    writeFileSync(join(companion, ".alignfirst.json"), JSON.stringify({ schemaVersion: 1 }));
-    writeRegistry(home, {
-      projects: {
-        "~/projects/app": {
-          dir: "projects_app",
-          items: { ".plans": "project", _aligndev: "companion" },
-        },
-      },
-    });
-
-    const json = JSON.parse((await runMain(["config", "--json"], { cwd: project, home })).stdout);
-    expect(json).toEqual({
+    writeFileSync(join(companion, "alignfirst.jsonc"), '{"schemaVersion":1}');
+    writeFileSync(join(companion, "alignfirst-workspace.json"), '{"INVALID":true}');
+    const result = await runMain(["config", "--json"], { cwd: project, home });
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
       source: "companion",
-      aligndev: null,
-      cli: null,
-      config: { schemaVersion: 1 },
-      companion: {
-        dir: companion,
-        exists: true,
-        key: "~/projects/app",
-        items: {
-          ".alignfirst.json": "auto",
-          ".alignfirst-instructions": "auto",
-          "DEVELOPERS.md": "auto",
-          docs: "auto",
-          ".plans": "project",
-          _aligndev: "companion",
-        },
-      },
+      aligndev: { profile: "work" },
+      companion: { dir: companion, items: { alignfirst: "companion" } },
       locations: {
-        ".alignfirst.json": {
-          path: join(companion, ".alignfirst.json"),
-          in: "companion",
-          exists: true,
-        },
-        ".alignfirst-instructions": {
-          path: join(companion, ".alignfirst-instructions"),
-          in: "companion",
-          exists: false,
-        },
-        "DEVELOPERS.md": { path: join(companion, "DEVELOPERS.md"), in: "companion", exists: false },
-        docs: { path: join(companion, "docs"), in: "companion", exists: false },
-        ".plans": { path: join(project, ".plans"), in: "project", exists: false },
-        _aligndev: { path: join(companion, ".plans"), in: "companion", exists: false },
+        alignfirst: { path: join(companion, "alignfirst.jsonc"), in: "companion", exists: true },
       },
+      workspace: { location: { path: join(project, "alignfirst-workspace.json"), exists: false } },
     });
-
-    const text = (await runMain(["config"], { cwd: project, home })).stdout;
-    expect(text).toContain(
-      `Source: companion\nCLI range: none\nCompanion: ${companion}\n` +
-        'Companion items: ".plans": "project", "_aligndev": "companion"\n',
-    );
-    expect(text).toContain(
-      `.alignfirst.json: ${join(companion, ".alignfirst.json")} (companion)\n`,
-    );
-    expect(text).toContain(`.plans: ${join(project, ".plans")} (project, missing)\n`);
-
-    rmSync(companion, { recursive: true });
-    writeRegistry(home, { projects: { "~/projects/app": { dir: "projects_app" } } });
-    expect((await runMain(["config"], { cwd: project, home })).stdout).toContain(
-      `Companion: ${companion} (missing)\nCompanion items: all auto\n`,
-    );
+    const text = await runMain(["config"], { cwd: project, home });
+    expect(text.stdout).toContain('Companion items: "alignfirst": "companion"');
+    expect(text.stdout).toContain("AlignDev profile: work");
   });
 
-  it("reports an independent profile selection without creating project or companion files", async () => {
+  it("reports a profile-only selection without creating a companion", async () => {
     const home = temp();
     configureGit(home);
     const project = join(home, "app");
     initRepository(project);
     writeRegistry(home, { projects: { "~/app": { aligndev: { profile: "work" } } } });
     const before = readdirSync(project);
-    const json = await runMain(["config", "--json"], { cwd: project, home });
-    expect(json.code).toBe(0);
-    expect(JSON.parse(json.stdout)).toMatchObject({
+    const result = await runMain(["config", "--json"], { cwd: project, home });
+    expect(JSON.parse(result.stdout)).toMatchObject({
       companion: null,
       aligndev: { profile: "work" },
     });
-    const text = await runMain(["config"], { cwd: project, home });
-    expect(text.stdout).toContain("Companion: none\nAlignDev profile: work\n");
     expect(readdirSync(project)).toEqual(before);
     expect(readdirSync(join(home, ".alignfirst", "companions"))).toEqual(["registry.json"]);
   });
 
-  it("reports an invalid config as a CLI error", async () => {
-    const cwd = temp();
-    writeFileSync(join(cwd, ".alignfirst.json"), "{");
-    const result = await runMain(["config"], { cwd });
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain(`Invalid ${join(cwd, ".alignfirst.json")}`);
-  });
+  it.each(["alignfirst", "alignfirst-workspace"])(
+    "reports invalid %s as a CLI error",
+    async (family) => {
+      const cwd = temp();
+      writeFileSync(join(cwd, `${family}.json`), "{");
+      const result = await runMain(["config", "--json"], { cwd });
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain(`Invalid ${join(cwd, `${family}.json`)}`);
+      expect(result.stdout).toBe("");
+    },
+  );
 
-  it("reports an invalid registry as a CLI error", async () => {
+  it("reports invalid companion settings", async () => {
     const home = temp();
     writeRegistry(home, { projects: { "~/app": { aligndev: { profile: false } } } });
     const result = await runMain(["config", "--json"], { cwd: home, home });
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain(
-      `Invalid ${join(home, ".alignfirst", "companions", "registry.json")}: projects["~/app"].aligndev.profile must be a non-empty string`,
-    );
+    expect(result.stderr).toContain("aligndev.profile");
   });
 });
 

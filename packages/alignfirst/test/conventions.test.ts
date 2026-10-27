@@ -19,7 +19,7 @@ describe("conventions command", () => {
     mkdirSync(join(cwd, ".local-wt"));
     writeFileSync(join(cwd, ".gitignore"), ".plans\n.local\n.local-wt\n");
     writeFileSync(
-      join(cwd, ".alignfirst.json"),
+      join(cwd, "alignfirst.json"),
       JSON.stringify({
         schemaVersion: 1,
         ticketIdPattern: "^\\d+$",
@@ -58,7 +58,7 @@ describe("conventions command", () => {
   it("renders the agent attribution rule without a configured commit format", async () => {
     const cwd = makeProject();
     writeFileSync(
-      join(cwd, ".alignfirst.json"),
+      join(cwd, "alignfirst.json"),
       JSON.stringify({ schemaVersion: 1, git: { agentCoauthoring: false } }),
     );
 

@@ -7,6 +7,29 @@ import {
   readPortFromJsonFile,
 } from "./helpers.js";
 
+export {
+  configFamilyExists,
+  resolveConfigFamily,
+  readConfigFile,
+  validateConfigSchema,
+  loadWorkspaceManifest,
+  validateWorkspaceManifest,
+  readWorkspaceConfigReport,
+  WORKSPACE_CONFIG_FAMILY,
+} from "./config.js";
+export type {
+  WorkspaceManifest,
+  WorkspaceSettings,
+  DevSettings,
+  FileEntry,
+  TextOutput,
+  Command,
+  Step,
+  PurgeStep,
+  Server,
+  ConfigFileLocation,
+  WorkspaceConfigReport,
+} from "./config.js";
 export { runWorkspace } from "./workspace.js";
 export { defaultWorktreeDirName } from "./worktree.js";
 export type { WorktreeDirNameFn } from "./worktree.js";

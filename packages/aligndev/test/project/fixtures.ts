@@ -120,11 +120,35 @@ export function makeRepository(parent: string, name: string, config?: object): s
   return realpathSync(repository);
 }
 
-export function writeProjectConfig(directory: string, config: object): void {
+// Inventory fixtures supply the range separately from convention settings.
+export function writeProjectConfig(
+  directory: string,
+  settings: object & { portRange?: { first: number; last: number } },
+): void {
+  const { portRange, ...config } = settings;
   writeFileSync(
-    join(directory, ".alignfirst.json"),
+    join(directory, "alignfirst.json"),
     `${JSON.stringify({ schemaVersion: 1, ...config }, undefined, 2)}\n`,
   );
+  if (portRange !== undefined) {
+    writeFileSync(
+      join(directory, "alignfirst-workspace.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        devServer: {
+          ports: { ...portRange, declare: ["app"] },
+          servers: [
+            {
+              kind: "spawn",
+              name: "app",
+              exec: { run: ["python", "app.py"] },
+              ready: { log: "ready" },
+            },
+          ],
+        },
+      }),
+    );
+  }
 }
 
 export function addWorktree(main: string, worktree: string, branch: string): void {

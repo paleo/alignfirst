@@ -22,7 +22,7 @@ const consumer = join(output, "consumer");
 const tools = join(output, "tools");
 const bunSource = process.env.BUN_BIN;
 const npm = join(dirname(process.execPath), "npm");
-const packages = ["docmap", "alignfirst", "aligndev", "workspace", "openclaw-test"];
+const packages = ["docmap", "workspace", "alignfirst", "aligndev", "openclaw-test"];
 let ownsOutput = false;
 
 try {

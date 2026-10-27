@@ -1,4 +1,9 @@
+import {
+  readWorkspaceConfigReport,
+  type WorkspaceConfigReport,
+} from "@alignfirst/workspace/config";
 import { CliError } from "../cli-error.js";
+import { errorMessage } from "../errors.js";
 import { parseArgs } from "node:util";
 import type { CommandContext } from "../context.js";
 import { parseCommandArgs } from "../parse-args.js";
@@ -6,7 +11,6 @@ import {
   type ProjectConfig,
   resolveProjectConfig,
   type ResolvedProjectConfig,
-  writeDeprecationWarnings,
 } from "../project-config.js";
 import {
   type AligndevProjectSettings,
@@ -17,22 +21,16 @@ import {
   layoutOf,
   type ProjectLayout,
   renderItemLocation,
+  projectRoot,
 } from "../project-layout.js";
-import { cliRangeResult } from "../version-guard.js";
 
 interface ConfigReport {
   source: "project" | "companion" | null;
-  cli: CliReport | null;
+  workspace: WorkspaceConfigReport;
   config: ProjectConfig | null;
   companion: CompanionLayout | null;
   aligndev: AligndevProjectSettings | null;
   locations: Record<ItemName, ItemLocation>;
-}
-
-interface CliReport {
-  installed: string;
-  range: string;
-  satisfied: boolean;
 }
 
 export function runConfig(ctx: CommandContext, args: string[]): number {
@@ -41,7 +39,6 @@ export function runConfig(ctx: CommandContext, args: string[]): number {
   if (json === undefined) return 0;
   const layout = layoutOf(ctx);
   const resolved = resolveProjectConfig(layout);
-  writeDeprecationWarnings(ctx.stderr, resolved);
   const report = buildConfigReport(ctx, layout, resolved);
   ctx.stdout.write(json ? `${JSON.stringify(report, undefined, 2)}\n` : renderConfigReport(report));
   return 0;
@@ -73,10 +70,15 @@ function buildConfigReport(
   layout: ProjectLayout,
   resolved: ResolvedProjectConfig | undefined,
 ): ConfigReport {
-  const cli = cliRangeResult(resolved?.config, ctx.version);
+  let workspace: WorkspaceConfigReport;
+  try {
+    workspace = readWorkspaceConfigReport(projectRoot(ctx.cwd));
+  } catch (error) {
+    throw new CliError(errorMessage(error));
+  }
   return {
     source: resolved?.source ?? null,
-    cli: cli ? { installed: ctx.version, range: cli.range, satisfied: cli.satisfied } : null,
+    workspace,
     config: resolved?.config ?? null,
     companion: layout.companion,
     aligndev: layout.aligndev,
@@ -86,11 +88,9 @@ function buildConfigReport(
 
 function renderConfigReport(report: ConfigReport): string {
   const lines = [`Source: ${report.source ?? "none"}`];
-  if (report.cli)
-    lines.push(
-      `CLI range: ${report.cli.range}, ${report.cli.satisfied ? "satisfied" : "not satisfied"} by ${report.cli.installed}`,
-    );
-  else lines.push("CLI range: none");
+  lines.push(
+    `Workspace: ${report.workspace.location.path}${report.workspace.location.exists ? "" : " (missing)"}`,
+  );
   lines.push(...renderCompanionLines(report.companion));
   lines.push(`AlignDev profile: ${report.aligndev?.profile ?? "none"}`);
   for (const name of ITEM_NAMES) lines.push(renderItemLocation(name, report.locations[name]));

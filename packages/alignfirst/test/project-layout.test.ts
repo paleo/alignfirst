@@ -42,6 +42,67 @@ describe("project layout", () => {
     expect(layout.locations._aligndev).toEqual(layout.locations[".plans"]);
   });
 
+  it("resolves only the selected family, including from nested and linked worktrees", () => {
+    const { home, project } = makeHome();
+    const companion = join(home, ".alignfirst", "companions", "app");
+    mkdirSync(companion, { recursive: true });
+    writeFileSync(join(project, "alignfirst.jsonc"), "{}");
+    writeFileSync(join(companion, "alignfirst.json"), "{}");
+    writeFileSync(join(companion, "alignfirst.jsonc"), "{}");
+    writeRegistry(home, {
+      projects: { "~/projects/app": { dir: "app", items: { alignfirst: "project" } } },
+    });
+    const nested = join(project, "packages", "app");
+    mkdirSync(nested, { recursive: true });
+    expect(resolveProjectLayout(nested, home).locations.alignfirst).toEqual({
+      path: join(project, "alignfirst.jsonc"),
+      in: "project",
+      exists: true,
+    });
+    const linked = join(home, "linked");
+    git(project, "worktree", "add", "--quiet", "-b", "feature", linked);
+    writeFileSync(join(linked, "alignfirst.json"), "{}");
+    expect(resolveProjectLayout(linked, home).locations.alignfirst.path).toBe(
+      join(linked, "alignfirst.json"),
+    );
+    writeRegistry(home, { projects: { "~/projects/app": { dir: "app" } } });
+    expect(() => resolveProjectLayout(project, home)).toThrow("Ambiguous configuration");
+    rmSync(join(companion, "alignfirst.json"));
+    expect(resolveProjectLayout(project, home).locations.alignfirst.path).toBe(
+      join(companion, "alignfirst.jsonc"),
+    );
+    writeRegistry(home, {
+      projects: { "~/projects/app": { dir: "app", items: { alignfirst: "project" } } },
+    });
+    writeFileSync(join(project, "alignfirst.json"), "{}");
+    expect(() => resolveProjectLayout(project, home)).toThrow("Ambiguous configuration");
+  });
+
+  it("does not interpret the obsolete registry item as a family selection", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { home, project } = makeHome();
+    const companion = join(home, ".alignfirst", "companions", "app");
+    mkdirSync(companion, { recursive: true });
+    writeFileSync(join(project, "alignfirst.json"), "{}");
+    writeFileSync(join(companion, "alignfirst.jsonc"), "{}");
+    writeRegistry(home, {
+      projects: { "~/projects/app": { dir: "app", items: { ".alignfirst.json": "project" } } },
+    });
+    expect(resolveProjectLayout(project, home).locations.alignfirst.in).toBe("companion");
+    expect(warn.mock.calls.flat().join("\n")).toContain('items[".alignfirst.json"]');
+  });
+
+  it("retains broken config links as selected failures rather than absence", () => {
+    const { home, project } = makeHome();
+    symlinkSync(join(project, "missing"), join(project, "alignfirst.jsonc"));
+    expect(resolveProjectLayout(project, home).locations.alignfirst).toMatchObject({
+      exists: true,
+      path: join(project, "alignfirst.jsonc"),
+    });
+    writeFileSync(join(project, "alignfirst.json"), "{}");
+    expect(() => resolveProjectLayout(project, home)).toThrow("Ambiguous configuration");
+  });
+
   it("warns at every settings level, redacts map keys and leaves the registry unchanged", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { home, project } = makeHome();
@@ -101,7 +162,7 @@ describe("project layout", () => {
         "~/projects/app": {
           dir: "app",
           items: {
-            ".alignfirst.json": "project",
+            alignfirst: "project",
             ".alignfirst-instructions": "auto",
             "DEVELOPERS.md": "companion",
             docs: "project",
@@ -211,7 +272,7 @@ describe("project layout", () => {
       exists: false,
       key: "~/projects/app",
       items: {
-        ".alignfirst.json": "auto",
+        alignfirst: "auto",
         ".alignfirst-instructions": "auto",
         "DEVELOPERS.md": "auto",
         docs: "auto",
@@ -313,7 +374,7 @@ describe("project layout", () => {
         "~/projects/app": {
           dir: "projects_app",
           items: {
-            ".alignfirst.json": "companion",
+            alignfirst: "companion",
             ".alignfirst-instructions": "project",
             "DEVELOPERS.md": "auto",
           },
@@ -326,8 +387,8 @@ describe("project layout", () => {
     writeFileSync(join(project, "DEVELOPERS.md"), "project\n");
     mkdirSync(join(project, "docs"));
     const { locations } = resolveProjectLayout(project, home);
-    expect(locations[".alignfirst.json"]).toEqual({
-      path: join(companion, ".alignfirst.json"),
+    expect(locations.alignfirst).toEqual({
+      path: join(companion, "alignfirst.json"),
       in: "companion",
       exists: false,
     });

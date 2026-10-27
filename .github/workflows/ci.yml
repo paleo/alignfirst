@@ -43,6 +43,6 @@ jobs:
         with:
           node-version: 22
       - name: Build invocation provider before CLI consumers
-        run: npm run build --workspace @alignfirst/docmap && npm run build --workspace alignfirst --workspace aligndev --workspace @alignfirst/workspace --workspace @alignfirst/pi-subagent --workspace @alignfirst/pi-background
+        run: npm run build --workspace @alignfirst/docmap --workspace @alignfirst/workspace && npm run build --workspace alignfirst --workspace aligndev --workspace @alignfirst/pi-subagent --workspace @alignfirst/pi-background
       - run: npm test --workspace @alignfirst/docmap --workspace alignfirst --workspace aligndev --workspace @alignfirst/workspace --workspace @alignfirst/pi-subagent --workspace @alignfirst/pi-background
       - run: npm run test:integration --workspace @alignfirst/pi-background --workspace @alignfirst/workspace --workspace aligndev

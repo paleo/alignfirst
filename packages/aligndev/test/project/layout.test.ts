@@ -16,13 +16,14 @@ afterEach(() => {
 
 describe("readProjectReport", () => {
   const cwd = tmpdir();
-  const tooOld = `The alignfirst CLI used in ${cwd} is too old: aligndev requires the profile-aware alignfirst config --json contract (top-level "aligndev"). Upgrade alignfirst.`;
+  const tooOld = `The alignfirst CLI used in ${cwd} is too old: aligndev requires the workspace-aware alignfirst config --json contract (top-level "workspace", locations.alignfirst and "aligndev"). Upgrade alignfirst.`;
 
   it.each([
     { source: "root", cli: null, config: null },
     { ...report(cwd), locations: {} },
     Object.fromEntries(Object.entries(report(cwd)).filter(([key]) => key !== "aligndev")),
-  ])("requires the profile-aware contract, not a version number: %#", (value) => {
+    Object.fromEntries(Object.entries(report(cwd)).filter(([key]) => key !== "workspace")),
+  ])("requires the workspace-aware contract, not a version number: %#", (value) => {
     const command = reportCommand(value);
     const result = readProjectReport(command, cwd, {});
     expect(result).toMatchObject({ error: expect.stringContaining(tooOld) });
@@ -104,9 +105,7 @@ describe("readProjectReport", () => {
     "separates settings warnings from the first failure diagnostic with %j line endings",
     (newline) => {
       const warnings = [
-        "Warning: ignoring unknown .alignfirst.json setting git.extra. Remove it or check its spelling.",
         "Warning: ignoring unknown companion registry setting projects[<entry>].aligndev.extra. Remove it or check its spelling.",
-        'Warning: /project/.alignfirst.json: plans.folder is deprecated; rename it to plans.repositoryFolder. See "Rename the Work-Files Folder Setting" in the setup guide\'s alignfirst-upgrade reference.',
       ];
       const error = "Invalid .alignfirst.json: git.commit.style must be conventionalCommit";
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -139,7 +138,7 @@ describe("readProjectReport", () => {
 
   it("uses a generic failure when stderr contains only recognized settings warnings", () => {
     const warning =
-      "Warning: ignoring unknown .alignfirst.json setting extra. Remove it or check its spelling.";
+      "Warning: ignoring unknown companion registry setting extra. Remove it or check its spelling.";
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const f = executableFixture("alignfirst", {}, "0.21.0\n", `${warning}\n`, 1);
     expect(readProjectReport(["alignfirst"], cwd, { PATH: f.dir })).toEqual({
@@ -178,15 +177,13 @@ describe("readProjectReport", () => {
     },
   );
 
-  it("retains the legacy plans.folder parser for compatible reports", () => {
+  it("rejects the retired plans.folder report field", () => {
     const command = reportCommand({
       ...report(cwd),
       source: "project",
       config: { schemaVersion: 1, plans: { folder: "project-plans" } },
     });
-    expect(readProjectReport(command, cwd, {})).toMatchObject({
-      config: { plans: { repositoryFolder: "project-plans" } },
-    });
+    expect(() => readProjectReport(command, cwd, {})).toThrow("Invalid alignfirst config report");
   });
 });
 
@@ -227,7 +224,7 @@ if (!args.includes("--version")) process.exitCode = ${status};
 function report(cwd: string) {
   const location = { path: cwd, in: "project", exists: false };
   const names = [
-    ".alignfirst.json",
+    "alignfirst",
     ".alignfirst-instructions",
     "DEVELOPERS.md",
     "docs",
@@ -236,7 +233,7 @@ function report(cwd: string) {
   ];
   return {
     source: null,
-    cli: null,
+    workspace: { location, schemaVersion: null, portRange: null, hasDevServer: false },
     config: null,
     companion: null,
     aligndev: null,

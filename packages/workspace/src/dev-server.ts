@@ -35,7 +35,6 @@ import {
   replayTail,
 } from "./log-polling.js";
 import { configureCommands, devCmd } from "./package-manager.js";
-import { checkPortClaim } from "./port-claim.js";
 import {
   canonicalCwd,
   detectPortConflicts,
@@ -153,7 +152,6 @@ function createKernel(config: DevServerConfig): DevKernel {
   const ports = config.ports === undefined ? undefined : resolveDevPortsConfig(config.ports);
   checkSpawnPortNames(config.servers, ports);
   const worktree = detectWorktree();
-  checkPortClaim(worktree.currentWorktree, ports);
   return { config, ports, worktree, registryDir: registryDirFor(config.runtimeDir) };
 }
 

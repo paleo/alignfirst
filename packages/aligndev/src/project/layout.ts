@@ -3,7 +3,7 @@ import { errorMessage } from "../errors.js";
 import type { PortRange } from "./markers.js";
 
 export type ItemName =
-  | ".alignfirst.json"
+  | "alignfirst"
   | ".alignfirst-instructions"
   | "DEVELOPERS.md"
   | "docs"
@@ -12,9 +12,9 @@ export type ItemName =
 
 // The `alignfirst config --json` report, reduced to what aligndev reads.
 export interface ProjectReport {
-  // Where `.alignfirst.json` was read; null when it exists nowhere.
+  // Where the selected project configuration was read; null when absent.
   source: ConfigSource | null;
-  cli: ProjectCliReport | null;
+  workspace: WorkspaceConfigReport;
   config: ProjectConfigView | null;
   companion: CompanionReport | null;
   aligndev: AligndevProjectSettings | null;
@@ -27,16 +27,16 @@ export interface AligndevProjectSettings {
 
 export type ConfigSource = "project" | "companion";
 
-export interface ProjectCliReport {
-  installed: string;
-  range: string;
-  satisfied: boolean;
+export interface WorkspaceConfigReport {
+  location: ItemLocation & { in: "project" };
+  schemaVersion: number | null;
+  portRange: PortRange | null;
+  hasDevServer: boolean;
 }
 
 export interface ProjectConfigView {
   ticketIdPattern?: string;
   plans?: { repositoryFolder?: string };
-  portRange?: PortRange;
 }
 
 export interface CompanionReport {
@@ -91,14 +91,19 @@ function isOutdatedReport(value: unknown): boolean {
   return (
     isRecord(value) &&
     (!Object.hasOwn(value, "aligndev") ||
-      !(isRecord(value.locations) && ".alignfirst-instructions" in value.locations))
+      !Object.hasOwn(value, "workspace") ||
+      !(
+        isRecord(value.locations) &&
+        "alignfirst" in value.locations &&
+        ".alignfirst-instructions" in value.locations
+      ))
   );
 }
 
 function outdatedAlignfirst(path: string): string {
   return (
-    `The alignfirst CLI used in ${path} is too old: aligndev requires the profile-aware ` +
-    'alignfirst config --json contract (top-level "aligndev"). Upgrade alignfirst.'
+    `The alignfirst CLI used in ${path} is too old: aligndev requires the workspace-aware ` +
+    'alignfirst config --json contract (top-level "workspace", locations.alignfirst and "aligndev"). Upgrade alignfirst.'
   );
 }
 
@@ -106,7 +111,7 @@ function parseProjectReport(value: unknown, path: string): ProjectReport {
   if (!isRecord(value)) throw invalidReport(path);
   return {
     source: parseSource(value.source, path),
-    cli: parseCli(value.cli, path),
+    workspace: parseWorkspace(value.workspace, path),
     config: parseConfig(value.config, path),
     companion: parseCompanion(value.companion, path),
     aligndev: parseAligndev(value.aligndev, path),
@@ -131,40 +136,50 @@ function parseSource(value: unknown, path: string): ConfigSource | null {
   throw invalidReport(path);
 }
 
-function parseCli(value: unknown, path: string): ProjectCliReport | null {
-  if (value === null) return null;
+function parseWorkspace(value: unknown, path: string): WorkspaceConfigReport {
+  if (!isRecord(value)) throw invalidReport(path);
+  const location = parseLocation(value.location, path);
   if (
-    !isRecord(value) ||
-    typeof value.installed !== "string" ||
-    typeof value.range !== "string" ||
-    typeof value.satisfied !== "boolean"
-  ) {
+    location.in !== "project" ||
+    (value.schemaVersion !== null && value.schemaVersion !== 1) ||
+    (value.portRange !== null && !isPortRange(value.portRange)) ||
+    typeof value.hasDevServer !== "boolean"
+  )
     throw invalidReport(path);
-  }
-  return { installed: value.installed, range: value.range, satisfied: value.satisfied };
+  if (
+    !location.exists &&
+    (value.schemaVersion !== null || value.portRange !== null || value.hasDevServer)
+  )
+    throw invalidReport(path);
+  if (location.exists && value.schemaVersion !== 1) throw invalidReport(path);
+  if (!value.hasDevServer && value.portRange !== null) throw invalidReport(path);
+  return {
+    location: { ...location, in: "project" },
+    schemaVersion: value.schemaVersion,
+    portRange: value.portRange,
+    hasDevServer: value.hasDevServer,
+  };
 }
 
 function parseConfig(value: unknown, path: string): ProjectConfigView | null {
   if (value === null) return null;
-  if (!isRecord(value)) throw invalidReport(path);
+  if (!isRecord(value) || Object.hasOwn(value, "cli") || Object.hasOwn(value, "portRange"))
+    throw invalidReport(path);
   const ticketIdPattern = value.ticketIdPattern;
   const plans = parsePlans(value.plans, path);
-  const portRange = value.portRange;
   if (ticketIdPattern !== undefined && typeof ticketIdPattern !== "string")
     throw invalidReport(path);
-  if (portRange !== undefined && !isPortRange(portRange)) throw invalidReport(path);
   return {
     ...(ticketIdPattern === undefined ? {} : { ticketIdPattern }),
     ...(plans === undefined ? {} : { plans }),
-    ...(portRange === undefined ? {} : { portRange }),
   };
 }
 
 function parsePlans(value: unknown, path: string): { repositoryFolder?: string } | undefined {
   if (value === undefined) return;
   if (!isRecord(value)) throw invalidReport(path);
-  // Before alignfirst 0.12.0, the report named this key `folder`.
-  const repositoryFolder = value.repositoryFolder ?? value.folder;
+  if (Object.hasOwn(value, "folder")) throw invalidReport(path);
+  const repositoryFolder = value.repositoryFolder;
   if (repositoryFolder !== undefined && typeof repositoryFolder !== "string")
     throw invalidReport(path);
   return repositoryFolder === undefined ? {} : { repositoryFolder };
@@ -183,7 +198,7 @@ function parseLocations(value: unknown, path: string): Record<ItemName, ItemLoca
   if (!isRecord(value)) throw invalidReport(path);
   const location = (name: ItemName) => parseLocation(value[name], path);
   return {
-    ".alignfirst.json": location(".alignfirst.json"),
+    alignfirst: location("alignfirst"),
     ".alignfirst-instructions": location(".alignfirst-instructions"),
     "DEVELOPERS.md": location("DEVELOPERS.md"),
     docs: location("docs"),
@@ -209,7 +224,16 @@ function invalidReport(path: string): Error {
 }
 
 function isPortRange(value: unknown): value is PortRange {
-  return isRecord(value) && typeof value.first === "number" && typeof value.last === "number";
+  return (
+    isRecord(value) &&
+    typeof value.first === "number" &&
+    typeof value.last === "number" &&
+    Number.isInteger(value.first) &&
+    Number.isInteger(value.last) &&
+    value.first >= 1 &&
+    value.last <= 65535 &&
+    value.first <= value.last
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

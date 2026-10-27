@@ -48,12 +48,7 @@ export function forwardSettingsWarnings(stderr: string): string {
 
 function isSettingsWarning(line: string): boolean {
   if (/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(line)) return false;
-  return (
-    /^Warning: ignoring unknown (?:\.alignfirst\.json|companion registry) setting /u.test(line) ||
-    /^Warning: .+: plans\.folder is deprecated; rename it to plans\.repositoryFolder\. See "Rename the Work-Files Folder Setting" in the setup guide's alignfirst-upgrade reference\.$/u.test(
-      line,
-    )
-  );
+  return /^Warning: ignoring unknown companion registry setting /u.test(line);
 }
 
 export function describeAlignfirst(command: string[], cwd: string, env: NodeJS.ProcessEnv): string {

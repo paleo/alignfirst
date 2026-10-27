@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://cdn.jsdelivr.net/npm/alignfirst/schemas/alignfirst-v1.schema.json",
+  "title": "AlignFirst project conventions",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion"],
+  "properties": {
+    "$schema": { "type": "string", "format": "uri" },
+    "schemaVersion": { "const": 1 },
+    "ticketIdPattern": { "$ref": "#/definitions/nonEmpty" },
+    "plans": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repositoryFolder": { "$ref": "#/definitions/nonEmpty" },
+        "autoArchive": { "type": "boolean" }
+      }
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "defaultBranch": { "$ref": "#/definitions/nonEmpty" },
+        "branchNameTemplate": { "$ref": "#/definitions/nonEmpty" },
+        "agentCoauthoring": { "type": "boolean" },
+        "commit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["style"],
+          "properties": {
+            "style": { "const": "conventionalCommit" },
+            "ticketReference": { "enum": ["bracketed", "bracketedHash"] }
+          }
+        }
+      }
+    }
+  },
+  "definitions": { "nonEmpty": { "type": "string", "minLength": 1 } }
+}

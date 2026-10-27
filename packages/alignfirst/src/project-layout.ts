@@ -1,3 +1,4 @@
+import { configFamilyExists, resolveConfigFamily } from "@alignfirst/workspace/config";
 import {
   existsSync,
   lstatSync,
@@ -14,7 +15,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { CliError } from "./cli-error.js";
 import type { CommandContext } from "./context.js";
 import { errorMessage } from "./errors.js";
-import { findMainWorktree } from "./git.js";
+import { findMainWorktree, gitOutput, optionalRepositoryId } from "./git.js";
 import {
   literal,
   nonEmptyString,
@@ -27,7 +28,7 @@ import {
 import { warnUnknownSetting } from "./settings-warning.js";
 
 export const ITEM_NAMES = [
-  ".alignfirst.json",
+  "alignfirst",
   ".alignfirst-instructions",
   "DEVELOPERS.md",
   "docs",
@@ -48,7 +49,7 @@ const registryProjectShape = object<RegistryProject>(
     items: optional(
       object<RegistryItems>(
         {
-          ".alignfirst.json": optional(itemSetting),
+          alignfirst: optional(itemSetting),
           ".alignfirst-instructions": optional(itemSetting),
           "DEVELOPERS.md": optional(itemSetting),
           docs: optional(itemSetting),
@@ -113,7 +114,7 @@ interface RegistryProject {
 }
 
 interface RegistryItems {
-  ".alignfirst.json"?: ItemSetting;
+  alignfirst?: ItemSetting;
   ".alignfirst-instructions"?: ItemSetting;
   "DEVELOPERS.md"?: ItemSetting;
   docs?: ItemSetting;
@@ -162,7 +163,7 @@ export function resolveProjectLayout(cwd: string, home: string): ProjectLayout {
   return {
     aligndev: entry?.project.aligndev ?? null,
     companion,
-    locations: resolveLocations(cwd, companion),
+    locations: resolveLocations(projectRoot(cwd), companion),
   };
 }
 
@@ -289,7 +290,7 @@ function companionsRoot(realHome: string): string {
 
 function effectiveItems({ items = {} }: RegistryProject): ItemSettings {
   return {
-    ".alignfirst.json": items[".alignfirst.json"] ?? "auto",
+    alignfirst: items.alignfirst ?? "auto",
     ".alignfirst-instructions": items[".alignfirst-instructions"] ?? "auto",
     "DEVELOPERS.md": items["DEVELOPERS.md"] ?? "auto",
     docs: items.docs ?? "auto",
@@ -313,7 +314,7 @@ function resolveLocations(
   const locate = (name: FileItemName) => locateItem(cwd, companion, name);
   const plans = locate(".plans");
   return {
-    ".alignfirst.json": locate(".alignfirst.json"),
+    alignfirst: locate("alignfirst"),
     ".alignfirst-instructions": locate(".alignfirst-instructions"),
     "DEVELOPERS.md": locate("DEVELOPERS.md"),
     docs: locate("docs"),
@@ -328,11 +329,40 @@ function locateItem(
   companion: CompanionLayout | null,
   name: FileItemName,
 ): ItemLocation {
+  if (name === "alignfirst") return locateConfigFamily(cwd, companion);
   const project = projectCopy(cwd, name);
   if (companion === null || companion.items[name] === "project") return project;
   const copy = companionCopy(companion, name);
   if (companion.items[name] === "companion" || copy.exists || !project.exists) return copy;
   return project;
+}
+
+export function projectRoot(cwd: string): string {
+  if (
+    optionalRepositoryId(cwd) === undefined ||
+    gitOutput(cwd, "rev-parse", "--is-bare-repository") === "true"
+  )
+    return cwd;
+  return gitOutput(cwd, "rev-parse", "--show-toplevel");
+}
+
+function locateConfigFamily(cwd: string, companion: CompanionLayout | null): ItemLocation {
+  try {
+    const setting = companion?.items.alignfirst;
+    const useCompanion =
+      companion !== null &&
+      setting !== "project" &&
+      (setting === "companion" ||
+        configFamilyExists(companion.dir, "alignfirst") ||
+        !configFamilyExists(cwd, "alignfirst"));
+    const directory = useCompanion ? companion.dir : cwd;
+    return {
+      ...resolveConfigFamily(directory, "alignfirst"),
+      in: useCompanion ? "companion" : "project",
+    };
+  } catch (error) {
+    throw new CliError(errorMessage(error));
+  }
 }
 
 function projectCopy(cwd: string, name: string): ItemLocation {

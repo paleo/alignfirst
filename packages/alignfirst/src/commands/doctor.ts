@@ -14,11 +14,8 @@ import { errorMessage } from "../errors.js";
 import { parseBareCommandArgs } from "../parse-args.js";
 import { resolvePlansMode } from "../plans/mode.js";
 import { findStoppedRebase } from "../plans/rebase.js";
-import {
-  PROJECT_CONFIG_FILENAME,
-  resolveProjectConfig,
-  type ResolvedProjectConfig,
-} from "../project-config.js";
+import { readWorkspaceConfigReport } from "@alignfirst/workspace/config";
+import { resolveProjectConfig, type ResolvedProjectConfig } from "../project-config.js";
 import {
   type CompanionLayout,
   type NestedCompanionDir,
@@ -31,6 +28,7 @@ import {
   layoutOf,
   type ProjectLayout,
   renderItemLocation,
+  projectRoot,
 } from "../project-layout.js";
 import {
   COMMAND_SKILLS,
@@ -38,8 +36,6 @@ import {
   type InstalledSkill,
   resolveSkillRoots,
 } from "../skills.js";
-import { cliRangeResult } from "../version-guard.js";
-import { isAheadOfRange } from "../version-range.js";
 
 interface DoctorLine {
   level: "ok" | "warn" | "error";
@@ -51,9 +47,21 @@ export function runDoctor(ctx: CommandContext, args: string[]): number {
   if (parseBareCommandArgs(ctx, args, usage)) return 0;
   writeSection(ctx, "CLI", () => inspectCli(ctx));
   let resolved: ResolvedProjectConfig | undefined;
-  writeSection(ctx, PROJECT_CONFIG_FILENAME, () => {
+  writeSection(ctx, "alignfirst", () => {
+    const location = layoutOf(ctx).locations.alignfirst;
     resolved = resolveProjectConfig(layoutOf(ctx));
-    return inspectConfig(ctx, resolved);
+    return [
+      { level: "ok", text: `${location.path} (${resolved === undefined ? "missing" : "present"})` },
+    ];
+  });
+  writeSection(ctx, "Workspace", () => {
+    const report = readWorkspaceConfigReport(projectRoot(ctx.cwd));
+    return [
+      {
+        level: "ok",
+        text: `${report.location.path} (${report.location.exists ? "present" : "missing"})`,
+      },
+    ];
   });
   writeSection(ctx, "Companion", () => inspectCompanion(ctx));
   writeSection(ctx, "AlignDev", () => [
@@ -91,28 +99,6 @@ function inspectCli(ctx: CommandContext): DoctorLine[] {
       text: `${ctx.version}, ${realpathSync(invokedPath)}, launched as ${ctx.form}`,
     },
   ];
-}
-
-function inspectConfig(
-  ctx: CommandContext,
-  resolved: ResolvedProjectConfig | undefined,
-): DoctorLine[] {
-  const lines: DoctorLine[] = [
-    { level: "ok", text: resolved === undefined ? "none" : "present" },
-    ...(resolved?.deprecations ?? []).map((text): DoctorLine => ({ level: "warn", text })),
-  ];
-  const result = cliRangeResult(resolved?.config, ctx.version);
-  if (result === undefined) {
-    lines.push({ level: "ok", text: "no cli range" });
-    return lines;
-  }
-  lines.push({
-    level: result.satisfied ? "ok" : "error",
-    text: `${result.satisfied ? "satisfies" : "does not satisfy"} ${result.range}`,
-  });
-  if (isAheadOfRange(ctx.version, result.range))
-    lines.push({ level: "warn", text: `${ctx.version} is ahead of ${result.range}` });
-  return lines;
 }
 
 function inspectCompanion(ctx: CommandContext): DoctorLine[] {

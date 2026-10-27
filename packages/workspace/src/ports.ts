@@ -22,7 +22,6 @@ const UPGRADE_POINTER =
 
 /** The project's port range and the ports declared in it. */
 export interface DevPortsConfig {
-  /** Must equal `portRange` in `.alignfirst.json`, when that file declares one. */
   first: number;
   last: number;
   /** Ports never allocated: single ports or inclusive ranges, inside `first`–`last`. */
@@ -88,6 +87,8 @@ export function resolveDevPortsConfig(config: DevPortsConfig): ResolvedDevPorts 
       ),
     ),
   };
+  Object.setPrototypeOf(resolved.ranges, null);
+  Object.setPrototypeOf(resolved.mainWorktree, null);
   checkRanges(resolved);
   checkPins(resolved);
   return resolved;

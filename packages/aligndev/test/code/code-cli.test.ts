@@ -960,12 +960,17 @@ function reportWithCompanion(items: ItemName[]): ProjectReport {
       : { path: `/proj/${name}`, in: "project", exists: true };
   return {
     source: "project",
-    cli: null,
+    workspace: {
+      location: { path: "/proj/alignfirst-workspace.json", in: "project", exists: false },
+      schemaVersion: null,
+      portRange: null,
+      hasDevServer: false,
+    },
     config: null,
     companion: { dir: "/companions/proj", exists: true },
     aligndev: null,
     locations: {
-      ".alignfirst.json": location(".alignfirst.json", ".alignfirst.json"),
+      alignfirst: location("alignfirst.json", "alignfirst"),
       ".alignfirst-instructions": location(".alignfirst-instructions", ".alignfirst-instructions"),
       "DEVELOPERS.md": location("DEVELOPERS.md", "DEVELOPERS.md"),
       docs: location("docs", "docs"),

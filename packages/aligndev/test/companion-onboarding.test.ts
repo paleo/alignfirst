@@ -202,9 +202,11 @@ describe("explicit companion-only onboarding", () => {
       selectedEntry.items = { ...selectedEntry.items, ".plans": "companion" };
       writeRegistry(fixture.home, registeredRegistry);
       const selected = readReport(fixture, repo);
-      for (const item of [".plans", ".alignfirst.json", "DEVELOPERS.md"] as const) {
+      for (const item of [".plans", "alignfirst", "DEVELOPERS.md"] as const) {
         expect(selected.locations[item].in, item).toBe("companion");
-        expect(selected.locations[item].path, item).toBe(join(dir, item));
+        expect(selected.locations[item].path, item).toBe(
+          join(dir, item === "alignfirst" ? "alignfirst.json" : item),
+        );
       }
       mkdirSync(selected.locations[".plans"].path, { recursive: true });
       runFirst(fixture, repo, ["plans", "check"]);
@@ -217,7 +219,7 @@ describe("explicit companion-only onboarding", () => {
       } else {
         expect(readdirSync(join(dir, ".plans"))).toEqual([]);
       }
-      writeFileSync(selected.locations[".alignfirst.json"].path, '{"schemaVersion":1}\n');
+      writeFileSync(selected.locations.alignfirst.path, '{"schemaVersion":1}\n');
       writeFileSync(selected.locations["DEVELOPERS.md"].path, "# Developer guide\n");
       const prepared = readReport(fixture, repo);
       expect(prepared.source).toBe("companion");

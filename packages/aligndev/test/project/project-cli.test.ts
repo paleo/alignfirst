@@ -253,7 +253,7 @@ describe("project inventory doctor", () => {
     ]);
   });
 
-  it("fails when a project's AlignFirst CLI range is unsatisfied", async () => {
+  it("rejects the retired project CLI range instead of silently ignoring it", async () => {
     const fixture = makeFixture({});
     const project = makeRepository(fixture.root, "project", { cli: ">=99.0.0" });
 
@@ -261,9 +261,8 @@ describe("project inventory doctor", () => {
 
     expect(result.code).toBe(1);
     expect(result.stdout).toContain(`[error] Project inventory: ${JSON.stringify(project)}:`);
-    expect(result.stdout).toMatch(
-      /AlignFirst CLI \d+\.\d+\.\d+(?:[-+]\S+)? does not satisfy required range >=99\.0\.0/u,
-    );
+    expect(result.stdout).toContain("/cli");
+    expect(result.stdout).toContain("update alignfirst");
   });
 
   it("fails for invalid configuration and incomplete discovery", async () => {
@@ -272,7 +271,7 @@ describe("project inventory doctor", () => {
     mkdirSync(nongit);
     writeProjectConfig(nongit, {});
     const invalid = makeRepository(fixture.root, "invalid");
-    writeFileSync(join(invalid, ".alignfirst.json"), "{}\n");
+    writeFileSync(join(invalid, "alignfirst.json"), "{}\n");
 
     const result = await runProjects(fixture, ["doctor"]);
 
@@ -379,7 +378,7 @@ describe("project discovery", () => {
     mkdirSync(nongit);
     writeProjectConfig(nongit, {});
     const invalid = makeRepository(fixture.root, "invalid");
-    writeFileSync(join(invalid, ".alignfirst.json"), "{}\n");
+    writeFileSync(join(invalid, "alignfirst.json"), "{}\n");
     makeProjectsDirectory(fixture.root, "nested-outside", {
       portRanges: [range(9000, 9099)],
     });
@@ -393,7 +392,7 @@ describe("project discovery", () => {
     expect(messages).toContain("not a git main worktree");
     expect(
       messages.some(
-        (message: string) => message.startsWith("Invalid ") && message.includes(".alignfirst.json"),
+        (message: string) => message.startsWith("Invalid ") && message.includes("alignfirst.json"),
       ),
     ).toBe(true);
     expect(report.projects.some((project: { name: string }) => project.name === "invalid")).toBe(
@@ -462,7 +461,7 @@ describe("project discovery", () => {
       {
         path: old,
         message: expect.stringContaining(
-          `The alignfirst CLI used in ${old} is too old: aligndev requires the profile-aware alignfirst config --json contract (top-level "aligndev"). Upgrade alignfirst.`,
+          `The alignfirst CLI used in ${old} is too old: aligndev requires the workspace-aware alignfirst config --json contract (top-level "workspace", locations.alignfirst and "aligndev"). Upgrade alignfirst.`,
         ),
       },
     ]);
@@ -654,8 +653,8 @@ describe("project status", () => {
       companion: null,
       aligndev: null,
       locations: {
-        ".alignfirst.json": {
-          path: join(project, ".alignfirst.json"),
+        alignfirst: {
+          path: join(project, "alignfirst.json"),
           in: "project",
           exists: true,
         },

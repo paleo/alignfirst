@@ -73,7 +73,7 @@ describe("validateEffectivePlans", () => {
 
   it("keeps recognized successful warnings on stderr without forwarding them twice", () => {
     const warning =
-      "Warning: ignoring unknown .alignfirst.json setting extra. Remove it or check its spelling.";
+      "Warning: ignoring unknown companion registry setting extra. Remove it or check its spelling.";
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const fixture = gateCommand(
       JSON.stringify({ plans: { target: tmpdir() } }),
