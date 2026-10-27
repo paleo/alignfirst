@@ -244,7 +244,7 @@ export async function runWorkspace(
   if (command.kind === "guide") {
     output.text(
       renderGuide(commands, {
-        runtimeDir: config.runtimeDir,
+        runtimeDir: config.storage?.runtimeDir ?? config.runtimeDir,
         sharedDirs: config.sharedDirs,
         hasDevServer: config.hasDevServer,
       }),

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-const { ports } = JSON.parse(process.env.ALIGNFIRST_CONTEXT);
+const { ports } = JSON.parse(process.env.ALIGNFIRST_WORKSPACE_CONTEXT);
 const domain = process.env.REMOTE_DEV_DOMAIN;
 const host = process.env.REMOTE_DEV_HOST;
 const publicUrl =

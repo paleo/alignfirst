@@ -145,10 +145,8 @@ function patchFixture(dst, name, basePort) {
   pkg.name = `@aligndev-openclaw-tests/${name}-fixture`;
   writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 
-  const config = {
-    schemaVersion: 1,
-    ticketIdPattern: "^ABC-\\d+$",
-  };
+  const config = JSON.parse(readFileSync(`${dst}/alignfirst.json`, "utf8"));
+  config.conventions = { ...config.conventions, ticketIdPattern: "^ABC-\\d+$" };
   writeFileSync(`${dst}/alignfirst.json`, `${JSON.stringify(config, null, 2)}\n`);
 
   // Both entry points name the project, so the three otherwise identical copies
@@ -171,7 +169,7 @@ function patchHeading(path, pattern, heading) {
 }
 
 function patchPortRange(dst, basePort) {
-  const path = `${dst}/alignfirst-workspace.json`;
+  const path = `${dst}/alignfirst.json`;
   writeFileSync(path, patchDevServerRange(readFileSync(path, "utf8"), basePort, basePort + 19));
 }
 

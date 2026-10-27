@@ -121,8 +121,8 @@ On the operator's machine, from the installed skill directory:
    ```
 
 6. Work-files repository on: delete the `TEAM_PLANS_SECTION` marker lines. The guarded block in `alignfirst.jsonc` writes `plans.repositoryFolder` as `{{ADMIN_REPOSITORY_NAME}}`. Off: delete each block, including that field.
-7. Replace every `{{TOKEN}}`, after all overlays are present and the derived tokens are computed. `sed` handles single-line values; the member list needs the editor or a Node one-liner. Include `alignfirst.jsonc`, `alignfirst-workspace.json` and dotfiles (`.env.example`, `.alignfirst-projects.json`) in the sweep. Manifest `${{ reference }}` lookups are runtime syntax, not render tokens.
-8. Validate the rendered project family and workspace manifest with `npx -y alignfirst config --json`. No workspace package dependency or wrapper installation is required.
+7. Replace every `{{TOKEN}}`, after all overlays are present and the derived tokens are computed. `sed` handles single-line values; the member list needs the editor or a Node one-liner. Include the merged `alignfirst.jsonc` and dotfiles (`.env.example`, `.alignfirst-projects.json`) in the sweep. Manifest `${{ reference }}` lookups are runtime syntax, not render tokens.
+8. Validate the complete rendered configuration with `npx -y alignfirst config --json`. No workspace package dependency or wrapper installation is required.
 9. Install `sysadmin` project-locally, so the clone carries it: `npx -y skills add https://github.com/paleo/skills --yes --agent <claude-code|codex|pi> --skill sysadmin </dev/null`. The CLI writes the skill under the agent's project skill directory (`.claude/skills/` for Claude, `.agents/skills/` for Codex/Pi) and the repository's own `skills-lock.json`; both are committed. The verified `skills@1.7.2` Pi target uses `.agents/skills/`; recheck the installed CLI contract when upgrading.
 10. Run the audits below.
 11. `git init -b main`, first commit `chore: initialize assistant administration`, `git remote add origin {{ADMIN_REPOSITORY_URL}}`, push. The repository stays private.
@@ -144,7 +144,7 @@ node --check infra/openclaw/deployment-profiles.mjs
 node --check infra/openclaw/deployment-policy.mjs
 # Pi overlay: also bash -n node-runtime/install-pi-launcher.sh and
 # node --check node-runtime/pi-launcher.mjs under infra/openclaw/.
-node -e 'for (const f of process.argv.slice(1)) JSON.parse(require("fs").readFileSync(f, "utf8"))' infra/openclaw/projects/.alignfirst-projects.json infra/openclaw/aligndev.settings.json alignfirst-workspace.json package.json
+node -e 'for (const f of process.argv.slice(1)) JSON.parse(require("fs").readFileSync(f, "utf8"))' infra/openclaw/projects/.alignfirst-projects.json infra/openclaw/aligndev.settings.json package.json
 npm run validate
 ```
 
@@ -165,7 +165,7 @@ Every runbook states its role and its position at the top. Human steps are marke
 9. `06-security-hardening.md` — last, because it locks what the others write.
 10. `07-channel.md`, smoke test — operator, from the chat client.
 11. `docs/operations/use-the-apps.md` — connects the desktop apps through the SSH tunnel; operator: device and node checks. Tailscale Serve for the mobile apps is opt-in and later. Human: Tailscale login and tailnet settings; operator: Serve through a re-seed, then each device's approval.
-12. `docs/operations/add-project.md` for each managed project. Prepare the project first through this skill's "Prepare a Project for an Assistant" route, which writes `alignfirst.json` or `alignfirst.jsonc` and the optional branch-local workspace manifest. Prepare effective plans and ignored `.local-wt/` before workspace setup in both work-files modes. For existing wrappers/state, first follow [the clean-break runbook](../../../docs/upgrading-multi-stack-workspaces.md). Project discovery then needs no registration step.
+12. `docs/operations/add-project.md` for each managed project. Prepare the project first through this skill's "Prepare a Project for an Assistant" route, which writes one selected `alignfirst.json` or `.jsonc`, including optional recipe sections and an explicit developer-instructions reference. Prepare effective plans and selected runtime storage before setup in both work-files modes. Only project runtime needs ignored `.local-wt/`. For existing wrappers/state, first follow [the clean-break runbook](../../../docs/upgrading-multi-stack-workspaces.md). Project discovery then needs no registration step.
 
 The operator records each task in `.reports/`, committed. The operations runbooks own the rest: `use-the-apps.md` (devices), `configure-assistant.md` (re-seed, secret rotation), `update-assistant.md`, `update-workspace.md`, `recover-assistant.md` (kill switch, backup, restore), `pair-dm-sender.md` (Discord).
 

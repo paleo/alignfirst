@@ -194,7 +194,7 @@ The `existing` policy decides the fate of an existing file. `reseed` writes it a
 
 `workspace setup` uses `patch`, and `reseed` with `--force`. `dev setup` never reseeds a run file: a deleted one is created again. An explicit `dev setup` uses `patch`.
 
-Before a start, `dev setup` uses `keep`, so a hand edit survives a restart. It switches to `patch` when the basis of the run files changed: the ports, and the defined values of `DevServerConfig.runFilesInputs`. The workspace entry stores that basis as `runFilesWrittenWith: { ports, inputs }` in `<mainWorktree>/<runtimeDir>/workspace-registry/workspaces.json`, alongside its allocated `ports`.
+Before a start, `dev setup` uses `keep`, so a hand edit survives a restart. It switches to `patch` when the basis of the run files changed: the ports, and the defined values of `DevServerConfig.runFilesInputs`. The workspace entry stores that basis as `runFilesWrittenWith: { ports, inputs }` in `<registryDir>/workspaces.json`, alongside its allocated `ports`.
 
 `runFilesInputs(ctx)` may be asynchronous and runs after port reconciliation. Each defined UTF-8 input value is stored as `sha256:<64 lowercase hex characters>` under its literal key; values are never stored in plaintext. Missing keys remain absent, distinct from an empty string's fingerprint.
 

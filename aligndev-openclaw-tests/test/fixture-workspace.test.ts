@@ -22,7 +22,7 @@ const alignfirst = fileURLToPath(
 );
 const devScript = "dev";
 const workspaceScript = "workspace";
-const source = readFileSync(join(template, "alignfirst-workspace.json"), "utf8");
+const source = readFileSync(join(template, "alignfirst.json"), "utf8");
 
 interface RegistryEntry {
   status: string;
@@ -175,6 +175,7 @@ test("reset stops Nova and linked lifecycle servers before deleting their regist
   const lifecycle = join(primary, "lifecycle-projects");
   const nova = join(lifecycle, "nova");
   const linked = join(lifecycle, "nova-feature");
+  const orphan = join(lifecycle, "nova-retained");
   const { pnpm, env } = fixtureEnvironment(root);
   const pids: number[] = [];
   const ports: number[] = [];
@@ -182,7 +183,30 @@ test("reset stops Nova and linked lifecycle servers before deleting their regist
   try {
     prepareProject(nova, 6600, env);
     command(nova, pnpm, ["install", "--frozen-lockfile"], env);
+    command(
+      nova,
+      process.execPath,
+      [alignfirst, "companion", "register", "--dir", join(root, "companion")],
+      env,
+    );
+    const companionRegistry = join(root, "home/.alignfirst/companions/registry.json");
+    const registrations = JSON.parse(readFileSync(companionRegistry, "utf8"));
+    registrations.projects[nova].items = { workspaceRuntime: "companion", ".plans": "project" };
+    writeFileSync(companionRegistry, JSON.stringify(registrations));
+    const storage = JSON.parse(
+      command(nova, process.execPath, [alignfirst, "config", "--json"], env),
+    ).workspace;
     command(nova, process.execPath, [workspaceScript, "setup"], env);
+    command(nova, process.execPath, [workspaceScript, "setup", "-c", "retained"], env);
+    const orphanRuntime = JSON.parse(
+      command(orphan, process.execPath, [alignfirst, "config", "--json"], env),
+    ).workspace.runtimeDir;
+    command(nova, process.execPath, [workspaceScript, "teardown", orphan], env);
+    command(nova, "git", ["worktree", "remove", orphan], env);
+    assert(
+      existsSync(orphanRuntime),
+      "External deletion retains clean runtime until explicit prune",
+    );
     command(nova, process.execPath, [workspaceScript, "setup", "-c", "feature"], env);
     for (const repo of [nova, linked]) {
       const output = command(repo, process.execPath, [devScript, "up"], env);
@@ -194,7 +218,7 @@ test("reset stops Nova and linked lifecycle servers before deleting their regist
       assert.equal((await fetch(`http://127.0.0.1:${port}`)).status, 200);
     }
     assert.equal(new Set(ports).size, 2);
-    assert(existsSync(join(nova, ".local-wt/workspace-registry/dev-servers.json")));
+    assert(existsSync(join(storage.registryDir, "dev-servers.json")));
 
     const reset = fileURLToPath(new URL("../scripts/reset-fixture.mjs", import.meta.url));
     const resetEnv = {
@@ -205,7 +229,7 @@ test("reset stops Nova and linked lifecycle servers before deleting their regist
     };
     // Cleanup must discover non-Node Git projects and retain state after a failed purge.
     rmSync(join(nova, "package.json"));
-    const manifestPath = join(nova, "alignfirst-workspace.json");
+    const manifestPath = join(nova, "alignfirst.json");
     const manifest = readFileSync(manifestPath, "utf8");
     const broken = JSON.parse(manifest);
     broken.workspace.purge = [{ name: "Refuse cleanup", run: ["node", "-e", "process.exit(7)"] }];
@@ -220,9 +244,11 @@ test("reset stops Nova and linked lifecycle servers before deleting their regist
     assert.match(refused.stderr, /state retained/);
     assert(existsSync(nova));
     assert(existsSync(linked));
-    assert(existsSync(join(nova, ".local-wt/workspace-registry/workspaces.json")));
+    assert(existsSync(join(storage.registryDir, "workspaces.json")));
     writeFileSync(manifestPath, manifest);
     command(root, process.execPath, [reset], resetEnv);
+    assert.equal(existsSync(orphanRuntime), false, "Reset prunes external runtime-only orphans");
+    assert.deepEqual(JSON.parse(readFileSync(companionRegistry, "utf8")), registrations);
 
     for (const repo of [nova, linked]) assert.equal(existsSync(repo), false);
     for (const port of ports) await assert.rejects(fetch(`http://127.0.0.1:${port}`));
@@ -230,7 +256,18 @@ test("reset stops Nova and linked lifecycle servers before deleting their regist
       assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
     }
     for (const project of ["nimbus", "lumen", "external-projects/orion"]) {
-      assert(existsSync(join(primary, project, ".git/refs/heads/main")));
+      const repo = join(primary, project);
+      assert(existsSync(join(repo, ".git/refs/heads/main")));
+      const report = JSON.parse(
+        command(repo, process.execPath, [alignfirst, "config", "--json"], env),
+      );
+      assert.equal(report.config.conventions.ticketIdPattern, "^ABC-\\d+$");
+      assert.equal(report.config.developerInstructions, "DEVELOPERS.md");
+      assert.equal(report.workspace.hasDevServer, true);
+      assert.match(
+        command(repo, process.execPath, [alignfirst, "developer-instructions"], env),
+        /Developer Guide/,
+      );
     }
     assert(existsSync(join(lifecycle, ".alignfirst-projects.json")));
   } finally {
@@ -281,12 +318,8 @@ function fixtureEnvironment(root: string): { pnpm: string; env: NodeJS.ProcessEn
 
 function prepareProject(repo: string, first: number, env: NodeJS.ProcessEnv): void {
   cpSync(template, repo, { recursive: true, filter: (path) => !path.includes("node_modules") });
-  writeFileSync(
-    join(repo, "alignfirst-workspace.json"),
-    patchDevServerRange(source, first, first + 19),
-  );
+  writeFileSync(join(repo, "alignfirst.json"), patchDevServerRange(source, first, first + 19));
   mkdirSync(join(repo, ".plans"), { recursive: true });
-  writeFileSync(join(repo, "alignfirst.json"), JSON.stringify({ schemaVersion: 1 }));
   command(repo, "git", ["init", "-q", "-b", "main"], env);
   command(repo, "git", ["add", "-A"], env);
   command(

@@ -37,4 +37,4 @@ Before removing a workspace or worktree, archive the workspace in Paseo: `paseo 
 paseo workspace archive <workspace-id>
 ```
 
-Archiving keeps a registered worktree on disk. Remove it afterwards through the usual procedure.
+Archiving keeps a registered worktree on disk. For an AlignFirst-managed worktree, run `alignfirst workspace teardown` through the installed CLI before Paseo deletes it. Teardown retains runtime files/logs. With companion runtime, external Git deletion can leave runtime-only state; explicit `alignfirst workspace prune` from surviving main disposes its verified directory. Paseo retains ownership of Git deletion; do not substitute `workspace remove`.

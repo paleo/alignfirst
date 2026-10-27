@@ -37,7 +37,8 @@ it("publishes manifest examples accepted by the production CLI without consumer 
         encoding: "utf8",
       });
       expect(result.status, result.stderr).toBe(0);
-      expect(JSON.parse(result.stdout)).toMatchObject({
+      const report = JSON.parse(result.stdout);
+      expect(report).toMatchObject({
         config: { schemaVersion: 1 },
         workspace: {
           location: { path },
@@ -46,6 +47,17 @@ it("publishes manifest examples accepted by the production CLI without consumer 
           hasDevServer: portRange !== null,
         },
       });
+      if (directory === assets) {
+        expect(report.config.devServer.maxConcurrentDevServers).toEqual({
+          env: "PROJECT_DEV_LIMIT",
+          default: 5,
+        });
+        expect(report.config.devServer.servers[0].error).toEqual({ preset: "node" });
+        expect(report.locations.developerInstructions).toBeNull();
+      } else {
+        expect(report.config.developerInstructions).toBe("DEVELOPERS.md");
+        expect(report.locations.developerInstructions.path).toBe(join(project, "DEVELOPERS.md"));
+      }
       rmSync(path);
     }
   } finally {

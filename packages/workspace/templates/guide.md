@@ -16,9 +16,9 @@ A **workspace** is a git worktree (with its branch) plus its own dev setup: syml
 {{/DEV}}
 ## Setting up a workspace
 
-Use `npx -y alignfirst workspace` on Node or `bunx --bun alignfirst workspace` on Bun. No project wrapper, package manifest or local JavaScript dependencies are required. The branch-local `alignfirst-workspace.json` or `.jsonc` manifest supplies optional project commands.
+Use `npx -y alignfirst workspace` on Node or `bunx --bun alignfirst workspace` on Bun. No project wrapper, package manifest or local JavaScript dependencies are required. The selected `alignfirst.json` or `.jsonc` supplies optional `workspace`/`devServer` recipes. Project selection is branch-local; companion selection shares the complete document without merging sections.
 
-Setup requires usable effective `.plans` and ignored, untracked `.local-wt` storage before branch creation. Prepare local/shared work files or select a companion separately. Setup never provisions plans, registers a companion or edits tracked ignore rules.
+Setup requires usable effective `.plans` and selected runtime storage before branch creation. Project runtime requires ignored, untracked `.local-wt/`; companion runtime creates no checkout directory or registry link. Prepare local/shared work files or select a companion separately. Setup never provisions plans, registers a companion or edits tracked ignore rules.
 
 Without a manifest, setup shares effective plans and usable untracked `.local` when present, then completes synchronously. This means protocol-ready; dependencies and applications are not prepared. Additional `sharedDirs` do not replace these defaults. Tracked `.local` stays branch-local.
 
@@ -66,7 +66,7 @@ Run the installed CLI from the target worktree even when project dependencies ar
 
 Names in `list` are opaque **registered names**, usually directory basenames and suffixed when another path already owns that name. Paths select exactly; there is no basename-search fallback. A registered name also selects an orphan whose directory is gone. Independent clones have independent registries.
 
-Listing combines Git worktrees with registrations. Unprepared trees have no registered name. Detached, locked, missing/prunable trees and registered orphans remain visible; listing never adopts or deletes them.
+Listing combines Git worktrees, resource registrations and external runtime owners. Runtime-only rows have no registered name or recipe. Unprepared trees have no registered name. Detached, locked, missing/prunable trees and registered orphans remain visible; listing never adopts or deletes them.
 
 `setup`, `list`, `status`, `wait`, `teardown`, `remove` and `prune` accept `--json`. stdout contains one result document; progress and diagnostics use stderr. Failures exit nonzero without a success document. `--enter` and `--json` cannot be combined.
 
@@ -102,13 +102,13 @@ Tears down infrastructure, drops the registry entry, and removes the worktree. T
 {{/DEV}}
 Removal refuses on uncommitted changes. Pass `--force` to discard them. When removing the current worktree, the script prints the main worktree path; `cd` there afterward.
 
-`remove`, `teardown` and `status` default to the current Git worktree, including from nested directories. Select another by exact path or registered name from `list`. Removal adds Git worktree deletion to cleanup; teardown leaves deletion to you or your external tool.
+`remove`, `teardown` and `status` default to the current Git worktree, including from nested directories. Select another by exact path or registered name from `list`. Removal adds Git worktree deletion to cleanup, then deletes only the verified target runtime. Teardown retains runtime files/logs and leaves Git deletion to you or your external tool. External deletion can leave clean runtime-only state for explicit prune. Failed disposal retains retry identity.
 
 **NEVER** delete a branch unless the user explicitly requests it.
 
 ### Healing orphaned workspaces
 
-A workspace is **orphaned** when its worktree dir was deleted out-of-band (manual `rm -rf`, bare `git worktree remove`). `list` retains its registered cleanup identity. Explicit `prune` also recovers abandoned pending setup whose worktree is gone:
+A workspace is **orphaned** when its worktree dir was deleted out-of-band (manual `rm -rf`, bare `git worktree remove`). `list` retains its registered cleanup identity. Explicit `prune` cleans resources and verified runtime, including runtime-only orphans left after teardown and external deletion. Live preparation/finalizer or startup ownership blocks cleanup even when the checkout is gone:
 
 ```sh
 {{COMMANDS:prune}}
@@ -129,7 +129,7 @@ When you only want a bare worktree (no symlinks, no config files, no finalize st
 
 A workspace's ports are allocated at its first dev start, stay fixed, and are listed by `{{WS}} list` / `status`.
 
-**Concurrent cap.** `dev` / `dev up` cap simultaneously running dev-servers. At the cap, the start errors with a table of active servers and exits non-zero. Make room via `down` in another worktree, `down --all`, or `up --evict` (stops the oldest live one and starts).
+**Concurrent cap.** `dev` / `dev up` count live dev environments within this repository, not individual processes. `maxConcurrentDevServers` accepts a number or `{ env, default }`; omission/zero means unlimited. Unset overrides use the default; defined values must be nonnegative safe decimal integers. Invalid values fail before startup effects. Inspection and cleanup do not resolve overrides; no dotenv is loaded. At the cap, the start errors with a table of active servers and exits non-zero. Make room via `down` in another worktree, `down --all`, or `up --evict` (stops the oldest live one and starts).
 
 **Two-tier shutdown.** `down` (and a foreground CTRL+C) stops dev processes and configured callbacks, which may stop containers. Destructive infrastructure purge belongs to `workspace teardown`, `remove` and `prune`.
 
@@ -149,5 +149,7 @@ A workspace's ports are allocated at its first dev start, stay fixed, and are li
 {{^DEV}}
   - `logs/` — setup logs.
 {{/DEV}}
-  - `{{REGISTRY_SUBDIR}}/` — the registry. Symlinked to the main worktree in linked worktrees.
+- `{{REGISTRY_SUBDIR}}/` is shared registry storage. Project mode uses main's `.local-wt/{{REGISTRY_SUBDIR}}`, linked from local linked-worktree runtime. Companion mode addresses `<companion>/.local-wt/{{REGISTRY_SUBDIR}}` directly, with separate path-derived runtimes below `<companion>/.local-wt/worktrees/`. `alignfirst config --json` reports absolute `registryDir` and `runtimeDir`.
+- Scripts read `ALIGNFIRST_WORKSPACE_CONTEXT.runtimeDir` for owned sidecars. Optional `configurationDir` locates configuration-owned helpers; it does not change command cwd.
+- Before changing placement/source, clean under the old selection. There is no placement-history registry or automatic recovery of manually hidden storage.
 {{LAYOUT:shared}}

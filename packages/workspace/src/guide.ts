@@ -14,7 +14,7 @@ import { REGISTRY_SUBDIR } from "./workspaces.js";
 //     reverse). Markers own their line.
 
 export interface GuideLayout {
-  /** The per-worktree runtime dir, relative to the worktree root (config `runtimeDir`, e.g. `.local-wt`). */
+  /** Selected absolute runtime directory, or the local relative default. */
   runtimeDir: string;
   /** The shared (symlinked-from-main) dir names (config `sharedDirs`). */
   sharedDirs: string[];
@@ -140,8 +140,8 @@ function commandBlocks(pm: WorkspaceCommands, layout: GuideLayout): Record<strin
       {
         command: `${ws} prune`,
         comment: layout.hasDevServer
-          ? "stop orphans' dev-servers, drop registry entries, run `git worktree prune`"
-          : "drop orphans' registry entries, then run `git worktree prune`",
+          ? "stop/purge orphan resources, dispose owned runtime, prune Git metadata"
+          : "purge orphan resources, dispose owned runtime, prune Git metadata",
       },
     ],
     dev: [

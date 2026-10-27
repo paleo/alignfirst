@@ -4,13 +4,13 @@ from pathlib import Path
 import sys
 import venv
 
-context = json.loads(os.environ["ALIGNFIRST_CONTEXT"])
+context = json.loads(os.environ["ALIGNFIRST_WORKSPACE_CONTEXT"])
 root = Path(context["currentWorktree"])
 action = sys.argv[1]
 
 if action == "finalize":
     venv.EnvBuilder(with_pip=False).create(root / ".venv")
-    data = root / ".local-wt" / "data"
+    data = Path(context["runtimeDir"]) / "data"
     data.mkdir(exist_ok=True)
     (data / "identity.json").write_text(json.dumps(context))
 elif action == "content":

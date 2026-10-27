@@ -2,7 +2,6 @@ export const PRIMARY_PROJECT_PARENT = "/home/assistant/projects";
 export const EXTERNAL_PROJECT_PARENT = `${PRIMARY_PROJECT_PARENT}/external-projects`;
 export const LIFECYCLE_PROJECT_PARENT = `${PRIMARY_PROJECT_PARENT}/lifecycle-projects`;
 export const PROJECT_CONFIG_FILENAME = "alignfirst.json";
-export const WORKSPACE_CONFIG_FILENAME = "alignfirst-workspace.json";
 
 export const NIMBUS_PROJECT_PATH = `${PRIMARY_PROJECT_PARENT}/nimbus`;
 export const LUMEN_PROJECT_PATH = `${PRIMARY_PROJECT_PARENT}/lumen`;

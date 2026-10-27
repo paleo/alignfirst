@@ -65,4 +65,4 @@ fnm exec --using=.nvmrc npm run build
 fnm exec --using=.nvmrc npm run workspace -- setup
 ```
 
-Tracked settings live in `alignfirst.json` and `alignfirst-workspace.json`. A fresh linked worktree must bootstrap from the already built main-checkout CLI while retaining the target cwd; see [`DEVELOPERS.md`](DEVELOPERS.md) for the exact command and Paseo teardown ownership. Existing old runtime state needs the [coordinated upgrade](docs/upgrading-multi-stack-workspaces.md) before lifecycle use.
+Tracked settings, nested conventions, the developer-instructions reference and the workspace recipe live in one `alignfirst.json`. A fresh linked worktree must bootstrap from the already built main-checkout CLI while retaining the target cwd; see [`DEVELOPERS.md`](DEVELOPERS.md) for the exact command and Paseo teardown ownership. Existing old runtime state needs the [coordinated upgrade](docs/upgrading-multi-stack-workspaces.md) before lifecycle use.

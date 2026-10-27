@@ -32,7 +32,7 @@ Global choices are `aligndev` (assistant playbook), `alignfirst` (protocol recog
 
 A missing name in the session's skill list means unavailable here, not absent on disk. If the host exposes no list, availability is unknown. This check needs no filesystem scan or installer. Install globally only with approval, using the selected reference's current command. A skill alone supplies no executable Pi tools. Preserve duplicate-tool audits and native trust/permission policies. For Paseo, read its skill before creating/removing actual workspaces and preserve archive-before-removal.
 
-Recommend protocols and Docmap regardless of language. Workspace isolation is also language-neutral; preserve existing project commands by expressing them in a branch-local manifest. An absent manifest supplies protocol-ready defaults. Detect existing tooling and propose conversion rather than running incompatible old wrappers against new registries. Determine whether a separate work-files repository already exists before offering one.
+Recommend protocols and Docmap regardless of language. Workspace isolation is also language-neutral; preserve existing project commands by expressing them in the selected configuration's workspace recipe. An absent manifest supplies protocol-ready defaults. Detect existing tooling and propose conversion rather than running incompatible old wrappers against new registries. Determine whether a separate work-files repository already exists before offering one.
 
 ## Project instructions
 
@@ -44,7 +44,7 @@ Global skills do not opt every repository into protocols. Workspace and Docmap a
 
 ## A repository that must stay untouched
 
-Use [companion-setup.md](references/companion-setup.md). Protocols and Docmap can keep all selected files outside the repository. Workspace adoption additionally creates local `.local-wt` storage and local Git exclusions; obtain approval and disclose that footprint. Companions supply effective plans and project settings, never branch-local workspace recipes or runtime storage.
+Use [companion-setup.md](references/companion-setup.md). Protocols and Docmap can keep all selected files outside the repository. A registration's `defaultLocation: "companion"` can also select the complete recipe and external runtime. This creates no checkout runtime directory/link or runtime ignore rule. Placement is not a write sandbox: project commands, shared directories, application outputs and Git operations retain their writes. Obtain approval for those effects.
 
 ## Prepare a project for an assistant
 
@@ -53,9 +53,9 @@ An assistant coordinates the conversation and delegates coding to the coding **a
 1. Canonical context bootstrap as the first `##` section of `AGENTS.md` or `CLAUDE.md`, after title/introduction. `alignfirst.json` or `alignfirst.jsonc` with `schemaVersion: 1` is required for an assistant-managed project and optional otherwise. Companion-only projects place selected instructions/settings outside the repository.
 2. Usable effective plans, untracked by the product repository. A separate work-files repository may track them. Use the separately authorized `aligndev guide work-files-setup` for missing/project-tracked plans, before ticket reservation, request capture or coding effects. Preserve old history without unsolicited copying.
 3. Docmap and meaningful project docs. When `docs/` is absent and documentation is part of preparation, follow [docmap-bootstrapping.md](references/docmap-bootstrapping.md).
-4. A unified workspace route through `alignfirst workspace`. The optional branch-local manifest declares project commands; without it, setup is protocol-ready and performs no install/build/start. Prepare ignored/untracked `.local-wt/` and effective plans before setup. Document separate stack commands when defaults are used.
+4. A unified workspace route through `alignfirst workspace`. The optional recipe in the selected merged configuration declares project commands; without `workspace`/`devServer`, setup is protocol-ready and performs no install/build/start. Prepare effective plans and selected runtime storage first; only project runtime requires ignored/untracked `.local-wt/`. Document separate stack commands when defaults are used.
 5. Confirmed runtime requirements. Node projects declare their version through `.nvmrc`, `.node-version` or `engines.node`; ask when none exists. Python and other runtimes retain their documented tools. Running the CLI through Node/Bun does not change project commands.
-6. A project-specific `DEVELOPERS.md`: confirmed commands, architecture, documentation map, workflow and verification. Include the workspace guide pointer and its actual readiness boundary, public URLs when services exist, and external ownership rules.
+6. A project-specific developer guide, commonly `DEVELOPERS.md` or `README.md`, with its relative path explicitly recorded as `developerInstructions`. Use `alignfirst developer-instructions` to read conventions and configured content, and nullable `locations.developerInstructions` to locate edits. Without a reference there is no filename fallback. Include confirmed commands, architecture, documentation map, workflow and verification. Include the workspace guide pointer and its actual readiness boundary, public URLs when services exist, and external ownership rules.
 7. `aligndev project doctor --root <projects-directory>` passes after settings/manifest creation and before workspace setup. A range belongs solely in `devServer.ports`; use `project free-ports` as a lookup when the inventory owns an enclosing range.
 
 Assistant preparation skips command-skill installation and global bootstrap changes unless separately requested. Companion-only preparation follows its authorization and location checks. Native coding-agent permissions are unchanged; report protected-path refusals rather than bypassing them.

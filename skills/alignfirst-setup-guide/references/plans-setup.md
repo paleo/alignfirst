@@ -32,10 +32,10 @@ For local mode, create `.plans/` and ignore it. A public project's README should
 
 `plans.autoArchive: true` makes sync archive stale tickets and completed no-ticket sessions under `_archives/`; remove it to opt out. `ALIGNFIRST_ARCHIVE_DAYS` defaults to 7. Running `_aligndev/*.running.md` logs are excluded from snapshots. Shared sync serializes through a clone lock, consolidates pending sync commits and retries busy/advancing remotes up to three times. A conflict aborts rebase and retains local commits; resolve it in the clone with `git pull --rebase`, then retry sync.
 
-With the canonical `alignfirst context` bootstrap, the CLI supplies the sync instruction. Otherwise document: after every `.plans/` change, run `npx -y alignfirst sync`. An assistant's `DEVELOPERS.md` names the repository and sync command.
+With the canonical `alignfirst context` bootstrap, the CLI supplies the sync instruction. Otherwise document: after every `.plans/` change, run `npx -y alignfirst sync`. The assistant's explicitly referenced developer guide names the repository and sync command.
 
 ## Before workspace setup
 
-Prepare effective plans and ignore `.local-wt/` before `npx -y alignfirst workspace setup`. No pre-setup wrapper check is needed: the CLI validates main before creating a branch/worktree, then validates linked-worktree parity. Main's project-local plans are shared through a link; companion plans resolve directly without one. Setup never provisions missing plans, selects companions or edits tracked ignore rules.
+Prepare effective plans and selected runtime storage (ignore `.local-wt/` only for project-local runtime) before `npx -y alignfirst workspace setup`. No pre-setup wrapper check is needed: the CLI validates main before creating a branch/worktree, then validates linked-worktree parity. Main's project-local plans are shared through a link; companion plans resolve directly without one. Setup never provisions missing plans, selects companions or edits tracked ignore rules.
 
 For an assistant, use the separately authorized `aligndev guide work-files-setup` procedure before ticket reservation, request capture or coding effects. Preserve existing tracked/missing-history boundaries and companion selections. See [workspace setup](workspace-setup.md#required-baseline-and-defaults).

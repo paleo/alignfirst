@@ -69,7 +69,7 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
         "Bootstrap complete in the main worktree. Created: package.json, pnpm-lock.yaml, " +
         "app.mjs, home-page.mjs, comparables.mjs, export-handler.mjs, app.test.mjs, " +
         "README.md, DEVELOPERS.md, docs/, scripts/workspace/ (workspace tooling), local.env.example, " +
-        ".local/, .gitignore, alignfirst.json and alignfirst-workspace.json. This minimal scaffold is deliberate and " +
+        ".local/, .gitignore and a merged alignfirst.json. This minimal scaffold is deliberate and " +
         "complete — nothing else is required before the initial commit on main."
       );
     },
@@ -230,7 +230,6 @@ async function declarePackageManager(ctx: ScenarioContext): Promise<void> {
 }
 
 async function copyBootstrapTemplate(ctx: ScenarioContext): Promise<void> {
-  const config = JSON.stringify({ schemaVersion: 1 }, null, 2);
   const result = await ctx.execInGateway(
     [
       "sh",
@@ -239,9 +238,8 @@ async function copyBootstrapTemplate(ctx: ScenarioContext): Promise<void> {
         `mkdir -p "${NOVA_PROJECT_PATH}/.local" "${NOVA_PROJECT_PATH}/.plans" && ` +
         `node --input-type=module -e 'import fs from "node:fs"; ` +
         `import { patchDevServerRange } from "/opt/openclaw-test/scripts/fixture-personalization.ts"; ` +
-        `const p = "${NOVA_PROJECT_PATH}/alignfirst-workspace.json"; ` +
-        `fs.writeFileSync(p, patchDevServerRange(fs.readFileSync(p, "utf8"), 6600, 6607));' && ` +
-        `printf '%s\\n' '${config}' > "${NOVA_PROJECT_PATH}/alignfirst.json"`,
+        `const p = "${NOVA_PROJECT_PATH}/alignfirst.json"; ` +
+        `fs.writeFileSync(p, patchDevServerRange(fs.readFileSync(p, "utf8"), 6600, 6607));'`,
     ],
     { timeoutMs: 30_000 },
   );
@@ -352,7 +350,7 @@ async function assertPreparedProjectContract(ctx: ScenarioContext): Promise<void
   );
   await assertGatewayCommand(
     ctx,
-    ["grep", "-F", "runFilesInputs", `${NOVA_PROJECT_PATH}/alignfirst-workspace.json`],
+    ["grep", "-F", "runFilesInputs", `${NOVA_PROJECT_PATH}/alignfirst.json`],
     "run-file environment input tracking",
   );
   await assertGatewayCommand(

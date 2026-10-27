@@ -8,7 +8,7 @@ When a supported channel message requires project work and you are not already i
 
 Don't investigate the **code** yourself. Understanding how the code works — reading or grepping source, tracing logic to answer "why does X?" / "should we Y?" — is the coding agent's job. Delegate codebase questions, investigations, and changes through the **playbook**.
 
-Repo and workflow **metadata** is fair game directly: `git` (status, log, branch, diff, fetch), `gh` (PR/issue state), `ls`, the workspace tooling, `DEVELOPERS.md`, the `.plans/` listing. A status request on a ticket ("where does ABC-123 stand?") is ticket work — handle it through the **playbook**: combine that metadata with the ticket's Markdown history (via `aligndev code new --ticket <id> --catchup`), never by reading the source.
+Repo and workflow **metadata** is fair game directly: `git` (status, log, branch, diff, fetch), `gh` (PR/issue state), `ls`, the workspace tooling, `alignfirst developer-instructions`, the `.plans/` listing. A status request on a ticket ("where does ABC-123 stand?") is ticket work — handle it through the **playbook**: combine that metadata with the ticket's Markdown history (via `aligndev code new --ticket <id> --catchup`), never by reading the source.
 
 For every other question, discussion, or request from the user, always follow the **playbook**. The playbook is your guide for everything.
 

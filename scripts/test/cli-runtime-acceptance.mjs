@@ -339,7 +339,7 @@ function alignfirstLifecycle() {
   writeFileSync(join(root, "alignfirst.json"), JSON.stringify({ schemaVersion: 1 }));
   const report = JSON.parse(af("new-config-report", ["config", "--json"]));
   assert.equal(report.locations.alignfirst.path, join(root, "alignfirst.json"));
-  assert.equal(report.workspace.location.path, join(root, "alignfirst-workspace.json"));
+  assert.equal(report.workspace.location.path, join(root, "alignfirst.json"));
   assert.equal(Object.hasOwn(report, "cli"), false);
   for (const args of [[], ["runtime.md"], ["--search", "runtime"], ["--check"], ["--guide"]]) {
     af(`embedded-docmap-${args.join("-")}`, ["docmap", ...args]);
@@ -630,15 +630,15 @@ function prepareWorkspaceFixture(project, probes, projectRuntime) {
   writeFileSync(
     join(project, "probe.mjs"),
     `import {appendFileSync,readFileSync,writeFileSync} from 'node:fs';
-const context=JSON.parse(process.env.ALIGNFIRST_CONTEXT);
+const context=JSON.parse(process.env.ALIGNFIRST_WORKSPACE_CONTEXT);
 appendFileSync(${JSON.stringify(probes)},JSON.stringify({context,cwd:process.cwd(),executable:process.execPath,runtime:process.versions.bun===undefined?'node':'bun',parentArgv:readFileSync('/proc/'+process.ppid+'/cmdline','utf8').split('\\0').filter(Boolean)})+'\\n');
-if(context.phase==='finalize') writeFileSync(context.currentWorktree+'/.local-wt/finalized.txt','ready');
+if(context.phase==='finalize') writeFileSync(context.runtimeDir+'/finalized.txt','ready');
 if(process.argv[2]==='serve'){console.log('RUNTIME_READY');setInterval(()=>{},1000);}
 `,
   );
   const probe = (action) => ({ run: [projectRuntime, "probe.mjs", action] });
   writeFileSync(
-    join(project, "alignfirst-workspace.json"),
+    join(project, "alignfirst.json"),
     JSON.stringify({
       schemaVersion: 1,
       workspace: {

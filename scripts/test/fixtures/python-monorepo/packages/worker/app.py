@@ -8,7 +8,7 @@ from shared import greeting
 
 
 def describe(role):
-    context = json.loads(os.environ["ALIGNFIRST_CONTEXT"])
+    context = json.loads(os.environ["ALIGNFIRST_WORKSPACE_CONTEXT"])
     value = {
         "context": context,
         "cwd": os.getcwd(),
@@ -17,7 +17,7 @@ def describe(role):
         "message": greeting(role),
         "pid": os.getpid(),
     }
-    path = Path(context["currentWorktree"]) / ".local-wt" / (role + ".json")
+    path = Path(context["runtimeDir"]) / (role + ".json")
     path.write_text(json.dumps(value))
     return value
 

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const { name, currentWorktree, servers } = JSON.parse(process.env.ALIGNFIRST_CONTEXT);
+const { name, currentWorktree, servers } = JSON.parse(process.env.ALIGNFIRST_WORKSPACE_CONTEXT);
 const url = readFileSync(join(currentWorktree, "local.env"), "utf8").match(
   /^PUBLIC_URL=(.+)$/m,
 )?.[1];

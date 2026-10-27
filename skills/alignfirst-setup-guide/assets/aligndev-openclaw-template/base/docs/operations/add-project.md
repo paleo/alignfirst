@@ -22,7 +22,7 @@ sudo -H -u {{SERVICE_USER}} bash -lc 'git -C ~/projects clone <repository-url>'
 
 Prepare the clone through the setup skill's **Prepare a Project for an Assistant** route.
 It writes the bootstrap section and `alignfirst.json` or `alignfirst.jsonc`, and configures docmap, workspace, and
-`DEVELOPERS.md`. It installs no AlignFirst skill.
+an explicitly referenced developer guide (commonly `DEVELOPERS.md`). Read it with `alignfirst developer-instructions`; use `locations.developerInstructions` from the config report for edits. It installs no AlignFirst skill.
 
 <!-- TEAM_PLANS_SECTION -->
 ## Work-files repository
@@ -113,11 +113,11 @@ aligndev project free-ports --size <size>
 '
 ```
 
-When the projects directory declares several ranges, inspect `aligndev guide project` and pass `--range <code>` for the project kind. This is a lookup, not a reservation. Record first/last only in the branch-local workspace manifest's `devServer.ports`; companion/project conventions carry no duplicate claim.
+When the projects directory declares several ranges, inspect `aligndev guide project` and pass `--range <code>` for the project kind. This is a lookup, not a reservation. Record first/last only in the selected merged configuration's `devServer.ports`, whether project- or companion-owned.
 
 ## Check the inventory
 
-After writing project settings and the optional workspace manifest, prepare usable effective plans and ignored, untracked `.local-wt/`. Before workspace setup, run the read-only inventory gate:
+After writing the merged configuration, prepare usable effective plans and selected runtime storage. Only project-local runtime requires ignored, untracked `.local-wt/`; companion runtime creates no checkout directory or link. Before workspace setup, run the read-only inventory gate:
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project doctor'
@@ -141,9 +141,9 @@ run-file patches read `REMOTE_DEV_DOMAIN` from `environment.d/common.conf`.
 Bring the dev server up, probe the URL it prints, bring it down, then inspect the discovered project:
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm run dev -- up'
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && alignfirst dev up'
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:<port>/
-sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm run dev -- down'
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && alignfirst dev down'
 sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project status ~/projects/<repo>'
 ```
 

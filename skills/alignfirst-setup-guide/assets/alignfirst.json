@@ -5,21 +5,17 @@
     "finalize": [
       {
         "name": "Install",
-        "run": [
-          "npm",
-          "ci"
-        ]
+        "run": ["npm", "ci"]
       }
     ],
     "summary": "Workspace ${{ name }} \u2014 ${{ status }}\nPath: ${{ currentWorktree }}"
   },
   "devServer": {
+    "maxConcurrentDevServers": { "env": "PROJECT_DEV_LIMIT", "default": 5 },
     "ports": {
       "first": 8100,
       "last": 8199,
-      "declare": [
-        "frontend"
-      ]
+      "declare": ["frontend"]
     },
     "runFiles": [
       {
@@ -40,16 +36,13 @@
         "kind": "spawn",
         "name": "frontend",
         "exec": {
-          "run": [
-            "npm",
-            "run",
-            "dev:app"
-          ]
+          "run": ["npm", "run", "dev:app"]
         },
         "port": "frontend",
         "ready": {
           "log": "ready|listening"
-        }
+        },
+        "error": { "preset": "node" }
       }
     ]
   }

@@ -374,7 +374,7 @@ async function consumerWarningChecks(f) {
     writeJson(projectSettings, {
       schemaVersion: 1,
       plans: { repositoryFolder: "alignfirst" },
-      git: { commit: { style: "conventionalCommit" } },
+      conventions: { git: { commit: { style: "conventionalCommit" } } },
     });
     const settingsBytes = readFileSync(projectSettings);
     const registryBytes = readFileSync(f.registry);
@@ -406,7 +406,8 @@ async function consumerWarningChecks(f) {
     for (const source of ["project", "unknownProject", "registry"]) {
       const invalidProject = structuredClone(validProject);
       const invalidRegistry = structuredClone(staleRegistry);
-      if (source === "project") invalidProject.git.commit.style = "private-invalid-consumer-value";
+      if (source === "project")
+        invalidProject.conventions.git.commit.style = "private-invalid-consumer-value";
       else if (source === "unknownProject") invalidProject.extra = "private-invalid-consumer-value";
       else invalidRegistry.projects["~/app"].aligndev.profile = ["private-invalid-consumer-value"];
       writeJson(projectSettings, invalidProject);
@@ -463,7 +464,14 @@ async function profileOnlyChecks(f) {
       const report = await reportAt(f, cwd);
       assert.deepEqual(report.aligndev, { profile: "a" });
       assert.equal(report.companion, null);
+      assert.equal(report.locations.developerInstructions, null);
+      assert.deepEqual(report.locations.workspaceRuntime, {
+        in: "project",
+        path: join(cwd, ".local-wt"),
+        exists: false,
+      });
       for (const [item, location] of Object.entries(report.locations)) {
+        if (item === "developerInstructions" || item === "workspaceRuntime") continue;
         assert.equal(location.in, "project");
         assert.equal(
           location.path,
@@ -607,7 +615,14 @@ async function companionChecks(f) {
     assert.deepEqual(report.aligndev, { profile: "b" });
     assert.equal(report.companion.dir, f.companion);
     assert.equal(report.companion.exists, false);
+    assert.equal(report.locations.developerInstructions, null);
+    assert.deepEqual(report.locations.workspaceRuntime, {
+      in: "project",
+      path: join(f.companionProject, ".local-wt"),
+      exists: false,
+    });
     for (const [item, location] of Object.entries(report.locations)) {
+      if (item === "developerInstructions" || item === "workspaceRuntime") continue;
       assert.equal(location.in, "companion");
       assert.equal(
         location.path,

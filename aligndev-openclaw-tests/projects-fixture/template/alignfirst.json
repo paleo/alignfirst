@@ -1,5 +1,7 @@
 {
   "schemaVersion": 1,
+  "conventions": { "ticketIdPattern": "^ABC-\\d+$" },
+  "developerInstructions": "DEVELOPERS.md",
   "workspace": {
     "finalize": [
       {

@@ -40,7 +40,7 @@ This repository is on *GitHub*.
 
 A **workspace** is a git worktree (with its branch) plus its own dev setup: symlinked shared directories and seeded config files. Workspaces are isolated, so you can work on several branches in parallel. This repository has no dev server, so the system runs portless: nothing to start, no `dev` script.
 
-Configuration lives in `alignfirst.json` and the branch-local `alignfirst-workspace.json`. Run `fnm exec --using=.nvmrc npm run workspace -- --guide` after building. For a fresh linked worktree, retain its cwd and bootstrap through the already built main-checkout bin as documented in `DEVELOPERS.md`; do not download a published older CLI or invoke nonexistent target build output. Paseo owns Git deletion: archive first, teardown through that external entry, then let Paseo remove it.
+The selected `alignfirst.json` holds nested conventions, the explicit developer-instructions reference and the workspace recipe. Run `fnm exec --using=.nvmrc npm run workspace -- --guide` after building. For a fresh linked worktree, retain its cwd and bootstrap through the already built main-checkout bin as documented in `DEVELOPERS.md`; do not download a published older CLI or invoke nonexistent target build output. Paseo owns Git deletion: archive first, teardown through that external entry, then let Paseo remove it.
 
 The side-32 implementation workspace's live runtime state is intentionally pending the coordinated upgrade in `docs/upgrading-multi-stack-workspaces.md`. Do not run the new lifecycle against old registries. Configuration/context reads and work-file sync are safe independently of runtime adoption.
 

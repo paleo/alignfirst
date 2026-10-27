@@ -57,10 +57,7 @@ function smokeTestRelease() {
   verifyCliVersion(cliRoot, "aligndev", ["--version"], aligndev.version);
   verifyCliVersion(cliRoot, "docmap", ["--version"], docmap.version);
   verifyInvocationConsumers(cliRoot);
-  for (const [name, schema] of [
-    ["alignfirst", "alignfirst-v1"],
-    ["@alignfirst/workspace", "workspace-v1"],
-  ]) {
+  for (const [name, schema] of [["alignfirst", "alignfirst-v1"]]) {
     const asset = join(cliRoot, "node_modules", name, "schemas", `${schema}.schema.json`);
     assert.equal(JSON.parse(readFileSync(asset, "utf8")).type, "object");
   }
@@ -188,7 +185,7 @@ function verifyInvocationConsumers(root) {
       encoding: "utf8",
     }),
   );
-  assert.equal(config.workspace.location.path, join(project, "alignfirst-workspace.json"));
+  assert.equal(config.workspace.location.path, join(project, "alignfirst.json"));
   assert.equal(config.workspace.hasDevServer, false);
   assert.equal(Object.hasOwn(config, "cli"), false);
 }

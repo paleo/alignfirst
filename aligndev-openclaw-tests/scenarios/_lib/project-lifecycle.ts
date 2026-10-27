@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import type { AgentToolCall, ScenarioContext } from "@alignfirst/openclaw-test";
 import { execCommandOf, listsProjects } from "./agent-tool-calls.ts";
-import { WORKSPACE_CONFIG_FILENAME } from "./project-fixtures.ts";
+import { PROJECT_CONFIG_FILENAME } from "./project-fixtures.ts";
 
 export interface WaitForLifecycleOptions {
   timeoutMs?: number;
@@ -46,7 +46,7 @@ export async function waitForProjectListing(ctx: ScenarioContext, label: string)
 }
 
 export function readProjectConfig(path: string): ProjectConfig | undefined {
-  const configPath = `${path}/${WORKSPACE_CONFIG_FILENAME}`;
+  const configPath = `${path}/${PROJECT_CONFIG_FILENAME}`;
   if (!existsSync(configPath)) return;
   const value: unknown = JSON.parse(readFileSync(configPath, "utf8"));
   if (!isRecord(value)) throw new Error(`invalid project config: ${configPath}`);

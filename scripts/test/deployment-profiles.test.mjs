@@ -21,7 +21,6 @@ import {
   resolveCodeConfig,
   resolveQuotaConfig,
 } from "../../packages/aligndev/dist/config.js";
-import { loadWorkspaceManifest } from "../../packages/workspace/dist/config.js";
 
 const repository = fileURLToPath(new URL("../../", import.meta.url));
 const template = join(
@@ -103,7 +102,20 @@ for (const overlay of Object.keys(agents)) {
             );
             assert.equal(report.workspace.schemaVersion, 1);
             assert.equal(report.workspace.hasDevServer, false);
-            assert.equal(loadWorkspaceManifest(fixture.rendered).schemaVersion, 1);
+            assert.equal(config.schemaVersion, 1);
+            assert.equal(config.conventions.git.defaultBranch, "main");
+            assert.equal(config.developerInstructions, "DEVELOPERS.md");
+            assert.equal(
+              report.locations.developerInstructions.path,
+              join(fixture.rendered, "DEVELOPERS.md"),
+            );
+            assert.equal(report.locations.developerInstructions.exists, true);
+            assert.equal(report.workspace.location.path, report.locations.alignfirst.path);
+            assert.equal(
+              report.workspace.registryDir,
+              join(fixture.rendered, ".local-wt/workspace-registry"),
+            );
+            assert.equal(existsSync(join(fixture.rendered, ".local-wt")), false);
             assert.equal(config.plans?.repositoryFolder, plans ? "admin" : undefined);
             const marker = readFileSync(
               join(fixture.infra, "projects/.alignfirst-projects.json"),

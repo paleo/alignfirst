@@ -8,7 +8,7 @@ An npm-workspaces monorepo of TypeScript packages (ESM only, `strict: true`), pu
 
 ## Workspaces
 
-A workspace is a Git worktree plus its setup. `alignfirst.json` holds conventions; `alignfirst-workspace.json` shares effective plans, usable untracked `.local` and harness artifacts, optionally seeds editor/harness settings, then finalizes with named `npm install` and `npm run build` steps. `.local-wt` stays local. This repository has no dev server or `dev` script.
+A workspace is a Git worktree plus its setup. `alignfirst.json` holds nested conventions, the explicit `developerInstructions: "DEVELOPERS.md"` reference and the recipe. Setup shares effective plans, usable untracked `.local` and harness artifacts, optionally seeds editor/harness settings, then finalizes with named `npm install` and `npm run build` steps. Runtime placement follows the companion registry; this checkout's retained state remains pending the upgrade below. This repository has no dev server or `dev` script.
 
 A fresh main clone needs `fnm exec --using=.nvmrc npm install` and `fnm exec --using=.nvmrc npm run build` first. Prepare ignored effective plans separately before workspace setup. A fresh linked worktree has neither dependencies nor `dist/`; retain its cwd and invoke the already built main-checkout entry:
 

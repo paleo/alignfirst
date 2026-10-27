@@ -13,7 +13,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-context = json.loads(os.environ["ALIGNFIRST_CONTEXT"])
+context = json.loads(os.environ["ALIGNFIRST_WORKSPACE_CONTEXT"])
 server = HTTPServer(("127.0.0.1", context["ports"]["api"]), Handler)
 value = describe("api")
 print("API_READY", flush=True)

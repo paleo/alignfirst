@@ -24,7 +24,7 @@ Repository specifics:
 
 A **workspace** is a git worktree with effective work files and isolated runtime storage. This repository has no install/build steps, seeded application config or dev services. Usable untracked `.local` is shared when present.
 
-Run `npx -y alignfirst workspace --guide` for the full procedures. The manifest is setup-only; readiness does not imply an application build or running service. Effective plans and ignored, untracked `.local-wt/` must be prepared before setup.
+Run `npx -y alignfirst workspace --guide` for the full procedures. The merged configuration is setup-only; readiness implies no build or running service. Prepare effective plans and selected runtime storage; only project runtime needs ignored, untracked `.local-wt/`.
 
 ## Writing OpenClaw workspace files
 

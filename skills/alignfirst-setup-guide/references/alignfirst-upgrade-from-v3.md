@@ -62,13 +62,15 @@ Write `alignfirst.json` (strict JSON) or `alignfirst.jsonc` by hand. Preserve th
 ```json
 {
   "schemaVersion": 1,
-  "ticketIdPattern": "<regex>",
-  "plans": { "repositoryFolder": "<recovered-folder>", "autoArchive": true },
-  "git": { "defaultBranch": "<detected-default-branch>" }
+  "conventions": {
+    "ticketIdPattern": "<regex>",
+    "git": { "defaultBranch": "<detected-default-branch>" }
+  },
+  "plans": { "repositoryFolder": "<recovered-folder>", "autoArchive": true }
 }
 ```
 
-Keep ranges only in the optional branch-local workspace manifest's `devServer.ports`. Existing wrappers/registries require [the multi-stack runbook](../../../docs/upgrading-multi-stack-workspaces.md) before conversion. Update README guidance and install the requested stubs.
+Keep ranges only in the selected merged configuration's `devServer.ports`. Existing wrappers/registries require [the multi-stack runbook](../../../docs/upgrading-multi-stack-workspaces.md) before conversion. Update README guidance and install the requested stubs.
 
 ## Replace Every Legacy Command
 
@@ -94,7 +96,7 @@ Replace the AlignFirst section in `AGENTS.md` or `CLAUDE.md` with the bootstrap 
 `alignfirst-skills-setup.md`. The section also replaces the `npm run docmap` instruction when the project
 adopts docmap through the CLI.
 
-Current `alignfirst workspace setup` validates effective plans and ignored runtime storage before creation. Prepare these prerequisites separately; no wrapper check is needed. Move any project-specific remote-development guard into a manifest command during the coordinated cutover.
+Current `alignfirst workspace setup` validates effective plans and selected runtime storage (ignored/untracked when project-local) before creation. Prepare these prerequisites separately; no wrapper check is needed. Move any project-specific remote-development guard into a manifest command during the coordinated cutover.
 
 ## Update the Skills
 

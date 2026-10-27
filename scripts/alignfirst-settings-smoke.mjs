@@ -90,7 +90,7 @@ function checkUnknownSettings(f) {
   const config = {
     schemaVersion: 1,
     plans: { repositoryFolder: "work", autoArchive: true },
-    git: { defaultBranch: "main", commit: { style: "conventionalCommit" } },
+    conventions: { git: { defaultBranch: "main", commit: { style: "conventionalCommit" } } },
   };
   writeJson(f.config, config);
   writeJson(f.registry, {
@@ -114,7 +114,7 @@ function checkUnknownSettings(f) {
   assert.deepEqual(report.config, {
     schemaVersion: 1,
     plans: { repositoryFolder: "work", autoArchive: true },
-    git: { defaultBranch: "main", commit: { style: "conventionalCommit" } },
+    conventions: { git: { defaultBranch: "main", commit: { style: "conventionalCommit" } } },
   });
   assert.deepEqual(report.aligndev, { profile: "work" });
   assert.equal(report.companion.items.docs, "project");
@@ -148,8 +148,11 @@ function checkUnknownSettings(f) {
   for (const [name, value] of [
     ["root", { extra: secret }],
     ["plans", { plans: { folder: "work" } }],
-    ["git", { git: { extra: secret } }],
-    ["commit", { git: { commit: { style: "conventionalCommit", extra: secret } } }],
+    ["git", { conventions: { git: { extra: secret } } }],
+    [
+      "commit",
+      { conventions: { git: { commit: { style: "conventionalCommit", extra: secret } } } },
+    ],
   ]) {
     writeJson(f.config, { schemaVersion: 1, ...value });
     assert.match(
@@ -158,7 +161,7 @@ function checkUnknownSettings(f) {
     );
   }
   writeJson(f.config, { schemaVersion: 1 });
-  const workspace = join(f.project, "alignfirst-workspace.json");
+  const workspace = f.config;
   for (const [name, value] of [
     ["root", { extra: secret }],
     ["workspace", { workspace: { extra: secret } }],
@@ -178,14 +181,26 @@ function checkKnownFailures(f) {
   for (const [name, known, expected] of [
     ["schema", { schemaVersion: 2 }, /schemaVersion.*constant/],
     ["cli", { cli: secret }, /unknown property|additional properties/i],
-    ["pattern", { ticketIdPattern: `[${secret}` }, /not a valid regular expression/],
-    ["pattern-anchors", { ticketIdPattern: "^ABC$|^XYZ$" }, /one anchored expression/],
+    [
+      "pattern",
+      { conventions: { ticketIdPattern: `[${secret}` } },
+      /not a valid regular expression/,
+    ],
+    [
+      "pattern-anchors",
+      { conventions: { ticketIdPattern: "^ABC$|^XYZ$" } },
+      /one anchored expression/,
+    ],
     ["plans-structure", { plans: [] }, /plans.*(object|invalid)/],
     ["archive", { plans: { autoArchive: secret } }, /autoArchive.*boolean/],
     ["port", { portRange: { first: 0, last: 100 } }, /unknown property|additional properties/i],
-    ["git", { git: null }, /git.*object/],
-    ["commit", { git: { commit: { style: secret } } }, /style.*constant/],
-    ["required-commit", { git: { commit: {} } }, /style.*required|required.*style/],
+    ["git", { conventions: { git: null } }, /git.*object/],
+    ["commit", { conventions: { git: { commit: { style: secret } } } }, /style.*constant/],
+    [
+      "required-commit",
+      { conventions: { git: { commit: {} } } },
+      /style.*required|required.*style/,
+    ],
   ]) {
     writeJson(f.config, { schemaVersion: 1, ...known });
     assert.match(run(f, `invalid-config-${name}`, 1).stderr, expected);

@@ -1,7 +1,13 @@
 import { existsSync, readdirSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import type { AgentToolCall, ScenarioContext } from "@alignfirst/openclaw-test";
-import { execMatches, inputOf, invokesAligndevCode, readsFile } from "./agent-tool-calls.ts";
+import {
+  execMatches,
+  inputOf,
+  invokesAligndevCode,
+  readsDeveloperInstructions,
+  readsFile,
+} from "./agent-tool-calls.ts";
 import { escapeRe } from "./common-constants.ts";
 import { assertSilentChannelTurn, requireThreadId, waitForStarter } from "./outbound.ts";
 import { FIXTURE_PROJECT_PATHS } from "./project-fixtures.ts";
@@ -166,6 +172,7 @@ async function assertChannelSessionHandedOff(
   assertStarterCalls(ctx, parentCalls, opts.threadId);
   const forbidden = parentCalls.filter(
     (call) =>
+      readsDeveloperInstructions(call) ||
       readsFile(call, "DEVELOPERS.md") ||
       readsFile(call, "README.md") ||
       invokesAligndevCode(call) ||
