@@ -27,8 +27,8 @@ export type {
   ConfigFileLocation,
   WorkspaceConfigReport,
 } from "./config.js";
-export { resolveWorkspaceStorage } from "./storage.js";
-export type { WorkspaceStorage, WorkspaceStorageSelection } from "./storage.js";
+export { resolveWorkspaceStorage, runtimeDirForTarget } from "./storage.js";
+export type { WorkspaceStorage, WorkspaceStorageSelection, RuntimePathInput } from "./storage.js";
 export { adaptWorkspaceManifest } from "./manifest-adapter.js";
 export type { ManifestAdapters, ManifestAdapterOptions } from "./manifest-adapter.js";
 export { executeCommand } from "./command-executor.js";
@@ -49,7 +49,11 @@ export type {
   ResolvedSpawnServer,
   SpawnCommand,
 } from "./server-descriptor.js";
-export { readWorkspaceInventory, selectWorkspaceRecord } from "./inventory.js";
+export {
+  readWorkspaceInventory,
+  selectWorkspaceRecord,
+  workspaceCandidatePaths,
+} from "./inventory.js";
 export type { WorkspaceInventory, WorkspaceRecord } from "./inventory.js";
 export { runWorkspace } from "./workspace.js";
 export type { WorkspaceOutcome } from "./workspace.js";
@@ -87,6 +91,9 @@ export type {
   WorkspaceRecipe,
   WorkspaceStatus,
   RunFilesBasis,
+  StoredRegistry,
+  RuntimeOwner,
+  OwnershipClaim,
 } from "./workspaces.js";
 export {
   readDevServers,
@@ -124,6 +131,25 @@ export type {
 } from "./file-entries.js";
 
 export { assertRegistryOwnership } from "./registry-ownership.js";
+export type { RegistryOwner } from "./registry-ownership.js";
+export {
+  assertRuntimeOwnership,
+  claimRuntime,
+  releaseRuntimeResources,
+  retainedRuntime,
+  claimRuntimeDisposal,
+  disposeRuntime,
+  inspectKnownWorkspaceState,
+} from "./runtime-ownership.js";
+export type { RuntimeDisposal, KnownWorkspaceState } from "./runtime-ownership.js";
+export {
+  createPreparationOwner,
+  publishPreparationOwner,
+  adoptPreparationOwner,
+  settlePreparationOwner,
+  recoverPreparationForCleanup,
+} from "./preparation-ownership.js";
+export { recoverStartupForCleanup } from "./startup-ownership.js";
 export { runDevServer } from "./dev-server.js";
 export type {
   DevServerConfig,

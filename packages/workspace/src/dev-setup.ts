@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { resolve } from "node:path";
 
 import { assertNoPendingCleanup, findOwnEntry } from "./dev-servers-registry.js";
 import { assertDistinctDestinations, assertFileDestination } from "./file-destinations.js";
@@ -18,6 +19,7 @@ import {
   allocateWorkspaceName,
   assertWorkspaceRecipe,
   assertWorkspaceCleanupComplete,
+  assertRuntimeAvailable,
   type WorkspaceRecipe,
   findWorkspaceByPath,
   readWorkspaces,
@@ -88,6 +90,7 @@ export async function runDevSetup(input: DevSetupInput): Promise<DevSetupResult>
   assertDistinctDestinations(
     worktree.currentWorktree,
     input.runFiles.map((entry) => entry.path),
+    resolve(mainWorktree, registryDir),
   );
   assertNoPendingCleanup(mainWorktree, registryDir, worktree.currentWorktree);
   if (options.resetPorts) refuseWhileRunning(mainWorktree, registryDir, worktree.currentWorktree);
@@ -144,6 +147,7 @@ async function ensureMainEntry(
   recipe: WorkspaceRecipe,
 ): Promise<ResolvedWorkspace> {
   return updateWorkspaces(mainWorktree, registryDir, (registry) => {
+    assertRuntimeAvailable(registry, mainWorktree);
     const existing = findWorkspaceByPath(registry, mainWorktree);
     assertWorkspaceCleanupComplete(existing?.entry);
     if (existing?.entry.main === true) {
@@ -200,7 +204,7 @@ export function buildWorktreeReadyMessage(input: {
   if (entry.status === "ready") return { ok: true };
   if (entry.status === "pending" && input.acceptPending === true) return { ok: true };
   const ws = pm.workspace.withArgs;
-  const logPath = setupLogPath(worktreePath, runtimeDir);
+  const logPath = setupLogPath(resolve(worktreePath, runtimeDir));
   if (entry.status === "pending") {
     const elapsed = formatDuration(now - Date.parse(entry.createdAt));
     return {
@@ -294,12 +298,19 @@ async function writeRunFiles(
     !sameValues(written.ports, basis.ports) ||
     !sameValues(written.inputs, basis.inputs);
   const rewrite = !beforeStart || changed;
-  const entries = rewrite ? regeneratedRunFiles(input.runFiles, ctx) : input.runFiles;
+  const entries = rewrite
+    ? regeneratedRunFiles(
+        input.runFiles,
+        ctx,
+        resolve(input.worktree.mainWorktree, input.registryDir),
+      )
+    : input.runFiles;
   const tee = beforeStart
     ? (msg: string) => outputOf(input).diagnostic(rewriteWarning(written, basis, msg))
     : outputOf(input).text;
   await storeRunFilesBasis(input, ctx.currentWorktree, undefined);
   await seedFiles({
+    registryDir: resolve(input.worktree.mainWorktree, input.registryDir),
     entries,
     ctx,
     existing: rewrite ? "patch" : "keep",
@@ -330,6 +341,7 @@ async function inputFingerprints(
 async function* regeneratedRunFiles(
   entries: RunFileEntry[],
   ctx: RunFileContext,
+  registryDir: string,
 ): AsyncGenerator<RunFileEntry> {
   for (const entry of entries) {
     const { source } = entry;
@@ -338,7 +350,7 @@ async function* regeneratedRunFiles(
       continue;
     }
     ctx.signal?.throwIfAborted();
-    assertFileDestination(ctx.currentWorktree, entry.path);
+    assertFileDestination(ctx.currentWorktree, entry.path, registryDir);
     entry.validateDestination?.(ctx);
     const content =
       typeof source.content === "function" ? await source.content(ctx) : source.content;

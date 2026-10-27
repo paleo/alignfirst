@@ -3,7 +3,12 @@ import { resolve } from "node:path";
 
 import { WorkspaceError } from "./errors.js";
 import { canonicalPath, readRepository, type GitContext } from "./git.js";
-import { findWorkspaceByPath, readWorkspaces } from "./workspaces.js";
+import {
+  findWorkspaceByPath,
+  readWorkspaces,
+  type RuntimeOwner,
+  type WorkspacesRegistry,
+} from "./workspaces.js";
 
 export interface WorkspaceInventory {
   mainWorktree: string;
@@ -22,6 +27,7 @@ export interface WorkspaceRecord {
   recipe: "defaults" | "manifest" | null;
   ports: Record<string, number>;
   devSetupFailure: string | null;
+  runtime?: RuntimeOwner;
 }
 
 /** A read-only exact-path union; neither Git nor workspace registrations are repaired. */
@@ -31,20 +37,23 @@ export function readWorkspaceInventory(
 ): WorkspaceInventory {
   const repo = readRepository(source);
   const registry = readWorkspaces(repo.mainWorktree, registryDir);
-  const paths = new Set([
-    ...repo.worktrees.map((tree) => tree.path),
-    ...Object.values(registry.workspaces).map((entry) => canonicalPath(entry.worktree)),
-  ]);
+  const paths = workspaceCandidatePaths(
+    repo.worktrees.map((tree) => tree.path),
+    registry,
+  );
   const workspaces = [...paths]
     .map((path): WorkspaceRecord => {
       const tree = repo.worktrees.find((candidate) => candidate.path === path);
       const found = findWorkspaceByPath(registry, path);
       const entry = found?.entry;
+      const runtime = Object.values(registry.runtimeOwners ?? {}).find(
+        (owner) => owner.worktree === path,
+      );
       return {
         path,
         name: found?.name ?? null,
         branch: tree?.branch ?? null,
-        main: tree?.main ?? entry?.main ?? false,
+        main: tree?.main ?? entry?.main ?? runtime?.main ?? false,
         exists: tree?.exists ?? existsSync(path),
         locked: tree?.locked ?? false,
         prunable: tree?.prunable ?? false,
@@ -52,10 +61,25 @@ export function readWorkspaceInventory(
         recipe: entry?.recipe.kind ?? null,
         ports: entry?.ports ?? {},
         devSetupFailure: entry?.devSetupFailure?.message ?? null,
+        runtime,
       };
     })
     .sort((a, b) => Number(b.main) - Number(a.main) || a.path.localeCompare(b.path));
   return { mainWorktree: repo.mainWorktree, workspaces };
+}
+
+/** Exact-path candidates include runtime-only identities without inventing a registration. */
+export function workspaceCandidatePaths(
+  gitPaths: string[],
+  registry: WorkspacesRegistry,
+): string[] {
+  return [
+    ...new Set([
+      ...gitPaths.map(canonicalPath),
+      ...Object.values(registry.workspaces).map((entry) => canonicalPath(entry.worktree)),
+      ...Object.values(registry.runtimeOwners ?? {}).map((owner) => owner.worktree),
+    ]),
+  ];
 }
 
 export function selectWorkspaceRecord(

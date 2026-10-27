@@ -6,6 +6,10 @@ import { WorkspaceError } from "./errors.js";
 import { wsCmd } from "./invocation.js";
 import { readRegistry, writeRegistry } from "./registry-storage.js";
 import { withRegistryLock } from "./registry-lock.js";
+import { assertDirectoryPath, registryOwner, type RegistryOwner } from "./registry-ownership.js";
+import { canonicalPath } from "./git.js";
+import { resolveWorkspaceStorage } from "./storage.js";
+import { isProcessAlive } from "./process-control.js";
 
 export const REGISTRY_SUBDIR = "workspace-registry";
 
@@ -21,12 +25,44 @@ const FAILURE_SCHEMA = {
   required: ["at", "message"],
   properties: { at: { type: "string", format: "date-time" }, message: { type: "string" } },
 };
+const CLAIM_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["pid", "token"],
+  properties: { pid: { type: "integer", minimum: 1 }, token: { type: "string", minLength: 1 } },
+};
 const REGISTRY_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["version", "workspaces"],
+  required: ["version", "storage", "workspaces", "runtimeOwners"],
   properties: {
     version: { const: REGISTRY_VERSION },
+    storage: {
+      type: "object",
+      additionalProperties: false,
+      required: ["in", "mainWorktree", "registryDir"],
+      properties: {
+        in: { enum: ["project", "companion"] },
+        mainWorktree: { type: "string", pattern: "^/" },
+        registryDir: { type: "string", pattern: "^/" },
+      },
+    },
+    runtimeOwners: {
+      type: "object",
+      additionalProperties: {
+        type: "object",
+        additionalProperties: false,
+        required: ["worktree", "runtimeDir", "main", "generation", "state"],
+        properties: {
+          worktree: { type: "string", pattern: "^/" },
+          runtimeDir: { type: "string", pattern: "^/" },
+          main: { type: "boolean" },
+          generation: { type: "string", minLength: 1 },
+          state: { enum: ["active", "retained", "deletionPending"] },
+          deletionClaim: CLAIM_SCHEMA,
+        },
+      },
+    },
     workspaces: {
       type: "object",
       additionalProperties: {
@@ -59,6 +95,7 @@ const REGISTRY_SCHEMA = {
           },
           failure: FAILURE_SCHEMA,
           cleanupPending: { type: "boolean" },
+          preparationOwner: CLAIM_SCHEMA,
           main: { type: "boolean" },
           neverFinalized: { type: "boolean" },
           ports: PORTS_SCHEMA,
@@ -85,6 +122,22 @@ const REGISTRY_SCHEMA = {
 /** One entry per normalized worktree path, keyed by its opaque registered workspace name. */
 export interface WorkspacesRegistry {
   workspaces: Record<string, WorkspaceEntry>;
+  storage?: RegistryOwner;
+  runtimeOwners?: Record<string, RuntimeOwner>;
+}
+
+export interface RuntimeOwner {
+  worktree: string;
+  runtimeDir: string;
+  main: boolean;
+  generation: string;
+  state: "active" | "retained" | "deletionPending";
+  deletionClaim?: OwnershipClaim;
+}
+
+export interface OwnershipClaim {
+  pid: number;
+  token: string;
 }
 
 export interface WorkspaceEntry {
@@ -95,6 +148,7 @@ export interface WorkspaceEntry {
   failure?: { at: string; message: string };
   /** Destructive workspace cleanup must succeed before any new preparation or startup. */
   cleanupPending?: boolean;
+  preparationOwner?: OwnershipClaim;
   /** `true` for the main-worktree entry. Absent on linked entries. */
   main?: boolean;
   /** `true` on a main entry that `dev setup` created before any `workspace setup` finalized it. */
@@ -123,9 +177,11 @@ export interface RunFilesBasis {
 }
 
 /** The registry as `workspaces.json` holds it. */
-interface StoredRegistry {
+export interface StoredRegistry {
   version: 4;
+  storage: RegistryOwner;
   workspaces: Record<string, WorkspaceEntry>;
+  runtimeOwners: Record<string, RuntimeOwner>;
 }
 
 /** The workspace a command acts on, resolved from the cwd. */
@@ -142,7 +198,7 @@ export function registryDirFor(runtimeDir: string): string {
 }
 
 export function workspacesFilePath(mainWorktree: string, registryDir: string): string {
-  return join(mainWorktree, registryDir, WORKSPACES_FILENAME);
+  return resolve(mainWorktree, registryDir, WORKSPACES_FILENAME);
 }
 
 /** Main relocation is in-memory until the next locked write; linked orphans retain identity. */
@@ -157,7 +213,7 @@ interface LoadedRegistry {
 
 function loadWorkspaces(mainWorktree: string, registryDir: string): LoadedRegistry {
   const filePath = workspacesFilePath(mainWorktree, registryDir);
-  const retired = join(mainWorktree, registryDir, "slots.json");
+  const retired = resolve(mainWorktree, registryDir, "slots.json");
   if (existsSync(retired))
     throw new WorkspaceError(
       `Unsupported retired registry ${retired}. Account for its services and resources before explicitly upgrading state.`,
@@ -165,16 +221,25 @@ function loadWorkspaces(mainWorktree: string, registryDir: string): LoadedRegist
   const stored = readRegistry<StoredRegistry>(
     filePath,
     REGISTRY_SCHEMA,
-    { version: 4, workspaces: {} },
+    {
+      version: 4,
+      storage: registryOwner(mainWorktree, registryDir),
+      workspaces: {},
+      runtimeOwners: {},
+    },
     mainWorktree,
   );
+  validateRuntimeOwners(stored, filePath);
   const workspaces: Record<string, WorkspaceEntry> = Object.create(null);
   let mainCount = 0;
   for (const [name, entry] of Object.entries(stored.workspaces)) {
     if (entry.main === true) ++mainCount;
     workspaces[name] = {
       ...entry,
-      worktree: entry.main === true ? resolve(mainWorktree) : resolve(entry.worktree),
+      worktree:
+        entry.main === true && stored.storage.in === "project"
+          ? canonicalPath(mainWorktree)
+          : canonicalPath(entry.worktree),
     };
   }
   if (
@@ -188,9 +253,64 @@ function loadWorkspaces(mainWorktree: string, registryDir: string): LoadedRegist
   }
   const main = Object.entries(workspaces).find(([, entry]) => entry.main === true);
   return {
-    registry: { workspaces },
+    registry: {
+      workspaces,
+      storage: registryOwner(mainWorktree, registryDir),
+      runtimeOwners: stored.runtimeOwners,
+    },
     originalMainPath: main === undefined ? undefined : stored.workspaces[main[0]].worktree,
   };
+}
+
+function validateRuntimeOwners(stored: StoredRegistry, path: string): void {
+  const owner = stored.storage;
+  const fail = () => {
+    throw new WorkspaceError(
+      `Invalid registry ${path}: conflicting runtime ownership. Preserve state and account for resources before explicit recovery.`,
+    );
+  };
+  if (owner.in === "project" && Object.keys(stored.runtimeOwners).length !== 0) fail();
+  const targets = new Set<string>();
+  const destinations = new Set<string>();
+  for (const [id, runtime] of Object.entries(stored.runtimeOwners)) {
+    const expected = resolveWorkspaceStorage(
+      {
+        in: "companion",
+        mainWorktree: owner.mainWorktree,
+        companionDir: resolve(owner.registryDir, "../.."),
+      },
+      runtime.worktree,
+    );
+    if (
+      runtime.worktree !== canonicalPath(runtime.worktree) ||
+      runtime.runtimeDir !== expected.runtimeDir ||
+      basename(expected.runtimeDir) !== id ||
+      runtime.main !== (runtime.worktree === owner.mainWorktree) ||
+      targets.has(runtime.worktree) ||
+      destinations.has(runtime.runtimeDir) ||
+      (runtime.deletionClaim !== undefined && runtime.state !== "deletionPending")
+    )
+      fail();
+    assertDirectoryPath(resolve(owner.registryDir, "../.."), runtime.runtimeDir);
+    targets.add(runtime.worktree);
+    destinations.add(runtime.runtimeDir);
+  }
+  const workspacePaths = new Set<string>();
+  let mainCount = 0;
+  for (const entry of Object.values(stored.workspaces)) {
+    if (entry.worktree !== canonicalPath(entry.worktree))
+      throw new WorkspaceError(
+        `Invalid registry ${path}: noncanonical worktree identity. Preserve state and recover explicitly.`,
+      );
+    if (entry.main === true) ++mainCount;
+    if (workspacePaths.has(canonicalPath(entry.worktree)) || mainCount > 1)
+      throw new WorkspaceError(
+        `Invalid registry ${path}: duplicate worktree identities. Repair explicitly before mutation.`,
+      );
+    workspacePaths.add(canonicalPath(entry.worktree));
+    if (owner.in === "companion" && entry.main === true && entry.worktree !== owner.mainWorktree)
+      fail();
+  }
 }
 
 /**
@@ -202,8 +322,14 @@ export function writeWorkspaces(
   registryDir: string,
   registry: WorkspacesRegistry,
 ): void {
-  const stored: StoredRegistry = { version: REGISTRY_VERSION, workspaces: registry.workspaces };
-  loadWorkspaces(mainWorktree, registryDir);
+  const previous = loadWorkspaces(mainWorktree, registryDir).registry;
+  const stored: StoredRegistry = {
+    version: REGISTRY_VERSION,
+    storage: registryOwner(mainWorktree, registryDir),
+    workspaces: registry.workspaces,
+    runtimeOwners: registry.runtimeOwners ?? previous.runtimeOwners ?? {},
+  };
+  validateRuntimeOwners(stored, workspacesFilePath(mainWorktree, registryDir));
   writeRegistry(
     workspacesFilePath(mainWorktree, registryDir),
     stored,
@@ -220,7 +346,8 @@ export async function updateWorkspaces<T>(
 ): Promise<T> {
   return withRegistryLock(mainWorktree, registryDir, async () => {
     const { registry, originalMainPath } = loadWorkspaces(mainWorktree, registryDir);
-    reconcileMainIdentity(registry, mainWorktree, originalMainPath);
+    if (registry.storage?.in === "project")
+      reconcileMainIdentity(registry, mainWorktree, originalMainPath);
     const result = await mutate(registry);
     writeWorkspaces(mainWorktree, registryDir, registry);
     return result;
@@ -246,6 +373,7 @@ export interface RegisterWorkspaceInput {
   registryDir: string;
   isMainWorktree: boolean;
   recipe: WorkspaceRecipe;
+  preparationOwner?: OwnershipClaim;
   /** When `true`, an existing `ready` workspace is reset to `pending` so the re-finalize is observable. */
   force?: boolean;
 }
@@ -258,13 +386,20 @@ export interface RegisteredWorkspace {
 export async function registerWorkspace(
   input: RegisterWorkspaceInput,
 ): Promise<RegisteredWorkspace> {
-  const worktree = resolve(input.currentWorktree);
+  const worktree = canonicalPath(input.currentWorktree);
   return updateWorkspaces(input.mainWorktree, input.registryDir, (registry) => {
     const found = findWorkspaceByPath(registry, worktree);
     const name = found?.name ?? allocateWorkspaceName(registry.workspaces, worktree);
     const existing = found?.entry;
     if (existing) assertWorkspaceRecipe(worktree, existing.recipe, input.recipe);
     assertWorkspaceCleanupComplete(existing);
+    assertRuntimeAvailable(registry, worktree);
+    if (existing?.preparationOwner) {
+      const reason = isProcessAlive(existing.preparationOwner.pid)
+        ? "already in progress"
+        : "abandoned; complete explicit cleanup before setup";
+      throw new WorkspaceError(`Preparation ${reason} for ${worktree}.`);
+    }
 
     const entry: WorkspaceEntry = {
       worktree,
@@ -278,11 +413,22 @@ export async function registerWorkspace(
       devSetupAt: existing?.devSetupAt,
       // A `devSetupFailure` is dropped: `workspace wait` reports only this setup's dev failure.
       recipe: input.recipe,
+      preparationOwner: input.preparationOwner,
     };
     if (input.isMainWorktree) entry.main = true;
     registry.workspaces[name] = entry;
     return { name, status: entry.status };
   });
+}
+
+export function assertRuntimeAvailable(registry: WorkspacesRegistry, worktree: string): void {
+  const runtime = Object.values(registry.runtimeOwners ?? {}).find(
+    (owner) => owner.worktree === canonicalPath(worktree),
+  );
+  if (runtime?.state === "deletionPending")
+    throw new WorkspaceError(
+      `Runtime deletion pending for ${worktree}. Retry explicit removal or prune before setup/start.`,
+    );
 }
 
 export function assertWorkspaceCleanupComplete(entry: WorkspaceEntry | undefined): void {
@@ -335,9 +481,9 @@ export function findWorkspaceByPath(
   registry: WorkspacesRegistry,
   worktree: string,
 ): WorkspacePathMatch | undefined {
-  const target = resolve(worktree);
+  const target = canonicalPath(worktree);
   const found = Object.entries(registry.workspaces).find(
-    ([, entry]) => resolve(entry.worktree) === target,
+    ([, entry]) => canonicalPath(entry.worktree) === target,
   );
   if (found) return { name: found[0], entry: found[1] };
 }
@@ -374,6 +520,8 @@ export async function markWorkspaceReady(
   await updateWorkspaces(mainWorktree, registryDir, (registry) => {
     const entry = findWorkspaceByPath(registry, target)?.entry;
     if (!entry) return;
+    if (entry.preparationOwner)
+      throw new WorkspaceError(`Preparation owner must settle ${worktree}.`);
     entry.status = "ready";
     delete entry.failure;
   });
@@ -389,6 +537,8 @@ export async function markWorkspaceFailed(
   await updateWorkspaces(mainWorktree, registryDir, (registry) => {
     const entry = findWorkspaceByPath(registry, target)?.entry;
     if (!entry) return;
+    if (entry.preparationOwner)
+      throw new WorkspaceError(`Preparation owner must settle ${worktree}.`);
     entry.status = "failed";
     entry.failure = { at: new Date().toISOString(), message };
   });

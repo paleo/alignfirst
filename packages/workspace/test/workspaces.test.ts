@@ -64,9 +64,16 @@ function entries() {
   return readWorkspaces(mainWorktree, registryDir).workspaces;
 }
 
-function raw(value: unknown) {
+function raw(value: Record<string, unknown>) {
   mkdirSync(join(mainWorktree, registryDir), { recursive: true });
-  writeFileSync(workspacesFilePath(mainWorktree, registryDir), JSON.stringify(value));
+  writeFileSync(
+    workspacesFilePath(mainWorktree, registryDir),
+    JSON.stringify({
+      storage: { in: "project", mainWorktree, registryDir: join(mainWorktree, registryDir) },
+      runtimeOwners: {},
+      ...value,
+    }),
+  );
 }
 
 function digest(value: string) {
@@ -76,10 +83,13 @@ function digest(value: string) {
 describe("workspace registration", () => {
   it("stores version 4, required provenance and pending preparation without allocating ports", async () => {
     expect(registryDir).toBe(".local-wt/workspace-registry");
-    expect(readWorkspaces(mainWorktree, registryDir)).toEqual({ workspaces: {} });
+    expect(readWorkspaces(mainWorktree, registryDir).workspaces).toEqual({});
+    expect(existsSync(join(mainWorktree, registryDir))).toBe(false);
     expect(await register("/repo/wt-a")).toEqual({ name: "wt-a", status: "pending" });
     expect(JSON.parse(stored())).toEqual({
       version: 4,
+      storage: { in: "project", mainWorktree, registryDir: join(mainWorktree, registryDir) },
+      runtimeOwners: {},
       workspaces: {
         "wt-a": {
           ...entry("/repo/wt-a", "pending"),
@@ -196,6 +206,7 @@ describe("registry format rejection", () => {
     },
     { ...entry("/old/wt"), recipe: { kind: "manifest", file: "alignfirst.json" } },
     entry("../relative"),
+    entry("/old/../noncanonical"),
     { ...entry("/old/wt"), runFilesWrittenWith: { ports: {}, inputs: { secret: "plaintext" } } },
   ])(
     "preserves bytes for missing provenance, retired fields and malformed entries",

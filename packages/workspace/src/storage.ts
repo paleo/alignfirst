@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 import { canonicalPath } from "./git.js";
 import { ConfigError } from "./errors.js";
@@ -43,6 +43,18 @@ export function resolveWorkspaceStorage(
     runtimeDir,
     ...(companionDir === undefined ? {} : { companionDir }),
   };
+}
+
+export interface RuntimePathInput {
+  runtimeDir: string;
+  storage?: WorkspaceStorage;
+}
+
+/** Resolve the selected target, not the command's caller, for every log/progress path. */
+export function runtimeDirForTarget(config: RuntimePathInput, target: string): string {
+  return config.storage === undefined
+    ? resolve(canonicalPath(target), config.runtimeDir)
+    : resolveWorkspaceStorage(config.storage, target).runtimeDir;
 }
 
 function worktreeId(path: string): string {

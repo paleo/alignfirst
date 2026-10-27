@@ -11,11 +11,12 @@ import {
   statSync,
   writeSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { WorkspaceError } from "./errors.js";
 import { isProcessAlive } from "./process-control.js";
-import { assertLocalRegistryPath } from "./registry-ownership.js";
+import { assertRegistryPath, assertSelectedRegistry } from "./registry-ownership.js";
+import { claimRegistryStorage } from "./registry-storage.js";
 
 const LOCK_FILENAME = "workspaces.lock";
 const RETRY_MS = 50;
@@ -39,14 +40,17 @@ export async function withRegistryLock<T>(
   fn: () => T | Promise<T>,
   timings: LockTimings = {},
 ): Promise<T> {
-  const lockPath = join(mainWorktree, registryDir, LOCK_FILENAME);
+  const directory = resolve(mainWorktree, registryDir);
+  assertSelectedRegistry(mainWorktree, directory);
+  const lockPath = join(directory, LOCK_FILENAME);
   const content = `${process.pid}:${randomBytes(8).toString("hex")}`;
   await acquireLock(mainWorktree, lockPath, content, timings);
   try {
-    assertLocalRegistryPath(mainWorktree, lockPath);
+    assertSelectedRegistry(mainWorktree, directory);
+    claimRegistryStorage(mainWorktree, directory);
     return await fn();
   } finally {
-    assertLocalRegistryPath(mainWorktree, lockPath);
+    assertRegistryPath(mainWorktree, directory, lockPath);
     releaseLock(lockPath, content);
   }
 }
@@ -60,10 +64,10 @@ async function acquireLock(
   const retryMs = timings.retryMs ?? RETRY_MS;
   const staleMs = timings.staleMs ?? STALE_MS;
   const deadline = Date.now() + (timings.timeoutMs ?? TIMEOUT_MS);
-  assertLocalRegistryPath(mainWorktree, lockPath);
+  assertRegistryPath(mainWorktree, dirname(lockPath), lockPath);
   mkdirSync(dirname(lockPath), { recursive: true });
   for (;;) {
-    assertLocalRegistryPath(mainWorktree, lockPath);
+    assertRegistryPath(mainWorktree, dirname(lockPath), lockPath);
     if (tryCreateLock(lockPath, content)) return;
     const staleContent = findStaleLock(lockPath, staleMs);
     if (staleContent !== undefined) {

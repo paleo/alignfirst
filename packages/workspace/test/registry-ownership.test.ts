@@ -85,6 +85,13 @@ describe("kernel-owned file destinations", () => {
       expect(() => assertFileDestination(main, path)).toThrow(/registry/i);
     }
     expect(readFileSync(join(registry, "workspaces.json"), "utf8")).toBe("original");
+    const selected = join(foreign, registryDir);
+    const before = readFileSync(join(selected, "workspaces.json"), "utf8");
+    symlinkSync(selected, join(main, "selected-registry"));
+    expect(() => assertFileDestination(main, "selected-registry/new", selected)).toThrow(
+      /registry/i,
+    );
+    expect(readFileSync(join(selected, "workspaces.json"), "utf8")).toBe(before);
   });
 
   it("allows application sidecars elsewhere in local runtime storage", async () => {
@@ -218,7 +225,7 @@ describe("main registry ownership", () => {
       writeWorkspaces(main, registryDir, { workspaces: {} });
       writeDevServers(main, registryDir, { servers: [] });
     });
-    expect(readWorkspaces(main, registryDir)).toEqual({ workspaces: {} });
+    expect(readWorkspaces(main, registryDir).workspaces).toEqual({});
     expect(readDevServers(main, registryDir)).toEqual({ servers: [] });
     expect(() => assertFileDestination(linked, `${registryDir}/workspaces.json`)).toThrow(
       /registry/i,

@@ -5,12 +5,12 @@ import { WorkspaceError } from "./errors.js";
 import { assertFileDestination } from "./file-destinations.js";
 import { devCmd, wsCmd } from "./invocation.js";
 
-export function setupLogPath(worktreeRoot: string, runtimeDir: string): string {
-  return join(worktreeRoot, runtimeDir, "logs", "workspace-setup.log");
+export function setupLogPath(runtimeDir: string): string {
+  return join(runtimeDir, "logs", "workspace-setup.log");
 }
 
-export function setupProgressPath(worktreeRoot: string, runtimeDir: string): string {
-  return join(worktreeRoot, runtimeDir, "logs", "workspace-setup.progress");
+export function setupProgressPath(runtimeDir: string): string {
+  return join(runtimeDir, "logs", "workspace-setup.progress");
 }
 
 export function patchEnvFile(content: string, patches: Record<string, string>): string {
@@ -92,6 +92,7 @@ export type ResolvedFileSource = { path: string } | { content: string };
 
 export interface CopyAndPatchOptions {
   currentWorktree: string;
+  registryDir?: string;
   /** Target path, relative to `currentWorktree`. Also the label of the outcome. */
   relPath: string;
   /** Called only when the target is (re)seeded from its source. */
@@ -119,7 +120,7 @@ export async function copyAndPatchFile(options: CopyAndPatchOptions): Promise<Co
   const targetPath = join(options.currentWorktree, relPath);
   const validate = (): void => {
     options.signal?.throwIfAborted();
-    assertFileDestination(options.currentWorktree, relPath);
+    assertFileDestination(options.currentWorktree, relPath, options.registryDir);
     options.validateDestination?.();
   };
   validate();

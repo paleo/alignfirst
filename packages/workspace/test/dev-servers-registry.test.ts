@@ -32,6 +32,7 @@ import {
 } from "../src/dev-servers-registry.js";
 
 import { claimStartup, releaseStartup } from "../src/startup-ownership.js";
+import { writeWorkspaces } from "../src/workspaces.js";
 
 function entry(
   name: string,
@@ -109,6 +110,7 @@ describe("evictOldest", () => {
 
   beforeEach(() => {
     mainWorktree = mkdtempSync(join(tmpdir(), "wt-env-test-"));
+    writeWorkspaces(mainWorktree, registryDir, { workspaces: {} });
   });
 
   afterEach(() => {
@@ -153,7 +155,10 @@ describe("evictOldest", () => {
     expect(
       JSON.parse(readFileSync(devServersFilePath(mainWorktree, registryDir), "utf8")).version,
     ).toBe(1);
-    expect(readdirSync(join(mainWorktree, registryDir))).toEqual(["dev-servers.json"]);
+    expect(readdirSync(join(mainWorktree, registryDir))).toEqual([
+      "dev-servers.json",
+      "workspaces.json",
+    ]);
   });
 
   it("keeps a slow live startup exclusive without retaining the registry lock", async () => {

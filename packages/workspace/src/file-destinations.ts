@@ -4,7 +4,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 import { ConfigError } from "./errors.js";
 
-export function assertFileDestination(root: string, path: string): string {
+export function assertFileDestination(root: string, path: string, registryDir?: string): string {
   const target = resolve(root, path);
   if (path.includes("\0") || isAbsolute(path) || !isWithin(resolve(root), target)) {
     throw new ConfigError(`File destination escapes worktree: ${path}.`);
@@ -12,13 +12,16 @@ export function assertFileDestination(root: string, path: string): string {
   if (relative(resolve(root), target).split(sep)[0] === ".git") {
     throw new ConfigError(`Refusing Git metadata destination: ${path}.`);
   }
-  const registry = resolve(root, ".local-wt", "workspace-registry");
-  if (overlaps(registry, target)) {
-    throw new ConfigError(`Refusing kernel-owned registry destination: ${path}.`);
-  }
+  const registries = [
+    resolve(root, ".local-wt", "workspace-registry"),
+    ...(registryDir === undefined ? [] : [registryDir]),
+  ];
   const canonical = canonicalDestination(target);
-  if (overlaps(canonicalDestination(registry), canonical)) {
-    throw new ConfigError(`Refusing kernel-owned registry destination through a link: ${path}.`);
+  for (const registry of registries) {
+    if (overlaps(registry, target) || overlaps(canonicalDestination(registry), canonical))
+      throw new ConfigError(
+        `Refusing kernel-owned registry destination or canonical alias: ${path}.`,
+      );
   }
   if (!isWithin(realpathSync(root), canonical)) {
     throw new ConfigError(`File destination escapes worktree through a link: ${path}.`);
@@ -32,10 +35,14 @@ export function assertFileDestination(root: string, path: string): string {
   return canonical;
 }
 
-export function assertDistinctDestinations(root: string, paths: string[]): void {
+export function assertDistinctDestinations(
+  root: string,
+  paths: string[],
+  registryDir?: string,
+): void {
   const destinations = new Set<string>();
   for (const path of paths) {
-    const target = assertFileDestination(root, path);
+    const target = assertFileDestination(root, path, registryDir);
     if (destinations.has(target)) throw new ConfigError(`Overlapping file destination: ${path}.`);
     destinations.add(target);
   }

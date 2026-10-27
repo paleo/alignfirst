@@ -52,6 +52,8 @@ import {
 import { type DevPortsConfig, type ResolvedDevPorts, resolveDevPortsConfig } from "./ports.js";
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
 import { assertRegistryOwnership } from "./registry-ownership.js";
+import { runtimeDirForTarget, resolveWorkspaceStorage, type WorkspaceStorage } from "./storage.js";
+import { assertRuntimeOwnership } from "./runtime-ownership.js";
 import { resolveServers } from "./server-descriptor.js";
 import type {
   CallbackServer,
@@ -79,6 +81,7 @@ export type { CallbackServer, ServerContext, ServerDescriptor, SpawnServer };
 /** Configuration accepted by {@link runDevServer}. */
 export interface DevServerConfig {
   recipe: WorkspaceRecipe;
+  storage?: WorkspaceStorage;
   /** Per-worktree runtime directory, relative to the worktree root (e.g. `.local-wt`). */
   runtimeDir: string;
   /** Maximum concurrent dev-servers across all worktrees. Omit for no limit. */
@@ -111,8 +114,8 @@ export interface DevServerConfig {
 
 export type DevSummaryFormatter = (ctx: DevServerSummaryContext) => string | Promise<string>;
 
-function logFileFor(cwd: string, runtimeDir: string, name: string): string {
-  return resolve(cwd, runtimeDir, "logs", `${encodeURIComponent(name)}.log`);
+function logFileFor(runtimeDir: string, name: string): string {
+  return resolve(runtimeDir, "logs", `${encodeURIComponent(name)}.log`);
 }
 
 /**
@@ -149,8 +152,13 @@ export async function runDevServer(
   if (registered && operation.command.kind !== "list" && operation.command.kind !== "status") {
     assertWorkspaceRecipe(registered.entry.worktree, registered.entry.recipe, config.recipe);
   }
-  if (["foreground", "up", "restart", "setup"].includes(operation.command.kind))
+  if (["foreground", "up", "restart", "setup"].includes(operation.command.kind)) {
     assertWorkspaceCleanupComplete(registered?.entry);
+    if (config.storage)
+      assertRuntimeOwnership(
+        resolveWorkspaceStorage(config.storage, kernel.worktree.currentWorktree),
+      );
+  }
   await dispatch(operation.command, kernel);
 }
 
@@ -160,7 +168,7 @@ interface DevKernel extends WorkspaceOperation {
   /** The validated `ports` group. `undefined` for a portless dev-server. */
   ports?: ResolvedDevPorts;
   worktree: WorktreeContext;
-  /** The registry directory, relative to a worktree root. */
+  /** Absolute shared registry address, independent of the target runtime directory. */
   registryDir: string;
 }
 
@@ -177,7 +185,9 @@ function createKernel(config: DevServerConfig, operation: WorkspaceOperation): D
     config: { ...config, output: operation.output },
     ports,
     worktree,
-    registryDir: registryDirFor(config.runtimeDir),
+    registryDir:
+      config.storage?.registryDir ??
+      resolve(worktree.mainWorktree, registryDirFor(config.runtimeDir)),
   };
 }
 
@@ -246,7 +256,7 @@ function devSetupInput(kernel: DevKernel, options: DevSetupOptions): DevSetupInp
     output: kernel.output,
     commands: kernel.commands,
     registryDir: kernel.registryDir,
-    runtimeDir: kernel.config.runtimeDir,
+    runtimeDir: runtimeDirForTarget(kernel.config, kernel.worktree.currentWorktree),
     ports: kernel.ports,
     runFiles: kernel.config.runFiles ?? [],
     runFilesInputs: kernel.config.runFilesInputs,
@@ -560,7 +570,10 @@ async function spawnAndAwait(
     ctx.signal?.throwIfAborted();
     config.output.text(`Starting ${server.name} dev server...`);
     if (server.kind === "spawn") {
-      state.spawnPids[server.name] = await spawnServer(server, config.runtimeDir, ctx.cwd);
+      state.spawnPids[server.name] = await spawnServer(
+        server,
+        runtimeDirForTarget(config, ctx.cwd),
+      );
     } else {
       try {
         await server.start(ctx);
@@ -577,7 +590,7 @@ async function spawnAndAwait(
   const spawnEntries = servers.filter((s): s is ResolvedSpawnServer => s.kind === "spawn");
   const pollables: PollableServer[] = spawnEntries.map((s) => ({
     name: s.name,
-    logFile: logFileFor(ctx.cwd, config.runtimeDir, s.name),
+    logFile: logFileFor(runtimeDirForTarget(config, ctx.cwd), s.name),
     detectReady: s.detectReady,
     detectError: s.detectError,
   }));
@@ -598,7 +611,7 @@ async function printStartSummary(
         server,
         port: server.port,
         pid: spawnPids[server.name],
-        logFile: logFileFor(workspace.worktree, config.runtimeDir, server.name),
+        logFile: logFileFor(runtimeDirForTarget(config, workspace.worktree), server.name),
       };
     }
     return { server };
@@ -613,7 +626,12 @@ async function printStartSummary(
       }),
     );
   } else {
-    defaultPrintSummary(workspace, summaryServers, config.runtimeDir, config.output);
+    defaultPrintSummary(
+      workspace,
+      summaryServers,
+      runtimeDirForTarget(config, workspace.worktree),
+      config.output,
+    );
   }
 }
 
@@ -632,7 +650,7 @@ function tailLogs(
   const names = Object.keys(spawnPids);
   const prefixed = names.length > 1;
   for (const name of names) {
-    const path = logFileFor(cwd, config.runtimeDir, name);
+    const path = logFileFor(runtimeDirForTarget(config, cwd), name);
     const prefix = prefixed ? `[${name}] ` : "";
     const offset =
       "fromStart" in mode ? 0 : replayTail(path, prefix, mode.replayLines, config.output.write);
@@ -925,17 +943,13 @@ function defaultPrintSummary(
     }
     const target = port === undefined ? `PID ${pid}` : `http://localhost:${port}/  (PID ${pid})`;
     output.text(`  ${server.name}: ${target}`);
-    output.text(`    log: ${logFileFor(workspace.worktree, runtimeDir, server.name)}`);
+    output.text(`    log: ${logFileFor(runtimeDir, server.name)}`);
   }
   output.text("");
 }
 
-async function spawnServer(
-  server: ResolvedSpawnServer,
-  runtimeDir: string,
-  cwd: string,
-): Promise<number> {
-  const logFile = logFileFor(cwd, runtimeDir, server.name);
+async function spawnServer(server: ResolvedSpawnServer, runtimeDir: string): Promise<number> {
+  const logFile = logFileFor(runtimeDir, server.name);
   mkdirSync(dirname(logFile), { recursive: true });
   const logFd = openSync(logFile, "w");
   const child = spawn(server.exec.command, server.exec.args, {

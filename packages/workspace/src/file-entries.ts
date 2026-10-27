@@ -107,6 +107,7 @@ export interface SeedLog {
 }
 
 export interface SeedFilesInput<C extends SetupContextBase> {
+  registryDir?: string;
   entries: Iterable<SeededFile<C>> | AsyncIterable<SeededFile<C>>;
   ctx: C;
   /** What happens to an existing file. */
@@ -129,6 +130,7 @@ export async function seedFiles<C extends SetupContextBase>(
       const { patch } = entry;
       const outcome = await copyAndPatchFile({
         currentWorktree: ctx.currentWorktree,
+        registryDir: input.registryDir,
         relPath: entry.path,
         resolveSource: () => resolveFileSource(entry, ctx),
         patch: patch ? (content: string) => patch(content, ctx) : undefined,

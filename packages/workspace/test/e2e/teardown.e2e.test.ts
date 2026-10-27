@@ -918,7 +918,15 @@ function recordIdentity(repo: string, worktree: string, name: string): void {
     recipe: { kind: "manifest", file: "alignfirst.json", in: "project" },
   };
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, JSON.stringify({ ...registry, version: 4 }));
+  writeFileSync(
+    file,
+    JSON.stringify({
+      ...registry,
+      version: 4,
+      storage: { in: "project", mainWorktree: repo, registryDir: dirname(file) },
+      runtimeOwners: {},
+    }),
+  );
 }
 
 function writeDevEntries(repo: string, servers: DevServerEntry[]): void {

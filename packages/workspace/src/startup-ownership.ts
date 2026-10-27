@@ -1,10 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 
 import { WorkspaceError } from "./errors.js";
 import { isProcessAlive } from "./process-control.js";
 import { withRegistryLock } from "./registry-lock.js";
 import { readRegistry, writeRegistry } from "./registry-storage.js";
+import {
+  assertRuntimeAvailable,
+  assertWorkspaceCleanupComplete,
+  findWorkspaceByPath,
+  readWorkspaces,
+} from "./workspaces.js";
 
 const FILENAME = "dev-startups.json";
 const SCHEMA = {
@@ -35,7 +41,7 @@ export interface StartupOwner {
   pid: number;
 }
 
-interface StartupOwners {
+export interface StartupOwners {
   owners: StartupOwner[];
 }
 
@@ -46,8 +52,11 @@ export async function claimStartup(
   worktree: string,
 ): Promise<StartupOwner> {
   return withRegistryLock(mainWorktree, registryDir, () => {
-    const data = readOwners(mainWorktree, registryDir);
+    const data = readStartupOwners(mainWorktree, registryDir);
     const path = resolve(worktree);
+    const registry = readWorkspaces(mainWorktree, registryDir);
+    assertRuntimeAvailable(registry, path);
+    assertWorkspaceCleanupComplete(findWorkspaceByPath(registry, path)?.entry);
     const existing = data.owners.find((owner) => owner.worktree === path);
     if (existing && isProcessAlive(existing.pid)) {
       throw new WorkspaceError(`Dev-server startup already in progress for ${path}.`);
@@ -66,10 +75,10 @@ export function assertStartupOwner(
   registryDir: string,
   owner: StartupOwner,
 ): void {
-  const current = readOwners(mainWorktree, registryDir).owners.find(
+  const current = readStartupOwners(mainWorktree, registryDir).owners.find(
     (entry) => entry.worktree === owner.worktree,
   );
-  if (current?.id !== owner.id) {
+  if (current?.id !== owner.id || current.pid !== owner.pid || owner.pid !== process.pid) {
     throw new WorkspaceError(`Dev-server startup ownership lost for ${owner.worktree}.`);
   }
 }
@@ -79,17 +88,20 @@ export async function releaseStartup(
   registryDir: string,
   owner: StartupOwner,
 ): Promise<void> {
+  if (owner.pid !== process.pid) return;
   await withRegistryLock(mainWorktree, registryDir, () => {
-    const data = readOwners(mainWorktree, registryDir);
+    const data = readStartupOwners(mainWorktree, registryDir);
     data.owners = data.owners.filter(
-      (entry) => entry.worktree !== owner.worktree || entry.id !== owner.id,
+      (entry) =>
+        entry.worktree !== owner.worktree || entry.id !== owner.id || entry.pid !== owner.pid,
     );
     writeOwners(mainWorktree, registryDir, data);
   });
 }
 
-function readOwners(mainWorktree: string, registryDir: string): StartupOwners {
-  const path = join(mainWorktree, registryDir, FILENAME);
+export function readStartupOwners(mainWorktree: string, registryDir: string): StartupOwners {
+  readWorkspaces(mainWorktree, registryDir);
+  const path = resolve(mainWorktree, registryDir, FILENAME);
   const data = readRegistry<StartupOwners>(path, SCHEMA, { owners: [] }, mainWorktree);
   const paths = data.owners.map((owner) => resolve(owner.worktree));
   if (new Set(paths).size !== paths.length)
@@ -97,9 +109,36 @@ function readOwners(mainWorktree: string, registryDir: string): StartupOwners {
   return { owners: data.owners.map((owner) => ({ ...owner, worktree: resolve(owner.worktree) })) };
 }
 
+/** Call under the shared lock after establishing a workspace cleanup gate. */
+export function recoverStartupForCleanup(
+  mainWorktree: string,
+  registryDir: string,
+  worktree: string,
+): void {
+  const data = readStartupOwners(mainWorktree, registryDir);
+  const owner = data.owners.find((entry) => entry.worktree === resolve(worktree));
+  if (!owner) return;
+  if (isProcessAlive(owner.pid)) throw new WorkspaceError(`Live startup owns ${worktree}.`);
+  const registry = readWorkspaces(mainWorktree, registryDir);
+  const entry = findWorkspaceByPath(registry, worktree)?.entry;
+  const runtime = Object.values(registry.runtimeOwners ?? {}).find(
+    (record) => record.worktree === resolve(worktree),
+  );
+  if (
+    entry?.cleanupPending !== true &&
+    runtime?.state !== "deletionPending" &&
+    runtime?.state !== "retained"
+  )
+    throw new WorkspaceError(
+      `Persist a cleanup gate before recovering startup ownership for ${worktree}.`,
+    );
+  data.owners = data.owners.filter((entry) => entry.worktree !== resolve(worktree));
+  writeOwners(mainWorktree, registryDir, data);
+}
+
 function writeOwners(mainWorktree: string, registryDir: string, data: StartupOwners): void {
   writeRegistry(
-    join(mainWorktree, registryDir, FILENAME),
+    resolve(mainWorktree, registryDir, FILENAME),
     { version: 1, ...data },
     SCHEMA,
     mainWorktree,

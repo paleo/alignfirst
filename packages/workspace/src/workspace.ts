@@ -54,6 +54,8 @@ import { stopTarget } from "./target-stop.js";
 import { formatPorts } from "./ports.js";
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
 import { assertRegistryOwnership } from "./registry-ownership.js";
+import { runtimeDirForTarget, resolveWorkspaceStorage } from "./storage.js";
+import { assertRuntimeOwnership } from "./runtime-ownership.js";
 import {
   assertWorkspaceRecipe,
   assertWorkspaceCleanupComplete,
@@ -197,7 +199,7 @@ export interface PurgeContext {
 /** Per-invocation state shared by every command flow. */
 interface Kernel extends WorkspaceOperation {
   config: WorkspaceConfig;
-  /** The registry directory, relative to a worktree root. */
+  /** Absolute shared registry address, independent of the target runtime directory. */
   registryDir: string;
 }
 
@@ -232,8 +234,13 @@ export async function runWorkspace(
     return;
   }
   installedCliCommand(operation.invocation, []);
-  const kernel: Kernel = { ...operation, config, registryDir: registryDirFor(config.runtimeDir) };
   const ctx = detectWorktree(operation.cwd);
+  const kernel: Kernel = {
+    ...operation,
+    config,
+    registryDir:
+      config.storage?.registryDir ?? resolve(ctx.mainWorktree, registryDirFor(config.runtimeDir)),
+  };
   assertRegistryOwnership(ctx.mainWorktree, ctx.currentWorktree, kernel.registryDir);
   readWorkspaces(ctx.mainWorktree, kernel.registryDir);
   readDevServers(ctx.mainWorktree, kernel.registryDir);
@@ -437,6 +444,7 @@ async function runSetup(
         config.sharedDirs,
         config.gitignoredFiles.map(({ path }) => path),
         kernel.output.diagnostic,
+        kernel.registryDir,
       );
       config.signal?.throwIfAborted();
       await preparation.apply();
@@ -454,7 +462,13 @@ async function runSetup(
     force: command.force,
     recipe: config.recipe,
   });
-  const log = openSetupLog(setupCtx.currentWorktree, config.runtimeDir, run.verbose, kernel.output);
+  if (config.storage)
+    assertRuntimeOwnership(resolveWorkspaceStorage(config.storage, setupCtx.currentWorktree));
+  const log = openSetupLog(
+    runtimeDirForTarget(config, setupCtx.currentWorktree),
+    run.verbose,
+    kernel.output,
+  );
 
   // An error in this phase must not leave the entry `pending`: a plain `setup` retries a `failed` one.
   // A `ready` entry stays `ready`: the finalize outcome is unchanged and nothing forces a re-finalize.
@@ -548,18 +562,13 @@ interface SetupLog {
   verbose: (msg: string) => void;
 }
 
-function openSetupLog(
-  worktree: string,
-  runtimeDir: string,
-  verbose: boolean,
-  output: WorkspaceOutput,
-): SetupLog {
-  const path = setupLogPath(worktree, runtimeDir);
+function openSetupLog(runtimeDir: string, verbose: boolean, output: WorkspaceOutput): SetupLog {
+  const path = setupLogPath(runtimeDir);
   mkdirSync(dirname(path), { recursive: true });
   // Truncate any prior log so `workspace setup` retries start with a clean record (the previous run's
   // FAILED: banner would otherwise linger and produce false positives for grep-based tooling).
   writeFileSync(path, "");
-  rmSync(setupProgressPath(worktree, runtimeDir), { force: true });
+  rmSync(setupProgressPath(runtimeDir), { force: true });
   // Opened "a" so the same fd can be inherited by the detached finalize child.
   const fd = openSync(path, "a");
   const append = (msg: string): void => {
@@ -599,7 +608,13 @@ async function prepareWorktree(input: PrepareWorktreeInput): Promise<void> {
   config.signal?.throwIfAborted();
   if (!kernel.host) {
     linkSharedDirectories(setupCtx, config.sharedDirs, log.verbose);
-    linkWorkspaceRegistry(setupCtx, config.runtimeDir, log.verbose);
+    if (config.storage?.in !== "companion")
+      linkWorkspaceRegistry(
+        setupCtx,
+        kernel.registryDir,
+        runtimeDirForTarget(config, setupCtx.currentWorktree),
+        log.verbose,
+      );
   }
   const patchCtx: PatchContext = {
     name,
@@ -609,6 +624,7 @@ async function prepareWorktree(input: PrepareWorktreeInput): Promise<void> {
     signal: config.signal,
   };
   await seedFiles({
+    registryDir: kernel.registryDir,
     entries: config.gitignoredFiles,
     ctx: patchCtx,
     existing: command.force ? "reseed" : "patch",
@@ -650,8 +666,11 @@ async function runFinalize(
   verbose: boolean,
 ): Promise<void> {
   const { config, registryDir } = kernel;
-  const logPath = setupLogPath(ctx.currentWorktree, config.runtimeDir);
-  const progressPath = setupProgressPath(ctx.currentWorktree, config.runtimeDir);
+  if (config.storage)
+    assertRuntimeOwnership(resolveWorkspaceStorage(config.storage, ctx.currentWorktree));
+  const runtimeDir = runtimeDirForTarget(config, ctx.currentWorktree);
+  const logPath = setupLogPath(runtimeDir);
+  const progressPath = setupProgressPath(runtimeDir);
   if (kernel.host) {
     await validateMainBaseline(ctx, kernel.host, kernel.env);
     await kernel.host.validateWorkFiles(ctx.currentWorktree);
@@ -787,7 +806,7 @@ async function printWorktreeInfo(
   const entry = found?.entry;
 
   const status: WorkspaceStatus = entry?.status ?? "pending";
-  const setupLog = setupLogPath(worktreeForLog, config.runtimeDir);
+  const setupLog = setupLogPath(runtimeDirForTarget(config, worktreeForLog));
   const now = Date.now();
   const isMainWorktree = entry?.main ?? target.main;
   const targetWorktree = entry?.worktree ?? ctx.currentWorktree;
@@ -858,7 +877,7 @@ function printDevServerBlock(
   for (const [name, pid] of liveEntries) {
     output.text(`  ${name}: PID ${pid}`);
     output.text(
-      `    log: ${join(targetWorktree, config.runtimeDir, "logs", `${encodeURIComponent(name)}.log`)}`,
+      `    log: ${join(runtimeDirForTarget(config, targetWorktree), "logs", `${encodeURIComponent(name)}.log`)}`,
     );
   }
 }
@@ -1188,8 +1207,9 @@ async function waitForWorkspace(
     throw new WorkspaceError(`No workspace "${name}" in registry.`);
   }
 
-  const logPath = setupLogPath(initial.worktree, config.runtimeDir);
-  const progressPath = setupProgressPath(initial.worktree, config.runtimeDir);
+  const runtimeDir = runtimeDirForTarget(config, initial.worktree);
+  const logPath = setupLogPath(runtimeDir);
+  const progressPath = setupProgressPath(runtimeDir);
   const ticker = startSetupTicker(
     options.verbose ?? false,
     options.replayLog ?? false,
@@ -1231,7 +1251,7 @@ async function waitForWorkspace(
       if (entry.status === "failed") {
         ticker.stop();
         throw new WorkspaceError(
-          `Setup failed: ${entry.failure?.message ?? "(no message)"}. Full log: ${setupLogPath(entry.worktree, config.runtimeDir)}`,
+          `Setup failed: ${entry.failure?.message ?? "(no message)"}. Full log: ${setupLogPath(runtimeDirForTarget(config, entry.worktree))}`,
         );
       }
       ticker.tick();
@@ -1607,21 +1627,15 @@ function writeSharedExcludes(excludePath: string, inheritedFiles: string[], dirs
   );
 }
 
-/**
- * Symlinks the linked worktree's `${runtimeDir}/workspace-registry` to the main worktree's, so a
- * linked worktree's `runtimeDir` has the same layout as main's. The kernel reads the registry from
- * the main worktree. `runtimeDir` is per-worktree and not in `sharedDirs`, so this is distinct from
- * {@link linkSharedDirectories}.
- */
+/** Local mode only: link the target runtime registry to main's real registry directory. */
 function linkWorkspaceRegistry(
   ctx: WorktreeContext,
-  runtimeDir: string,
+  mainDir: string,
+  runtimeRoot: string,
   log: (msg: string) => void,
 ): void {
   if (ctx.isMainWorktree) return;
-  const mainDir = join(ctx.mainWorktree, runtimeDir, REGISTRY_SUBDIR);
   mkdirSync(mainDir, { recursive: true });
-  const runtimeRoot = join(ctx.currentWorktree, runtimeDir);
   mkdirSync(runtimeRoot, { recursive: true });
   const link = join(runtimeRoot, REGISTRY_SUBDIR);
   // lstat, not existsSync: existsSync follows symlinks, so a broken one would read as absent and

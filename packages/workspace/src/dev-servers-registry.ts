@@ -1,10 +1,11 @@
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 
 import { consoleWorkspaceOutput, type WorkspaceOutput } from "./operation.js";
 import { errorMessage, WorkspaceError } from "./errors.js";
 import { isProcessAlive } from "./process-control.js";
 import { withRegistryLock } from "./registry-lock.js";
-import { readRegistry, writeRegistry } from "./registry-storage.js";
+import { claimRegistryStorage, readRegistry, writeRegistry } from "./registry-storage.js";
+import { readWorkspaces } from "./workspaces.js";
 import { assertStartupOwner, type StartupOwner } from "./startup-ownership.js";
 import { getWorktreeBranch } from "./worktree.js";
 
@@ -281,6 +282,7 @@ export async function updateDevServers<T>(
 }
 
 export function readDevServers(mainWorktree: string, registryDir: string): DevServersData {
+  readWorkspaces(mainWorktree, registryDir);
   const path = devServersFilePath(mainWorktree, registryDir);
   const data = readRegistry<DevServersData>(path, REGISTRY_SCHEMA, { servers: [] }, mainWorktree);
   const paths = data.servers.map((entry) => resolve(entry.worktree));
@@ -296,6 +298,7 @@ export function writeDevServers(
   data: DevServersData,
 ): void {
   readDevServers(mainWorktree, registryDir);
+  claimRegistryStorage(mainWorktree, resolve(mainWorktree, registryDir));
   writeRegistry(
     devServersFilePath(mainWorktree, registryDir),
     { version: 1, servers: data.servers },
@@ -305,7 +308,7 @@ export function writeDevServers(
 }
 
 export function devServersFilePath(mainWorktree: string, registryDir: string): string {
-  return join(mainWorktree, registryDir, DEV_SERVERS_FILENAME);
+  return resolve(mainWorktree, registryDir, DEV_SERVERS_FILENAME);
 }
 
 function sortByName(servers: DevServerEntry[]): DevServerEntry[] {

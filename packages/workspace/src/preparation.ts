@@ -98,6 +98,7 @@ export async function planPreparation(
   sharedDirs: string[],
   filePaths: string[],
   diagnostic: (message: string) => void,
+  registryDir = join(ctx.mainWorktree, ".local-wt", "workspace-registry"),
 ): Promise<Preparation> {
   const protection = await host.sharedDirectoryProtection(ctx.mainWorktree);
   const source = { cwd: ctx.mainWorktree, env };
@@ -124,6 +125,7 @@ export async function planPreparation(
           join(ctx.mainWorktree, ".plans"),
           join(ctx.mainWorktree, ".local-wt"),
           protection.plans.path,
+          registryDir,
         ].some(
           (reserved) =>
             isInside(canonicalPath(reserved), canonicalPath(main)) ||
@@ -187,7 +189,7 @@ export async function planPreparation(
     }
   }
   for (const path of filePaths) {
-    const destination = assertFileDestination(ctx.currentWorktree, path);
+    const destination = assertFileDestination(ctx.currentWorktree, path, registryDir);
     if (
       isInside(resolve(ctx.currentWorktree, ".local-wt"), destination) ||
       links.some((link) => isInside(link.path, destination) || isInside(destination, link.path))
