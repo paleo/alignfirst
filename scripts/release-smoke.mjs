@@ -12,6 +12,8 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readPackedFilename } from "./npm-pack.mjs";
+import { verifyPackagedWorkspaces } from "./test/packaged-workspace-acceptance.mjs";
 
 const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const installRoot = mkdtempSync(join(tmpdir(), "alignfirst-release-"));
@@ -27,9 +29,16 @@ function smokeTestRelease() {
     process.argv.slice(2).every((arg) => arg === "--cli-only"),
     "Unknown smoke option",
   );
-  const [docmap, alignfirst, aligndev] = ["docmap", "alignfirst", "aligndev"].map(packWorkspace);
-  const cliRoot = disposableInstall("cli", [docmap, alignfirst, aligndev]);
-  for (const packed of [docmap, alignfirst, aligndev]) {
+  const [docmap, workspace, alignfirst, aligndev] = [
+    "docmap",
+    "workspace",
+    "alignfirst",
+    "aligndev",
+  ].map(packWorkspace);
+  const cliRoot = disposableInstall("cli", [docmap, workspace, alignfirst, aligndev]);
+  for (const packed of [docmap, workspace, alignfirst, aligndev]) {
+    assert.equal(installedManifest(cliRoot, packed.name).version, packed.version);
+    assert.equal(existsSync(join(cliRoot, "node_modules", packed.name, "dist")), true);
     const manifest = installedManifest(cliRoot, packed.name);
     assert.equal(manifest.pi, undefined, `${packed.name} must remain a CLI`);
     assert.deepEqual(manifest.peerDependencies ?? {}, {});
@@ -45,6 +54,20 @@ function smokeTestRelease() {
   verifyCliVersion(cliRoot, "aligndev", ["--version"], aligndev.version);
   verifyCliVersion(cliRoot, "docmap", ["--version"], docmap.version);
   verifyInvocationConsumers(cliRoot);
+  for (const [name, schema] of [
+    ["alignfirst", "alignfirst-v1"],
+    ["@alignfirst/workspace", "workspace-v1"],
+  ]) {
+    const asset = join(cliRoot, "node_modules", name, "schemas", `${schema}.schema.json`);
+    assert.equal(JSON.parse(readFileSync(asset, "utf8")).type, "object");
+  }
+  verifyPackagedWorkspaces({
+    executable: process.execPath,
+    entry: join(cliRoot, "node_modules/alignfirst/bin/alignfirst.mjs"),
+    root: installRoot,
+    env: isolatedEnvironment(cliRoot),
+    evidence: process.env.PACKAGED_WORKSPACE_EVIDENCE,
+  });
   for (const executable of ["alignfirst", "aligndev", "docmap"]) {
     assert.match(
       execFileSync(join(cliRoot, "node_modules/.bin", executable), ["--help"], {
@@ -147,6 +170,18 @@ function verifyInvocationConsumers(root) {
   assert.equal(report.path, project, "Packed AlignDev must load the real AlignFirst config report");
   assert.equal(report.companion, null);
   assert.equal(report.locations.docs.path, join(project, "docs"));
+  assert.equal(report.locations.alignfirst.path, join(project, "alignfirst.json"));
+  assert.equal(report.portRange, null);
+  const config = JSON.parse(
+    execFileSync(join(root, "node_modules/.bin/alignfirst"), ["config", "--json"], {
+      cwd: project,
+      env,
+      encoding: "utf8",
+    }),
+  );
+  assert.equal(config.workspace.location.path, join(project, "alignfirst-workspace.json"));
+  assert.equal(config.workspace.hasDevServer, false);
+  assert.equal(Object.hasOwn(config, "cli"), false);
 }
 
 function packWorkspace(directory) {
@@ -158,12 +193,6 @@ function packWorkspace(directory) {
     throw new Error(`Could not pack packages/${directory}.`);
   }
   return { tarball: join(installRoot, filename), version: manifest.version, name: manifest.name };
-}
-
-function readPackedFilename(packed) {
-  // npm 11 prints an array of packed packages; npm 12 prints an object keyed by package name.
-  const [first] = Array.isArray(packed) ? packed : Object.values(packed ?? {});
-  return first?.filename;
 }
 
 function disposableInstall(name, packages, host = false) {
