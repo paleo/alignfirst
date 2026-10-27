@@ -3,7 +3,15 @@ import { statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
 import { WorkspaceError } from "./errors.js";
-import { canonicalPath, git, isInside, pathExists, readRepository, worktreeRoot } from "./git.js";
+import {
+  canonicalPath,
+  git,
+  headCommit,
+  isInside,
+  pathExists,
+  readRepository,
+  worktreeRoot,
+} from "./git.js";
 import type { WorkspaceOutput } from "./operation.js";
 
 const MAX_ALIGNED_SUFFIX_ATTEMPTS = 100;
@@ -61,7 +69,14 @@ export function useExistingBranch(
   const worktreePath = selectDestination(ctx, run, branch, dirNameFn, options.path);
   options.beforeCreate?.(start);
   runGitWorktree(
-    ["worktree", "add", ...(tracking ? ["--track", "-b", branch] : []), "--", worktreePath, start],
+    [
+      "worktree",
+      "add",
+      ...(tracking ? ["--track", "-b", branch] : []),
+      "--",
+      worktreePath,
+      tracking ? start : branch,
+    ],
     ctx.currentWorktree,
     run,
   );
@@ -85,8 +100,13 @@ export function createBranch(
   options: CreateBranchOptions = {},
 ): WorktreeContext {
   const { dirNameFn = defaultWorktreeDirName, from, dedupe = false } = options;
-  validateBranch(requestedBranch, { cwd: ctx.currentWorktree, env: run.env ?? process.env });
+  const source = { cwd: ctx.currentWorktree, env: run.env ?? process.env };
+  validateBranch(requestedBranch, source);
   if (from !== undefined) verifyFromRef(from, ctx.currentWorktree);
+  else if (headCommit(source) === undefined)
+    throw new WorkspaceError(
+      "HEAD has no commit. Make the initial commit before creating a linked workspace.",
+    );
 
   const ancestor = findAncestorBranchConflict(requestedBranch, ctx.currentWorktree);
   if (ancestor !== undefined) {

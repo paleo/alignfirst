@@ -204,6 +204,64 @@ describe("run-file write batches", () => {
 });
 
 describe("computed run-file inputs", () => {
+  it("reconciles invocation environment changes and removal without exposing input values", async () => {
+    const key = "SIDE32_INVOCATION_INPUT";
+    const env: NodeJS.ProcessEnv = { ...process.env, [key]: "private-invocation-A" };
+    const { devServer } = adaptWorkspaceManifest(
+      {
+        schemaVersion: 1,
+        devServer: {
+          runFilesInputs: [key],
+          runFiles: [
+            {
+              path: "invocation.txt",
+              source: {
+                kind: "content",
+                content: {
+                  command: {
+                    run: [
+                      process.execPath,
+                      "-e",
+                      `process.stdout.write(process.env.${key} ?? 'absent')`,
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+          servers: [],
+        },
+      },
+      { mainWorktree: input.worktree.mainWorktree, env },
+    );
+    if (!devServer) throw new Error("Missing dev adapter");
+    input.runFilesInputs = devServer.runFilesInputs;
+    input.runFiles = devServer.runFiles ?? [];
+    await runDevSetup(input);
+    const first = currentEntry().runFilesWrittenWith?.inputs[key];
+    expect(first).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(fileContent("invocation.txt")).toBe("private-invocation-A");
+
+    env[key] = "private-invocation-B";
+    await runDevSetup(input);
+    expect(currentEntry().runFilesWrittenWith?.inputs[key]).not.toBe(first);
+    expect(fileContent("invocation.txt")).toBe("private-invocation-B");
+
+    delete env[key];
+    await runDevSetup(input);
+    expect(currentEntry().runFilesWrittenWith?.inputs).toEqual({});
+    expect(fileContent("invocation.txt")).toBe("absent");
+    expect(console.warn).toHaveBeenCalledTimes(2);
+    for (const [warning] of vi.mocked(console.warn).mock.calls)
+      expect(warning).toContain(`inputs changed (${key})`);
+    const recorded = [
+      readFileSync(filePath(`${input.registryDir}/workspaces.json`), "utf8"),
+      ...vi.mocked(console.warn).mock.calls.flat(),
+      ...vi.mocked(console.log).mock.calls.flat(),
+    ].join("\n");
+    expect(recorded).not.toContain("private-invocation-");
+  });
+
   it("runs command producers in order after ports, fingerprints inputs and detects removal", async () => {
     const secret = "private-host-value";
     const { devServer } = adaptWorkspaceManifest(

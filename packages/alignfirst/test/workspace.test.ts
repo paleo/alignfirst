@@ -128,6 +128,41 @@ describe("unified workspace inventory and defaults", () => {
     });
   });
 
+  it("prepares a new main worktree before its initial commit, preserving the bootstrap index", async () => {
+    const fx = fixture(true);
+    writeFileSync(join(fx.repo, "alignfirst.json"), '{"schemaVersion":1}\n');
+    git(fx.repo, "add", "README.md", "alignfirst.json");
+    const index = readFileSync(join(fx.repo, ".git/index"));
+    const setup = await run(fx, ["setup", "--json"]);
+    expect(setup.code, setup.stderr).toBe(0);
+    expect(JSON.parse(setup.stdout).workspace).toMatchObject({
+      path: fx.repo,
+      branch: "main",
+      main: true,
+      preparation: "ready",
+    });
+    expect(readFileSync(join(fx.repo, ".git/index"))).toEqual(index);
+    expect(git(fx.repo, "rev-list", "--all")).toBe("");
+    const premature = await run(fx, ["setup", "-c", "topic", "--path", fx.target, "--json"]);
+    expect(premature.code).toBe(1);
+    expect(premature.stdout).toBe("");
+    expect(premature.stderr).toContain("HEAD");
+    expect(existsSync(fx.target)).toBe(false);
+    commit(fx.repo);
+    const linked = await run(fx, ["setup", "-c", "topic", "--path", fx.target, "--json"]);
+    expect(linked.code, linked.stderr).toBe(0);
+    expect(JSON.parse(linked.stdout).workspace.branch).toBe("topic");
+  });
+
+  it("shows identity, path, branch and preparation without a custom status summary", async () => {
+    const fx = fixture();
+    const setup = await run(fx, ["setup", "--json"]);
+    expect(setup.code, setup.stderr).toBe(0);
+    const status = await run(fx, ["status"]);
+    expect(status.code, status.stderr).toBe(0);
+    for (const value of ["app", fx.repo, "main", "ready"]) expect(status.stdout).toContain(value);
+  });
+
   it("completes default detached setup synchronously without an empty finalizer", async () => {
     const fx = fixture();
     const result = await run(fx, ["setup", "-c", "topic", "--path", fx.target, "-d", "--json"]);
@@ -161,6 +196,26 @@ describe("unified workspace inventory and defaults", () => {
 });
 
 describe("Git and baseline preflight", () => {
+  it.each([".plans", ".local-wt"])(
+    "refuses staged %s in an unborn repository without changing its index or files",
+    async (path) => {
+      const fx = fixture(true);
+      mkdirSync(join(fx.repo, path), { recursive: true });
+      writeFileSync(join(fx.repo, path, "keep"), "staged bytes");
+      git(fx.repo, "add", "-f", path);
+      const index = readFileSync(join(fx.repo, ".git/index"));
+      const result = await run(fx, ["setup", "--json"]);
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toMatch(
+        path === ".plans" ? /\.plans.*tracked/ : /Runtime storage is tracked/,
+      );
+      expect(readFileSync(join(fx.repo, ".git/index"))).toEqual(index);
+      expect(readFileSync(join(fx.repo, path, "keep"), "utf8")).toBe("staged bytes");
+      expect(existsSync(join(fx.repo, ".local-wt/workspace-registry/workspaces.json"))).toBe(false);
+    },
+  );
+
   it.each([
     "missingPlans",
     "trackedPlans",
@@ -266,7 +321,10 @@ describe("Git and baseline preflight", () => {
   it("reuses local and unambiguous fetched remote branches without fetching", async () => {
     const fx = fixture();
     git(fx.repo, "branch", "local");
-    expect((await run(fx, ["setup", "local", "--path", fx.target])).code).toBe(0);
+    const local = await run(fx, ["setup", "local", "--path", fx.target, "--json"]);
+    expect(local.code, local.stderr).toBe(0);
+    expect(git(fx.target, "symbolic-ref", "--short", "HEAD")).toBe("local");
+    expect(JSON.parse(local.stdout).workspace.branch).toBe("local");
     git(fx.repo, "config", "remote.origin.url", "/unreachable");
     git(fx.repo, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*");
     git(fx.repo, "update-ref", "refs/remotes/origin/fetched", "HEAD");
@@ -608,6 +666,85 @@ describe("exact adoption and safe sharing", () => {
   );
 });
 
+describe("kernel registry ownership at the public boundary", () => {
+  it.each([false, true])(
+    "preserves registry bytes before rejecting a run-file destination (alias=%s)",
+    async (alias) => {
+      const fx = fixture();
+      expect((await run(fx, ["setup"])).code).toBe(0);
+      const registry = join(fx.repo, ".local-wt/workspace-registry/workspaces.json");
+      const bytes = readFileSync(registry);
+      if (alias) symlinkSync(join(fx.repo, ".local-wt/workspace-registry"), join(fx.repo, "alias"));
+      const marker = join(fx.root, "producer-ran");
+      const manifest = {
+        schemaVersion: 1,
+        devServer: {
+          runFiles: [
+            {
+              path: alias
+                ? "alias/workspaces.json"
+                : ".local-wt/workspace-registry/workspaces.json",
+              source: {
+                kind: "content",
+                content: {
+                  command: {
+                    run: [
+                      process.execPath,
+                      "-e",
+                      `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran'); process.stdout.write('{}')`,
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+          servers: [
+            {
+              kind: "spawn",
+              name: "app",
+              exec: { run: [process.execPath, "-e", ""] },
+              ready: { log: "ready" },
+            },
+          ],
+        },
+      };
+      const file = join(fx.repo, "alignfirst-workspace.json");
+      writeFileSync(file, JSON.stringify(manifest));
+      const result = await runMain(["dev", "setup"], { cwd: fx.repo, home: fx.home });
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("registry destination");
+      expect(existsSync(marker)).toBe(false);
+      expect(readFileSync(registry)).toEqual(bytes);
+      manifest.devServer.runFiles[0].path = ".local-wt/application.json";
+      writeFileSync(file, JSON.stringify(manifest));
+      const sidecar = await runMain(["dev", "setup"], { cwd: fx.repo, home: fx.home });
+      expect(sidecar.code, sidecar.stderr).toBe(0);
+      expect(readFileSync(join(fx.repo, ".local-wt/application.json"), "utf8")).toBe("{}");
+    },
+  );
+
+  it("rejects a linked registry belonging to another repository before dispatch", async () => {
+    const fx = fixture();
+    const foreign = fixture();
+    expect((await run(foreign, ["setup"])).code).toBe(0);
+    expect((await run(fx, ["setup", "-c", "topic", "--path", fx.target])).code).toBe(0);
+    const victim = join(foreign.repo, ".local-wt/workspace-registry/workspaces.json");
+    const bytes = readFileSync(victim);
+    const link = join(fx.target, ".local-wt/workspace-registry");
+    rmSync(link);
+    symlinkSync(join(foreign.repo, ".local-wt/workspace-registry"), link);
+    for (const args of [
+      ["workspace", "list", "--json"],
+      ["dev", "down"],
+    ]) {
+      const result = await runMain(args, { cwd: fx.target, home: fx.home });
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("own main worktree");
+      expect(readFileSync(victim)).toEqual(bytes);
+    }
+  });
+});
+
 describe("protected deletion", () => {
   it.each([
     "locked",
@@ -680,17 +817,21 @@ describe("protected deletion", () => {
   );
 });
 
-function fixture(): Fixture {
+function fixture(unborn = false): Fixture {
   const root = makeTempDir("alignfirst-workspace-");
   roots.push(root);
   configureGit(root);
   const repo = join(root, "app");
   const home = join(root, "home");
   mkdirSync(home);
-  initRepository(repo);
+  if (unborn) {
+    mkdirSync(repo);
+    git(repo, "init", "--quiet", "-b", "main");
+    writeFileSync(join(repo, "README.md"), "project\n");
+  } else initRepository(repo);
   mkdirSync(join(repo, ".plans"));
   writeFileSync(join(repo, ".gitignore"), "/.plans\n/.local-wt/\n");
-  commit(repo);
+  if (!unborn) commit(repo);
   return { root, repo, home, target: join(root, "external target") };
 }
 

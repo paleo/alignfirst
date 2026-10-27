@@ -1,6 +1,6 @@
 ---
 title: Workspace Package Architecture
-summary: Internals of the `@alignfirst/workspace` kernel — foreground self-exit, stop/teardown signal mechanics, cross-worktree callback dispatch, the `workspace remove` re-exec, the concurrency-cap race, port allocation, versioned registries, retained cleanup, and installed-CLI invocation. Complements the workspace setup blueprint (`skills/alignfirst-setup-guide/references/workspace-setup.md`), the consumer-facing guide.
+summary: Kernel internals for workspace preparation, cancellation, startup ownership, target-local cleanup, registries and port allocation.
 read_when:
   - onboarding to the @alignfirst/workspace codebase
   - changing dev-server start/stop, foreground, or eviction behavior
@@ -24,11 +24,13 @@ The data-only `@alignfirst/workspace/config` reader discovers `alignfirst-worksp
 
 `preparation.ts` validates effective plans and ignored, untracked `.local-wt/` before Git creation. The AlignFirst host supplies plans resolution and shared-target protection directly. Project-local effective plans must exist and be ignored/untracked by the product repository; companion plans resolve directly. Linked parity is checked after preparation. Setup never provisions plans, changes companion selection or edits tracked ignore rules. Generated sharing exclusions do not conceal tracked/conflicting data. Usable untracked `.local` is optional default sharing; tracked `.local` stays branch-local. Explicit shared dirs cannot overlap mandatory plans/runtime storage.
 
+Main can be adopted before its initial commit. Preparation checks the index even without `HEAD`, protecting staged plans/runtime paths, shared sources and generated-file destinations. Invalid Git state fails closed. Creating a linked worktree requires a resolvable commit.
+
 An absent manifest has the same baseline and synchronous preparation, with no empty finalizer, install/build, seeded application files, ports or services. Its `ready` state means protocol-ready. `--full` and dev startup require declared managed services. Listing/help/cleanup do not require plans readiness, but configuration and deletion safety still validate. The read-only inventory unions exact normalized Git worktree paths and registrations, exposing unprepared, detached, locked, prunable and orphan targets without adopting or cleaning them.
 
 ## Invocation and runtime
 
-The kernel receives a `WorkspaceOperation`: cwd, environment, output channels, optional public command forms, and an `InstalledCliInvocation` containing the absolute runtime executable and installed AlignFirst bin path. `runWorkspace` also receives a parsed command and verbosity; `runDevServer` receives a parsed dev command. Neither reads `process.argv` or configures mutable command state. The outer CLI owns error presentation, exit codes and structured results; foreground signal handlers remain a process boundary.
+The kernel receives a `WorkspaceOperation`: cwd, environment, output channels, optional public command forms, and an `InstalledCliInvocation` containing the absolute runtime executable and installed AlignFirst bin path. `runWorkspace` also receives a parsed command and verbosity; `runDevServer` receives a parsed dev command. Neither reads `process.argv` or configures mutable command state. The outer CLI owns error presentation, exit codes, structured results and SIGINT/SIGTERM cancellation for workspace and non-foreground dev operations. Foreground handlers distinguish startup rollback, owned shutdown and non-owning detach. Cancellation propagates through hooks, command children, readiness waits and file generation. It awaits owned command termination, prevents later steps and retains incomplete cleanup for explicit retry. Startup rollback uses a fresh cleanup lifetime.
 
 `invocation.ts` uses `@alignfirst/docmap/invocation` for public command hints. Internal dispatch uses the exact installed runtime/bin plus fixed argv: `workspace __finalize`, `dev setup`, `dev down`, or `workspace remove <path>`. Workspace cleanup adds the internal `dev down --retain-cleanup` flag so successful stopping retains the dev record through purge. It never performs a new package-runner lookup or forwards loaded callbacks. Children run in the requested target cwd and load its current recipe through CLI dispatch. Removal of the current worktree re-executes from main before cleanup or deletion.
 
@@ -50,6 +52,8 @@ The child is spawned as `workspace __finalize` with no target argument and `cwd`
 
 - **Blocking (default).** After spawning the child, `runSetup` calls `waitForWorkspace`, which polls `workspaces.json` until the finalize child marks the workspace `ready` or `failed`. During the wait it shows a ticker: a single status line `Finalizing… <label> (<elapsed>) — tail: <log>`, rewritten in place on a TTY and re-emitted on label change otherwise. `--verbose` replaces the ticker with a live follow of the setup log from its current size (the pre-finalize lines were already printed); on settle, one final drain read prints the log bytes written since the last poll.
 - **Detached (`-d`/`--detached`).** `runSetup` returns right after spawning the child, printing `Setup continuing in background.` plus a `wait` hint. The caller joins later with `workspace wait`, which runs the same ticker; its `--verbose` first replays the last 30 log lines, since the joiner saw no history. `--enter` enters the worktree immediately in this mode (it already exists), while finalize keeps running.
+
+Cancelling a setup waiter stops its wait, not the detached finalizer. Once spawned, that child has an independent cancellation lifetime and continues updating the registry and log. The same applies to standalone `workspace wait`.
 
 ### Failure before the finalize spawn
 
@@ -122,21 +126,25 @@ Missing or malformed registered manifests fail without default fallback. Changin
 
 Cleanup invokes the selected recipe's `purgeInfrastructure` with the captured registered name, target path, main path, provenance and verbosity. Existing targets resolve cwd and scripts in the target. Missing manifest-backed targets require main's valid manifest and purge recipe, executing from main with the orphan identity. Defaults-only orphans invent no project commands. Purge runs for failed and partial preparations even without dev setup; `continueOnError` permits later purge attempts while aggregate failure still retains cleanup.
 
-Before stopping a dev-only target, `retainCleanupIdentity` saves its identity and recipe as a failed workspace entry. Child stop and PID fallback retain pending dev records through purge. Only successful cleanup releases dev/workspace entries and ports, using fresh path-scoped locked mutations. Setup and startup refuse pending dev cleanup. Prune attempts other orphans after a failure, but returns nonzero without a success document or Git prune. Listing retains every orphan identity and performs no resource cleanup. No callback or subprocess runs under the registry lock.
+Before stopping a target, `retainCleanupIdentity` sets the workspace entry's independent `cleanupPending` gate, creating a failed entry with identity and recipe for a dev-only target. This gate survives successful `dev down` and blocks workspace setup, dev setup and startup until workspace cleanup completes stop and purge successfully. Child stop and PID fallback retain pending dev records through purge. Only successful cleanup releases dev/workspace entries and ports, using fresh path-scoped locked mutations. Setup and startup refuse pending dev cleanup. Prune attempts other orphans after a failure, but returns nonzero without a success document or Git prune. Listing retains every orphan identity and performs no resource cleanup. No callback or subprocess runs under the registry lock.
 
 `teardown` preserves files, dependencies, seeded/runtime files, shared links and all Git state. Main teardown preserves the shared registry directory and other entries. It accepts dirty worktrees, has no force/all mode, and never runs Git deletion or prune. An already-unregistered verified worktree succeeds without guessed-name purge; a dev-only entry supplies its recorded identity. Unknown names and unrelated same-basename paths fail. Re-adoption runs normal setup again; names and ports are released rather than reserved.
 
 `remove` checks exact Git registration and main/locked/nested/shared-target protection before resource side effects. Protection includes plans, session/companion paths and manifest-declared shared sources. Dirty removal requires `--force`; force bypasses only dirtiness. Git deletion retains the branch, and unprepared worktrees receive no guessed purge identity. `dev down` only stops processes and command services; destructive purge belongs to teardown/remove/prune.
 
-## Concurrency-cap TOCTOU race
+## Startup ownership and concurrency cap
 
-The cap check and the subsequent register in `enforceCap` are not atomic. Two concurrent `dev up --evict` from different worktrees can both pass the check and both register, leaving `maxConcurrentDevServers + 1` live servers. This is accepted: the window is narrow and the consequence is bounded to one extra server. Resolve manually with `dev list` + `dev down`.
+`startup-ownership.ts` claims each exact worktree path in `dev-startups.json` (`version: 1`, `owners`) under the shared registry lock before setup, restart, eviction or stale-port cleanup. Each claim records the CLI PID and a unique token. Hooks run outside the lock while the claim remains held. A live PID's claim never expires by age; only a dead holder can be replaced. Publication and rollback verify ownership, and release removes only the matching token.
+
+Registered dev instances carry that token as `instanceId`. Rollback and cleanup compare captured instance identity so a stale owner cannot overwrite or remove a replacement run.
+
+This exclusivity is per worktree. The cap check and the subsequent register in `enforceCap` are not atomic. Two concurrent `dev up --evict` from different worktrees can both pass the check and both register, leaving `maxConcurrentDevServers + 1` live servers. This is accepted: the window is narrow and the consequence is bounded to one extra server. Resolve manually with `dev list` + `dev down`.
 
 ## Registry liveness
 
 An entry in `dev-servers.json` is **live** when at least one spawn PID is alive. `hasLiveSpawnPids`, `liveDevServers` and `liveWorktrees` share that predicate. `pruneDeadServers` and locked `pruneAndPersist` retain entries with `cleanupPending: true` even after all PIDs exit. Retention alone does not count toward the cap; retained entries with live PIDs still count. A pending-cleanup entry blocks a fresh start on that exact path.
 
-Before asynchronous stopping or startup rollback, `markDevServerCleanupPending` reads fresh unpruned state under the shared lock. It can create a rollback record before ordinary startup registration. `completeDevServerCleanup` removes only the requested path after the caller confirms cleanup success; an optional captured `startedAt` protects a replacement run. Hooks, subprocesses and process waits run outside locks. Stop-all and eviction update individual paths on fresh reads, preserving entries created by child commands.
+Before asynchronous stopping or startup rollback, `markDevServerCleanupPending` reads fresh unpruned state under the shared lock. It can create a rollback record before ordinary startup registration. `completeDevServerCleanup` removes only the requested path after the caller confirms cleanup success; captured `startedAt` and `instanceId` protect a replacement run. Hooks, subprocesses and process waits run outside locks. Stop-all and eviction update individual paths on fresh reads, preserving entries created by child commands.
 
 Ordinary dead records without pending cleanup may still be pruned after manual PID killing; liveness does not discover callback-managed resources. Workspace-orphan identities are retained independently until explicit cleanup.
 
@@ -178,7 +186,7 @@ Adding a dedicated range moves no port of another workspace from the outside. Ea
 
 `seedFiles` ([`file-entries.ts`](../packages/workspace/src/file-entries.ts)) writes both file lists through `copyAndPatchFile`: `workspace setup` the `gitignoredFiles` with a `PatchContext`, `dev setup` the `runFiles` with a `RunFileContext`, which adds `ports`.
 
-Content producers and patches may be asynchronous. Destination checks reject tracked paths, Git metadata and logical/canonical escapes before generation and again after awaited work, before writing. Manifest file lists also reject canonical aliases across lists.
+Content producers and patches may be asynchronous. Destination checks reject committed or staged paths, Git metadata, the kernel-owned `.local-wt/workspace-registry` subtree and its ancestors or canonical aliases, and logical/canonical escapes. Dev setup preflights destinations before registry mutation; ordinary application sidecars elsewhere in `.local-wt` remain supported. Checks run before generation and again after awaited work, before writing; cancellation is checked before the write. Manifest file lists also reject canonical aliases across lists.
 
 The `existing` policy decides the fate of an existing file. `reseed` writes it again from its source. `patch` re-applies its `patch` and rewrites it only when the result differs. `keep` leaves it. `copyAndPatchFile` refuses a patch that is not idempotent, on a seed as on a re-apply, before writing. The rewritten files are reported in one `Updated <paths>` line, printed even when a later entry fails.
 
@@ -197,6 +205,8 @@ A generated run file, a `content` source without `patch`, would never follow a p
 `workspaces.json` stores `{ version: 3, workspaces }`. Every entry requires a recipe: `{ kind: "defaults" }` or `{ kind: "manifest", file: "alignfirst-workspace.json" | "alignfirst-workspace.jsonc" }`. `dev-servers.json` stores `{ version: 1, servers }`. Missing files mean empty state; malformed data, unsupported versions, relative paths and missing provenance fail before mutation. Readers never infer default preparation or repair legacy fields. `portIndex`, `purgeData`, implicit dev-setup repair and duplicate-main repair are retired. A surviving `slots.json` is also refused; there is no runtime migration command.
 
 Registration and dev setup validate manifest provenance against the current logical family. Changing only its extension is permitted. Removing a registered manifest cannot silently select defaults. Diagnostic workspace reads retain provenance without requiring a present recipe file.
+
+Registry storage must remain local to main, through real directories and regular files. A linked worktree's registry directory, when present, must be a symlink to its own main's registry. Foreign, broken or redirected registry paths fail before mutation and preserve existing state.
 
 Both registries store normalized absolute paths. Keys are opaque registered names: `registerWorkspace` first reuses an exact path match, otherwise allocates the basename or appends a SHA-256 path prefix (initially eight hex characters). It extends the digest, then uses numeric discriminators if necessary, under the insertion lock. Assigned suffixes remain stable when collisions disappear. Main dev setup and dev-only cleanup identity recovery retain recipe provenance.
 
@@ -236,4 +246,4 @@ A missing purge recipe cannot discover external resources by itself. Cleanup hoo
 
 `workspace --guide` prints `templates/guide.md`, expanded by [`guide.ts`](../packages/workspace/src/guide.ts). The prose lives in the template; code aligns command comments for the host's rendered public command forms.
 
-One manifest-backed capability gates the template: `DEV`, on when managed dev services are declared. `{{#DEV}}…{{/DEV}}` keeps a block when the flag is on, `{{^DEV}}…{{/DEV}}` when it is off. Markers own their line and one regex handles both forms, so a stripped block leaves no stray blank line. A setup-only or manifest-free project reads a guide without a dev-server section. It states baseline preparation, effective capabilities and direct CLI forms; default readiness never implies dependency/application readiness. External owners adopt in place and run teardown before their own Git deletion.
+One manifest-backed capability gates the template: `DEV`, on when managed dev services are declared. `{{#DEV}}…{{/DEV}}` keeps a block when the flag is on, `{{^DEV}}…{{/DEV}}` when it is off. Markers own their line and one regex handles both forms, so a stripped block leaves no stray blank line. A setup-only or manifest-free project reads a guide without a dev-server section. It states baseline preparation, effective capabilities and direct CLI forms; default readiness never implies dependency/application readiness. Without a custom workspace summary, setup and status report the registered name, path, branch and preparation status. External owners adopt in place and run teardown before their own Git deletion.

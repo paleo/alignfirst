@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import type { WorkspaceManifest } from "../../src/config.js";
 import type { DevServerEntry } from "../../src/dev-servers-registry.js";
 import type { ServerContext } from "../../src/server-descriptor.js";
 import {
@@ -182,18 +183,71 @@ describe("registered callback identity (e2e)", () => {
     TIMEOUT_MS,
   );
 
-  it(
-    "stops a dev-only record using its recorded name after workspace registration disappears",
-    () => {
+  it.each([false, true])(
+    "stops using current callbacks without interpolating startup commands, allocation missing=%s",
+    async (missingAllocation) => {
       const { fx, root, nested, ctx } = prepareTarget();
       expect(runDev(root, ["up"], ENV, nested).status).toBe(0);
-      const registry = readWorkspaces(fx.repo);
-      delete registry.workspaces[ctx.name];
-      writeWorkspaces(fx.repo, registry);
+      if (missingAllocation) {
+        const registry = readWorkspaces(fx.repo);
+        delete registry.workspaces[ctx.name];
+        writeWorkspaces(fx.repo, registry);
+      }
+      const file = join(root, "alignfirst-workspace.json");
+      const manifest: WorkspaceManifest = JSON.parse(readFileSync(file, "utf8"));
+      const dev = manifest.devServer;
+      if (!dev?.ports) throw new Error("Missing fixture dev ports");
+      dev.ports.declare.push("newPort");
+      for (const server of dev.servers) {
+        if (server.kind !== "spawn") continue;
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Manifest interpolation syntax.
+        server.exec = { run: [cliExecutable, "${{ ports.newPort }}"] };
+        server.port = "newPort";
+      }
+      writeFileSync(file, JSON.stringify(manifest));
       const stopped = runDev(root, ["down"], ENV, nested);
       expect(stopped.status, stopped.stderr).toBe(0);
-      expect(stops(fx)).toEqual(expectedStops({ ...ctx, ports: {} }));
+      expect(stops(fx)).toEqual(
+        expectedStops({ ...ctx, ports: missingAllocation ? {} : ctx.ports }),
+      );
       expect(devEntries(fx)).toEqual([]);
+      await waitUntil(() => spawns(fx).every((event) => !isAlive(event.pid)), "recorded PID stop");
+    },
+    TIMEOUT_MS,
+  );
+
+  it.each(["setup", "readiness"] as const)(
+    "a competing restart cannot mutate or stop the startup owner during %s",
+    async (phase) => {
+      const target = prepareTarget(phase !== "setup");
+      const barrier = newBarrier(target.fx, `${phase}.release`);
+      const running = foreground(
+        target,
+        phase === "setup" ? { E2E_DEV_SETUP_BARRIER: barrier } : { E2E_READY_BARRIER: barrier },
+        ["up"],
+      );
+      await waitUntil(
+        () =>
+          phase === "setup" ? existsSync(`${barrier}.entered`) : spawns(target.fx).length === 1,
+        `winner blocked during ${phase}`,
+      );
+      const before = callbacks(target.fx);
+      const recorded = devEntries(target.fx);
+      const lost = runDev(target.root, ["up", "--restart"], ENV);
+      expect(lost.status, lost.stderr).toBe(1);
+      expect(lost.stderr).toContain("startup already in progress");
+      expect(callbacks(target.fx)).toEqual(before);
+      expect(devEntries(target.fx)).toEqual(recorded);
+      expect(stops(target.fx)).toEqual([]);
+      expect(spawns(target.fx).every((event) => isAlive(event.pid))).toBe(true);
+      writeFileSync(barrier, "release\n");
+      await exited(running, 0);
+      expect(spawns(target.fx)).toHaveLength(1);
+      expect(callbacks(target.fx).filter((event) => event.event === "start")).toHaveLength(2);
+      expect(devEntries(target.fx)).toMatchObject([
+        { name: target.ctx.name, worktree: target.root },
+      ]);
+      expect(runDev(target.root, ["down"], ENV).status).toBe(0);
     },
     TIMEOUT_MS,
   );

@@ -1,6 +1,8 @@
 import {
   adaptWorkspaceManifest,
+  assertRegistryOwnership,
   assertWorkspaceRecipe,
+  assertWorkspaceCleanupComplete,
   assertDistinctDestinations,
   ConfigError,
   defaultCommands,
@@ -38,10 +40,14 @@ import { resolveProjectConfig } from "../project-config.js";
 import { resolveProjectLayout } from "../project-layout.js";
 
 export async function runWorkspaceCommand(ctx: CommandContext, args: string[]): Promise<number> {
+  const controller = new AbortController();
+  const cancel = (): void => controller.abort(new Error("Workspace operation cancelled."));
+  process.on("SIGINT", cancel);
+  process.on("SIGTERM", cancel);
   try {
     const parsed = parseWorkspaceArgs(args);
     const output = workspaceOutput(ctx, parsed.json === true);
-    const operation = workspaceOperation(ctx, output);
+    const operation = workspaceOperation(ctx, output, controller.signal);
     if (parsed.command.kind === "help" || parsed.command.kind === "version") {
       output.text(
         parsed.command.kind === "help" ? renderWorkspaceHelp(operation.commands) : ctx.version,
@@ -49,7 +55,8 @@ export async function runWorkspaceCommand(ctx: CommandContext, args: string[]): 
       return 0;
     }
     const root = detectWorktree(ctx.cwd);
-    const config = loadRecipe(ctx, root.currentWorktree, output);
+    assertRegistryOwnership(root.mainWorktree, root.currentWorktree, registryDirFor(".local-wt"));
+    const config = loadRecipe(ctx, root.currentWorktree, output, controller.signal);
     const informational = ["help", "guide", "version", "list", "status"].includes(
       parsed.command.kind,
     );
@@ -105,6 +112,9 @@ export async function runWorkspaceCommand(ctx: CommandContext, args: string[]): 
     return 0;
   } catch (error) {
     throw workspaceCliError(error);
+  } finally {
+    process.removeListener("SIGINT", cancel);
+    process.removeListener("SIGTERM", cancel);
   }
 }
 
@@ -131,15 +141,16 @@ export async function runDevCommand(ctx: CommandContext, args: string[]): Promis
       );
       return 0;
     }
-    // Foreground owns attach versus server shutdown; all other asynchronous startup owns its commands here.
-    ownsCancellation = ["setup", "up", "restart"].includes(command.kind);
+    // Foreground distinguishes non-owning attach from server shutdown; other commands cancel here.
+    ownsCancellation = command.kind !== "foreground";
     if (ownsCancellation) {
-      process.once("SIGINT", cancel);
-      process.once("SIGTERM", cancel);
+      process.on("SIGINT", cancel);
+      process.on("SIGTERM", cancel);
     }
     const output = workspaceOutput(ctx, false);
     const operation = workspaceOperation(ctx, output, controller.signal);
     const root = detectWorktree(ctx.cwd);
+    assertRegistryOwnership(root.mainWorktree, root.currentWorktree, registryDirFor(".local-wt"));
     const manifest = loadWorkspaceManifest(root.currentWorktree);
     const adapted = adaptWorkspaceManifest(manifest ?? { schemaVersion: 1 }, {
       mainWorktree: root.mainWorktree,
@@ -151,13 +162,12 @@ export async function runDevCommand(ctx: CommandContext, args: string[]): Promis
     if (needsServices && adapted.devServer === undefined)
       throw new WorkspaceError("No dev services declared in the workspace manifest.");
     if (needsServices) {
-      if (
-        !root.isMainWorktree &&
-        !findWorkspaceByPath(
-          readWorkspaces(root.mainWorktree, registryDirFor(".local-wt")),
-          root.currentWorktree,
-        )
-      )
+      const registered = findWorkspaceByPath(
+        readWorkspaces(root.mainWorktree, registryDirFor(".local-wt")),
+        root.currentWorktree,
+      );
+      assertWorkspaceCleanupComplete(registered?.entry);
+      if (!root.isMainWorktree && !registered)
         throw new WorkspaceError(
           "No workspace here. Run alignfirst workspace setup before dev setup/start.",
         );
@@ -166,10 +176,17 @@ export async function runDevCommand(ctx: CommandContext, args: string[]): Promis
       validateRuntimeStorage({ cwd: root.currentWorktree, env: ctx.env });
       await operation.host?.validateWorkFiles(root.currentWorktree);
     }
-    await runDevServer(adapted.devServer ?? { runtimeDir: ".local-wt", servers: [] }, {
-      ...operation,
-      command,
-    });
+    await runDevServer(
+      adapted.devServer ?? {
+        runtimeDir: ".local-wt",
+        servers: [],
+        signal: controller.signal,
+      },
+      {
+        ...operation,
+        command,
+      },
+    );
     return 0;
   } catch (error) {
     throw workspaceCliError(error);

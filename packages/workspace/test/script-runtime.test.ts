@@ -361,6 +361,25 @@ describe("manifest adapters", () => {
     await server.stop({ name: base.name, cwd: root, ports: {} });
   });
 
+  it("selects defined invocation inputs and uses the parent environment only as a default", async () => {
+    const key = "SIDE32_SCRIPT_INPUT";
+    vi.stubEnv(key, "parent-only");
+    const manifest: WorkspaceManifest = {
+      schemaVersion: 1,
+      devServer: { servers: [], runFilesInputs: [key] },
+    };
+    const context = { ...base, ports: {} };
+    const inherited = adaptWorkspaceManifest(manifest, { mainWorktree: root });
+    expect(await inherited.devServer?.runFilesInputs?.(context)).toEqual({ [key]: "parent-only" });
+    const env: NodeJS.ProcessEnv = { [key]: "" };
+    const invocation = adaptWorkspaceManifest(manifest, { mainWorktree: root, env });
+    expect(await invocation.devServer?.runFilesInputs?.(context)).toEqual({ [key]: "" });
+    env[key] = undefined;
+    expect(await invocation.devServer?.runFilesInputs?.(context)).toEqual({});
+    delete env[key];
+    expect(await invocation.devServer?.runFilesInputs?.(context)).toEqual({});
+  });
+
   it.each(["[]", '{"host":3}', "not json"])(
     "rejects malformed computed inputs: %s",
     async (output) => {

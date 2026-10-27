@@ -7,6 +7,8 @@ import type { ResolvedCommand } from "./script-context.js";
 
 export interface ExecuteCommandOptions {
   signal?: AbortSignal;
+  /** Installed CLI children own detached commands and must finish their cancellation cleanup. */
+  cooperativeCancellation?: boolean;
   stdin?: string;
   stdout?: "capture" | "stream";
   label: string;
@@ -30,7 +32,11 @@ export async function executeCommand(
   let inputError: Error | undefined;
   let stopping: Promise<void> | undefined;
   const abort = (): void => {
-    if (child.pid !== undefined) stopping ??= stopProcessGroup(child.pid, 1000);
+    if (child.pid === undefined || stopping !== undefined) return;
+    if (options.cooperativeCancellation === true) {
+      child.kill("SIGTERM");
+      stopping = Promise.resolve();
+    } else stopping = stopProcessGroup(child.pid, 1000);
   };
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (chunk: string) => {

@@ -107,7 +107,10 @@ describe("workspace teardown (e2e)", () => {
       expect(existsSync(marker)).toBe(true);
       expect(readFileSync(join(fx.repo, "after-purge"), "utf8")).toBe("attempted");
       expect(isAlive(pid)).toBe(false);
-      expect(requiredEntry(fx.repo, linked)).toEqual(target);
+      expect(requiredEntry(fx.repo, linked)).toEqual({
+        ...target,
+        entry: { ...target.entry, cleanupPending: true },
+      });
       expect(requiredEntry(fx.repo, sibling)).toEqual(other);
       expect(devEntries(fx.repo)).toMatchObject([{ cleanupPending: true }]);
       expect(git(fx.repo, ["worktree", "list", "--porcelain"])).toContain(linked);
@@ -169,7 +172,10 @@ describe("workspace teardown (e2e)", () => {
       expect(failed.stderr).toContain(
         missing === "manifest" ? "required purge recipe" : "purge purge",
       );
-      expect(requiredEntry(fx.repo, linked)).toEqual(target);
+      expect(requiredEntry(fx.repo, linked)).toEqual({
+        ...target,
+        entry: { ...target.entry, ...(missing === "script" ? { cleanupPending: true } : {}) },
+      });
       expect(purges(fx.repo)).toEqual([]);
     },
     TEST_TIMEOUT_MS,
@@ -415,6 +421,41 @@ describe("workspace teardown (e2e)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  it(
+    "gates ready workspaces without dev records until purge succeeds, even after force or dev down",
+    () => {
+      const fx = fixture();
+      const linked = addWorktree(fx, "managed/retry", "retry");
+      setup(fx.repo, linked);
+      const target = requiredEntry(fx.repo, linked);
+      expect(devEntries(fx.repo)).toEqual([]);
+      const failed = runCli(fx.repo, ["teardown", linked], { E2E_PURGE_FAIL: "1" });
+      expect(failed.status).toBe(1);
+      expect(requiredEntry(fx.repo, linked).entry).toMatchObject({
+        status: "ready",
+        cleanupPending: true,
+      });
+      const forced = runCli(fx.repo, ["setup", "--force"], undefined, linked);
+      expect(forced.status).toBe(1);
+      expect(forced.stderr).toContain("cleanup is pending");
+      writeDevEntries(fx.repo, [{ ...devEntry(target.name, linked), cleanupPending: true }]);
+      expect(runDev(linked, ["down"]).status).toBe(0);
+      expect(devEntries(fx.repo)).toEqual([]);
+      for (const args of [["setup", "--force"], ["up"]]) {
+        const blocked = runDev(linked, args);
+        expect(blocked.status).toBe(1);
+        expect(blocked.stderr).toContain("cleanup is pending");
+      }
+      expect(existsSync(join(linked, "setup-runs.log"))).toBe(false);
+      expect(requiredEntry(fx.repo, linked).entry.cleanupPending).toBe(true);
+      expect(runCli(fx.repo, ["teardown", linked]).status).toBe(0);
+      expect(entryAt(fx.repo, linked)).toBeUndefined();
+      expect(runCli(fx.repo, ["setup"], undefined, linked).status).toBe(0);
+      expect(runDev(linked, ["setup"]).status).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it.each([false, true])(
     "retains failed stop work before purge and retries cleanup, stop failure=%s",
     (failStop) => {
@@ -434,7 +475,10 @@ describe("workspace teardown (e2e)", () => {
       if (failStop) {
         expect(result.stderr).toContain("e2e callback stop boom");
         expect(devEntries(fx.repo)[0].cleanupPending).toBe(true);
-        expect(requiredEntry(fx.repo, linked)).toEqual(target);
+        expect(requiredEntry(fx.repo, linked)).toEqual({
+          ...target,
+          entry: { ...target.entry, cleanupPending: true },
+        });
         expect(purges(fx.repo)).toEqual([]);
         expect(runCli(fx.repo, ["teardown", linked]).status).toBe(0);
       }
@@ -707,7 +751,10 @@ describe("workspace teardown (e2e)", () => {
       const failed = runCli(fx.repo, ["prune"], { E2E_PURGE_FAIL: "1" });
       expect(failed.status).toBe(1);
       expect(failed.stderr).toContain("e2e purge boom");
-      expect(requiredEntry(fx.repo, linked)).toEqual(before);
+      expect(requiredEntry(fx.repo, linked)).toEqual({
+        ...before,
+        entry: { ...before.entry, cleanupPending: true },
+      });
       const result = runCli(fx.repo, ["prune"]);
       expect(result.status, result.stderr).toBe(0);
       expect(isAlive(pid)).toBe(false);

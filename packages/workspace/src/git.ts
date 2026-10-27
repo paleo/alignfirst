@@ -1,4 +1,8 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import {
+  execFileSync,
+  spawnSync,
+  type SpawnSyncOptionsWithStringEncoding,
+} from "node:child_process";
 import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -66,27 +70,29 @@ export function isProjectTrackedDirectory(
 function hasTrackedFiles(ctx: GitContext, path: string): boolean {
   const candidate = path === "" ? "." : path;
   if (git(ctx, "--literal-pathspecs", "ls-files", "-z", "--", candidate).length > 0) return true;
-  const head = spawnSync("git", ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"], {
+  const head = headCommit(ctx);
+  if (head === undefined) return false;
+  return (
+    git(ctx, "--literal-pathspecs", "ls-tree", "-r", "--name-only", "-z", head, "--", candidate)
+      .length > 0
+  );
+}
+
+export function headCommit(ctx: GitContext): string | undefined {
+  const options: SpawnSyncOptionsWithStringEncoding = {
     cwd: ctx.cwd,
     env: ctx.env,
     encoding: "utf8",
-  });
-  if (head.status === 1) return false;
-  if (head.status !== 0)
-    throw head.error ?? new Error(`Cannot inspect tracked source: ${path}. ${head.stderr}`);
-  return (
-    git(
-      ctx,
-      "--literal-pathspecs",
-      "ls-tree",
-      "-r",
-      "--name-only",
-      "-z",
-      head.stdout.trim(),
-      "--",
-      candidate,
-    ).length > 0
-  );
+  };
+  const head = spawnSync("git", ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"], options);
+  if (head.error || head.signal !== null || (head.status !== 0 && head.status !== 1))
+    throw head.error ?? new Error(`Cannot inspect HEAD: ${head.stderr}`);
+  if (head.status === 0) return head.stdout.trim();
+  const branch = git(ctx, "symbolic-ref", "--quiet", "HEAD").trim();
+  if (!branch.startsWith("refs/heads/")) throw new Error("HEAD does not name a local branch.");
+  const ref = spawnSync("git", ["show-ref", "--verify", "--quiet", branch], options);
+  if (ref.error || ref.signal !== null || ref.status !== 1)
+    throw ref.error ?? new Error(`HEAD does not resolve to a commit: ${ref.stderr}`);
 }
 
 function optionalRepositoryIdentity(ctx: GitContext): string | undefined {

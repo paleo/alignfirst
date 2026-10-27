@@ -28,6 +28,7 @@ import {
   stopAllRegistered,
 } from "./dev-servers-registry.js";
 import { stopTarget } from "./target-stop.js";
+import { claimStartup, releaseStartup, type StartupOwner } from "./startup-ownership.js";
 import { ConfigError, errorMessage, StartupError, WorkspaceError } from "./errors.js";
 import type { RunFileEntry } from "./file-entries.js";
 import {
@@ -50,6 +51,7 @@ import {
 } from "./port-holder.js";
 import { type DevPortsConfig, type ResolvedDevPorts, resolveDevPortsConfig } from "./ports.js";
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
+import { assertRegistryOwnership } from "./registry-ownership.js";
 import { resolveServers } from "./server-descriptor.js";
 import type {
   CallbackServer,
@@ -62,6 +64,7 @@ import type {
 import {
   workspaceRecipe,
   assertWorkspaceRecipe,
+  assertWorkspaceCleanupComplete,
   findWorkspaceByPath,
   readWorkspaces,
   registryDirFor,
@@ -132,6 +135,11 @@ export async function runDevServer(
   }
   installedCliCommand(operation.invocation, []);
   const kernel = createKernel(config, operation);
+  assertRegistryOwnership(
+    kernel.worktree.mainWorktree,
+    kernel.worktree.currentWorktree,
+    kernel.registryDir,
+  );
   readDevServers(kernel.worktree.mainWorktree, kernel.registryDir);
   const registered = findWorkspaceByPath(
     readWorkspaces(kernel.worktree.mainWorktree, kernel.registryDir),
@@ -140,6 +148,8 @@ export async function runDevServer(
   if (registered && operation.command.kind !== "list" && operation.command.kind !== "status") {
     assertWorkspaceRecipe(registered.entry.worktree, registered.entry.recipe);
   }
+  if (["foreground", "up", "restart", "setup"].includes(operation.command.kind))
+    assertWorkspaceCleanupComplete(registered?.entry);
   await dispatch(operation.command, kernel);
 }
 
@@ -302,7 +312,7 @@ async function start(kernel: DevKernel, options: StartOptions): Promise<void> {
   const { workspace, ctx, servers } = prepared;
 
   const state: StartState = { spawnPids: Object.create(null), startedCallbacks: [] };
-  await spawnWithRollback(kernel, workspace, ctx, state, servers);
+  await spawnWithRollback(kernel, workspace, ctx, state, servers, prepared.owner);
 }
 
 /**
@@ -346,7 +356,7 @@ async function runForeground(kernel: DevKernel, options: StartOptions): Promise<
     const { workspace, ctx, servers } = prepared;
     const streamLogs = (): void =>
       tailLogs(config, workspace.worktree, state.spawnPids, { fromStart: true });
-    await spawnWithRollback(kernel, workspace, ctx, state, servers, streamLogs);
+    await spawnWithRollback(kernel, workspace, ctx, state, servers, prepared.owner, streamLogs);
     ctx.signal?.throwIfAborted();
   } catch (error) {
     process.removeListener("SIGINT", onSignal);
@@ -426,15 +436,32 @@ async function shutdownForeground(kernel: DevKernel): Promise<void> {
 }
 
 interface PreparedStart {
+  owner: StartupOwner;
   workspace: ResolvedWorkspace;
   ctx: ServerContext;
   servers: ResolvedServerDescriptor[];
 }
 
-/** Prepares the authoritative identity and ports before any server callback can run. */
+/** Claims the worktree before setup, restart, eviction or stale-port cleanup can run. */
 async function runStartChecks(
   kernel: DevKernel,
+  options: StartOptions,
+): Promise<PreparedStart | undefined> {
+  const { mainWorktree, currentWorktree } = kernel.worktree;
+  const owner = await claimStartup(mainWorktree, kernel.registryDir, currentWorktree);
+  let prepared: PreparedStart | undefined;
+  try {
+    prepared = await prepareStart(kernel, options, owner);
+    return prepared;
+  } finally {
+    if (!prepared) await releaseStartup(mainWorktree, kernel.registryDir, owner);
+  }
+}
+
+async function prepareStart(
+  kernel: DevKernel,
   { evict, restart }: StartOptions,
+  owner: StartupOwner,
 ): Promise<PreparedStart | undefined> {
   const { mainWorktree, currentWorktree } = kernel.worktree;
   assertNoPendingCleanup(mainWorktree, kernel.registryDir, currentWorktree);
@@ -459,7 +486,7 @@ async function runStartChecks(
   const servers = resolveServers(kernel.config.servers, ctx);
   const pins = workspace.main === true ? (kernel.ports?.mainWorktree ?? {}) : {};
   await checkPortsFree(servers, ctx.cwd, pins, kernel.output);
-  return { workspace, ctx, servers };
+  return { workspace, ctx, servers, owner };
 }
 
 /**
@@ -471,6 +498,7 @@ async function spawnWithRollback(
   ctx: ServerContext,
   state: StartState,
   servers: ResolvedServerDescriptor[],
+  owner: StartupOwner,
   onSpawned?: () => void,
 ): Promise<void> {
   const { config } = kernel;
@@ -479,18 +507,19 @@ async function spawnWithRollback(
     worktree: workspace.worktree,
     pids: state.spawnPids,
     startedAt: new Date().toISOString(),
+    instanceId: owner.id,
     ...(workspace.main ? { main: true } : {}),
   };
   try {
     await spawnAndAwait(config, ctx, state, servers, onSpawned);
     ctx.signal?.throwIfAborted();
-    await registerDevServer(kernel.worktree.mainWorktree, kernel.registryDir, entry);
+    await registerDevServer(kernel.worktree.mainWorktree, kernel.registryDir, entry, owner);
     ctx.signal?.throwIfAborted();
     await printStartSummary(config, workspace, servers, state.spawnPids, ctx.ports);
     ctx.signal?.throwIfAborted();
   } catch (err) {
     try {
-      await rollbackStart(kernel, entry, state.startedCallbacks, ctx);
+      await rollbackStart(kernel, entry, state.startedCallbacks, ctx, owner);
     } catch (cleanupError) {
       throw new AggregateError(
         [err, cleanupError],
@@ -504,6 +533,8 @@ async function spawnWithRollback(
       throw new WorkspaceError(`${err.label}: ${err.reason}`, { cause: err });
     }
     throw err;
+  } finally {
+    await releaseStartup(kernel.worktree.mainWorktree, kernel.registryDir, owner);
   }
 }
 
@@ -633,13 +664,16 @@ async function rollbackStart(
   entry: DevServerEntry,
   callbacks: CallbackServer[],
   ctx: ServerContext,
+  owner: StartupOwner,
 ): Promise<void> {
-  await markDevServerCleanupPending(
+  const marked = await markDevServerCleanupPending(
     kernel.worktree.mainWorktree,
     kernel.registryDir,
     ctx.cwd,
     entry,
+    owner,
   );
+  if (!marked) throw new WorkspaceError(`Startup rollback identity changed for ${ctx.cwd}.`);
   kernel.output.diagnostic("\nStopping dev servers...");
   await stopOwnedServices(kernel, entry, callbacks, {
     ...ctx,
@@ -650,6 +684,7 @@ async function rollbackStart(
     kernel.registryDir,
     ctx.cwd,
     entry.startedAt,
+    entry.instanceId,
   );
 }
 
@@ -826,7 +861,7 @@ async function checkNoLocalRegistryConflict(
     }
   }
   // Stale entry — drop it so registration overwrites cleanly.
-  await completeDevServerCleanup(mainWorktree, registryDir, cwd, entry.startedAt);
+  await completeDevServerCleanup(mainWorktree, registryDir, cwd, entry.startedAt, entry.instanceId);
 }
 
 async function stopLocal(kernel: DevKernel, retainCleanup = false): Promise<void> {
@@ -835,10 +870,10 @@ async function stopLocal(kernel: DevKernel, retainCleanup = false): Promise<void
   const entry = findOwnEntry(mainWorktree, registryDir, currentWorktree);
   const cwd = entry?.worktree ?? currentWorktree;
   const ports = portsLookup(kernel)(cwd);
-  const servers = resolveServers(config.servers, {
-    name: entry?.name ?? "(unregistered)",
-    cwd,
-    ports,
+  const servers = config.servers.flatMap((server) => {
+    if (server.kind !== "spawn") return [];
+    const port = typeof server.port === "string" ? ports[server.port] : server.port;
+    return port === undefined ? [] : [{ name: server.name, port }];
   });
   if (!entry) {
     kernel.output.text("No dev-server running in this worktree.");
@@ -850,7 +885,13 @@ async function stopLocal(kernel: DevKernel, retainCleanup = false): Promise<void
   await stopOwnedServices(kernel, entry, callbackServersOf(config), ctx);
   await sweepStalePorts(servers, ctx.cwd);
   if (!retainCleanup)
-    await completeDevServerCleanup(mainWorktree, registryDir, ctx.cwd, entry.startedAt);
+    await completeDevServerCleanup(
+      mainWorktree,
+      registryDir,
+      ctx.cwd,
+      entry.startedAt,
+      entry.instanceId,
+    );
 }
 
 function dispatchStop(kernel: DevKernel, target: DevServerEntry): Promise<void> {

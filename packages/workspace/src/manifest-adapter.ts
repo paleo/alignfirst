@@ -118,7 +118,12 @@ function adaptWorkspace(
       settings.purge === undefined ? undefined : (ctx) => purge(settings.purge ?? [], ctx, options),
     formatSummary: async (ctx) =>
       settings.summary === undefined
-        ? ""
+        ? [
+            `Workspace: ${ctx.name}`,
+            `Path: ${ctx.currentWorktree}`,
+            `Branch: ${ctx.branch}`,
+            `Preparation: ${ctx.status}`,
+          ].join("\n")
         : textOutput(
             settings.summary,
             scriptContext(ctx, "workspaceSummary", ctx),
@@ -188,10 +193,11 @@ function adaptInputs(
   if (inputs === undefined) return;
   return async (ctx) => {
     if (Array.isArray(inputs)) {
+      const env = options.env ?? process.env;
       return Object.fromEntries(
         inputs
-          .filter((key) => Object.hasOwn(process.env, key))
-          .map((key) => [key, process.env[key]]),
+          .filter((key) => Object.hasOwn(env, key) && env[key] !== undefined)
+          .map((key) => [key, env[key]]),
       );
     }
     const output = await commandOutput(

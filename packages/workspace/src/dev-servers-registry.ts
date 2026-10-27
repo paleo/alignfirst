@@ -5,6 +5,7 @@ import { errorMessage, WorkspaceError } from "./errors.js";
 import { isProcessAlive } from "./process-control.js";
 import { withRegistryLock } from "./registry-lock.js";
 import { readRegistry, writeRegistry } from "./registry-storage.js";
+import { assertStartupOwner, type StartupOwner } from "./startup-ownership.js";
 import { getWorktreeBranch } from "./worktree.js";
 
 const DEV_SERVERS_FILENAME = "dev-servers.json";
@@ -27,6 +28,7 @@ const REGISTRY_SCHEMA = {
           startedAt: { type: "string", format: "date-time" },
           main: { type: "boolean" },
           cleanupPending: { const: true },
+          instanceId: { type: "string", minLength: 1 },
         },
       },
     },
@@ -40,6 +42,7 @@ export interface DevServerEntry {
   startedAt: string;
   main?: boolean;
   cleanupPending?: true;
+  instanceId?: string;
 }
 
 export interface DevServersData {
@@ -94,6 +97,7 @@ export async function stopAllRegistered(input: StopAllInput): Promise<void> {
         input.registryDir,
         entry.worktree,
         entry.startedAt,
+        entry.instanceId,
       );
     } catch (error) {
       failures.push(error);
@@ -127,6 +131,7 @@ export async function evictOldest(input: EvictInput): Promise<DevServerEntry[]> 
       input.registryDir,
       entry.worktree,
       entry.startedAt,
+      entry.instanceId,
     );
   }
   return victims;
@@ -136,8 +141,10 @@ export async function registerDevServer(
   mainWorktree: string,
   registryDir: string,
   entry: DevServerEntry,
+  owner?: StartupOwner,
 ): Promise<void> {
   await updateDevServers(mainWorktree, registryDir, (data) => {
+    if (owner) assertStartupOwner(mainWorktree, registryDir, owner);
     const existing = data.servers.find(
       (server) => resolve(server.worktree) === resolve(entry.worktree),
     );
@@ -155,9 +162,13 @@ export async function markDevServerCleanupPending(
   registryDir: string,
   worktree: string,
   rollback?: DevServerEntry,
+  owner?: StartupOwner,
 ): Promise<DevServerEntry | undefined> {
   return updateDevServers(mainWorktree, registryDir, (data) => {
+    if (owner) assertStartupOwner(mainWorktree, registryDir, owner);
     let entry = data.servers.find((server) => resolve(server.worktree) === resolve(worktree));
+    if (entry && rollback && entry.instanceId !== rollback.instanceId) return;
+    if (entry && rollback && entry.startedAt !== rollback.startedAt) return;
     if (!entry && rollback) {
       if (resolve(rollback.worktree) !== resolve(worktree))
         throw new WorkspaceError("Rollback identity does not match cleanup path.");
@@ -175,12 +186,14 @@ export async function completeDevServerCleanup(
   registryDir: string,
   worktree: string,
   startedAt?: string,
+  instanceId?: string,
 ): Promise<void> {
   await updateDevServers(mainWorktree, registryDir, (data) => {
     data.servers = data.servers.filter(
       (entry) =>
         resolve(entry.worktree) !== resolve(worktree) ||
-        (startedAt !== undefined && entry.startedAt !== startedAt),
+        (startedAt !== undefined && entry.startedAt !== startedAt) ||
+        (instanceId !== undefined && entry.instanceId !== instanceId),
     );
   });
 }
@@ -269,7 +282,7 @@ export async function updateDevServers<T>(
 
 export function readDevServers(mainWorktree: string, registryDir: string): DevServersData {
   const path = devServersFilePath(mainWorktree, registryDir);
-  const data = readRegistry<DevServersData>(path, REGISTRY_SCHEMA, { servers: [] });
+  const data = readRegistry<DevServersData>(path, REGISTRY_SCHEMA, { servers: [] }, mainWorktree);
   const paths = data.servers.map((entry) => resolve(entry.worktree));
   if (new Set(paths).size !== paths.length)
     throw new WorkspaceError(`Invalid registry ${path}: duplicate worktree identities.`);
@@ -287,6 +300,7 @@ export function writeDevServers(
     devServersFilePath(mainWorktree, registryDir),
     { version: 1, servers: data.servers },
     REGISTRY_SCHEMA,
+    mainWorktree,
   );
 }
 

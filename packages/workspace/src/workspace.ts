@@ -51,8 +51,10 @@ import { executeCommand } from "./command-executor.js";
 import { stopTarget } from "./target-stop.js";
 import { formatPorts } from "./ports.js";
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
+import { assertRegistryOwnership } from "./registry-ownership.js";
 import {
   assertWorkspaceRecipe,
+  assertWorkspaceCleanupComplete,
   workspaceRecipe,
   type WorkspaceRecipe,
   findWorkspaceByPath,
@@ -226,6 +228,7 @@ export async function runWorkspace(
   installedCliCommand(operation.invocation, []);
   const kernel: Kernel = { ...operation, config, registryDir: registryDirFor(config.runtimeDir) };
   const ctx = detectWorktree(operation.cwd);
+  assertRegistryOwnership(ctx.mainWorktree, ctx.currentWorktree, kernel.registryDir);
   readWorkspaces(ctx.mainWorktree, kernel.registryDir);
   readDevServers(ctx.mainWorktree, kernel.registryDir);
 
@@ -338,6 +341,7 @@ async function runDevSetupChild(input: DevSetupChildInput): Promise<string | und
       {
         label: "dev setup",
         signal: kernel.config.signal,
+        cooperativeCancellation: true,
         stdout: "stream",
         output: kernel.output,
       },
@@ -388,6 +392,7 @@ async function runSetup(
   kernel: Kernel,
 ): Promise<{ name: string; worktree: string; status: WorkspaceStatus }> {
   const { registryDir } = kernel;
+  kernel.config.signal?.throwIfAborted();
   const protection =
     kernel.host === undefined
       ? undefined
@@ -398,6 +403,7 @@ async function runSetup(
       : (commit: string): void => {
           assertReservedCommit({ cwd: ctx.currentWorktree, env: kernel.env }, commit, protection);
         };
+  kernel.config.signal?.throwIfAborted();
   const setupCtx = ensureWorktree(command, ctx, run, kernel.config.worktreeDirName, beforeCreate);
   let config = kernel.config;
   try {
@@ -408,6 +414,8 @@ async function runSetup(
       setupCtx.currentWorktree,
     );
     if (existing) assertWorkspaceRecipe(setupCtx.currentWorktree, existing.entry.recipe);
+    assertWorkspaceCleanupComplete(existing?.entry);
+    config.signal?.throwIfAborted();
     assertNoPendingCleanup(setupCtx.mainWorktree, registryDir, setupCtx.currentWorktree);
     refuseIfFinalizePending(setupCtx, registryDir, command.force);
     if (command.full && !config.hasDevServer)
@@ -423,8 +431,10 @@ async function runSetup(
         config.gitignoredFiles.map(({ path }) => path),
         kernel.output.diagnostic,
       );
+      config.signal?.throwIfAborted();
       await preparation.apply();
     }
+    config.signal?.throwIfAborted();
   } catch (error) {
     throw setupRetry(error, setupCtx.currentWorktree);
   }
@@ -442,10 +452,17 @@ async function runSetup(
   // An error in this phase must not leave the entry `pending`: a plain `setup` retries a `failed` one.
   // A `ready` entry stays `ready`: the finalize outcome is unchanged and nothing forces a re-finalize.
   try {
+    config.signal?.throwIfAborted();
     await prepareWorktree({ command, setupCtx, kernel, name, log, verbose: run.verbose });
-    log.tee(
-      await config.formatSummary({ ...setupCtx, name, branch, status, signal: config.signal }),
-    );
+    const summary = await config.formatSummary({
+      ...setupCtx,
+      name,
+      branch,
+      status,
+      signal: config.signal,
+    });
+    config.signal?.throwIfAborted();
+    log.tee(summary);
   } catch (err) {
     const message = errorMessage(err);
     log.append(`FAILED: ${message}`);
@@ -561,6 +578,7 @@ interface PrepareWorktreeInput {
 async function prepareWorktree(input: PrepareWorktreeInput): Promise<void> {
   const { command, setupCtx, kernel, name, log } = input;
   const { config } = kernel;
+  config.signal?.throwIfAborted();
   if (config.preSetup) {
     await config.preSetup({
       ...setupCtx,
@@ -571,6 +589,7 @@ async function prepareWorktree(input: PrepareWorktreeInput): Promise<void> {
       log: log.tee,
     });
   }
+  config.signal?.throwIfAborted();
   if (!kernel.host) {
     linkSharedDirectories(setupCtx, config.sharedDirs, log.verbose);
     linkWorkspaceRegistry(setupCtx, config.runtimeDir, log.verbose);
@@ -588,6 +607,7 @@ async function prepareWorktree(input: PrepareWorktreeInput): Promise<void> {
     existing: command.force ? "reseed" : "patch",
     log,
   });
+  config.signal?.throwIfAborted();
 }
 
 /**
@@ -645,6 +665,8 @@ async function runFinalize(
   }
   const { name, entry } = found;
   assertWorkspaceRecipe(ctx.currentWorktree, entry.recipe);
+  assertWorkspaceCleanupComplete(entry);
+  config.signal?.throwIfAborted();
 
   const branch = getWorktreeBranch(ctx.currentWorktree) ?? "(detached)";
 
@@ -669,6 +691,7 @@ async function runFinalize(
 
   try {
     await config.finalizeWorkspace?.(setupContext);
+    config.signal?.throwIfAborted();
   } catch (err) {
     const message = (err as Error).message;
     const stack = (err as Error).stack ?? "";
@@ -928,6 +951,7 @@ async function runPrune(kernel: Kernel, verbose: boolean): Promise<void> {
   let stoppedProcesses = 0;
   const failures: unknown[] = [];
   for (const name of orphanNames) {
+    kernel.config.signal?.throwIfAborted();
     const entry = registry.workspaces[name];
     try {
       stoppedProcesses += await cleanupTarget(
@@ -949,6 +973,7 @@ async function runPrune(kernel: Kernel, verbose: boolean): Promise<void> {
   }
   if (failures.length > 0)
     throw new AggregateError(failures, failures.map(errorMessage).join("; "));
+  kernel.config.signal?.throwIfAborted();
   pruneGitWorktrees(ctx.mainWorktree);
 
   if (orphanNames.length === 0) {
@@ -966,6 +991,8 @@ async function cleanupTarget(
   orphanOnly = false,
 ): Promise<number> {
   const { registryDir } = kernel;
+  const signal = target.signal ?? kernel.config.signal;
+  signal?.throwIfAborted();
   const exists = existsSync(target.worktree);
   if (!orphanOnly || exists) refusePendingCleanup(ctx, registryDir, target.worktree);
   if (exists) assertWorkspaceRecipe(target.worktree, target.recipe);
@@ -989,22 +1016,32 @@ async function cleanupTarget(
         mainWorktree: ctx.mainWorktree,
         registryDir,
         target: dev,
-        signal: config.signal,
+        signal,
         retainCleanup: true,
       });
     } catch (error) {
       stopFailure = error;
     }
   }
+  signal?.throwIfAborted();
   const leftover = await killRecordedDevServer(ctx.mainWorktree, registryDir, target.worktree);
   if (leftover > 0)
     kernel.output.diagnostic(
       `Stopped ${leftover} recorded dev-server process(es) by PID fallback; recipe cleanup is still required.`,
     );
   if (stopFailure !== undefined) throw stopFailure;
-  if (exists || target.recipe.kind === "manifest") await runPurgeInfrastructure(config, target);
+  signal?.throwIfAborted();
+  if (exists || target.recipe.kind === "manifest")
+    await runPurgeInfrastructure(config, { ...target, signal });
+  signal?.throwIfAborted();
   if (dev)
-    await completeDevServerCleanup(ctx.mainWorktree, registryDir, target.worktree, dev.startedAt);
+    await completeDevServerCleanup(
+      ctx.mainWorktree,
+      registryDir,
+      target.worktree,
+      dev.startedAt,
+      dev.instanceId,
+    );
   if (orphanOnly) {
     await deleteOrphanEntries(ctx.mainWorktree, registryDir, target.worktree);
   } else {
@@ -1020,7 +1057,11 @@ async function retainCleanupIdentity(
   target: PurgeContext,
 ): Promise<void> {
   await updateWorkspaces(ctx.mainWorktree, registryDir, (registry) => {
-    if (findWorkspaceByPath(registry, target.worktree)) return;
+    const existing = findWorkspaceByPath(registry, target.worktree)?.entry;
+    if (existing) {
+      existing.cleanupPending = true;
+      return;
+    }
     if (Object.hasOwn(registry.workspaces, target.name)) {
       throw new WorkspaceError(`Workspace name ${target.name} belongs to a different worktree.`);
     }
@@ -1029,6 +1070,7 @@ async function retainCleanupIdentity(
       worktree: resolve(target.worktree),
       createdAt: now,
       status: "failed",
+      cleanupPending: true,
       recipe: target.recipe,
       failure: { at: now, message: "Infrastructure cleanup incomplete; retry workspace teardown." },
       ...(resolve(target.worktree) === resolve(ctx.mainWorktree) ? { main: true } : {}),
@@ -1089,9 +1131,10 @@ async function deleteOrphanEntries(
 ): Promise<void> {
   await updateWorkspaces(mainWorktree, registryDir, (registry) => {
     const found = findWorkspaceByPath(registry, worktree);
-    if (found && findOrphanNames(registry).includes(found.name)) {
+    if (!found) return;
+    if (findOrphanNames(registry).includes(found.name)) {
       delete registry.workspaces[found.name];
-    }
+    } else delete found.entry.cleanupPending;
   });
 }
 
@@ -1386,6 +1429,7 @@ async function handleRemove(
       {
         label: "workspace remove",
         signal: kernel.config.signal,
+        cooperativeCancellation: true,
         stdout: "stream",
         output: kernel.output,
       },
@@ -1422,6 +1466,7 @@ async function handleRemove(
   }
 
   if (cleanup) await cleanupTarget(kernel, ctx, cleanup);
+  kernel.config.signal?.throwIfAborted();
 
   removeWorktree(worktree, { ...run, cwd: ctx.mainWorktree });
 

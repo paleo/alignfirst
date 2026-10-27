@@ -81,6 +81,7 @@ export {
   markWorkspaceFailed,
   workspaceRecipe,
   assertWorkspaceRecipe,
+  assertWorkspaceCleanupComplete,
 } from "./workspaces.js";
 export type {
   WorkspacesRegistry,
@@ -124,6 +125,7 @@ export type {
   RunFileContext,
 } from "./file-entries.js";
 
+export { assertRegistryOwnership } from "./registry-ownership.js";
 export { runDevServer } from "./dev-server.js";
 export type {
   DevServerConfig,

@@ -15,6 +15,7 @@ import { dirname, join } from "node:path";
 
 import { WorkspaceError } from "./errors.js";
 import { isProcessAlive } from "./process-control.js";
+import { assertLocalRegistryPath } from "./registry-ownership.js";
 
 const LOCK_FILENAME = "workspaces.lock";
 const RETRY_MS = 50;
@@ -40,20 +41,29 @@ export async function withRegistryLock<T>(
 ): Promise<T> {
   const lockPath = join(mainWorktree, registryDir, LOCK_FILENAME);
   const content = `${process.pid}:${randomBytes(8).toString("hex")}`;
-  await acquireLock(lockPath, content, timings);
+  await acquireLock(mainWorktree, lockPath, content, timings);
   try {
+    assertLocalRegistryPath(mainWorktree, lockPath);
     return await fn();
   } finally {
+    assertLocalRegistryPath(mainWorktree, lockPath);
     releaseLock(lockPath, content);
   }
 }
 
-async function acquireLock(lockPath: string, content: string, timings: LockTimings): Promise<void> {
+async function acquireLock(
+  mainWorktree: string,
+  lockPath: string,
+  content: string,
+  timings: LockTimings,
+): Promise<void> {
   const retryMs = timings.retryMs ?? RETRY_MS;
   const staleMs = timings.staleMs ?? STALE_MS;
   const deadline = Date.now() + (timings.timeoutMs ?? TIMEOUT_MS);
+  assertLocalRegistryPath(mainWorktree, lockPath);
   mkdirSync(dirname(lockPath), { recursive: true });
   for (;;) {
+    assertLocalRegistryPath(mainWorktree, lockPath);
     if (tryCreateLock(lockPath, content)) return;
     const staleContent = findStaleLock(lockPath, staleMs);
     if (staleContent !== undefined) {

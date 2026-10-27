@@ -58,6 +58,7 @@ const REGISTRY_SCHEMA = {
             ],
           },
           failure: FAILURE_SCHEMA,
+          cleanupPending: { type: "boolean" },
           main: { type: "boolean" },
           neverFinalized: { type: "boolean" },
           ports: PORTS_SCHEMA,
@@ -92,6 +93,8 @@ export interface WorkspaceEntry {
   createdAt: string;
   status: WorkspaceStatus;
   failure?: { at: string; message: string };
+  /** Destructive workspace cleanup must succeed before any new preparation or startup. */
+  cleanupPending?: boolean;
   /** `true` for the main-worktree entry. Absent on linked entries. */
   main?: boolean;
   /** `true` on a main entry that `dev setup` created before any `workspace setup` finalized it. */
@@ -159,10 +162,12 @@ function loadWorkspaces(mainWorktree: string, registryDir: string): LoadedRegist
     throw new WorkspaceError(
       `Unsupported retired registry ${retired}. Account for its services and resources before explicitly upgrading state.`,
     );
-  const stored = readRegistry<StoredRegistry>(filePath, REGISTRY_SCHEMA, {
-    version: 3,
-    workspaces: {},
-  });
+  const stored = readRegistry<StoredRegistry>(
+    filePath,
+    REGISTRY_SCHEMA,
+    { version: 3, workspaces: {} },
+    mainWorktree,
+  );
   const workspaces: Record<string, WorkspaceEntry> = Object.create(null);
   let mainCount = 0;
   for (const [name, entry] of Object.entries(stored.workspaces)) {
@@ -199,7 +204,12 @@ export function writeWorkspaces(
 ): void {
   const stored: StoredRegistry = { version: REGISTRY_VERSION, workspaces: registry.workspaces };
   loadWorkspaces(mainWorktree, registryDir);
-  writeRegistry(workspacesFilePath(mainWorktree, registryDir), stored, REGISTRY_SCHEMA);
+  writeRegistry(
+    workspacesFilePath(mainWorktree, registryDir),
+    stored,
+    REGISTRY_SCHEMA,
+    mainWorktree,
+  );
 }
 
 /** Reads, mutates and writes the registry under the registry lock. */
@@ -263,6 +273,7 @@ export async function registerWorkspace(
     const name = found?.name ?? allocateWorkspaceName(registry.workspaces, worktree);
     const existing = found?.entry;
     if (existing) assertWorkspaceRecipe(worktree, existing.recipe);
+    assertWorkspaceCleanupComplete(existing);
 
     const entry: WorkspaceEntry = {
       worktree,
@@ -281,6 +292,13 @@ export async function registerWorkspace(
     registry.workspaces[name] = entry;
     return { name, status: entry.status };
   });
+}
+
+export function assertWorkspaceCleanupComplete(entry: WorkspaceEntry | undefined): void {
+  if (entry?.cleanupPending !== true) return;
+  throw new WorkspaceError(
+    `Infrastructure cleanup is pending for ${entry.worktree}. Run \`${wsCmd("teardown")} '${entry.worktree.replaceAll("'", "'\\''")}'\` successfully before setup or dev startup.`,
+  );
 }
 
 function isFinalized(entry: WorkspaceEntry | undefined): boolean {

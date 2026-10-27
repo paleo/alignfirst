@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { assertNoPendingCleanup, findOwnEntry } from "./dev-servers-registry.js";
-import { assertFileDestination } from "./file-destinations.js";
+import { assertDistinctDestinations, assertFileDestination } from "./file-destinations.js";
 import { ConfigError, errorMessage, WorkspaceError } from "./errors.js";
 import {
   type RunFileContext,
@@ -17,6 +17,7 @@ import { isProcessAlive } from "./process-control.js";
 import {
   allocateWorkspaceName,
   assertWorkspaceRecipe,
+  assertWorkspaceCleanupComplete,
   type WorkspaceRecipe,
   findWorkspaceByPath,
   readWorkspaces,
@@ -84,6 +85,10 @@ export async function runDevSetup(input: DevSetupInput): Promise<DevSetupResult>
   input.signal?.throwIfAborted();
   const { worktree, registryDir, options } = input;
   const { mainWorktree } = worktree;
+  assertDistinctDestinations(
+    worktree.currentWorktree,
+    input.runFiles.map((entry) => entry.path),
+  );
   assertWorkspaceRecipe(worktree.currentWorktree, input.recipe);
   assertNoPendingCleanup(mainWorktree, registryDir, worktree.currentWorktree);
   if (options.resetPorts) refuseWhileRunning(mainWorktree, registryDir, worktree.currentWorktree);
@@ -93,6 +98,7 @@ export async function runDevSetup(input: DevSetupInput): Promise<DevSetupResult>
   const entry = readWorkspaces(mainWorktree, registryDir).workspaces[workspace.name];
   if (!entry) throw new WorkspaceError(`No workspace "${workspace.name}" in the registry.`);
   assertWorkspaceRecipe(workspace.worktree, entry.recipe);
+  assertWorkspaceCleanupComplete(entry);
   checkReady(input, workspace, entry);
 
   try {
@@ -140,6 +146,7 @@ async function ensureMainEntry(
 ): Promise<ResolvedWorkspace> {
   return updateWorkspaces(mainWorktree, registryDir, (registry) => {
     const existing = findWorkspaceByPath(registry, mainWorktree);
+    assertWorkspaceCleanupComplete(existing?.entry);
     if (existing?.entry.main === true) {
       assertWorkspaceRecipe(mainWorktree, existing.entry.recipe);
       return { name: existing.name, worktree: existing.entry.worktree, main: true };

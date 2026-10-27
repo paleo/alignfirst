@@ -21,6 +21,7 @@ export interface TargetStopInput {
 /** Only the child-local down path executes a loaded recipe; multi-target callers dispatch here. */
 export async function stopTarget(input: TargetStopInput): Promise<void> {
   const { operation, mainWorktree, registryDir, target } = input;
+  input.signal?.throwIfAborted();
   await markDevServerCleanupPending(mainWorktree, registryDir, target.worktree);
   if (!existsSync(target.worktree))
     throw new WorkspaceError(
@@ -45,6 +46,7 @@ export async function stopTarget(input: TargetStopInput): Promise<void> {
     {
       label: `dev down (${target.name})`,
       signal: input.signal,
+      cooperativeCancellation: true,
       stdout: "stream",
       output: operation.output,
     },

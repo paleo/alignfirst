@@ -16,7 +16,9 @@ Workspace can be adopted independently of protocols, skills and Docmap. Existing
 
 Setup requires usable effective `.plans`, untracked by the product repository. Project-local plans must exist and be ignored. A symlink into a separate work-files repository is supported. Companion plans resolve directly; no project-local link is needed. Linked worktrees must resolve to the main worktree's effective plans target and selection.
 
-`.local-wt/` is always per-worktree runtime storage. It must be ignored, untracked and free of conflicting files or symlinks. Setup creates it when absent; its `workspace-registry/` subdirectory is shared with main. Use tracked `.gitignore` rules with approval, or root-anchored rules in `git rev-parse --git-path info/exclude` when project files must stay unchanged. Local exclusions still change Git metadata; workspace setup is not filesystem-untouched companion mode.
+Main can be adopted before its initial commit. Staged plans/runtime paths, shared sources and generated-file destinations remain protected. Make an initial commit before creating a linked workspace; commit templates before relying on committed-source recipes.
+
+`.local-wt/` is always per-worktree runtime storage. It must be ignored, untracked and free of conflicting files or symlinks. Setup creates it when absent. Its kernel-owned `workspace-registry/` subtree is local to main; linked worktrees link only to their own main's registry. Preserve and repair conflicting or redirected registry state before retrying. Use tracked `.gitignore` rules with approval, or root-anchored rules in `git rev-parse --git-path info/exclude` when project files must stay unchanged. Local exclusions still change Git metadata; workspace setup is not filesystem-untouched companion mode.
 
 Setup never provisions missing plans, selects companions or edits tracked ignore rules. Prepare these separately through [plans setup](plans-setup.md) or [companion setup](companion-setup.md). For an assistant, the separately authorized `aligndev guide work-files-setup` procedure precedes ticket reservation, request capture and coding effects.
 
@@ -35,7 +37,7 @@ Editor schemas ship at `alignfirst/schemas/alignfirst-v1.schema.json` and `@alig
 
 Copy [alignfirst-workspace.json](../assets/alignfirst-workspace.json) and adapt its commands. It is data, not an expression language. The asset is a Node example; scripts own stack-specific details. The optional groups are `workspace` and `devServer`.
 
-`workspace` accepts `sharedDirs`, `gitignoredFiles`, named sequential `preSetup`, `finalize`, `purge` steps and `summary`. Finalize runs in a detached installed-CLI child; ordinary setup waits. `--detached` returns pending, and `workspace wait` joins it. Failed/partial setup retains files and identity; repair the reported problem and retry the printed setup command.
+`workspace` accepts `sharedDirs`, `gitignoredFiles`, named sequential `preSetup`, `finalize`, `purge` steps and `summary`. Finalize runs in a detached installed-CLI child; ordinary setup waits. `--detached` returns pending, and `workspace wait` joins it. Cancelling either waiter leaves an already-spawned finalizer running independently. Without a custom summary, setup and status report the workspace name, path, branch and preparation status. Failed/partial setup retains files and identity; repair the reported problem and retry the printed setup command.
 
 `devServer` accepts `ports`, `runFiles`, `runFilesInputs`, named sequential `setup`, `servers`, `maxConcurrentDevServers` and `summary`. `dev setup` allocates ports and reconciles run files before provisioning infrastructure. It runs implicitly before startup. `workspace setup --full` adds dev setup, not service startup. A dev setup failure leaves preparation ready with a separate failure and a retry path.
 
@@ -69,11 +71,11 @@ Unavailable fields are omitted. Scalar conveniences are `ALIGNFIRST_NAME`, `ALIG
 | Summary | Closed | Summary text |
 | Computed inputs | Closed | JSON object with string values |
 
-Send diagnostics to stderr and propagate launch, signal and nonzero failures. Steps run sequentially. Only purge steps accept `continueOnError`; later attempts continue but any failure retains cleanup state and makes the operation fail.
+Send diagnostics to stderr and propagate launch, signal and nonzero failures. Steps run sequentially. SIGINT/SIGTERM cancel active lifecycle commands and readiness waits; cancelled file generation stops before writing. Startup cancellation waits for rollback with a fresh cleanup lifetime. An attached foreground session only detaches on interruption; it does not own the running services. Only purge steps accept `continueOnError`; ordinary failures allow later attempts, retain cleanup state and make the operation fail. Cancellation waits for owned commands to terminate and prevents later steps, including those following `continueOnError`.
 
 ### Files and input fingerprints
 
-Each file entry has `path`, `source`, optional `patch` and `optional`. Put install/build/test inputs in `workspace.gitignoredFiles`; put port-bearing/runtime inputs in `devServer.runFiles`. One destination cannot occur in both. Tracked files, Git metadata and symlink escapes are protected.
+Each file entry has `path`, `source`, optional `patch` and `optional`. Put install/build/test inputs in `workspace.gitignoredFiles`; put port-bearing/runtime inputs in `devServer.runFiles`. One destination cannot occur in both. Committed and staged files, Git metadata, the reserved registry subtree (including ancestors and symlink aliases) and symlink escapes are protected.
 
 Sources are `{ "kind": "mainWorktree", "fallback": ".env.example" }`, `{ "kind": "committed", "path": ".env.example" }`, or `{ "kind": "content", "content": <text-output> }`. Main sources prefer customized main content, falling back to a template in the target branch. Text output is a string or `{ "command": <command> }`. Script-based source selection reads main/branch files using the ABI and emits selected content.
 
@@ -93,7 +95,7 @@ A spawn service has unique `name`, `exec`, optional named/numeric `port`, requir
 
 A command service has `kind: "command"`, `name`, `start` and optional `stop`. Start returns only after the resource is ready; custom database probes belong in scripts. Failed starts clean their partial effects or leave them recoverable by purge. Omitted stop deliberately retains the resource until purge. Servers launch in array order and stop in reverse; ordered spawning does not promise readiness dependencies. Managed environments require at least one spawn service; callback-only container stacks are not PID-supervised.
 
-`maxConcurrentDevServers` is a positive integer; omission means unlimited. At capacity, `--evict` stops the oldest environment using its target recipe. A stop failure prevents replacement startup.
+`maxConcurrentDevServers` is a positive integer; omission means unlimited. At capacity, `--evict` stops the oldest environment using its target recipe. A stop failure prevents replacement startup. Exclusive per-worktree startup claims in `dev-startups.json` hold a PID and unique token across setup/startup; live claims do not age out. Instance tokens protect replacement runs from stale rollback or cleanup. These claims do not make the cross-worktree cap atomic; simultaneous starts can exceed it.
 
 ### Public URLs
 
@@ -115,7 +117,7 @@ Paseo or another external owner runs `workspace setup` inside its checkout, then
 
 ### Teardown by name
 
-Existing targets use their current branch's recipe, commands, cwd and env. Missing manifest-backed targets require main's purge recipe and execute there with the missing target's recorded identity/path. Name/label resources with `composeProject` or durable name-keyed records under main; do not depend on deleted target files. Main must cover resource families from participating branches. Use explicit Compose `-p` on every operation. Stop and purge scripts must be idempotent and propagate failures. Failed cleanup retains records even after PIDs exit; repair and retry before new setup/start.
+Existing targets use their current branch's recipe, commands, cwd and env. Missing manifest-backed targets require main's purge recipe and execute there with the missing target's recorded identity/path. Name/label resources with `composeProject` or durable name-keyed records under main; do not depend on deleted target files. Main must cover resource families from participating branches. Use explicit Compose `-p` on every operation. Stop and purge scripts must be idempotent and propagate failures. Failed cleanup retains records even after PIDs exit. The workspace's independent `cleanupPending` gate blocks setup, dev setup and startup until successful workspace cleanup completes stop and purge. A successful `dev down` alone cannot clear that gate; repair and retry `workspace teardown`.
 
 ## Agent Instructions
 

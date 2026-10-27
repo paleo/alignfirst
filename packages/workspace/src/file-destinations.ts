@@ -12,7 +12,14 @@ export function assertFileDestination(root: string, path: string): string {
   if (relative(resolve(root), target).split(sep)[0] === ".git") {
     throw new ConfigError(`Refusing Git metadata destination: ${path}.`);
   }
+  const registry = resolve(root, ".local-wt", "workspace-registry");
+  if (overlaps(registry, target)) {
+    throw new ConfigError(`Refusing kernel-owned registry destination: ${path}.`);
+  }
   const canonical = canonicalDestination(target);
+  if (overlaps(canonicalDestination(registry), canonical)) {
+    throw new ConfigError(`Refusing kernel-owned registry destination through a link: ${path}.`);
+  }
   if (!isWithin(realpathSync(root), canonical)) {
     throw new ConfigError(`File destination escapes worktree through a link: ${path}.`);
   }
@@ -49,6 +56,10 @@ function canonicalDestination(path: string): string {
   const parent = dirname(path);
   if (parent === path) return path;
   return resolve(canonicalDestination(parent), relative(parent, path));
+}
+
+function overlaps(first: string, second: string): boolean {
+  return first === second || isWithin(first, second) || isWithin(second, first);
 }
 
 function isWithin(root: string, target: string): boolean {

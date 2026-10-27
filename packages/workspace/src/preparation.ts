@@ -15,6 +15,7 @@ import { assertFileDestination } from "./file-destinations.js";
 import {
   canonicalPath,
   git,
+  headCommit,
   isInside,
   isProjectTrackedDirectory,
   pathExists,
@@ -46,16 +47,25 @@ export async function validateMainBaseline(
   const local = join(ctx.mainWorktree, ".local");
   if (
     pathExists(local) &&
-    !targetTracks(source, "HEAD", ".local") &&
+    !targetTracks(source, preparationCommit(source), ".local") &&
     !statSync(local).isDirectory()
   )
     throw new WorkspaceError(`Source is not a usable directory: ${local}`);
   return protection;
 }
 
+function preparationCommit(source: GitContext): string | undefined {
+  const head = headCommit(source);
+  if (head === undefined && canonicalPath(source.cwd) !== readRepository(source).mainWorktree)
+    throw new WorkspaceError(
+      "HEAD has no commit. Only the main worktree can be prepared before its initial commit.",
+    );
+  return head;
+}
+
 export function assertReservedCommit(
   source: GitContext,
-  commit: string,
+  commit: string | undefined,
   protection: SharedDirectoryProtection,
   includeIndex = false,
 ): void {
@@ -67,15 +77,16 @@ export function assertReservedCommit(
   }
 }
 
-export function targetTracks(
+function targetTracks(
   source: GitContext,
-  commit: string,
+  commit: string | undefined,
   path: string,
   includeIndex = true,
 ): boolean {
   return (
-    git(source, "--literal-pathspecs", "ls-tree", "-r", "--name-only", "-z", commit, "--", path)
-      .length > 0 ||
+    (commit !== undefined &&
+      git(source, "--literal-pathspecs", "ls-tree", "-r", "--name-only", "-z", commit, "--", path)
+        .length > 0) ||
     (includeIndex && git(source, "--literal-pathspecs", "ls-files", "-z", "--", path).length > 0)
   );
 }
@@ -91,7 +102,9 @@ export async function planPreparation(
   const protection = await host.sharedDirectoryProtection(ctx.mainWorktree);
   const source = { cwd: ctx.mainWorktree, env };
   const target = { cwd: ctx.currentWorktree, env };
-  assertReservedCommit(target, "HEAD", protection, true);
+  const mainCommit = preparationCommit(source);
+  const targetCommit = ctx.isMainWorktree ? mainCommit : preparationCommit(target);
+  assertReservedCommit(target, targetCommit, protection, true);
   validateRuntimeStorage(target);
   const repo = readRepository(source);
   const links: Link[] = [];
@@ -120,14 +133,14 @@ export async function planPreparation(
       throw new WorkspaceError(
         `Shared directory overlaps mandatory plans/runtime storage: ${name}`,
       );
-    if (targetTracks(target, "HEAD", name)) {
+    if (targetTracks(target, targetCommit, name)) {
       if (name !== ".local") throw new WorkspaceError(`Shared directory is tracked: ${name}`);
       diagnostic(
         "Warning: Target branch tracks .local; it remains branch-local and is not shared.",
       );
       continue;
     }
-    if (targetTracks(source, "HEAD", name)) {
+    if (targetTracks(source, mainCommit, name)) {
       if (name !== ".local")
         throw new WorkspaceError(`Shared source contains project-tracked content: ${main}`);
       diagnostic("Warning: Main .local contains tracked content; it is not shared.");
@@ -208,7 +221,7 @@ export async function planPreparation(
 
 export function validateRuntimeStorage(source: GitContext): void {
   const path = join(source.cwd, ".local-wt");
-  if (targetTracks(source, "HEAD", ".local-wt"))
+  if (targetTracks(source, preparationCommit(source), ".local-wt"))
     throw new WorkspaceError(`Runtime storage is tracked: ${path}`);
   const stat = lstatSync(path, { throwIfNoEntry: false });
   if (stat && (!stat.isDirectory() || stat.isSymbolicLink()))

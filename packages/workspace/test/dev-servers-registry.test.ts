@@ -1,4 +1,13 @@
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -21,6 +30,8 @@ import {
   writeDevServers,
   type DevServerEntry,
 } from "../src/dev-servers-registry.js";
+
+import { claimStartup, releaseStartup } from "../src/startup-ownership.js";
 
 function entry(
   name: string,
@@ -143,6 +154,65 @@ describe("evictOldest", () => {
       JSON.parse(readFileSync(devServersFilePath(mainWorktree, registryDir), "utf8")).version,
     ).toBe(1);
     expect(readdirSync(join(mainWorktree, registryDir))).toEqual(["dev-servers.json"]);
+  });
+
+  it("keeps a slow live startup exclusive without retaining the registry lock", async () => {
+    const worktree = join(mainWorktree, "target");
+    const owner = await claimStartup(mainWorktree, registryDir, worktree);
+    const path = join(mainWorktree, registryDir, "dev-startups.json");
+    utimesSync(path, new Date(0), new Date(0));
+    await expect(claimStartup(mainWorktree, registryDir, worktree)).rejects.toThrow(
+      "startup already in progress",
+    );
+    const sibling = entry("sibling", { app: process.pid });
+    await registerDevServer(mainWorktree, registryDir, sibling);
+    expect(readDevServers(mainWorktree, registryDir).servers).toEqual([sibling]);
+    await releaseStartup(mainWorktree, registryDir, owner);
+    const replacement = await claimStartup(mainWorktree, registryDir, worktree);
+    expect(replacement.id).not.toBe(owner.id);
+    await releaseStartup(mainWorktree, registryDir, replacement);
+  });
+
+  it("reclaims a dead owner but rejects its stale publication, rollback and release", async () => {
+    const worktree = join(mainWorktree, "target");
+    const exited = spawnSync(process.execPath, ["-p", "process.pid"], { encoding: "utf8" });
+    expect(exited.status).toBe(0);
+    const deadOwner = { worktree, id: "abandoned", pid: Number(exited.stdout.trim()) };
+    mkdirSync(join(mainWorktree, registryDir), { recursive: true });
+    writeFileSync(
+      join(mainWorktree, registryDir, "dev-startups.json"),
+      JSON.stringify({ version: 1, owners: [deadOwner] }),
+    );
+    const owner = await claimStartup(mainWorktree, registryDir, worktree);
+    const winner = {
+      ...entry("target", { app: process.pid }),
+      worktree,
+      instanceId: owner.id,
+    };
+    await registerDevServer(mainWorktree, registryDir, winner, owner);
+    await releaseStartup(mainWorktree, registryDir, deadOwner);
+    await expect(claimStartup(mainWorktree, registryDir, worktree)).rejects.toThrow(
+      "startup already in progress",
+    );
+    const stale = { ...winner, instanceId: deadOwner.id };
+    await expect(registerDevServer(mainWorktree, registryDir, stale, deadOwner)).rejects.toThrow(
+      "ownership lost",
+    );
+    await expect(
+      markDevServerCleanupPending(mainWorktree, registryDir, worktree, stale, deadOwner),
+    ).rejects.toThrow("ownership lost");
+    expect(
+      await markDevServerCleanupPending(mainWorktree, registryDir, worktree, stale),
+    ).toBeUndefined();
+    await completeDevServerCleanup(
+      mainWorktree,
+      registryDir,
+      worktree,
+      winner.startedAt,
+      deadOwner.id,
+    );
+    expect(readDevServers(mainWorktree, registryDir).servers).toEqual([winner]);
+    await releaseStartup(mainWorktree, registryDir, owner);
   });
 
   it("preserves child/sibling mutations during cross-target eviction", async () => {

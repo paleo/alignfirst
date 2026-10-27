@@ -3,8 +3,10 @@ import { lstatSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync }
 import { dirname } from "node:path";
 import { validateConfigSchema } from "./config.js";
 import { WorkspaceError } from "./errors.js";
+import { assertLocalRegistryPath } from "./registry-ownership.js";
 
-export function readRegistry<T>(path: string, schema: object, empty: T): T {
+export function readRegistry<T>(path: string, schema: object, empty: T, mainWorktree: string): T {
+  assertLocalRegistryPath(mainWorktree, path);
   let text: string;
   try {
     text = readFileSync(path, "utf8");
@@ -33,12 +35,19 @@ export function readRegistry<T>(path: string, schema: object, empty: T): T {
 }
 
 /** Call under the registry lock. Readers see either complete revision. */
-export function writeRegistry(path: string, data: unknown, schema: object): void {
+export function writeRegistry(
+  path: string,
+  data: unknown,
+  schema: object,
+  mainWorktree: string,
+): void {
+  assertLocalRegistryPath(mainWorktree, path);
   validateConfigSchema(data, schema, path);
   mkdirSync(dirname(path), { recursive: true });
   const temp = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
   try {
     writeFileSync(temp, `${JSON.stringify(data, undefined, 2)}\n`);
+    assertLocalRegistryPath(mainWorktree, path);
     renameSync(temp, path);
   } finally {
     rmSync(temp, { force: true });
