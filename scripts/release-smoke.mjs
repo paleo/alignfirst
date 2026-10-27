@@ -6,6 +6,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -38,6 +39,8 @@ function smokeTestRelease() {
   const cliRoot = disposableInstall("cli", [docmap, workspace, alignfirst, aligndev]);
   for (const packed of [docmap, workspace, alignfirst, aligndev]) {
     assert.equal(installedManifest(cliRoot, packed.name).version, packed.version);
+    const installed = join(cliRoot, "node_modules", packed.name);
+    assert.equal(realpathSync(installed), installed, `${packed.name} must come from its tarball`);
     assert.equal(existsSync(join(cliRoot, "node_modules", packed.name, "dist")), true);
     const manifest = installedManifest(cliRoot, packed.name);
     assert.equal(manifest.pi, undefined, `${packed.name} must remain a CLI`);
@@ -79,7 +82,7 @@ function smokeTestRelease() {
     );
   }
   console.log(
-    `CLI release smoke passed: docmap@${docmap.version}, alignfirst@${alignfirst.version}, aligndev@${aligndev.version}.`,
+    `CLI release smoke passed: docmap@${docmap.version}, workspace@${workspace.version}, alignfirst@${alignfirst.version}, aligndev@${aligndev.version}.`,
   );
   if (process.argv.includes("--cli-only")) return;
   const [subagent, background] = ["pi-subagent", "pi-background"].map(packWorkspace);
