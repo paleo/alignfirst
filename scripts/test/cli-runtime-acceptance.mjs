@@ -584,6 +584,18 @@ function workspaceLifecycle(executable = bun, runtime = "bun") {
     ["commit", "-m", "workspace fixture"],
   ])
     check(`${runtime}-workspace-git`, "git", args, { cwd: project });
+  const companion = tier === "matrix" && runtime === "bun";
+  if (companion) {
+    const registration = join(process.env.HOME, ".alignfirst/companions/registry.json");
+    mkdirSync(dirname(registration), { recursive: true });
+    const registry = existsSync(registration) ? JSON.parse(readFileSync(registration, "utf8")) : {};
+    registry.projects ??= {};
+    registry.projects[project] = {
+      dir: join(output, "runtime companion"),
+      items: { workspaceRuntime: "companion", ".plans": "project" },
+    };
+    writeFileSync(registration, JSON.stringify(registry));
+  }
   const before = readRecords(audit).length;
   try {
     invoke("workspace-guide", ["workspace", "--guide"]);
@@ -595,9 +607,16 @@ function workspaceLifecycle(executable = bun, runtime = "bun") {
       "--path",
       linked,
       "-d",
+      "--full",
     ]);
     invoke("workspace-wait", ["workspace", "wait", linked]);
-    assert.ok(existsSync(join(linked, ".local-wt/finalized.txt")));
+    const report = JSON.parse(invoke("workspace-config", ["config", "--json"], linked));
+    assert.ok(existsSync(join(report.workspace.runtimeDir, "finalized.txt")));
+    if (companion) {
+      assert.equal(report.locations.workspaceRuntime.in, "companion");
+      assert.equal(existsSync(join(linked, ".local-wt")), false);
+      assert.equal(existsSync(join(project, ".local-wt")), false);
+    }
     for (const path of ["package.json", "node_modules", "dist"])
       assert.equal(existsSync(join(linked, path)), false);
     invoke("dev-up", ["dev", "up"], linked);
@@ -674,6 +693,7 @@ function verifyWorkspaceRuntime({
     .filter((record) => /\/alignfirst(?:\.mjs)?$/.test(record.argv[0] ?? ""));
   for (const args of [
     ["workspace", "__finalize"],
+    ["dev", "setup"],
     ["dev", "down"],
     ["workspace", "remove"],
   ]) {

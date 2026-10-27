@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
+  appendFileSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -21,8 +23,12 @@ const installRoot = mkdtempSync(join(tmpdir(), "alignfirst-release-"));
 
 try {
   smokeTestRelease();
-} finally {
   rmSync(installRoot, { force: true, recursive: true });
+} catch (error) {
+  console.error(
+    `Release smoke failed; retained owned fixtures/tarballs for recovery: ${installRoot}`,
+  );
+  throw error;
 }
 
 function smokeTestRelease() {
@@ -59,7 +65,23 @@ function smokeTestRelease() {
   verifyInvocationConsumers(cliRoot);
   for (const [name, schema] of [["alignfirst", "alignfirst-v1"]]) {
     const asset = join(cliRoot, "node_modules", name, "schemas", `${schema}.schema.json`);
-    assert.equal(JSON.parse(readFileSync(asset, "utf8")).type, "object");
+    const installedSchema = JSON.parse(readFileSync(asset, "utf8"));
+    assert.equal(installedSchema.type, "object");
+    assert.deepEqual(Object.keys(installedSchema.properties).sort(), [
+      "$schema",
+      "conventions",
+      "devServer",
+      "developerInstructions",
+      "plans",
+      "schemaVersion",
+      "workspace",
+    ]);
+    assert.equal(
+      existsSync(
+        join(cliRoot, "node_modules/@alignfirst/workspace/schemas/workspace-v1.schema.json"),
+      ),
+      false,
+    );
   }
   verifyPackagedWorkspaces({
     executable: process.execPath,
@@ -198,7 +220,23 @@ function packWorkspace(directory) {
   if (typeof manifest.version !== "string" || typeof filename !== "string") {
     throw new Error(`Could not pack packages/${directory}.`);
   }
-  return { tarball: join(installRoot, filename), version: manifest.version, name: manifest.name };
+  const packed = {
+    tarball: join(installRoot, filename),
+    version: manifest.version,
+    name: manifest.name,
+  };
+  if (process.env.PACKAGED_WORKSPACE_EVIDENCE !== undefined)
+    appendFileSync(
+      process.env.PACKAGED_WORKSPACE_EVIDENCE,
+      `${JSON.stringify({
+        kind: "localTarball",
+        ...packed,
+        sha256: createHash("sha256").update(readFileSync(packed.tarball)).digest("hex"),
+        executable: process.execPath,
+        node: process.version,
+      })}\n`,
+    );
+  return packed;
 }
 
 function disposableInstall(name, packages, host = false) {

@@ -19,7 +19,7 @@ A block names a fact, each marker alone on its line. A line is kept when every b
 | Slack | `openclaw`, `slack`, `thread` |
 | Discord | `openclaw`, `discord`, `thread` |
 | App | `openclaw`, `app`, `conversation` |
-| `codingAgent` | `codingAgent`, `conversation`, and `developers`, `readme` or `noGuide` (`hasGuide` with the first two) |
+| `codingAgent` | `codingAgent`, `conversation` |
 
 ```text
 {{#openclaw}}
@@ -33,21 +33,9 @@ Text only for a coding agent.
 {{/codingAgent}}
 ```
 
-A `codingAgent` sentence that depends on the project's guide file sits in a condition block: `{{#developers}}` for a project with `DEVELOPERS.md`, `{{#readme}}` for one with `README.md` only, `{{#noGuide}}` for neither. `aligndev guide` resolves the condition from its working directory. A condition block holds only the differing sentence:
+Project instructions are read at execution time through `{{ALIGNFIRST}} developer-instructions` from the selected workplace. The command prints conventions and explicitly configured content; without a reference it prints conventions only. Use nullable `locations.developerInstructions` from `config --json` to locate edits. Guide rendering does not inspect project filenames or offer project-file condition blocks.
 
-```text
-{{#codingAgent}}
-Shared coding-agent sentence.
-{{#developers}}
-Sentence for a project with DEVELOPERS.md.
-{{/developers}}
-{{#noGuide}}
-Sentence for a project without a guide file.
-{{/noGuide}}
-{{/codingAgent}}
-```
-
-A platform block sits at the top level. A surface block and `{{#thread}}` never sit inside a `{{#codingAgent}}` block, and `{{#conversation}}` sits anywhere. A condition block sits inside a `{{#codingAgent}}` block, at any depth, which keeps the OpenClaw output independent of the project. An unknown name, a misplaced block, an unclosed block or a stray closing marker fails the render, naming the template and the line.
+A platform block sits at the top level. A surface block and `{{#thread}}` never sit inside a `{{#codingAgent}}` block, and `{{#conversation}}` sits anywhere. An unknown name, a misplaced block, an unclosed block or a stray closing marker fails the render, naming the template and the line.
 
 After block removal, runs of blank lines collapse to one, which repairs the gaps left by dropped blocks. Keep the templates free of double blank lines: the collapse would remove them from the rendered output.
 
