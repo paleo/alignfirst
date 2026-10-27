@@ -215,7 +215,7 @@ describe("installed CLI boundary", () => {
     await markWorkspaceReady(root, registryDirFor(config.runtimeDir), target);
     await runWorkspace(config, { ...operation, ...parseWorkspaceArgs(["teardown", target]) });
     expect(captured()).toMatchObject({
-      argv: [operation.invocation.entryPoint, "dev", "down"],
+      argv: [operation.invocation.entryPoint, "dev", "down", "--retain-cleanup"],
       cwd: target,
     });
   });

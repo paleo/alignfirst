@@ -14,6 +14,7 @@ import {
   type DevServerEntry,
   assertNoPendingCleanup,
   completeDevServerCleanup,
+  markDevServerCleanupPending,
   hasLiveSpawnPids,
   liveDevServers,
   evictOldest,
@@ -26,7 +27,8 @@ import {
   readDevServers,
   stopAllRegistered,
 } from "./dev-servers-registry.js";
-import { ConfigError, StartupError, WorkspaceError } from "./errors.js";
+import { stopTarget } from "./target-stop.js";
+import { ConfigError, errorMessage, StartupError, WorkspaceError } from "./errors.js";
 import type { RunFileEntry } from "./file-entries.js";
 import {
   awaitAllReady,
@@ -200,12 +202,11 @@ async function dispatch(command: DevCommand, kernel: DevKernel): Promise<void> {
         await stopAllRegistered({
           mainWorktree: worktree.mainWorktree,
           registryDir,
-          callbackServers: callbackServersOf(kernel.config),
-          portsOf: portsLookup(kernel),
+          stopTarget: (target) => dispatchStop(kernel, target),
           output: kernel.output,
         });
       } else {
-        await stopLocal(kernel);
+        await stopLocal(kernel, command.retainCleanup);
       }
       return;
     case "up":
@@ -296,16 +297,12 @@ interface StartOptions {
 }
 
 async function start(kernel: DevKernel, options: StartOptions): Promise<void> {
-  const { config, worktree, registryDir } = kernel;
   const prepared = await runStartChecks(kernel, options);
   if (!prepared) return;
   const { workspace, ctx, servers } = prepared;
 
   const state: StartState = { spawnPids: Object.create(null), startedCallbacks: [] };
-  await spawnWithRollback(config, ctx, state, servers);
-
-  await registerStartedServer(worktree.mainWorktree, registryDir, workspace, state.spawnPids);
-  await printStartSummary(config, workspace, servers, state.spawnPids, ctx.ports);
+  await spawnWithRollback(kernel, workspace, ctx, state, servers);
 }
 
 /**
@@ -349,16 +346,18 @@ async function runForeground(kernel: DevKernel, options: StartOptions): Promise<
     const { workspace, ctx, servers } = prepared;
     const streamLogs = (): void =>
       tailLogs(config, workspace.worktree, state.spawnPids, { fromStart: true });
-    await spawnWithRollback(config, ctx, state, servers, streamLogs);
+    await spawnWithRollback(kernel, workspace, ctx, state, servers, streamLogs);
     ctx.signal?.throwIfAborted();
   } catch (error) {
-    if (shuttingDown) process.exit(130);
+    process.removeListener("SIGINT", onSignal);
+    process.removeListener("SIGTERM", onSignal);
+    if (shuttingDown) {
+      kernel.output.diagnostic(errorMessage(error));
+      process.exit(130);
+    }
     throw error;
   }
-  const { workspace, ctx, servers } = prepared;
-  await registerStartedServer(mainWorktree, registryDir, workspace, state.spawnPids);
   started = true;
-  await printStartSummary(config, workspace, servers, state.spawnPids, ctx.ports);
   watchForExternalStop(Object.values(state.spawnPids), () => {
     if (shuttingDown) return;
     shuttingDown = true;
@@ -416,9 +415,14 @@ async function attachForeground(config: RuntimeDevConfig, entry: DevServerEntry)
 
 async function shutdownForeground(kernel: DevKernel): Promise<void> {
   kernel.output.text("\nStopping dev servers...");
-  await stopLocal(kernel);
-  kernel.output.text("Stopped.");
-  process.exit(0);
+  try {
+    await stopLocal(kernel);
+    kernel.output.text("Stopped.");
+    process.exit(0);
+  } catch (error) {
+    kernel.output.diagnostic(errorMessage(error));
+    process.exit(1);
+  }
 }
 
 interface PreparedStart {
@@ -462,17 +466,37 @@ async function runStartChecks(
  * Spawn the resolved descriptors and await readiness, rolling back on failure or cancellation.
  */
 async function spawnWithRollback(
-  config: RuntimeDevConfig,
+  kernel: DevKernel,
+  workspace: ResolvedWorkspace,
   ctx: ServerContext,
   state: StartState,
   servers: ResolvedServerDescriptor[],
   onSpawned?: () => void,
 ): Promise<void> {
+  const { config } = kernel;
+  const entry: DevServerEntry = {
+    name: workspace.name,
+    worktree: workspace.worktree,
+    pids: state.spawnPids,
+    startedAt: new Date().toISOString(),
+    ...(workspace.main ? { main: true } : {}),
+  };
   try {
     await spawnAndAwait(config, ctx, state, servers, onSpawned);
     ctx.signal?.throwIfAborted();
+    await registerDevServer(kernel.worktree.mainWorktree, kernel.registryDir, entry);
+    ctx.signal?.throwIfAborted();
+    await printStartSummary(config, workspace, servers, state.spawnPids, ctx.ports);
+    ctx.signal?.throwIfAborted();
   } catch (err) {
-    await rollbackStart(state.spawnPids, state.startedCallbacks, ctx, config.output);
+    try {
+      await rollbackStart(kernel, entry, state.startedCallbacks, ctx);
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [err, cleanupError],
+        `${errorMessage(err)}; ${errorMessage(cleanupError)}`,
+      );
+    }
     ctx.signal?.throwIfAborted();
     if (err instanceof StartupError) {
       // The foreground (onSpawned set) already streamed the log live, so skip the redundant tail.
@@ -527,22 +551,6 @@ async function spawnAndAwait(
   }));
   const pollPids = spawnEntries.map((s) => state.spawnPids[s.name]);
   await awaitAllReady(pollables, pollPids, { signal: ctx.signal });
-}
-
-async function registerStartedServer(
-  mainWorktree: string,
-  registryDir: string,
-  workspace: ResolvedWorkspace,
-  spawnPids: Record<string, number>,
-): Promise<void> {
-  const devEntry: DevServerEntry = {
-    name: workspace.name,
-    worktree: workspace.worktree,
-    pids: spawnPids,
-    startedAt: new Date().toISOString(),
-  };
-  if (workspace.main) devEntry.main = true;
-  await registerDevServer(mainWorktree, registryDir, devEntry);
 }
 
 async function printStartSummary(
@@ -621,27 +629,59 @@ export function watchForExternalStop(
 }
 
 async function rollbackStart(
-  spawnPids: Record<string, number>,
-  startedCallbacks: CallbackServer[],
+  kernel: DevKernel,
+  entry: DevServerEntry,
+  callbacks: CallbackServer[],
   ctx: ServerContext,
-  output: WorkspaceOutput,
 ): Promise<void> {
-  output.diagnostic("\nStopping dev servers...");
-  for (const pid of Object.values(spawnPids)) {
+  await markDevServerCleanupPending(
+    kernel.worktree.mainWorktree,
+    kernel.registryDir,
+    ctx.cwd,
+    entry,
+  );
+  kernel.output.diagnostic("\nStopping dev servers...");
+  await stopOwnedServices(kernel, entry, callbacks, {
+    ...ctx,
+    signal: new AbortController().signal,
+  });
+  await completeDevServerCleanup(
+    kernel.worktree.mainWorktree,
+    kernel.registryDir,
+    ctx.cwd,
+    entry.startedAt,
+  );
+}
+
+async function stopOwnedServices(
+  kernel: DevKernel,
+  entry: DevServerEntry,
+  callbacks: CallbackServer[],
+  ctx: ServerContext,
+): Promise<void> {
+  const failures: unknown[] = [];
+  for (const [name, pid] of Object.entries(entry.pids).reverse()) {
+    if (!isProcessAlive(pid)) continue;
+    kernel.output.text(`Stopping ${name} (PID ${pid})...`);
     try {
       await stopProcessGroup(pid);
-    } catch (err) {
-      output.diagnostic(`  Failed to stop PID ${pid}: ${(err as Error).message}`);
+    } catch (error) {
+      failures.push(error);
     }
   }
-  for (const server of [...startedCallbacks].reverse()) {
-    output.text(`Stopping ${server.name}...`);
+  for (const server of [...callbacks].reverse()) {
+    kernel.output.text(`Stopping ${server.name}...`);
     try {
-      await server.stop({ ...ctx, signal: new AbortController().signal });
-    } catch (err) {
-      output.diagnostic(`  Failed to stop ${server.name}: ${(err as Error).message}`);
+      await server.stop(ctx);
+    } catch (error) {
+      failures.push(error);
     }
   }
+  if (failures.length > 0)
+    throw new AggregateError(
+      failures,
+      `Cleanup pending for ${entry.worktree}: ${failures.map(errorMessage).join("; ")}`,
+    );
 }
 
 /**
@@ -699,8 +739,7 @@ async function enforceCap(kernel: DevKernel, evict: boolean): Promise<void> {
   const evicted = await evictOldest({
     mainWorktree,
     registryDir,
-    callbackServers: callbackServersOf(config),
-    portsOf: portsLookup(kernel),
+    stopTarget: (target) => dispatchStop(kernel, target),
     count: toEvict,
     output: kernel.output,
   });
@@ -790,7 +829,7 @@ async function checkNoLocalRegistryConflict(
   await completeDevServerCleanup(mainWorktree, registryDir, cwd, entry.startedAt);
 }
 
-async function stopLocal(kernel: DevKernel): Promise<void> {
+async function stopLocal(kernel: DevKernel, retainCleanup = false): Promise<void> {
   const { config, registryDir } = kernel;
   const { mainWorktree, currentWorktree } = kernel.worktree;
   const entry = findOwnEntry(mainWorktree, registryDir, currentWorktree);
@@ -806,19 +845,23 @@ async function stopLocal(kernel: DevKernel): Promise<void> {
     await sweepStalePorts(servers, cwd);
     return;
   }
+  await markDevServerCleanupPending(mainWorktree, registryDir, cwd);
   const ctx: ServerContext = { name: entry.name, cwd, ports, signal: config.signal };
-  for (const [name, pid] of Object.entries(entry.pids)) {
-    if (!isProcessAlive(pid)) continue;
-    kernel.output.text(`Stopping ${name} (PID ${pid})...`);
-    await stopProcessGroup(pid);
-  }
-  const callbacks = callbackServersOf(config);
-  for (const server of [...callbacks].reverse()) {
-    kernel.output.text(`Stopping ${server.name}...`);
-    await server.stop(ctx);
-  }
-  await completeDevServerCleanup(mainWorktree, registryDir, ctx.cwd, entry.startedAt);
+  await stopOwnedServices(kernel, entry, callbackServersOf(config), ctx);
   await sweepStalePorts(servers, ctx.cwd);
+  if (!retainCleanup)
+    await completeDevServerCleanup(mainWorktree, registryDir, ctx.cwd, entry.startedAt);
+}
+
+function dispatchStop(kernel: DevKernel, target: DevServerEntry): Promise<void> {
+  return stopTarget({
+    operation: kernel,
+    mainWorktree: kernel.worktree.mainWorktree,
+    registryDir: kernel.registryDir,
+    target,
+    signal: kernel.config.signal,
+    local: { worktree: kernel.worktree.currentWorktree, stop: () => stopLocal(kernel) },
+  });
 }
 
 function defaultPrintSummary(

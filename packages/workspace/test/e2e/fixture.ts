@@ -130,7 +130,8 @@ function fixtureManifest(options: FixtureOptions): WorkspaceManifest {
 }
 
 function lifecycleSource(): string {
-  return `import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+  return `import { spawn } from "node:child_process";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 const ctx = JSON.parse(process.env.ALIGNFIRST_CONTEXT);
 const action = process.argv[2];
@@ -162,6 +163,10 @@ if (action === "finalize") {
 } else if (action === "portsContent") {
   process.stdout.write("web=" + (process.env.E2E_HOST ?? "localhost") + ":" + ctx.ports.web + "\\n");
 } else if (action === "devSetup") {
+  if (process.env.E2E_SETUP_GRANDCHILD_FILE !== undefined) {
+    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+    writeFileSync(process.env.E2E_SETUP_GRANDCHILD_FILE, String(child.pid));
+  }
   await barrier("E2E_DEV_SETUP_BARRIER");
   if (process.env.E2E_DEV_EXIT === "1") process.exit(3);
   if (process.env.E2E_DEV_SETUP_FAIL === "1") throw new Error("e2e dev boom.");
@@ -196,6 +201,75 @@ if (process.env.E2E_RESIST_TERM === "1") process.on("SIGTERM", () => {});
 console.log("FIXTURE_READY");
 setInterval(() => {}, 1000);
 `;
+}
+
+export function installResourceRecipe(
+  worktree: string,
+  version: string,
+  options: { service?: boolean } = {},
+): void {
+  const file = join(worktree, "alignfirst-workspace.json");
+  const manifest: WorkspaceManifest = JSON.parse(readFileSync(file, "utf8"));
+  const command = (action: string): Command => ({
+    run: [cliExecutable, "scripts/resource.mjs", action],
+    env: { E2E_RECIPE_VERSION: version },
+  });
+  if (options.service !== false)
+    manifest.devServer?.servers.push({
+      kind: "command",
+      name: "extra",
+      start: command("start"),
+      stop: command("stop"),
+    });
+  manifest.workspace ??= {};
+  manifest.workspace.purge = [{ name: "resource", ...command("purge") }];
+  writeFileSync(file, JSON.stringify(manifest));
+  writeFileSync(
+    join(worktree, "scripts", "resource.mjs"),
+    `import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+const ctx = JSON.parse(process.env.ALIGNFIRST_CONTEXT);
+const action = process.argv[2];
+const version = ${JSON.stringify(version)};
+const resources = join(dirname(ctx.mainWorktree), "resources");
+mkdirSync(resources, { recursive: true });
+const marker = join(resources, ctx.name);
+appendFileSync(join(ctx.mainWorktree, "resource-runs.jsonl"), JSON.stringify({ action, version, recipeVersion: process.env.E2E_RECIPE_VERSION, cwd: process.cwd(), ctx }) + "\\n");
+if (action === "start") writeFileSync(marker, version);
+if (action === "stop" && process.env.E2E_RESOURCE_STOP_BARRIER !== undefined) {
+  const barrier = process.env.E2E_RESOURCE_STOP_BARRIER;
+  writeFileSync(barrier + ".entered", String(process.pid));
+  while (!existsSync(barrier)) await new Promise((resolve) => setTimeout(resolve, 25));
+}
+if (process.env.E2E_RESOURCE_FAIL === action) throw new Error("resource " + action + " failed");
+if (action === "stop" || action === "purge") rmSync(marker, { force: true });
+`,
+  );
+}
+
+export interface ResourceEvent {
+  action: string;
+  version: string;
+  recipeVersion: string;
+  cwd: string;
+  ctx: {
+    name: string;
+    currentWorktree: string;
+    mainWorktree: string;
+    branch?: string;
+    ports?: Record<string, number>;
+    phase: string;
+  };
+}
+
+export function resourceEvents(repo: string): ResourceEvent[] {
+  const file = join(repo, "resource-runs.jsonl");
+  return existsSync(file)
+    ? readFileSync(file, "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line))
+    : [];
 }
 
 function git(repo: string, args: string[]): void {

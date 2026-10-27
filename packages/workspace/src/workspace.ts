@@ -31,6 +31,8 @@ import {
   liveWorktrees,
   readDevServers,
   completeDevServerCleanup,
+  markDevServerCleanupPending,
+  assertNoPendingCleanup,
 } from "./dev-servers-registry.js";
 import { errorMessage, WorkspaceError } from "./errors.js";
 import {
@@ -46,6 +48,7 @@ import { findOrphanNames } from "./orphans.js";
 import { defaultCommands, devCmd, installedCliCommand, wsCmd } from "./invocation.js";
 import type { WorkspaceOperation, WorkspaceOutput } from "./operation.js";
 import { executeCommand } from "./command-executor.js";
+import { stopTarget } from "./target-stop.js";
 import { formatPorts } from "./ports.js";
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
 import {
@@ -405,6 +408,7 @@ async function runSetup(
       setupCtx.currentWorktree,
     );
     if (existing) assertWorkspaceRecipe(setupCtx.currentWorktree, existing.entry.recipe);
+    assertNoPendingCleanup(setupCtx.mainWorktree, registryDir, setupCtx.currentWorktree);
     refuseIfFinalizePending(setupCtx, registryDir, command.force);
     if (command.full && !config.hasDevServer)
       throw new WorkspaceError(
@@ -916,29 +920,35 @@ function hintRetainedOrphans(retainedOrphans: string[], output: WorkspaceOutput)
 }
 
 async function runPrune(kernel: Kernel, verbose: boolean): Promise<void> {
-  const { config, registryDir } = kernel;
+  const { registryDir } = kernel;
   const ctx = detectWorktree(kernel.cwd);
   const registry = readWorkspaces(ctx.mainWorktree, registryDir);
   const orphanNames = findOrphanNames(registry);
 
   let stoppedProcesses = 0;
+  const failures: unknown[] = [];
   for (const name of orphanNames) {
     const entry = registry.workspaces[name];
-    stoppedProcesses += await cleanupTarget(
-      kernel,
-      ctx,
-      {
-        worktree: entry.worktree,
-        mainWorktree: ctx.mainWorktree,
-        name,
-        recipe: entry.recipe,
-        verbose,
-      },
-      true,
-    );
-    kernel.output.text(`Pruned workspace ${name} (${entry.worktree}).`);
+    try {
+      stoppedProcesses += await cleanupTarget(
+        kernel,
+        ctx,
+        {
+          worktree: entry.worktree,
+          mainWorktree: ctx.mainWorktree,
+          name,
+          recipe: entry.recipe,
+          verbose,
+        },
+        true,
+      );
+      kernel.output.text(`Pruned workspace ${name} (${entry.worktree}).`);
+    } catch (error) {
+      failures.push(error);
+    }
   }
-
+  if (failures.length > 0)
+    throw new AggregateError(failures, failures.map(errorMessage).join("; "));
   pruneGitWorktrees(ctx.mainWorktree);
 
   if (orphanNames.length === 0) {
@@ -947,12 +957,6 @@ async function runPrune(kernel: Kernel, verbose: boolean): Promise<void> {
   }
   kernel.output.text(`Pruned ${orphanNames.length} orphaned workspace(s).`);
   if (stoppedProcesses > 0) kernel.output.text(`Stopped ${stoppedProcesses} orphaned process(es).`);
-  if (config.purgeInfrastructure === undefined) {
-    kernel.output.text(
-      "Note: infrastructure managed by callback servers (e.g. `docker compose`) is not torn down " +
-        "automatically — check for leftover containers.",
-    );
-  }
 }
 
 async function cleanupTarget(
@@ -961,29 +965,46 @@ async function cleanupTarget(
   target: PurgeContext,
   orphanOnly = false,
 ): Promise<number> {
-  const { config, registryDir } = kernel;
-  if (!orphanOnly || existsSync(target.worktree)) {
-    refusePendingCleanup(ctx, registryDir, target.worktree);
-  }
-  if (existsSync(target.worktree)) assertWorkspaceRecipe(target.worktree, target.recipe);
+  const { registryDir } = kernel;
+  const exists = existsSync(target.worktree);
+  if (!orphanOnly || exists) refusePendingCleanup(ctx, registryDir, target.worktree);
+  if (exists) assertWorkspaceRecipe(target.worktree, target.recipe);
+  const recipeRoot = exists ? target.worktree : ctx.mainWorktree;
+  const config = kernel.host?.loadWorkspace?.(recipeRoot) ?? kernel.config;
+  if (
+    !exists &&
+    target.recipe.kind === "manifest" &&
+    (config.recipe.kind !== "manifest" || config.purgeInfrastructure === undefined)
+  )
+    throw new WorkspaceError(
+      `Cannot purge manifest-backed orphan ${target.name}: restore a main-worktree manifest with its required purge recipe.`,
+    );
   await retainCleanupIdentity(ctx, registryDir, target);
-  const log = makeVerboseLog(target.verbose, kernel.output);
-  if (!config.hasDevServer) {
-    log("No dev services declared; skipping stop.");
-  } else if (
-    existsSync(target.worktree) &&
-    findOwnEntry(ctx.mainWorktree, registryDir, target.worktree)
-  ) {
-    await stopTargetDevServer(kernel, target.worktree, log);
+  const dev = findOwnEntry(ctx.mainWorktree, registryDir, target.worktree);
+  let stopFailure: unknown;
+  if (exists && dev) {
+    try {
+      await stopTarget({
+        operation: kernel,
+        mainWorktree: ctx.mainWorktree,
+        registryDir,
+        target: dev,
+        signal: config.signal,
+        retainCleanup: true,
+      });
+    } catch (error) {
+      stopFailure = error;
+    }
   }
   const leftover = await killRecordedDevServer(ctx.mainWorktree, registryDir, target.worktree);
-  if (leftover > 0) {
+  if (leftover > 0)
     kernel.output.diagnostic(
-      `Warning: Killed ${leftover} dev-server process(es) left running; the configured callback ` +
-        "`stop()` did not run.",
+      `Stopped ${leftover} recorded dev-server process(es) by PID fallback; recipe cleanup is still required.`,
     );
-  }
-  await runPurgeInfrastructure(config, target);
+  if (stopFailure !== undefined) throw stopFailure;
+  if (exists || target.recipe.kind === "manifest") await runPurgeInfrastructure(config, target);
+  if (dev)
+    await completeDevServerCleanup(ctx.mainWorktree, registryDir, target.worktree, dev.startedAt);
   if (orphanOnly) {
     await deleteOrphanEntries(ctx.mainWorktree, registryDir, target.worktree);
   } else {
@@ -1024,16 +1045,13 @@ function refusePendingCleanup(ctx: WorktreeContext, registryDir: string, worktre
   );
 }
 
-/**
- * PID fallback for a missing target. The caller retains workspace identity through purge.
- * Target-owned durable stop/rollback orchestration is completed by the cleanup lifecycle.
- */
+/** PID fallback retains both identities until the target's purge succeeds. */
 async function killRecordedDevServer(
   mainWorktree: string,
   registryDir: string,
   worktree: string,
 ): Promise<number> {
-  const devEntry = findOwnEntry(mainWorktree, registryDir, worktree);
+  const devEntry = await markDevServerCleanupPending(mainWorktree, registryDir, worktree);
   if (!devEntry) return 0;
   let stopped = 0;
   for (const pid of Object.values(devEntry.pids)) {
@@ -1042,7 +1060,6 @@ async function killRecordedDevServer(
       ++stopped;
     }
   }
-  await completeDevServerCleanup(mainWorktree, registryDir, worktree, devEntry.startedAt);
   return stopped;
 }
 
@@ -1576,29 +1593,4 @@ function linkWorkspaceRegistry(
   }
   symlinkSync(relative(runtimeRoot, mainDir), link);
   log("Created workspace-registry symlink → main worktree.");
-}
-
-/** The child dispatch loads the target branch's recipe. */
-async function stopTargetDevServer(
-  kernel: Kernel,
-  worktreePath: string,
-  log: (msg: string) => void,
-): Promise<void> {
-  log(`Stopping dev-server in ${worktreePath}...`);
-  const child = installedCliCommand(kernel.invocation, ["dev", "down"]);
-  await executeCommand(
-    { command: child.executable, args: child.args, cwd: worktreePath, env: kernel.env },
-    {
-      label: "dev down",
-      signal: kernel.config.signal,
-      stdout: "stream",
-      output: kernel.output,
-    },
-  );
-}
-
-function makeVerboseLog(verbose: boolean, output: WorkspaceOutput): (msg: string) => void {
-  return (msg) => {
-    if (verbose) output.text(msg);
-  };
 }

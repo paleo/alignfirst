@@ -7,6 +7,7 @@ import {
   readlinkSync,
   realpathSync,
   renameSync,
+  symlinkSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -24,6 +25,8 @@ import {
   readWorkspaces,
   runCli,
   runDev,
+  installResourceRecipe,
+  resourceEvents,
 } from "./fixture.js";
 
 const TEST_TIMEOUT_MS = 60_000;
@@ -70,6 +73,151 @@ afterEach(async () => {
 });
 
 describe("workspace teardown (e2e)", () => {
+  it(
+    "prunes orphans using main scripts, retaining identity and ports until purge succeeds",
+    () => {
+      const fx = fixture();
+      const linked = addWorktree(fx, "orphan/review", "review");
+      const sibling = addWorktree(fx, "sibling/review", "sibling");
+      setup(fx.repo, linked, true);
+      setup(fx.repo, sibling, true);
+      const target = requiredEntry(fx.repo, linked);
+      const other = requiredEntry(fx.repo, sibling);
+      installResourceRecipe(linked, "deleted-branch");
+      installResourceRecipe(fx.repo, "surviving-main");
+      const mainManifestPath = join(fx.repo, "alignfirst-workspace.json");
+      const mainManifest = JSON.parse(readFileSync(mainManifestPath, "utf8"));
+      mainManifest.workspace.purge[0].continueOnError = true;
+      mainManifest.workspace.purge.push({
+        name: "after-resource",
+        run: 'printf attempted > "$ALIGNFIRST_MAIN_WORKTREE/after-purge"',
+      });
+      writeFileSync(mainManifestPath, JSON.stringify(mainManifest));
+      mkdirSync(join(fx.root, "resources"));
+      const marker = join(fx.root, "resources", target.name);
+      writeFileSync(marker, "branch resource");
+      const pid = startSleeper(fx.repo);
+      writeDevEntries(fx.repo, [devEntry(target.name, linked, pid)]);
+      rmSync(linked, { recursive: true, force: true });
+      expect(runCli(fx.repo, ["list", "--json"]).status).toBe(0);
+      expect(requiredEntry(fx.repo, linked)).toEqual(target);
+      const failed = runCli(fx.repo, ["prune", "--json"], { E2E_RESOURCE_FAIL: "purge" });
+      expect(failed.status).toBe(1);
+      expect(failed.stdout).toBe("");
+      expect(existsSync(marker)).toBe(true);
+      expect(readFileSync(join(fx.repo, "after-purge"), "utf8")).toBe("attempted");
+      expect(isAlive(pid)).toBe(false);
+      expect(requiredEntry(fx.repo, linked)).toEqual(target);
+      expect(requiredEntry(fx.repo, sibling)).toEqual(other);
+      expect(devEntries(fx.repo)).toMatchObject([{ cleanupPending: true }]);
+      expect(git(fx.repo, ["worktree", "list", "--porcelain"])).toContain(linked);
+      const retry = runCli(fx.repo, ["prune", "--json"]);
+      expect(retry.status, retry.stderr).toBe(0);
+      expect(JSON.parse(retry.stdout).pruned).toEqual([{ path: linked, name: target.name }]);
+      expect(existsSync(marker)).toBe(false);
+      expect(devEntries(fx.repo)).toEqual([]);
+      expect(requiredEntry(fx.repo, sibling)).toEqual(other);
+      for (const event of resourceEvents(fx.repo)) {
+        expect(event).toMatchObject({
+          action: "purge",
+          version: "surviving-main",
+          cwd: fx.repo,
+          ctx: { name: target.name, currentWorktree: linked, phase: "purge" },
+        });
+        expect(event.ctx.branch).toBeUndefined();
+        expect(event.ctx.ports).toBeUndefined();
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "purges no invented project resources for a defaults-only orphan",
+    () => {
+      const fx = fixture();
+      const linked = addWorktree(fx, "orphan/default", "default");
+      rmSync(join(linked, "alignfirst-workspace.json"));
+      setup(fx.repo, linked);
+      const target = requiredEntry(fx.repo, linked);
+      expect(target.entry.recipe).toEqual({ kind: "defaults" });
+      rmSync(linked, { recursive: true, force: true });
+      expect(runCli(fx.repo, ["list"]).status).toBe(0);
+      expect(runCli(fx.repo, ["prune"]).status).toBe(0);
+      expect(entryAt(fx.repo, linked)).toBeUndefined();
+      expect(purges(fx.repo)).toEqual([]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it.each(["manifest", "script"])(
+    "refuses a missing orphan %s rather than forgetting registration or reserved ports",
+    (missing) => {
+      const fx = fixture();
+      const linked = addWorktree(fx, "orphan/review", "review");
+      setup(fx.repo, linked, true);
+      const target = requiredEntry(fx.repo, linked);
+      rmSync(linked, { recursive: true, force: true });
+      rmSync(
+        join(
+          fx.repo,
+          missing === "manifest" ? "alignfirst-workspace.json" : "scripts/lifecycle.mjs",
+        ),
+      );
+      const failed = runCli(fx.repo, ["prune", "--json"]);
+      expect(failed.status).toBe(1);
+      expect(failed.stdout).toBe("");
+      expect(failed.stderr).toContain(
+        missing === "manifest" ? "required purge recipe" : "purge purge",
+      );
+      expect(requiredEntry(fx.repo, linked)).toEqual(target);
+      expect(purges(fx.repo)).toEqual([]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it.each(["locked", "nested", "shared", "unregistered"])(
+    "force refuses %s targets before resource purge",
+    (kind) => {
+      const fx = fixture();
+      const linked = addWorktree(fx, "managed/review", "review");
+      setup(fx.repo, linked);
+      installResourceRecipe(linked, "protected-target");
+      const target = requiredEntry(fx.repo, linked);
+      if (kind === "locked") git(fx.repo, ["worktree", "lock", linked]);
+      if (kind === "nested")
+        git(fx.repo, ["worktree", "add", "-b", "nested", join(linked, "nested")]);
+      if (kind === "shared") {
+        mkdirSync(join(linked, "protected"));
+        symlinkSync(join(linked, "protected"), join(fx.repo, ".protected"));
+        const path = join(fx.repo, "alignfirst-workspace.json");
+        const manifest = JSON.parse(readFileSync(path, "utf8"));
+        manifest.workspace.sharedDirs = [".protected"];
+        writeFileSync(path, JSON.stringify(manifest));
+      }
+      if (kind === "unregistered") {
+        git(fx.repo, ["worktree", "remove", "--force", linked]);
+        mkdirSync(linked);
+      }
+      const result = runCli(fx.repo, ["remove", linked, "--force", "--json"]);
+      expect(result.status).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain(
+        kind === "locked"
+          ? "locked worktree"
+          : kind === "nested"
+            ? "another registered worktree"
+            : kind === "shared"
+              ? "protected shared directory"
+              : "not an exact registered Git worktree root",
+      );
+      expect(requiredEntry(fx.repo, linked)).toEqual(target);
+      expect(purges(fx.repo)).toEqual([]);
+      expect(resourceEvents(fx.repo)).toEqual([]);
+      expect(existsSync(linked)).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it.each(["current", "nested", "absolute", "relative", "name"])(
     "preserves files and Git state with the %s selector, including dirty same-basename targets",
     (selector) => {
@@ -251,7 +399,7 @@ describe("workspace teardown (e2e)", () => {
       expect(failed.status).not.toBe(0);
       expect(failed.stderr).toContain("e2e purge boom");
       expect(requiredEntry(fx.repo, linked).name).toBe(target.name);
-      expect(devEntries(fx.repo)).toEqual([]);
+      expect(devEntries(fx.repo)).toMatchObject([{ cleanupPending: true }]);
       expect(runCli(fx.repo, ["teardown", linked]).status).toBe(0);
       expect(entryAt(fx.repo, linked)).toBeUndefined();
       expect(purges(fx.repo)).toEqual(
@@ -268,7 +416,7 @@ describe("workspace teardown (e2e)", () => {
   );
 
   it.each([false, true])(
-    "runs the configured stop callback before purging, including best-effort stop failure=%s",
+    "retains failed stop work before purge and retries cleanup, stop failure=%s",
     (failStop) => {
       const fx = fixture();
       const linked = addWorktree(fx, "managed/review", "review");
@@ -279,48 +427,55 @@ describe("workspace teardown (e2e)", () => {
         E2E_CALLBACK_RECORD: "1",
         E2E_CALLBACK_STOP_FAIL: failStop ? "1" : "0",
       });
-      expect(result.status, result.stderr).toBe(0);
-      if (failStop) expect(result.stderr).toContain("e2e callback stop boom");
-      expect(readJsonLines(join(fx.repo, "callback-runs.jsonl"))).toEqual([
-        {
-          event: "stop",
-          name: target.name,
-          cwd: linked,
-          ports: target.entry.ports,
-        },
-      ]);
+      expect(result.status, result.stderr).toBe(failStop ? 1 : 0);
+      expect(readJsonLines(join(fx.repo, "callback-runs.jsonl"))).toEqual(
+        stopEvents(target.name, linked, target.entry.ports ?? {}),
+      );
+      if (failStop) {
+        expect(result.stderr).toContain("e2e callback stop boom");
+        expect(devEntries(fx.repo)[0].cleanupPending).toBe(true);
+        expect(requiredEntry(fx.repo, linked)).toEqual(target);
+        expect(purges(fx.repo)).toEqual([]);
+        expect(runCli(fx.repo, ["teardown", linked]).status).toBe(0);
+      }
       expect(devEntries(fx.repo)).toEqual([]);
       expect(purges(fx.repo)).toHaveLength(1);
     },
     TEST_TIMEOUT_MS,
   );
 
-  it.each(["wrapperFailure", "noWrapper"])(
-    "kills recorded PIDs and warns on %s, including a dev-only target",
+  it.each(["stopFailure", "noServices"])(
+    "kills recorded PIDs with %s, including a dev-only target",
     (mode) => {
-      const fx = fixture({ portless: mode === "noWrapper" });
+      const fx = fixture({ portless: mode === "noServices" });
       const linked = addWorktree(fx, "managed/review", "review");
-      if (mode === "wrapperFailure") setup(fx.repo, linked);
+      if (mode === "stopFailure") setup(fx.repo, linked);
       else mkdirSync(dirname(registryFile(fx.repo, "dev-servers.json")), { recursive: true });
       const pid = startSleeper(fx.repo);
       writeDevEntries(fx.repo, [devEntry("recorded-infra", linked, pid)]);
-      const result = runCli(fx.repo, ["teardown", linked], { E2E_DEV_EXIT: "1" });
-      expect(result.status, result.stderr).toBe(0);
-      if (mode === "wrapperFailure") expect(result.stderr).toContain("dev down exited with code 3");
-      expect(result.stderr).toContain("Killed 1 dev-server process(es)");
-      expect(result.stderr).toContain("`stop()` did not run");
+      const result = runCli(fx.repo, ["teardown", linked], {
+        E2E_CALLBACK_RECORD: "1",
+        E2E_CALLBACK_STOP_FAIL: "1",
+      });
+      expect(result.status, result.stderr).toBe(mode === "stopFailure" ? 1 : 0);
       expect(isAlive(pid)).toBe(false);
+      if (mode === "stopFailure") {
+        expect(result.stderr).toContain("e2e callback stop boom");
+        expect(devEntries(fx.repo)[0].cleanupPending).toBe(true);
+        expect(purges(fx.repo)).toEqual([]);
+        expect(runCli(fx.repo, ["teardown", linked]).status).toBe(0);
+      }
       expect(devEntries(fx.repo)).toEqual([]);
-      expect(purges(fx.repo)[0].name).toBe(mode === "noWrapper" ? "recorded-infra" : "review");
+      expect(purges(fx.repo)[0].name).toBe(mode === "noServices" ? "recorded-infra" : "review");
       expect(existsSync(linked)).toBe(true);
     },
     TEST_TIMEOUT_MS,
   );
 
-  it.each(["noWrapper", "wrapperFailure", "wrapperUnregisters", "missingWorktree"])(
+  it.each(["noServices", "stopUnregisters", "missingWorktree"])(
     "retains a dev-only cleanup identity through purge failure: %s",
     (mode) => {
-      const fx = fixture({ portless: mode === "noWrapper" });
+      const fx = fixture({ portless: mode === "noServices" });
       const linked = addWorktree(fx, "outside/review", "review");
       mkdirSync(dirname(registryFile(fx.repo, "dev-servers.json")), { recursive: true });
       const pid = startSleeper(fx.repo);
@@ -329,20 +484,19 @@ describe("workspace teardown (e2e)", () => {
       const failed = runCli(fx.repo, ["teardown", linked], {
         E2E_PURGE_FAIL: "1",
         E2E_CALLBACK_RECORD: "1",
-        ...(mode === "wrapperFailure" ? { E2E_DEV_EXIT: "1" } : {}),
       });
       expect(failed.status).toBe(1);
       expect(failed.stderr).toContain("e2e purge boom");
       expect(isAlive(pid)).toBe(false);
-      expect(devEntries(fx.repo)).toEqual([]);
+      expect(devEntries(fx.repo)).toMatchObject([{ cleanupPending: true }]);
       expect(requiredEntry(fx.repo, linked)).toMatchObject({
         name: "recorded-infra",
         entry: { status: "failed" },
       });
-      if (mode === "wrapperUnregisters") {
-        expect(readJsonLines(join(fx.repo, "callback-runs.jsonl"))).toEqual([
-          { event: "stop", name: "recorded-infra", cwd: linked, ports: {} },
-        ]);
+      if (mode === "stopUnregisters") {
+        expect(readJsonLines(join(fx.repo, "callback-runs.jsonl"))).toEqual(
+          stopEvents("recorded-infra", linked, {}),
+        );
       }
       const retained = requiredEntry(fx.repo, linked);
       const listed = runCli(fx.repo, ["list"]);
@@ -391,33 +545,14 @@ describe("workspace teardown (e2e)", () => {
   );
 
   it.each([false, true])(
-    "stops all migrated historical main-slot PIDs, without a stop wrapper=%s",
+    "stops every recorded main process with no services=%s",
     (portless) => {
       const fx = fixture({ portless });
-      mkdirSync(dirname(registryFile(fx.repo, "slots.json")), { recursive: true });
+      setup(fx.repo, fx.repo);
       const pids = [startSleeper(fx.repo), startSleeper(fx.repo)];
-      const paths = [join(fx.root, "historical-main"), fx.repo];
-      writeFileSync(
-        registryFile(fx.repo, "slots.json"),
-        JSON.stringify({
-          slots: Object.fromEntries(
-            paths.map((worktree, index) => [
-              String(8100 + index),
-              { worktree, main: true, status: "ready", createdAt: "2026-01-01T00:00:00.000Z" },
-            ]),
-          ),
-        }),
-      );
-      writeDevEntries(
-        fx.repo,
-        paths.map((path, index) => devEntry(`historical-${index}`, path, pids[index])),
-      );
-      const migrated = runCli(fx.repo, ["migrate-registry-0.30"]);
-      expect(migrated.status, migrated.stderr).toBe(0);
-      const entries = devEntries(fx.repo);
-      expect(entries).toHaveLength(1);
-      expect(entries[0].worktree).toBe(fx.repo);
-      expect(Object.values(entries[0].pids)).toEqual(pids);
+      writeDevEntries(fx.repo, [
+        { ...devEntry("fixrepo", fx.repo), main: true, pids: { app: pids[0], worker: pids[1] } },
+      ]);
       const result = runCli(fx.repo, ["teardown"]);
       expect(result.status, result.stderr).toBe(0);
       expect(pids.map(isAlive)).toEqual([false, false]);
@@ -429,14 +564,22 @@ describe("workspace teardown (e2e)", () => {
   );
 
   it(
-    "retains wrapper failure warnings even when no PID remains",
+    "retains a real stop failure even when no PID remains",
     () => {
       const fx = fixture();
       setup(fx.repo, fx.repo);
       writeDevEntries(fx.repo, [devEntry("old", fx.repo)]);
-      const result = runCli(fx.repo, ["teardown"], { E2E_DEV_EXIT: "1" });
-      expect(result.status).toBe(0);
-      expect(result.stderr).toContain("dev down exited with code 3");
+      const result = runCli(fx.repo, ["teardown", "--json"], {
+        E2E_CALLBACK_RECORD: "1",
+        E2E_CALLBACK_STOP_FAIL: "1",
+      });
+      expect(result.status).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain("e2e callback stop boom");
+      expect(devEntries(fx.repo)[0].cleanupPending).toBe(true);
+      expect(purges(fx.repo)).toEqual([]);
+      expect(runCli(fx.repo, ["teardown"]).status).toBe(0);
+      expect(devEntries(fx.repo)).toEqual([]);
       expect(purges(fx.repo)).toHaveLength(1);
     },
     TEST_TIMEOUT_MS,
@@ -743,6 +886,13 @@ function readJsonLines<T>(file: string): T[] {
     .trim()
     .split("\n")
     .map((line) => JSON.parse(line));
+}
+
+function stopEvents(name: string, cwd: string, ports: Record<string, number>): object[] {
+  return [
+    { event: "legacyStop", name, cwd, ports },
+    ...["cache", "docker"].map((label) => ({ event: "stop", name, cwd, ports, label })),
+  ];
 }
 
 function preservationSnapshot(repo: string, worktree: string): object {

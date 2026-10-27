@@ -21,7 +21,6 @@ import {
   writeDevServers,
   type DevServerEntry,
 } from "../src/dev-servers-registry.js";
-import type { CallbackServer, ServerContext } from "../src/server-descriptor.js";
 
 function entry(
   name: string,
@@ -95,9 +94,7 @@ describe("evictOldest", () => {
   let mainWorktree: string;
   const registryDir = ".local/_workspace-registry";
   const isAlive = () => true;
-  const stop = async () => {};
-  const callbackServers: never[] = [];
-  const portsOf = () => ({});
+  const stopTarget = async () => {};
 
   beforeEach(() => {
     mainWorktree = mkdtempSync(join(tmpdir(), "wt-env-test-"));
@@ -157,19 +154,10 @@ describe("evictOldest", () => {
       registryDir,
       count: 1,
       isAlive,
-      stop,
-      portsOf,
-      callbackServers: [
-        {
-          kind: "callback",
-          name: "child dispatch",
-          start: async () => {},
-          stop: async () => {
-            await completeDevServerCleanup(mainWorktree, registryDir, victim.worktree);
-            await registerDevServer(mainWorktree, registryDir, sibling);
-          },
-        },
-      ],
+      stopTarget: async () => {
+        await completeDevServerCleanup(mainWorktree, registryDir, victim.worktree);
+        await registerDevServer(mainWorktree, registryDir, sibling);
+      },
     });
     expect(readDevServers(mainWorktree, registryDir).servers).toEqual([sibling]);
   });
@@ -182,17 +170,9 @@ describe("evictOldest", () => {
     await stopAllRegistered({
       mainWorktree,
       registryDir,
-      portsOf,
-      callbackServers: [
-        {
-          kind: "callback",
-          name: "child",
-          start: async () => {},
-          stop: async () => {
-            await registerDevServer(mainWorktree, registryDir, sibling);
-          },
-        },
-      ],
+      stopTarget: async () => {
+        await registerDevServer(mainWorktree, registryDir, sibling);
+      },
     });
     expect(readDevServers(mainWorktree, registryDir).servers).toEqual([sibling]);
   });
@@ -209,10 +189,8 @@ describe("evictOldest", () => {
       mainWorktree,
       registryDir,
       count: 1,
-      callbackServers,
-      portsOf,
+      stopTarget,
       isAlive,
-      stop,
     });
     expect(evicted).toHaveLength(1);
     expect(evicted[0].name).toBe("a");
@@ -230,48 +208,32 @@ describe("evictOldest", () => {
       mainWorktree,
       registryDir,
       count: 2,
-      callbackServers,
-      portsOf,
+      stopTarget,
       isAlive,
-      stop,
     });
     expect(evicted.map((e) => e.name)).toEqual(["a", "c"]);
     const remaining = readDevServers(mainWorktree, registryDir).servers.map((e) => e.name);
     expect(remaining).toEqual(["b"]);
   });
 
-  it("reverse-stops callbacks with each victim's registered name, root and ports", async () => {
-    const victims = [
-      { ...entry("review-a1b2c3d4", { main: 4 }), worktree: "/external/one/review" },
-      { ...entry("review-e5f6a7b8", { main: 6 }), worktree: "/external/two/review" },
-    ];
-    writeDevServers(mainWorktree, registryDir, { servers: victims });
-    const seen: { label: string; ctx: ServerContext }[] = [];
-    const callbacks: CallbackServer[] = ["docker", "cache"].map((label) => ({
-      kind: "callback",
-      name: label,
-      start: async () => {},
-      stop: async (ctx) => {
-        seen.push({ label, ctx });
-      },
+  it("aggregates stop-all failures, retains failed targets and still stops siblings", async () => {
+    const victims = [entry("failed", {}), entry("sibling", {})].map((entry) => ({
+      ...entry,
+      cleanupPending: true as const,
     }));
-    await evictOldest({
-      mainWorktree,
-      registryDir,
-      count: 2,
-      callbackServers: callbacks,
-      portsOf: (worktree) => ({ db: worktree === victims[0].worktree ? 8101 : 8102 }),
-      isAlive,
-      stop,
-    });
-    expect(seen).toEqual(
-      victims.flatMap((victim, i) =>
-        ["cache", "docker"].map((label) => ({
-          label,
-          ctx: { name: victim.name, cwd: victim.worktree, ports: { db: 8101 + i } },
-        })),
-      ),
-    );
-    expect(readDevServers(mainWorktree, registryDir).servers).toEqual([]);
+    writeDevServers(mainWorktree, registryDir, { servers: victims });
+    const seen: string[] = [];
+    await expect(
+      stopAllRegistered({
+        mainWorktree,
+        registryDir,
+        stopTarget: async (target) => {
+          seen.push(target.name);
+          if (target.name === "failed") throw new Error("stop failed");
+        },
+      }),
+    ).rejects.toThrow("stop failed");
+    expect(seen).toEqual(["failed", "sibling"]);
+    expect(readDevServers(mainWorktree, registryDir).servers).toEqual([victims[0]]);
   });
 });

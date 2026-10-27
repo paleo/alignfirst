@@ -1,5 +1,5 @@
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -10,6 +10,8 @@ import {
   cliExecutable,
   alignfirstBin,
   createFixtureRepo,
+  installResourceRecipe,
+  resourceEvents,
   type FixtureRepo,
   readWorkspaces,
   runCli,
@@ -233,20 +235,29 @@ describe("registered callback identity (e2e)", () => {
     TIMEOUT_MS,
   );
 
-  it(
-    "a signal before readiness rolls back the prepared identity without registering",
-    async () => {
+  it.each([false, true])(
+    "a signal before readiness awaits rollback and retains stop failure=%s",
+    async (failStop) => {
       const target = prepareTarget();
       const barrier = newBarrier(target.fx, "ready.release");
-      const running = foreground(target, { E2E_READY_BARRIER: barrier });
+      const running = foreground(target, {
+        E2E_READY_BARRIER: barrier,
+        ...(failStop ? { E2E_CALLBACK_STOP_FAIL: "1" } : {}),
+      });
       await waitUntil(() => spawns(target.fx).length === 1, "spawn before readiness");
       expect(callbacks(target.fx).filter((event) => event.event === "start")).toHaveLength(2);
       expect(running.output).not.toContain("Dev servers started!");
       running.child.kill("SIGINT");
       await exited(running, 130);
       expect(stops(target.fx)).toEqual(expectedStops(target.ctx));
-      expect(devEntries(target.fx)).toEqual([]);
       await waitUntil(() => !isAlive(spawns(target.fx)[0].pid), "rollback pid");
+      if (failStop) {
+        expect(devEntries(target.fx)).toMatchObject([
+          { name: target.ctx.name, cleanupPending: true },
+        ]);
+        expect(runDev(target.root, ["down"], ENV).status).toBe(0);
+      }
+      expect(devEntries(target.fx)).toEqual([]);
     },
     TIMEOUT_MS,
   );
@@ -256,13 +267,19 @@ describe("registered callback identity (e2e)", () => {
     async () => {
       const target = prepareTarget(false);
       const barrier = newBarrier(target.fx, "setup.release");
-      const running = foreground(target, { E2E_DEV_SETUP_BARRIER: barrier });
+      const grandchildFile = join(target.fx.root, "setup-grandchild.pid");
+      const running = foreground(target, {
+        E2E_DEV_SETUP_BARRIER: barrier,
+        E2E_SETUP_GRANDCHILD_FILE: grandchildFile,
+      });
       await waitUntil(() => existsSync(`${barrier}.entered`), "unresolved setup");
       const setupPid = Number(readFileSync(`${barrier}.entered`, "utf-8"));
       expect(setupPid).not.toBe(running.child.pid);
       running.child.kill("SIGINT");
       await exited(running, 130);
       await waitUntil(() => !isAlive(setupPid), "cancelled setup command");
+      const grandchild = Number(readFileSync(grandchildFile, "utf8"));
+      await waitUntil(() => !isAlive(grandchild), "cancelled setup grandchild");
       writeFileSync(barrier, "release\n");
       expect(callbacks(target.fx)).toEqual([]);
       expect(spawns(target.fx)).toEqual([]);
@@ -291,13 +308,14 @@ describe("registered callback identity (e2e)", () => {
     TIMEOUT_MS,
   );
 
-  it(
-    "down --all reverse-stops same-basename victims using their identities, not the caller's",
-    () => {
+  it.each(["manifest", "defaults"])(
+    "down --all from %s executes victim-only scripts with their recorded identities",
+    (caller) => {
       const target = prepareTarget();
       const { fx, root, ctx } = target;
       const other = addWorktree(fx, "three/review", "three");
       setup(fx, other);
+      installResourceRecipe(other, "victim-only");
       expect(runDev(other, ["up"], ENV).status).toBe(0);
       expect(runDev(root, ["up"], ENV).status).toBe(0);
       const registeredOther = Object.entries(readWorkspaces(fx.repo).workspaces).find(
@@ -308,30 +326,152 @@ describe("registered callback identity (e2e)", () => {
       expect(name).toMatch(/^review-[a-f0-9]{8}$/);
       expect(name).not.toBe(ctx.name);
       const otherCtx = { name, cwd: other, ports: entry.ports ?? {} };
-      expect(runDev(fx.repo, ["setup"]).status).toBe(0);
-      expect(readWorkspaces(fx.repo).workspaces.fixrepo.main).toBe(true);
+      if (caller === "manifest") {
+        installResourceRecipe(fx.repo, "caller-version", { service: false });
+        expect(runDev(fx.repo, ["setup"]).status).toBe(0);
+        expect(readWorkspaces(fx.repo).workspaces.fixrepo.main).toBe(true);
+      } else rmSync(join(fx.repo, "alignfirst-workspace.json"));
+      renameSync(
+        join(other, "alignfirst-workspace.json"),
+        join(other, "alignfirst-workspace.jsonc"),
+      );
       const result = runDev(fx.repo, ["down", "--all"], ENV);
       expect(result.status, result.stderr).toBe(0);
       expect(stops(fx)).toEqual([...expectedStops(otherCtx), ...expectedStops(ctx)]);
+      expect(resourceEvents(fx.repo).filter((event) => event.action === "stop")).toEqual([
+        expect.objectContaining({
+          version: "victim-only",
+          recipeVersion: "victim-only",
+          cwd: other,
+          ctx: expect.objectContaining({
+            name,
+            currentWorktree: other,
+            ports: otherCtx.ports,
+            phase: "stop",
+          }),
+        }),
+      ]);
+      expect(existsSync(join(fx.root, "resources", name))).toBe(false);
+      expect(devEntries(fx)).toEqual([]);
+    },
+    TIMEOUT_MS,
+  );
+
+  it.each([false, true])(
+    "eviction uses the victim recipe and refuses replacement on cleanup failure=%s",
+    (fail) => {
+      const { fx, root, ctx } = prepareTarget();
+      installResourceRecipe(root, "victim-version");
+      installResourceRecipe(fx.repo, "caller-version", { service: false });
+      expect(runDev(root, ["up"], ENV).status).toBe(0);
+      const path = join(fx.repo, "alignfirst-workspace.json");
+      const manifest = JSON.parse(readFileSync(path, "utf8"));
+      manifest.devServer.maxConcurrentDevServers = 1;
+      writeFileSync(path, JSON.stringify(manifest));
+      const result = runDev(fx.repo, ["up", "--evict"], {
+        ...ENV,
+        ...(fail ? { E2E_RESOURCE_FAIL: "stop" } : {}),
+      });
+      expect(result.status, result.stderr).toBe(fail ? 1 : 0);
+      expect(stops(fx)).toEqual(expectedStops(ctx));
+      expect(resourceEvents(fx.repo).find((event) => event.action === "stop")).toMatchObject({
+        version: "victim-version",
+        recipeVersion: "victim-version",
+        cwd: root,
+        ctx: { name: ctx.name, ports: ctx.ports },
+      });
+      if (fail) {
+        expect(devEntries(fx)).toMatchObject([{ name: ctx.name, cleanupPending: true }]);
+        expect(spawns(fx)).toHaveLength(1);
+        expect(runDev(root, ["down"], ENV).status).toBe(0);
+      } else {
+        expect(devEntries(fx).map((entry) => entry.name)).toEqual(["fixrepo"]);
+        expect(runDev(fx.repo, ["down"], ENV).status).toBe(0);
+      }
+    },
+    TIMEOUT_MS,
+  );
+  it(
+    "retains stop work across PID exit, concurrent listing/start and a failed command",
+    async () => {
+      const target = prepareTarget();
+      const { fx, root, ctx } = target;
+      installResourceRecipe(root, "barrier-victim");
+      const callerManifestPath = join(fx.repo, "alignfirst-workspace.json");
+      const callerManifest = JSON.parse(readFileSync(callerManifestPath, "utf8"));
+      callerManifest.devServer.maxConcurrentDevServers = 1;
+      writeFileSync(callerManifestPath, JSON.stringify(callerManifest));
+      expect(runDev(root, ["up"], ENV).status).toBe(0);
+      const pid = spawns(fx)[0].pid;
+      const barrier = newBarrier(fx, "stop.release");
+      const stopping = foreground(
+        target,
+        { E2E_RESOURCE_STOP_BARRIER: barrier, E2E_RESOURCE_FAIL: "stop" },
+        ["down"],
+      );
+      await waitUntil(() => existsSync(`${barrier}.entered`), "stop barrier after PID exit");
+      expect(isAlive(pid)).toBe(false);
+      expect(runDev(fx.repo, ["list"]).stdout).toContain("cleanupPending=true");
+      expect(runDev(root, ["up"], ENV).stderr).toContain("Cleanup is pending");
+      expect(spawns(fx)).toHaveLength(1);
+      expect(runDev(fx.repo, ["up"], ENV).status).toBe(0);
+      const sibling = devEntries(fx).find((entry) => entry.worktree === fx.repo);
+      writeFileSync(barrier, "release\n");
+      await exited(stopping, 1);
+      expect(devEntries(fx).find((entry) => entry.worktree === root)).toMatchObject({
+        name: ctx.name,
+        cleanupPending: true,
+      });
+      expect(runDev(root, ["down"], ENV).status).toBe(0);
+      expect(devEntries(fx)).toEqual([sibling]);
+      expect(existsSync(join(fx.root, "resources", ctx.name))).toBe(false);
+      expect(runDev(fx.repo, ["down"], ENV).status).toBe(0);
+    },
+    TIMEOUT_MS,
+  );
+
+  it.each(["missing", "malformed"])(
+    "down-all retains a %s victim recipe failure while cleaning other targets",
+    (kind) => {
+      const { fx, root, ctx } = prepareTarget();
+      expect(runDev(root, ["up"], ENV).status).toBe(0);
+      expect(runDev(fx.repo, ["up"], ENV).status).toBe(0);
+      const manifest = join(root, "alignfirst-workspace.json");
+      const saved = readFileSync(manifest, "utf8");
+      if (kind === "missing") rmSync(manifest);
+      else writeFileSync(manifest, "{bad json}");
+      const failed = runDev(fx.repo, ["down", "--all"], ENV);
+      expect(failed.status).toBe(1);
+      expect(devEntries(fx)).toMatchObject([{ name: ctx.name, cleanupPending: true }]);
+      expect(isAlive(spawns(fx)[0].pid)).toBe(true);
+      expect(stops(fx).map((event) => event.name)).toEqual(["fixrepo", "fixrepo"]);
+      writeFileSync(manifest, saved);
+      expect(runDev(fx.repo, ["down", "--all"], ENV).status).toBe(0);
       expect(devEntries(fx)).toEqual([]);
     },
     TIMEOUT_MS,
   );
 
   it(
-    "eviction dispatches the caller's callbacks with the suffixed victim's identity",
+    "retains failed pre-registration rollback for an explicit dead-PID retry",
     () => {
       const { fx, root, ctx } = prepareTarget();
-      expect(runDev(root, ["up"], ENV).status).toBe(0);
-      const path = join(fx.repo, "alignfirst-workspace.json");
-      const manifest = JSON.parse(readFileSync(path, "utf8"));
-      manifest.devServer.maxConcurrentDevServers = 1;
-      writeFileSync(path, JSON.stringify(manifest));
-      const result = runDev(fx.repo, ["up", "--evict"], ENV);
-      expect(result.status, result.stderr).toBe(0);
-      expect(stops(fx)).toEqual(expectedStops(ctx));
-      expect(devEntries(fx).map((entry) => entry.name)).toEqual(["fixrepo"]);
-      expect(runDev(fx.repo, ["down"], ENV).status).toBe(0);
+      const failed = runDev(root, ["up"], {
+        ...ENV,
+        E2E_CALLBACK_START_FAIL: "cache",
+        E2E_CALLBACK_STOP_FAIL: "1",
+      });
+      expect(failed.status).toBe(1);
+      expect(failed.stderr).toContain("e2e callback start boom");
+      expect(spawns(fx)).toEqual([]);
+      expect(devEntries(fx)).toMatchObject([
+        { name: ctx.name, worktree: root, pids: {}, cleanupPending: true },
+      ]);
+      expect(runDev(root, ["list"]).stdout).toContain(ctx.name);
+      expect(runDev(root, ["up"], ENV).stderr).toContain("Cleanup is pending");
+      expect(runDev(root, ["down"], ENV).status).toBe(0);
+      expect(devEntries(fx)).toEqual([]);
+      expect(stops(fx).map((event) => event.label)).toEqual(["docker", "cache", "docker"]);
     },
     TIMEOUT_MS,
   );
@@ -367,8 +507,12 @@ function addWorktree(fx: FixtureRepo, path: string, branch: string): string {
   return target;
 }
 
-function foreground(target: Target, env: Record<string, string> = {}): RunningChild {
-  const child = spawn(cliExecutable, [alignfirstBin, "dev"], {
+function foreground(
+  target: Target,
+  env: Record<string, string> = {},
+  args: string[] = [],
+): RunningChild {
+  const child = spawn(cliExecutable, [alignfirstBin, "dev", ...args], {
     cwd: target.nested,
     env: { ...process.env, HOME: join(target.fx.root, "home"), ...ENV, ...env },
     stdio: ["ignore", "pipe", "pipe"],

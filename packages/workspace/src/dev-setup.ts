@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { findOwnEntry } from "./dev-servers-registry.js";
+import { assertNoPendingCleanup, findOwnEntry } from "./dev-servers-registry.js";
 import { assertFileDestination } from "./file-destinations.js";
 import { ConfigError, errorMessage, WorkspaceError } from "./errors.js";
 import {
@@ -85,6 +85,7 @@ export async function runDevSetup(input: DevSetupInput): Promise<DevSetupResult>
   const { worktree, registryDir, options } = input;
   const { mainWorktree } = worktree;
   assertWorkspaceRecipe(worktree.currentWorktree, input.recipe);
+  assertNoPendingCleanup(mainWorktree, registryDir, worktree.currentWorktree);
   if (options.resetPorts) refuseWhileRunning(mainWorktree, registryDir, worktree.currentWorktree);
   const workspace = worktree.isMainWorktree
     ? await ensureMainEntry(mainWorktree, registryDir, input.recipe)

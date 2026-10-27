@@ -1,11 +1,10 @@
 import { join, resolve } from "node:path";
 
 import { consoleWorkspaceOutput, type WorkspaceOutput } from "./operation.js";
-import { WorkspaceError } from "./errors.js";
-import { isProcessAlive, stopProcessGroup } from "./process-control.js";
+import { errorMessage, WorkspaceError } from "./errors.js";
+import { isProcessAlive } from "./process-control.js";
 import { withRegistryLock } from "./registry-lock.js";
 import { readRegistry, writeRegistry } from "./registry-storage.js";
-import type { CallbackServer, ServerContext } from "./server-descriptor.js";
 import { getWorktreeBranch } from "./worktree.js";
 
 const DEV_SERVERS_FILENAME = "dev-servers.json";
@@ -73,8 +72,7 @@ export function printActiveServers(
 export interface StopAllInput {
   mainWorktree: string;
   registryDir: string;
-  callbackServers: CallbackServer[];
-  portsOf: PortsLookup;
+  stopTarget: (entry: DevServerEntry) => Promise<void>;
   output?: WorkspaceOutput;
 }
 
@@ -85,26 +83,24 @@ export async function stopAllRegistered(input: StopAllInput): Promise<void> {
     output.text("No dev-servers running.");
     return;
   }
+  const failures: unknown[] = [];
   for (const entry of data.servers) {
     const branch = getWorktreeBranch(entry.worktree) ?? "(detached)";
     output.text(`Stopping workspace ${entry.name} (${branch})...`);
-    for (const [name, pid] of Object.entries(entry.pids)) {
-      if (!isProcessAlive(pid)) continue;
-      output.text(`  ${name} (PID ${pid})`);
-      await stopProcessGroup(pid);
+    try {
+      await input.stopTarget(entry);
+      await completeDevServerCleanup(
+        input.mainWorktree,
+        input.registryDir,
+        entry.worktree,
+        entry.startedAt,
+      );
+    } catch (error) {
+      failures.push(error);
     }
-    await stopCallbacksForVictim(
-      input.callbackServers,
-      victimContext(entry, input.portsOf),
-      output,
-    );
-    await completeDevServerCleanup(
-      input.mainWorktree,
-      input.registryDir,
-      entry.worktree,
-      entry.startedAt,
-    );
   }
+  if (failures.length > 0)
+    throw new AggregateError(failures, failures.map(errorMessage).join("; "));
   output.text(`Stopped ${data.servers.length} dev-server(s).`);
 }
 
@@ -112,30 +108,20 @@ export interface EvictInput {
   mainWorktree: string;
   registryDir: string;
   count: number;
-  callbackServers: CallbackServer[];
-  portsOf: PortsLookup;
+  stopTarget: (entry: DevServerEntry) => Promise<void>;
   output?: WorkspaceOutput;
   isAlive?: IsAliveFn;
-  stop?: (pid: number) => Promise<void>;
 }
 
 export async function evictOldest(input: EvictInput): Promise<DevServerEntry[]> {
   const isAlive = input.isAlive ?? isProcessAlive;
-  const stop = input.stop ?? stopProcessGroup;
   const data = readDevServers(input.mainWorktree, input.registryDir);
   const sorted = liveDevServers(data, isAlive).sort((a, b) =>
     a.startedAt.localeCompare(b.startedAt),
   );
   const victims = sorted.slice(0, input.count);
   for (const entry of victims) {
-    for (const pid of Object.values(entry.pids)) {
-      if (isAlive(pid)) await stop(pid);
-    }
-    await stopCallbacksForVictim(
-      input.callbackServers,
-      victimContext(entry, input.portsOf),
-      input.output ?? consoleWorkspaceOutput(),
-    );
+    await input.stopTarget(entry);
     await completeDevServerCleanup(
       input.mainWorktree,
       input.registryDir,
@@ -144,21 +130,6 @@ export async function evictOldest(input: EvictInput): Promise<DevServerEntry[]> 
     );
   }
   return victims;
-}
-
-function victimContext(entry: DevServerEntry, portsOf: PortsLookup): ServerContext {
-  return { name: entry.name, cwd: entry.worktree, ports: portsOf(entry.worktree) };
-}
-
-async function stopCallbacksForVictim(
-  callbackServers: CallbackServer[],
-  ctx: ServerContext,
-  output: WorkspaceOutput,
-): Promise<void> {
-  for (const server of [...callbackServers].reverse()) {
-    output.text(`  ${server.name} (callback)`);
-    await server.stop(ctx);
-  }
 }
 
 export async function registerDevServer(

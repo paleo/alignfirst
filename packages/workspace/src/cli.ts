@@ -329,7 +329,7 @@ export type DevCommand =
   | { kind: "foreground"; evict: boolean; restart: boolean }
   | { kind: "up"; evict: boolean; restart: boolean }
   | { kind: "restart"; evict: boolean }
-  | { kind: "down"; all: boolean }
+  | { kind: "down"; all: boolean; retainCleanup?: boolean }
   | { kind: "list" }
   | { kind: "status" }
   | { kind: "setup"; force: boolean; resetPorts: boolean; fromFinalize: boolean; verbose?: boolean }
@@ -404,12 +404,18 @@ function parseRestart(tokens: string[]): DevCommand {
 function parseDown(tokens: string[]): DevCommand {
   const { values, positionals } = parseArgs({
     args: tokens,
-    options: { all: { type: "boolean" } },
+    options: { all: { type: "boolean" }, "retain-cleanup": { type: "boolean" } },
     allowPositionals: true,
     strict: true,
   });
   rejectDevPositionals(positionals, "dev down");
-  return { kind: "down", all: values.all ?? false };
+  if (values.all === true && values["retain-cleanup"] === true)
+    throw new ConfigError("Internal --retain-cleanup requires child-local dev down.");
+  return {
+    kind: "down",
+    all: values.all ?? false,
+    ...(values["retain-cleanup"] === true ? { retainCleanup: true } : {}),
+  };
 }
 
 function parseDevList(tokens: string[]): DevCommand {

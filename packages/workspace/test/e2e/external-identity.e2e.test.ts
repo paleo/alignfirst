@@ -5,7 +5,15 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { WorkspaceEntry } from "../../src/workspaces.js";
-import { createFixtureRepo, type FixtureRepo, readWorkspaces, runCli, runDev } from "./fixture.js";
+import {
+  createFixtureRepo,
+  type FixtureRepo,
+  installResourceRecipe,
+  resourceEvents,
+  readWorkspaces,
+  runCli,
+  runDev,
+} from "./fixture.js";
 
 const TEST_TIMEOUT_MS = 60_000;
 const fixtures: ExternalFixture[] = [];
@@ -55,6 +63,50 @@ afterEach(async () => {
 });
 
 describe("externally created same-basename worktrees", () => {
+  it(
+    "tears down through the external target's current recipe and re-adopts without Git deletion",
+    () => {
+      const fixture = externalFixture();
+      const { repo, first, second } = fixture;
+      expect(runCli(repo, ["setup", "--full"], undefined, second).status).toBe(0);
+      const target = entryAt(fixture, second);
+      installResourceRecipe(repo, "main-version");
+      installResourceRecipe(second, "external-version");
+      mkdirSync(join(fixture.root, "resources"));
+      writeFileSync(join(fixture.root, "resources", target.name), "external resource");
+      writeFileSync(join(second, "workspace.local"), "hand-edit\nworktree=linked\n");
+      mkdirSync(join(second, "node_modules"));
+      writeFileSync(join(second, "node_modules", "retained"), "dependency");
+      const before = git(second, ["status", "--porcelain"]);
+      expect(runCli(repo, ["teardown", target.name, "--json"]).status).toBe(0);
+      expect(resourceEvents(repo)).toMatchObject([
+        {
+          action: "purge",
+          version: "external-version",
+          recipeVersion: "external-version",
+          cwd: second,
+          ctx: {
+            name: target.name,
+            currentWorktree: second,
+            branch: "external-two",
+            phase: "purge",
+          },
+        },
+      ]);
+      expect(existsSync(join(fixture.root, "resources", target.name))).toBe(false);
+      expect(git(second, ["status", "--porcelain"])).toBe(before);
+      expect(git(second, ["branch", "--show-current"]).trim()).toBe("external-two");
+      expect(readFileSync(join(second, "node_modules", "retained"), "utf8")).toBe("dependency");
+      expect(runCli(repo, ["setup"], undefined, first).status).toBe(0);
+      expect(runCli(repo, ["setup", "--full"], undefined, second).status).toBe(0);
+      expect(entryAt(fixture, second).name).toMatch(/^same-[a-f0-9]{8}$/);
+      expect(readFileSync(join(second, "workspace.local"), "utf8")).toBe(
+        "hand-edit\nworktree=linked\n",
+      );
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it(
     "adopts both paths, seeds and links across parents, and finalizes with registered identities",
     () => {
@@ -230,6 +282,10 @@ describe("externally created same-basename worktrees", () => {
     TEST_TIMEOUT_MS,
   );
 });
+
+function git(cwd: string, args: string[]): string {
+  return execFileSync("git", args, { cwd, encoding: "utf8" });
+}
 
 function externalFixture(): ExternalFixture {
   const fixture = createFixtureRepo({ fallbackSeeding: true, sharedDirs: [".shared"] });

@@ -15,6 +15,8 @@ export async function assertDeletionSafe(
   if (path === repo.mainWorktree)
     throw new WorkspaceError(`Cannot remove the main worktree: ${path}`);
   const tree = repo.worktrees.find((tree) => tree.path === path);
+  if (!tree && pathExists(path))
+    throw new WorkspaceError(`Cannot remove ${path}: not an exact registered Git worktree root.`);
   if (tree?.locked) throw new WorkspaceError(`Cannot remove locked worktree: ${path}`);
   const nested = repo.worktrees.find((tree) => tree.path !== path && isInside(path, tree.path));
   if (nested)
