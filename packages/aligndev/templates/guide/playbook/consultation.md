@@ -8,18 +8,6 @@ The user consults you, and you consult the agent. It reads the repository; you w
 
 ## Step 1 — Select the worktree
 
-{{#openclaw}}
-Run `{{ALIGNDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH. Read DEVELOPERS_PATH and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
-{{/openclaw}}
-{{#codingAgent}}
-{{#hasGuide}}
-Read DEVELOPERS_PATH, retained by Step 1 of `{{GUIDE}} working-session`, and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
-{{/hasGuide}}
-{{#noGuide}}
-Run `{{ALIGNFIRST}} context` from PROJECT_PATH.
-{{/noGuide}}
-{{/codingAgent}}
-
 {{#thread}}
 Use the main worktree on the configured default branch. When the question explicitly concerns a branch or a PR, or follows ongoing branch work in this thread, use that branch's existing registered workspace instead: resolve it through `{{ALIGNFIRST}} workspace list --json`. Report the limitation rather than inspecting a different branch when no worktree exists. Do not create a worktree merely to answer a question.
 {{/thread}}
@@ -54,6 +42,8 @@ Retain `git rev-parse --short HEAD`, the revision the answer comes from. Report 
 {{/codingAgent}}
 
 ## Step 3 — Delegate
+
+Run `{{ALIGNFIRST}} developer-instructions` from the selected worktree after any refresh. It prints that worktree's conventions and configured guide, with its source path. Use `{{ALIGNFIRST}} config --json` there when you need the nullable `locations.developerInstructions`; do not substitute main's file or a filename fallback.
 
 Delegation creates session files under the work files, so complete `{{GUIDE}} work-files-setup` from PROJECT_PATH first.
 

@@ -14,6 +14,7 @@ import { runCompanion } from "./commands/companion.js";
 import { runConfig } from "./commands/config.js";
 import { runContext } from "./commands/context.js";
 import { runConventions } from "./commands/conventions.js";
+import { runDeveloperInstructions } from "./commands/developer-instructions.js";
 import { runDoctor } from "./commands/doctor.js";
 import { runDocmap } from "./commands/docmap.js";
 import { runGuide } from "./commands/guide.js";
@@ -108,6 +109,7 @@ Usage:
   ${ctx.form} docmap [<arguments>]
   ${ctx.form} conventions
   ${ctx.form} context
+  ${ctx.form} developer-instructions
   ${ctx.form} companion register | unregister
   ${ctx.form} config [--json]
   ${ctx.form} doctor
@@ -138,6 +140,8 @@ function dispatch(ctx: CommandContext, command: string, args: string[]): number 
       return runConventions(ctx, args);
     case "context":
       return runContext(ctx, args);
+    case "developer-instructions":
+      return runDeveloperInstructions(ctx, args);
     case "companion":
       return runCompanion(ctx, args);
     case "config":

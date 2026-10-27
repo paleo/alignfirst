@@ -20,14 +20,7 @@ The setup phase of a working session: decide the workplace and get it ready befo
 {{#codingAgent}}
 - `{{GUIDE}} code` — the delegation manual. Required every time you run this procedure, status requests included; do not skip it because no coding seems planned.
 {{/codingAgent}}
-{{#openclaw}}
-- run `{{ALIGNDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH, then read that file when it exists — how to create a worktree or a branch.
-{{/openclaw}}
-{{#codingAgent}}
-{{#hasGuide}}
-- Read DEVELOPERS_PATH, retained by Step 1 of `{{GUIDE}} working-session` — whether the project has workspace tooling, and how to create a worktree or a branch.
-{{/hasGuide}}
-{{/codingAgent}}
+- Run `{{ALIGNFIRST}} developer-instructions` from the current workplace when known, otherwise deliberately from PROJECT_PATH — how to create a worktree or a branch. The command prints conventions even without a configured guide.
 
 ## Step 1 — Requirements
 
@@ -207,6 +200,8 @@ Combine them into the report and post it in the conversation; use `--catchup` wh
 {{/conversation}}
 
 ## Step 7 — Start the work
+
+Run `{{ALIGNFIRST}} developer-instructions` from the selected workplace now that its path and branch are settled. Resolve any source-file editing location through `{{ALIGNFIRST}} config --json` there, using nullable `locations.developerInstructions`.
 
 {{#thread}}
 The workspace is ready. Before a coding delegation, apply the takeover-turn race checkpoint in the playbook (`{{GUIDE}}`). Then announce what you're about to do in one line and do it. The user's request is the go-ahead; asking them to confirm it again wastes a turn.

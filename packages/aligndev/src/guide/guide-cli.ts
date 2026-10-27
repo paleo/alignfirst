@@ -8,7 +8,6 @@ import { errorMessage } from "../errors.js";
 import { readProjectReport } from "../project/layout.js";
 import { type ProjectsCallerContext, renderProjectsGuideForRoot } from "../project/project-cli.js";
 import { renderCodeGuide } from "./code-guide.js";
-import { resolveGuideFile } from "./guide-file.js";
 import {
   type ActiveBlocks,
   isSurface,
@@ -162,8 +161,7 @@ function renderCodeTopic(
   );
 }
 
-// An entry topic prints after the playbook. Under codingAgent, the playbook topics read the
-// project's guide file; no other guide has a condition block.
+// An entry topic prints after the playbook.
 function renderPlaybookTopic(
   topic: string,
   active: ActiveBlocks,
@@ -171,11 +169,9 @@ function renderPlaybookTopic(
   ctx: ProjectsCallerContext,
 ): string {
   assertPlaybookTopic(topic, active);
-  const topicActive: ActiveBlocks =
-    active.platform === "codingAgent" ? { ...active, guideFile: resolveGuideFile(ctx) } : active;
-  const text = renderPlaybookTemplate(topic, topicActive, config, ctx.forms);
+  const text = renderPlaybookTemplate(topic, active, config, ctx.forms);
   if (!ENTRY_TOPICS.includes(topic)) return text;
-  return `${renderPlaybookTemplate(PLAYBOOK, topicActive, config, ctx.forms)}\n\n${text}`;
+  return `${renderPlaybookTemplate(PLAYBOOK, active, config, ctx.forms)}\n\n${text}`;
 }
 
 function assertPlaybookTopic(topic: string, active: ActiveBlocks): void {

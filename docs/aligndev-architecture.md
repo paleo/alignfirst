@@ -21,7 +21,7 @@ read_when:
 | `src/cli.ts` | Entry point: dispatches commands and loads settings; creates command-scoped model discovery. |
 | `src/config.ts` | `~/.alignfirst/aligndev.settings.json`: tolerant settings, reference validation, effective selection and child environment. |
 | `src/code/` | `aligndev code`: arguments, prompt, run, session file, adapters, models, quota. |
-| `src/guide/` | `aligndev guide [--channel <surface>]`: topics by context, the template renderer, and the project's guide file (`guide-file.ts`). |
+| `src/guide/` | `aligndev guide [--channel <surface>]`: topics by context and the template renderer. |
 | `src/project/` | `aligndev project`: discovery, markers, status, port allocation; AlignFirst report parsing and work-files gate calls. |
 | `@alignfirst/workspace/git` | Shared Git inventory/path helpers; lifecycle commands belong to AlignFirst. |
 | `templates/guide/` | The dispatcher, the playbook and the guides, rendered per platform and surface. |
@@ -32,18 +32,17 @@ Under npm/npx, counterpart commands use `npx -y alignfirst`; under Bun runtime t
 
 `src/alignfirst-cli.ts` spawns the structured executable and fixed argv plus operation arguments, never split rendered text. This covers config reports, plans checks, ticket open/reservation/catchup, companion context and diagnostic `--version` probes. Missing/outdated-report diagnostics describe the selected runner, explicit Bun runtime when applicable, and direct executable resolution. Delegated prompts use the same counterpart selection; the native coding agent keeps its own executable policy and prerequisites.
 
-A render has a platform, a surface under `openclaw` (`--channel slack|discord|app`), and a guide-file condition under `codingAgent`. Without a topic, `aligndev guide` prints the dispatcher, the only `openclaw` render without a surface. `code` without `--channel` renders the `app` surface, for operators who validate profiles outside any session. `--channel` alone prints the surface's playbook. The entry topics, `working-session` and `channel-handling`, print the playbook first. The topics are keyed by context: `thread` (Slack and Discord), `app`, `codingAgent`. `{{GUIDE}}` renders as `aligndev guide --channel <surface>` or `aligndev guide`, so every later guide call keeps the surface.
+A render has a platform and a surface under `openclaw` (`--channel slack|discord|app`). Without a topic, `aligndev guide` prints the dispatcher, the only `openclaw` render without a surface. `code` without `--channel` renders the `app` surface, for operators who validate profiles outside any session. `--channel` alone prints the surface's playbook. The entry topics, `working-session` and `channel-handling`, print the playbook first. The topics are keyed by context: `thread` (Slack and Discord), `app`, `codingAgent`. `{{GUIDE}}` renders as `aligndev guide --channel <surface>` or `aligndev guide`, so every later guide call keeps the surface.
 
 Variants sit in blocks, each marker alone on its line. A block names a fact, and a line is kept when every block around it holds:
 
 - A platform block, `{{#openclaw}}` or `{{#codingAgent}}`, sits at the top level.
 - A surface block, `{{#slack}}`, `{{#discord}}` or `{{#app}}`, and `{{#thread}}` never sit inside a `{{#codingAgent}}` block.
 - `{{#conversation}}` sits anywhere.
-- A condition block, `{{#developers}}`, `{{#readme}}`, `{{#noGuide}}` or `{{#hasGuide}}` (both guide files), sits inside a `{{#codingAgent}}` block, at any depth.
 
 `thread` and `conversation` are derived: `thread` holds on Slack and Discord, `conversation` on `app` and under `codingAgent`.
 
-The condition names the project's guide file for the assistant. Under `codingAgent`, `aligndev guide` resolves it once per playbook-topic call: it runs `alignfirst config --json` in PROJECT_PATH, the main worktree of the working directory, and a report error fails the command. An existing configured `locations.developerInstructions` gives `developers`; otherwise `README.md` at the root of PROJECT_PATH gives `readme`; otherwise, outside git included, `noGuide`. Ordinary OpenClaw playbooks read no report. The `code` topic reads the report in the actual cwd for project profile selection, independently of the main-worktree guide-file policy.
+Playbook-topic rendering reads no project report and performs no guide-file discovery. Every platform asks the assistant to run `alignfirst developer-instructions` in the selected workplace. AlignFirst prints shared conventions and optional explicitly configured content, reporting its absolute source path; missing configured content fails instead of falling back to README. Editing uses nullable `locations.developerInstructions` from `alignfirst config --json` in that worktree. With no reference, the assistant proposes a file and explicit configuration under the existing authorization policy. Developer instructions and coding-agent context remain distinct. The `code` topic still reads the report in the actual cwd for independent project profile selection.
 
 ## Running the Agent
 

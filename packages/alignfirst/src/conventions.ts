@@ -18,6 +18,10 @@ export interface CommitSubject {
   side?: string;
 }
 
+export function renderConventionsSection(ctx: CommandContext): string {
+  return `# Project Conventions\n\n${renderConventions(ctx)}`;
+}
+
 export function renderConventions(ctx: CommandContext): string {
   const lines = [
     renderTicketIds(ctx),

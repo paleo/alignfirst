@@ -14,9 +14,22 @@ describe("alignfirst CLI", () => {
     const cwd = temp();
     const help = await runMain([], { cwd });
     expect(help).toMatchObject({ code: 0, stderr: "" });
-    for (const command of ["guide", "conventions", "context", "doctor"])
+    for (const command of ["guide", "conventions", "context", "developer-instructions", "doctor"])
       expect(help.stdout).toContain(`alignfirst ${command}`);
     expect((await runMain(["--version"], { cwd })).stdout).toBe(`${packageVersion}\n`);
+  });
+
+  it("supports developer-instructions help and rejects arguments", async () => {
+    const cwd = temp();
+    expect((await runMain(["developer-instructions", "--help"], { cwd })).stdout).toBe(
+      "Usage: alignfirst developer-instructions\n",
+    );
+    for (const argument of ["extra", "--unknown"]) {
+      const result = await runMain(["developer-instructions", argument], { cwd });
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain("Usage: alignfirst developer-instructions");
+    }
   });
 
   it("reports unknown commands with help", async () => {
