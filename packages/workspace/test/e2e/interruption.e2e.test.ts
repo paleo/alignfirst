@@ -148,7 +148,7 @@ describe("installed workspace CLI cancellation", () => {
       for (const entry of entries.servers)
         for (const pid of Object.values(entry.pids)) ownedPids.add(pid);
       installBarrier(fx, linked, "stop");
-      writeFileSync(join(fx.repo, "alignfirst-workspace.json"), '{"schemaVersion":1}');
+      writeFileSync(join(fx.repo, "alignfirst.json"), '{"schemaVersion":1}');
       const running = startCli(fx, fx.repo, ["dev", "down", "--all"]);
       const pids = await waitForOwnedCommand(fx);
       running.child.kill("SIGINT");
@@ -215,7 +215,7 @@ function installBarrier(
   worktree: string,
   phase: "preSetup" | "finalize" | "purge" | "devSetup" | "stop",
 ): void {
-  const file = join(worktree, "alignfirst-workspace.json");
+  const file = join(worktree, "alignfirst.json");
   const manifest: WorkspaceManifest = JSON.parse(readFileSync(file, "utf8"));
   const steps = [
     {

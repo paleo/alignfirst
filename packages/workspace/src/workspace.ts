@@ -47,6 +47,8 @@ import { followLogFile, LOG_TAIL_LINES, replayTail } from "./log-polling.js";
 import { findOrphanNames } from "./orphans.js";
 import { defaultCommands, devCmd, installedCliCommand, wsCmd } from "./invocation.js";
 import type { WorkspaceOperation, WorkspaceOutput } from "./operation.js";
+import type { WorkspaceStorage } from "./storage.js";
+import type { WorkspaceManifest } from "./config.js";
 import { executeCommand } from "./command-executor.js";
 import { stopTarget } from "./target-stop.js";
 import { formatPorts } from "./ports.js";
@@ -55,7 +57,6 @@ import { assertRegistryOwnership } from "./registry-ownership.js";
 import {
   assertWorkspaceRecipe,
   assertWorkspaceCleanupComplete,
-  workspaceRecipe,
   type WorkspaceRecipe,
   findWorkspaceByPath,
   markWorkspaceFailed,
@@ -86,6 +87,11 @@ import {
 export interface WorkspaceConfig {
   signal?: AbortSignal;
   recipe: WorkspaceRecipe;
+  /** Validated host-selected recipe sections, without project discovery in the kernel. */
+  settings?: WorkspaceManifest;
+  configurationDir?: string;
+  companionDir?: string;
+  storage?: WorkspaceStorage;
   hasDevServer: boolean;
   /** Directories symlinked from the main worktree. */
   sharedDirs: string[];
@@ -413,7 +419,8 @@ async function runSetup(
       readWorkspaces(setupCtx.mainWorktree, registryDir),
       setupCtx.currentWorktree,
     );
-    if (existing) assertWorkspaceRecipe(setupCtx.currentWorktree, existing.entry.recipe);
+    if (existing)
+      assertWorkspaceRecipe(setupCtx.currentWorktree, existing.entry.recipe, config.recipe);
     assertWorkspaceCleanupComplete(existing?.entry);
     config.signal?.throwIfAborted();
     assertNoPendingCleanup(setupCtx.mainWorktree, registryDir, setupCtx.currentWorktree);
@@ -664,7 +671,7 @@ async function runFinalize(
     throw new WorkspaceError(`No workspace registered for worktree ${ctx.currentWorktree}.`);
   }
   const { name, entry } = found;
-  assertWorkspaceRecipe(ctx.currentWorktree, entry.recipe);
+  assertWorkspaceRecipe(ctx.currentWorktree, entry.recipe, config.recipe);
   assertWorkspaceCleanupComplete(entry);
   config.signal?.throwIfAborted();
 
@@ -995,9 +1002,9 @@ async function cleanupTarget(
   signal?.throwIfAborted();
   const exists = existsSync(target.worktree);
   if (!orphanOnly || exists) refusePendingCleanup(ctx, registryDir, target.worktree);
-  if (exists) assertWorkspaceRecipe(target.worktree, target.recipe);
   const recipeRoot = exists ? target.worktree : ctx.mainWorktree;
   const config = kernel.host?.loadWorkspace?.(recipeRoot) ?? kernel.config;
+  assertWorkspaceRecipe(target.worktree, target.recipe, config.recipe);
   if (
     !exists &&
     target.recipe.kind === "manifest" &&
@@ -1352,14 +1359,7 @@ function resolveCleanupTarget(
     };
   }
   const dev = devServers.find((entry) => resolve(entry.worktree) === path);
-  if (dev)
-    return {
-      worktree: path,
-      identity: {
-        name: dev.name,
-        recipe: workspaceRecipe(existsSync(path) ? path : ctx.mainWorktree),
-      },
-    };
+  if (dev) missingRecipeIdentity(path);
 
   if (selector.dir !== undefined) {
     const entry = registry.workspaces[selector.dir];
@@ -1376,12 +1376,7 @@ function resolveCleanupTarget(
         worktree: resolve(namedDev.worktree),
         identity: owner
           ? { name: owner.name, recipe: owner.entry.recipe }
-          : {
-              name: namedDev.name,
-              recipe: workspaceRecipe(
-                existsSync(namedDev.worktree) ? namedDev.worktree : ctx.mainWorktree,
-              ),
-            },
+          : missingRecipeIdentity(namedDev.worktree),
       };
     }
   }
@@ -1399,6 +1394,12 @@ function resolveCleanupTarget(
   throw new WorkspaceError(
     `No workspace matching "${selector.dir ?? path}" (by path or registered name), ` +
       "or the path is not a worktree of this repository.",
+  );
+}
+
+function missingRecipeIdentity(worktree: string): never {
+  throw new WorkspaceError(
+    `Missing durable workspace recipe identity for ${worktree}. Recover its registration before cleanup.`,
   );
 }
 

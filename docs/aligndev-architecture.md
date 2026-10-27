@@ -43,7 +43,7 @@ Variants sit in blocks, each marker alone on its line. A block names a fact, and
 
 `thread` and `conversation` are derived: `thread` holds on Slack and Discord, `conversation` on `app` and under `codingAgent`.
 
-The condition names the project's guide file for the assistant. Under `codingAgent`, `aligndev guide` resolves it once per playbook-topic call: it runs `alignfirst config --json` in PROJECT_PATH, the main worktree of the working directory, and a report error fails the command. `DEVELOPERS.md` at its reported location gives `developers`; otherwise `README.md` at the root of PROJECT_PATH gives `readme`; otherwise, outside git included, `noGuide`. Ordinary OpenClaw playbooks read no report. The `code` topic reads the report in the actual cwd for project profile selection, independently of the main-worktree guide-file policy.
+The condition names the project's guide file for the assistant. Under `codingAgent`, `aligndev guide` resolves it once per playbook-topic call: it runs `alignfirst config --json` in PROJECT_PATH, the main worktree of the working directory, and a report error fails the command. An existing configured `locations.developerInstructions` gives `developers`; otherwise `README.md` at the root of PROJECT_PATH gives `readme`; otherwise, outside git included, `noGuide`. Ordinary OpenClaw playbooks read no report. The `code` topic reads the report in the actual cwd for project profile selection, independently of the main-worktree guide-file policy.
 
 ## Running the Agent
 
@@ -164,8 +164,8 @@ A projects directory carries a `.alignfirst-projects.json` marker, with an optio
 - These are inventory issues: a child outside Git with a root `alignfirst.json` or `alignfirst.jsonc`, and two projects sharing one companion directory. `aligndev project doctor` succeeds only without any issue.
 - `list` and `status` carry the registry's independent `aligndev: { profile } | null` selection alongside companion and location data. Inventory reports it without resolving a launch profile or requiring an available coding agent. A missing top-level `aligndev` field in `alignfirst config --json` is an outdated contract and requires an AlignFirst upgrade.
 - `--root` defaults to `projectsRoot` in the config, then to the working directory.
-- A marker with the old `"portRange": { … }` key is rejected. A project's sole range declaration is `devServer.ports` in its branch-local workspace manifest.
+- A marker with the old `"portRange": { … }` key is rejected. A project's sole range declaration is `devServer.ports` in its selected merged configuration, including companion-selected recipes.
 
 ### Port Claims
 
-`aligndev project free-ports --size <n>` returns a free block in a marker range. The size is the project's port range: port names × expected concurrent workspaces. A range without a code is the default; `--range <code>` selects a coded one. This lookup does not reserve ports. The setup guide writes the block only in the branch-local manifest's `devServer.ports`. AlignDev requires top-level `workspace` metadata and `locations.alignfirst` in the report, and inventories `workspace.portRange` without evaluating scripts.
+`aligndev project free-ports --size <n>` returns a free block in a marker range. The size is the project's port range: port names × expected concurrent workspaces. A range without a code is the default; `--range <code>` selects a coded one. This lookup does not reserve ports. The setup guide writes the block in the selected configuration's `devServer.ports`. AlignDev requires the merged report contract: top-level `workspace` metadata with registry/runtime addresses, `selectionOrigins`, `locations.alignfirst`, nullable `locations.developerInstructions` and `locations.workspaceRuntime`. It reads nested `config.conventions`, accepts full authored recipes and inventories `workspace.portRange` without evaluating scripts. Missing contract fields produce an actionable AlignFirst upgrade diagnostic.

@@ -76,7 +76,6 @@ describe("resolved application launch", () => {
     const output = vi.spyOn(console, "log").mockImplementation(() => {});
     const { devServer } = adaptWorkspaceManifest(
       {
-        schemaVersion: 1,
         devServer: {
           setup: [
             {
@@ -115,7 +114,7 @@ describe("resolved application launch", () => {
           summary: { command: { run: "printf '%s' \"$ALIGNFIRST_CONTEXT\"" } },
         },
       },
-      { mainWorktree: root },
+      { recipe: { kind: "defaults" }, mainWorktree: root },
     );
     if (!devServer) throw new Error("Missing dev adapter");
     try {

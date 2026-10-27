@@ -220,10 +220,10 @@ describe("installed CLI boundary", () => {
     });
   });
 
-  it("recovers a dev-only cleanup identity with the target's current recipe", async () => {
+  it("refuses a dev-only record without durable recipe identity before cleanup", async () => {
     const target = join(root, "dev-only");
     mkdirSync(target);
-    writeFileSync(join(target, "alignfirst-workspace.jsonc"), '{"schemaVersion":1,}');
+    writeFileSync(join(target, "alignfirst.jsonc"), '{"schemaVersion":1,}');
     writeDevServers(root, registryDirFor(config.runtimeDir), {
       servers: [
         {
@@ -240,16 +240,12 @@ describe("installed CLI boundary", () => {
     };
     await expect(
       runWorkspace(config, { ...operation, ...parseWorkspaceArgs(["teardown", target]) }),
-    ).rejects.toThrow("purge failed");
+    ).rejects.toThrow("Missing durable workspace recipe identity");
     const recovered = findWorkspaceByPath(
       readWorkspaces(root, registryDirFor(config.runtimeDir)),
       target,
     );
-    expect(recovered?.name).toBe("registered-name");
-    expect(recovered?.entry.recipe).toEqual({
-      kind: "manifest",
-      file: "alignfirst-workspace.jsonc",
-    });
+    expect(recovered).toBeUndefined();
   });
 
   it("re-executes removal outside the current target with fixed argv", async () => {

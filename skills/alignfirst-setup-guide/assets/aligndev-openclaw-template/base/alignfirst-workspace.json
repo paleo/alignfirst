@@ -1,6 +1,0 @@
-{
-  "schemaVersion": 1,
-  "workspace": {
-    "summary": "Workspace ${{ name }} — ${{ status }}\nBranch: ${{ branch }}\nPath: ${{ currentWorktree }}"
-  }
-}

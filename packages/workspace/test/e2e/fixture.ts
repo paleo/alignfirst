@@ -50,8 +50,8 @@ export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
     `${["/.plans", "/.local", "/.local-wt/", ...(options.sharedDirs ?? []).map((dir) => `/${dir}`), "workspace.local", "required.local", "ports.env", "ports.txt", "setup-runs.log", "finalized.txt", "finalize-context.json", "*-runs.jsonl", "finalize-pids.jsonl"].join("\n")}\n`,
   );
   writeFileSync(
-    join(repo, "alignfirst-workspace.json"),
-    JSON.stringify(options.oldConfig ? { ...manifest, ports: {} } : manifest),
+    join(repo, "alignfirst.json"),
+    JSON.stringify({ schemaVersion: 1, ...manifest, ...(options.oldConfig ? { ports: {} } : {}) }),
   );
   git(repo, ["init", "-b", "main"]);
   git(repo, ["config", "user.email", "e2e@example.com"]);
@@ -66,7 +66,6 @@ function fixtureManifest(options: FixtureOptions): WorkspaceManifest {
     run: [cliExecutable, "scripts/lifecycle.mjs", phase],
   });
   return {
-    schemaVersion: 1,
     workspace: {
       sharedDirs: options.sharedDirs,
       gitignoredFiles: options.fallbackSeeding
@@ -208,7 +207,7 @@ export function installResourceRecipe(
   version: string,
   options: { service?: boolean } = {},
 ): void {
-  const file = join(worktree, "alignfirst-workspace.json");
+  const file = join(worktree, "alignfirst.json");
   const manifest: WorkspaceManifest = JSON.parse(readFileSync(file, "utf8"));
   const command = (action: string): Command => ({
     run: [cliExecutable, "scripts/resource.mjs", action],

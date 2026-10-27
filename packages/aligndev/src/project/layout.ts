@@ -5,7 +5,8 @@ import type { PortRange } from "./markers.js";
 export type ItemName =
   | "alignfirst"
   | ".alignfirst-instructions"
-  | "DEVELOPERS.md"
+  | "developerInstructions"
+  | "workspaceRuntime"
   | "docs"
   | ".plans"
   | "_aligndev";
@@ -18,8 +19,14 @@ export interface ProjectReport {
   config: ProjectConfigView | null;
   companion: CompanionReport | null;
   aligndev: AligndevProjectSettings | null;
-  locations: Record<ItemName, ItemLocation>;
+  locations: ProjectLocations;
+  selectionOrigins: Record<ItemName, SelectionOrigin>;
 }
+
+export type SelectionOrigin = "item" | "defaultLocation" | "builtin";
+export type ProjectLocations = Record<Exclude<ItemName, "developerInstructions">, ItemLocation> & {
+  developerInstructions: ItemLocation | null;
+};
 
 export interface AligndevProjectSettings {
   profile: string;
@@ -28,21 +35,28 @@ export interface AligndevProjectSettings {
 export type ConfigSource = "project" | "companion";
 
 export interface WorkspaceConfigReport {
-  location: ItemLocation & { in: "project" };
+  location: ItemLocation;
+  registryDir: string;
+  runtimeDir: string;
   schemaVersion: number | null;
   portRange: PortRange | null;
   hasDevServer: boolean;
 }
 
 export interface ProjectConfigView {
-  ticketIdPattern?: string;
+  conventions?: { ticketIdPattern?: string };
+  developerInstructions?: string;
   plans?: { repositoryFolder?: string };
 }
 
 export interface CompanionReport {
   dir: string;
   exists: boolean;
+  defaultLocation: "project" | "companion" | "auto";
+  items: Record<ItemName, ItemSetting>;
 }
+
+export type ItemSetting = "project" | "companion" | "auto";
 
 export interface ItemLocation {
   path: string;
@@ -92,10 +106,16 @@ function isOutdatedReport(value: unknown): boolean {
     isRecord(value) &&
     (!Object.hasOwn(value, "aligndev") ||
       !Object.hasOwn(value, "workspace") ||
+      !Object.hasOwn(value, "selectionOrigins") ||
       !(
         isRecord(value.locations) &&
         "alignfirst" in value.locations &&
-        ".alignfirst-instructions" in value.locations
+        ".alignfirst-instructions" in value.locations &&
+        "developerInstructions" in value.locations &&
+        "workspaceRuntime" in value.locations &&
+        isRecord(value.workspace) &&
+        "registryDir" in value.workspace &&
+        "runtimeDir" in value.workspace
       ))
   );
 }
@@ -103,7 +123,7 @@ function isOutdatedReport(value: unknown): boolean {
 function outdatedAlignfirst(path: string): string {
   return (
     `The alignfirst CLI used in ${path} is too old: aligndev requires the workspace-aware ` +
-    'alignfirst config --json contract (top-level "workspace", locations.alignfirst and "aligndev"). Upgrade alignfirst.'
+    "alignfirst config --json contract (merged configuration, developerInstructions, workspaceRuntime and selectionOrigins). Upgrade alignfirst."
   );
 }
 
@@ -116,6 +136,7 @@ function parseProjectReport(value: unknown, path: string): ProjectReport {
     companion: parseCompanion(value.companion, path),
     aligndev: parseAligndev(value.aligndev, path),
     locations: parseLocations(value.locations, path),
+    selectionOrigins: parseSelectionOrigins(value.selectionOrigins, path),
   };
 }
 
@@ -140,7 +161,10 @@ function parseWorkspace(value: unknown, path: string): WorkspaceConfigReport {
   if (!isRecord(value)) throw invalidReport(path);
   const location = parseLocation(value.location, path);
   if (
-    location.in !== "project" ||
+    typeof value.registryDir !== "string" ||
+    !value.registryDir.startsWith("/") ||
+    typeof value.runtimeDir !== "string" ||
+    !value.runtimeDir.startsWith("/") ||
     (value.schemaVersion !== null && value.schemaVersion !== 1) ||
     (value.portRange !== null && !isPortRange(value.portRange)) ||
     typeof value.hasDevServer !== "boolean"
@@ -154,7 +178,9 @@ function parseWorkspace(value: unknown, path: string): WorkspaceConfigReport {
   if (location.exists && value.schemaVersion !== 1) throw invalidReport(path);
   if (!value.hasDevServer && value.portRange !== null) throw invalidReport(path);
   return {
-    location: { ...location, in: "project" },
+    location,
+    registryDir: value.registryDir,
+    runtimeDir: value.runtimeDir,
     schemaVersion: value.schemaVersion,
     portRange: value.portRange,
     hasDevServer: value.hasDevServer,
@@ -165,12 +191,19 @@ function parseConfig(value: unknown, path: string): ProjectConfigView | null {
   if (value === null) return null;
   if (!isRecord(value) || Object.hasOwn(value, "cli") || Object.hasOwn(value, "portRange"))
     throw invalidReport(path);
-  const ticketIdPattern = value.ticketIdPattern;
+  if (Object.hasOwn(value, "ticketIdPattern") || Object.hasOwn(value, "git"))
+    throw invalidReport(path);
+  if (value.conventions !== undefined && !isRecord(value.conventions)) throw invalidReport(path);
+  const ticketIdPattern = value.conventions?.ticketIdPattern;
+  const developerInstructions = value.developerInstructions;
+  if (developerInstructions !== undefined && typeof developerInstructions !== "string")
+    throw invalidReport(path);
   const plans = parsePlans(value.plans, path);
   if (ticketIdPattern !== undefined && typeof ticketIdPattern !== "string")
     throw invalidReport(path);
   return {
-    ...(ticketIdPattern === undefined ? {} : { ticketIdPattern }),
+    ...(ticketIdPattern === undefined ? {} : { conventions: { ticketIdPattern } }),
+    ...(developerInstructions === undefined ? {} : { developerInstructions }),
     ...(plans === undefined ? {} : { plans }),
   };
 }
@@ -185,25 +218,65 @@ function parsePlans(value: unknown, path: string): { repositoryFolder?: string }
   return repositoryFolder === undefined ? {} : { repositoryFolder };
 }
 
-// The report's other companion fields (`key`, `items`) are alignfirst's concern.
+// Registry keys remain AlignFirst's concern; carry effective placement and its origins.
 function parseCompanion(value: unknown, path: string): CompanionReport | null {
   if (value === null) return null;
   if (!isRecord(value) || typeof value.dir !== "string" || typeof value.exists !== "boolean") {
     throw invalidReport(path);
   }
-  return { dir: value.dir, exists: value.exists };
+  if (
+    value.defaultLocation !== "auto" &&
+    value.defaultLocation !== "project" &&
+    value.defaultLocation !== "companion"
+  )
+    throw invalidReport(path);
+  if (!isRecord(value.items)) throw invalidReport(path);
+  const items = parseItemRecord(value.items, path, (setting): ItemSetting => {
+    if (setting !== "auto" && setting !== "project" && setting !== "companion")
+      throw invalidReport(path);
+    return setting;
+  });
+  if (items._aligndev === "project") throw invalidReport(path);
+  return { dir: value.dir, exists: value.exists, defaultLocation: value.defaultLocation, items };
 }
 
-function parseLocations(value: unknown, path: string): Record<ItemName, ItemLocation> {
+function parseLocations(value: unknown, path: string): ProjectLocations {
   if (!isRecord(value)) throw invalidReport(path);
   const location = (name: ItemName) => parseLocation(value[name], path);
   return {
     alignfirst: location("alignfirst"),
     ".alignfirst-instructions": location(".alignfirst-instructions"),
-    "DEVELOPERS.md": location("DEVELOPERS.md"),
+    developerInstructions:
+      value.developerInstructions === null ? null : location("developerInstructions"),
+    workspaceRuntime: location("workspaceRuntime"),
     docs: location("docs"),
     ".plans": location(".plans"),
     _aligndev: location("_aligndev"),
+  };
+}
+
+function parseSelectionOrigins(value: unknown, path: string): Record<ItemName, SelectionOrigin> {
+  return parseItemRecord(value, path, (origin): SelectionOrigin => {
+    if (origin !== "item" && origin !== "defaultLocation" && origin !== "builtin")
+      throw invalidReport(path);
+    return origin;
+  });
+}
+
+function parseItemRecord<T>(
+  value: unknown,
+  path: string,
+  parse: (entry: unknown) => T,
+): Record<ItemName, T> {
+  if (!isRecord(value)) throw invalidReport(path);
+  return {
+    alignfirst: parse(value.alignfirst),
+    ".alignfirst-instructions": parse(value[".alignfirst-instructions"]),
+    developerInstructions: parse(value.developerInstructions),
+    workspaceRuntime: parse(value.workspaceRuntime),
+    docs: parse(value.docs),
+    ".plans": parse(value[".plans"]),
+    _aligndev: parse(value._aligndev),
   };
 }
 
@@ -244,6 +317,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function companionInUse(report: ProjectReport, items: readonly ItemName[]): boolean {
   return items.some((item) => {
     const location = report.locations[item];
-    return location.in === "companion" && location.exists;
+    return location?.in === "companion" && location.exists;
   });
 }

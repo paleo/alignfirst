@@ -123,19 +123,18 @@ export function makeRepository(parent: string, name: string, config?: object): s
 // Inventory fixtures supply the range separately from convention settings.
 export function writeProjectConfig(
   directory: string,
-  settings: object & { portRange?: { first: number; last: number } },
+  settings: object & {
+    portRange?: { first: number; last: number };
+    ticketIdPattern?: string;
+    git?: object;
+    developerInstructions?: string;
+  },
 ): void {
-  const { portRange, ...config } = settings;
-  writeFileSync(
-    join(directory, "alignfirst.json"),
-    `${JSON.stringify({ schemaVersion: 1, ...config }, undefined, 2)}\n`,
-  );
-  if (portRange !== undefined) {
-    writeFileSync(
-      join(directory, "alignfirst-workspace.json"),
-      JSON.stringify({
-        schemaVersion: 1,
-        devServer: {
+  const { portRange, ticketIdPattern, git, ...config } = settings;
+  const devServer =
+    portRange === undefined
+      ? undefined
+      : {
           ports: { ...portRange, declare: ["app"] },
           servers: [
             {
@@ -145,10 +144,17 @@ export function writeProjectConfig(
               ready: { log: "ready" },
             },
           ],
-        },
-      }),
-    );
-  }
+        };
+  writeFileSync(
+    join(directory, "alignfirst.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      developerInstructions: "DEVELOPERS.md",
+      ...config,
+      conventions: { ticketIdPattern, git },
+      ...(devServer === undefined ? {} : { devServer }),
+    }),
+  );
 }
 
 export function addWorktree(main: string, worktree: string, branch: string): void {

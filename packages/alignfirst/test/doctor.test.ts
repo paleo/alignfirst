@@ -203,7 +203,8 @@ describe("doctor command", () => {
         `[ok] Companion: directory ${companion} (missing)`,
         `[ok] Companion: alignfirst (auto): ${join(companion, "alignfirst.json")} (companion, missing)`,
         `[ok] Companion: .alignfirst-instructions (auto): ${join(companion, ".alignfirst-instructions")} (companion, missing)`,
-        `[ok] Companion: DEVELOPERS.md (auto): ${join(companion, "DEVELOPERS.md")} (companion, missing)`,
+        "[ok] Companion: developerInstructions (auto): not configured",
+        `[ok] Companion: workspaceRuntime (auto): ${join(project, ".local-wt")} (project, missing)`,
         `[warn] Companion: docs (companion): ${join(companion, "docs")} (companion, missing)`,
         `[ok] Companion: .plans (project): ${join(project, ".plans")} (project)`,
         `[ok] Companion: _aligndev (auto): ${join(project, ".plans")} (project)`,
@@ -304,10 +305,9 @@ describe("doctor command", () => {
     expect(result.stdout).toContain("[ok] Skills: alignfirst none");
   });
 
-  it("reports unknown project settings and invalid workspace metadata independently", async () => {
+  it("reports invalid merged settings in dependent sections", async () => {
     const cwd = temp();
     writeFileSync(join(cwd, "alignfirst.jsonc"), '{"schemaVersion":1,"plans":{"folder":"x"}}');
-    writeFileSync(join(cwd, "alignfirst-workspace.json"), '{"schemaVersion":2}');
     const result = await runMain(["doctor"], { cwd, home: cwd });
     expect(result).toMatchObject({ code: 0, stderr: "" });
     expect(result.stdout).toContain(`[error] alignfirst: Invalid ${join(cwd, "alignfirst.jsonc")}`);
@@ -329,7 +329,7 @@ describe("doctor command", () => {
     const cwd = temp();
     writeFileSync(
       join(cwd, "alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, git: { defaultBranch: "main" } }),
+      JSON.stringify({ schemaVersion: 1, conventions: { git: { defaultBranch: "main" } } }),
     );
     const skillDir = join(cwd, ".agents", "skills", "alignfirst");
     mkdirSync(skillDir, { recursive: true });

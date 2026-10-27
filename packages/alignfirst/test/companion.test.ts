@@ -540,7 +540,8 @@ describe("companion registry preservation", () => {
           [alias]: {
             ...profileEntry,
             dir: "chosen",
-            items: { docs: "project", ...extension },
+            defaultLocation: "companion",
+            items: { docs: "project", workspaceRuntime: "auto", ...extension },
           },
         },
       };
@@ -558,6 +559,10 @@ describe("companion registry preservation", () => {
       const parsed = JSON.parse(report.stdout);
       expect(parsed.aligndev).toEqual({ profile: "work" });
       expect(parsed.companion.items.docs).toBe("project");
+      expect(parsed.companion.defaultLocation).toBe("companion");
+      expect(parsed.selectionOrigins.docs).toBe("item");
+      expect(parsed.selectionOrigins.workspaceRuntime).toBe("item");
+      expect(parsed.selectionOrigins.alignfirst).toBe("defaultLocation");
       expect(Object.hasOwn(parsed.companion.items, key)).toBe(false);
       expect(report.stdout).not.toContain("PRIVATE");
       expect(readFileSync(registryOf(home), "utf-8")).toBe(before);

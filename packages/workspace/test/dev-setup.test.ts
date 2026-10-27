@@ -15,7 +15,6 @@ import {
   registerWorkspace,
   registryDirFor,
   updateWorkspaces,
-  workspaceRecipe,
 } from "../src/workspaces.js";
 
 const fingerprintA = "sha256:559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd";
@@ -209,7 +208,6 @@ describe("computed run-file inputs", () => {
     const env: NodeJS.ProcessEnv = { ...process.env, [key]: "private-invocation-A" };
     const { devServer } = adaptWorkspaceManifest(
       {
-        schemaVersion: 1,
         devServer: {
           runFilesInputs: [key],
           runFiles: [
@@ -232,7 +230,7 @@ describe("computed run-file inputs", () => {
           servers: [],
         },
       },
-      { mainWorktree: input.worktree.mainWorktree, env },
+      { recipe: { kind: "defaults" }, mainWorktree: input.worktree.mainWorktree, env },
     );
     if (!devServer) throw new Error("Missing dev adapter");
     input.runFilesInputs = devServer.runFilesInputs;
@@ -266,7 +264,6 @@ describe("computed run-file inputs", () => {
     const secret = "private-host-value";
     const { devServer } = adaptWorkspaceManifest(
       {
-        schemaVersion: 1,
         devServer: {
           ports: { first: 28100, last: 28199, declare: ["constructor", "__proto__", "fo-api"] },
           runFilesInputs: {
@@ -300,7 +297,7 @@ describe("computed run-file inputs", () => {
           servers: [],
         },
       },
-      { mainWorktree: input.worktree.mainWorktree },
+      { recipe: { kind: "defaults" }, mainWorktree: input.worktree.mainWorktree },
     );
     if (!devServer?.ports) throw new Error("Missing dev adapter");
     input.ports = resolveDevPortsConfig(devServer.ports);
@@ -331,13 +328,13 @@ describe("computed run-file inputs", () => {
 
 describe("registered main identity", () => {
   it("records the selected recipe on automatic main creation and refuses a missing registered manifest", async () => {
-    const path = join(input.worktree.mainWorktree, "alignfirst-workspace.json");
+    const path = join(input.worktree.mainWorktree, "alignfirst.json");
     writeFileSync(path, '{"schemaVersion":1}');
-    input.recipe = workspaceRecipe(input.worktree.mainWorktree);
+    input.recipe = { kind: "manifest", file: "alignfirst.json", in: "project" };
     await runDevSetup(input);
-    expect(currentEntry().recipe).toEqual({ kind: "manifest", file: "alignfirst-workspace.json" });
+    expect(currentEntry().recipe).toEqual(input.recipe);
     renameSync(path, `${path}c`);
-    input.recipe = workspaceRecipe(input.worktree.mainWorktree);
+    input.recipe = { kind: "manifest", file: "alignfirst.jsonc", in: "project" };
     await runDevSetup(input);
     rmSync(`${path}c`);
     input.recipe = { kind: "defaults" };

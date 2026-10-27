@@ -11,7 +11,7 @@ export function resolveDefaultBranch(
   cwd: string,
   config: ProjectConfig | undefined,
 ): DefaultBranch | undefined {
-  const configured = config?.git?.defaultBranch;
+  const configured = config?.conventions?.git?.defaultBranch;
   if (configured !== undefined) return { name: configured, source: "config" };
   const remote = resolveRemote(cwd);
   if (remote === undefined) return;

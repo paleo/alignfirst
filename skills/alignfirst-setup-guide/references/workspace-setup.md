@@ -35,7 +35,7 @@ Editor schemas ship at `alignfirst/schemas/alignfirst-v1.schema.json` and `@alig
 
 ## Manifest and project scripts
 
-Copy [alignfirst-workspace.json](../assets/alignfirst-workspace.json) and adapt its commands. It is data, not an expression language. The asset is a Node example; scripts own stack-specific details. The optional groups are `workspace` and `devServer`.
+Copy [alignfirst.json](../assets/alignfirst.json) and adapt its commands. It is data, not an expression language. The asset is a Node example; scripts own stack-specific details. The optional groups are `workspace` and `devServer`.
 
 `workspace` accepts `sharedDirs`, `gitignoredFiles`, named sequential `preSetup`, `finalize`, `purge` steps and `summary`. Finalize runs in a detached installed-CLI child; ordinary setup waits. `--detached` returns pending, and `workspace wait` joins it. Cancelling either waiter leaves an already-spawned finalizer running independently. Without a custom summary, setup and status report the workspace name, path, branch and preparation status. Failed/partial setup retains files and identity; repair the reported problem and retry the printed setup command.
 

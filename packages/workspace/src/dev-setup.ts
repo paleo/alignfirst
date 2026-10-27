@@ -89,7 +89,6 @@ export async function runDevSetup(input: DevSetupInput): Promise<DevSetupResult>
     worktree.currentWorktree,
     input.runFiles.map((entry) => entry.path),
   );
-  assertWorkspaceRecipe(worktree.currentWorktree, input.recipe);
   assertNoPendingCleanup(mainWorktree, registryDir, worktree.currentWorktree);
   if (options.resetPorts) refuseWhileRunning(mainWorktree, registryDir, worktree.currentWorktree);
   const workspace = worktree.isMainWorktree
@@ -97,7 +96,7 @@ export async function runDevSetup(input: DevSetupInput): Promise<DevSetupResult>
     : resolveCurrentWorkspace(mainWorktree, registryDir, worktree.currentWorktree);
   const entry = readWorkspaces(mainWorktree, registryDir).workspaces[workspace.name];
   if (!entry) throw new WorkspaceError(`No workspace "${workspace.name}" in the registry.`);
-  assertWorkspaceRecipe(workspace.worktree, entry.recipe);
+  assertWorkspaceRecipe(workspace.worktree, entry.recipe, input.recipe);
   assertWorkspaceCleanupComplete(entry);
   checkReady(input, workspace, entry);
 
@@ -148,7 +147,7 @@ async function ensureMainEntry(
     const existing = findWorkspaceByPath(registry, mainWorktree);
     assertWorkspaceCleanupComplete(existing?.entry);
     if (existing?.entry.main === true) {
-      assertWorkspaceRecipe(mainWorktree, existing.entry.recipe);
+      assertWorkspaceRecipe(mainWorktree, existing.entry.recipe, recipe);
       return { name: existing.name, worktree: existing.entry.worktree, main: true };
     }
     const name = allocateWorkspaceName(registry.workspaces, mainWorktree);

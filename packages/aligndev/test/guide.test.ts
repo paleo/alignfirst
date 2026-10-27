@@ -1192,7 +1192,7 @@ describe("codingAgent guides", () => {
       return stdout.slice(stdout.indexOf("### Step 1"), stdout.indexOf("### Step 2"));
     };
     expect(await step1("developers")).toContain(
-      'Retain `locations["DEVELOPERS.md"].path` from the report as DEVELOPERS_PATH.',
+      "Retain `locations.developerInstructions.path` from the report as DEVELOPERS_PATH.",
     );
     expect(await step1("readme")).toContain(
       "Retain `README.md` at the root of PROJECT_PATH as DEVELOPERS_PATH",
@@ -1213,7 +1213,7 @@ describe("codingAgent guides", () => {
     for (const cwd of [subdirectory, worktree]) {
       const { stdout } = await runGuide(fixture, ["working-session"], { cwd });
       expect(stdout, cwd).toContain(
-        'Retain `locations["DEVELOPERS.md"].path` from the report as DEVELOPERS_PATH.',
+        "Retain `locations.developerInstructions.path` from the report as DEVELOPERS_PATH.",
       );
     }
   });
@@ -1631,7 +1631,9 @@ function runGuide(fixture: Fixture, args: string[], overrides?: RunOverrides): P
 // A working directory per guide file: a repository with `DEVELOPERS.md`, one with `README.md` only,
 // and the projects directory, outside git.
 function makeGuideVariants(fixture: Fixture): Record<GuideFileCondition, string> {
-  const developers = makeRepository(fixture.root, "with-developers");
+  const developers = makeRepository(fixture.root, "with-developers", {
+    developerInstructions: "DEVELOPERS.md",
+  });
   writeFileSync(join(developers, "DEVELOPERS.md"), "# Developers\n");
   return {
     developers,

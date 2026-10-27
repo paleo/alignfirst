@@ -38,13 +38,11 @@
     "./config": {
       "types": "./dist/config.d.ts",
       "import": "./dist/config.js"
-    },
-    "./schemas/workspace-v1.schema.json": "./schemas/workspace-v1.schema.json"
+    }
   },
   "files": [
     "dist",
-    "templates",
-    "schemas"
+    "templates"
   ],
   "publishConfig": {
     "access": "public"

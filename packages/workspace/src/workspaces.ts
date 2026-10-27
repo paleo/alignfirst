@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 
-import { loadWorkspaceManifest, resolveConfigFamily, WORKSPACE_CONFIG_FAMILY } from "./config.js";
 import { WorkspaceError } from "./errors.js";
 import { wsCmd } from "./invocation.js";
 import { readRegistry, writeRegistry } from "./registry-storage.js";
@@ -11,7 +10,7 @@ import { withRegistryLock } from "./registry-lock.js";
 export const REGISTRY_SUBDIR = "workspace-registry";
 
 const WORKSPACES_FILENAME = "workspaces.json";
-const REGISTRY_VERSION = 3;
+const REGISTRY_VERSION = 4;
 const PORTS_SCHEMA = {
   type: "object",
   additionalProperties: { type: "integer", minimum: 1, maximum: 65535 },
@@ -49,10 +48,11 @@ const REGISTRY_SCHEMA = {
               {
                 type: "object",
                 additionalProperties: false,
-                required: ["kind", "file"],
+                required: ["kind", "file", "in"],
                 properties: {
                   kind: { const: "manifest" },
-                  file: { enum: ["alignfirst-workspace.json", "alignfirst-workspace.jsonc"] },
+                  file: { enum: ["alignfirst.json", "alignfirst.jsonc"] },
+                  in: { enum: ["project", "companion"] },
                 },
               },
             ],
@@ -112,7 +112,7 @@ export interface WorkspaceEntry {
 
 export type WorkspaceRecipe =
   | { kind: "defaults" }
-  | { kind: "manifest"; file: "alignfirst-workspace.json" | "alignfirst-workspace.jsonc" };
+  | { kind: "manifest"; file: "alignfirst.json" | "alignfirst.jsonc"; in: "project" | "companion" };
 
 export type WorkspaceStatus = "pending" | "ready" | "failed";
 
@@ -124,7 +124,7 @@ export interface RunFilesBasis {
 
 /** The registry as `workspaces.json` holds it. */
 interface StoredRegistry {
-  version: 3;
+  version: 4;
   workspaces: Record<string, WorkspaceEntry>;
 }
 
@@ -165,7 +165,7 @@ function loadWorkspaces(mainWorktree: string, registryDir: string): LoadedRegist
   const stored = readRegistry<StoredRegistry>(
     filePath,
     REGISTRY_SCHEMA,
-    { version: 3, workspaces: {} },
+    { version: 4, workspaces: {} },
     mainWorktree,
   );
   const workspaces: Record<string, WorkspaceEntry> = Object.create(null);
@@ -227,24 +227,16 @@ export async function updateWorkspaces<T>(
   });
 }
 
-/** Resolves the logical family afresh, allowing extension changes but never missing manifests. */
-export function workspaceRecipe(worktree: string): WorkspaceRecipe {
-  const location = resolveConfigFamily(worktree, WORKSPACE_CONFIG_FAMILY);
-  if (!location.exists) return { kind: "defaults" };
-  loadWorkspaceManifest(worktree);
-  return {
-    kind: "manifest",
-    file: location.path.endsWith(".jsonc")
-      ? "alignfirst-workspace.jsonc"
-      : "alignfirst-workspace.json",
-  };
-}
-
-export function assertWorkspaceRecipe(worktree: string, recipe: WorkspaceRecipe): void {
-  if (recipe.kind !== "manifest") return;
-  if (workspaceRecipe(worktree).kind === "manifest") return;
+/** Compare validated host selections; extension changes retain the same logical source. */
+export function assertWorkspaceRecipe(
+  worktree: string,
+  registered: WorkspaceRecipe,
+  selected: WorkspaceRecipe,
+): void {
+  if (registered.kind === "defaults") return;
+  if (selected.kind === "manifest" && registered.in === selected.in) return;
   throw new WorkspaceError(
-    `Registered manifest recipe is missing in ${worktree}. Restore alignfirst-workspace.json or .jsonc before preparation or cleanup.`,
+    `Registered manifest recipe is missing or its source changed in ${worktree}. Restore the selected alignfirst.json or .jsonc source before preparation or cleanup.`,
   );
 }
 
@@ -267,12 +259,11 @@ export async function registerWorkspace(
   input: RegisterWorkspaceInput,
 ): Promise<RegisteredWorkspace> {
   const worktree = resolve(input.currentWorktree);
-  assertWorkspaceRecipe(worktree, input.recipe);
   return updateWorkspaces(input.mainWorktree, input.registryDir, (registry) => {
     const found = findWorkspaceByPath(registry, worktree);
     const name = found?.name ?? allocateWorkspaceName(registry.workspaces, worktree);
     const existing = found?.entry;
-    if (existing) assertWorkspaceRecipe(worktree, existing.recipe);
+    if (existing) assertWorkspaceRecipe(worktree, existing.recipe, input.recipe);
     assertWorkspaceCleanupComplete(existing);
 
     const entry: WorkspaceEntry = {

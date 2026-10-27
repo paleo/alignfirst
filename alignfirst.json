@@ -1,17 +1,50 @@
 {
   "$schema": "https://cdn.jsdelivr.net/npm/alignfirst/schemas/alignfirst-v1.schema.json",
   "schemaVersion": 1,
-  "ticketIdPattern": "^\\d+$",
   "plans": {
     "repositoryFolder": "alignfirst",
     "autoArchive": true
   },
-  "git": {
-    "defaultBranch": "main",
-    "branchNameTemplate": "{TICKET_ID}/{slug-1-3-words}",
-    "commit": {
-      "style": "conventionalCommit"
-    },
-    "agentCoauthoring": false
+  "conventions": {
+    "ticketIdPattern": "^\\d+$",
+    "git": {
+      "defaultBranch": "main",
+      "branchNameTemplate": "{TICKET_ID}/{slug-1-3-words}",
+      "commit": {
+        "style": "conventionalCommit"
+      },
+      "agentCoauthoring": false
+    }
+  },
+  "developerInstructions": "DEVELOPERS.md",
+  "workspace": {
+    "sharedDirs": ["aligndev-openclaw-tests/artifacts"],
+    "gitignoredFiles": [
+      {
+        "path": ".vscode/settings.json",
+        "source": {
+          "kind": "mainWorktree"
+        },
+        "optional": true
+      },
+      {
+        "path": "aligndev-openclaw-tests/.env.local",
+        "source": {
+          "kind": "mainWorktree"
+        },
+        "optional": true
+      }
+    ],
+    "finalize": [
+      {
+        "name": "npm install",
+        "run": ["npm", "install"]
+      },
+      {
+        "name": "npm run build",
+        "run": ["npm", "run", "build"]
+      }
+    ],
+    "summary": "Workspace ${{ name }} \u2014 ${{ status }}\n  Branch: ${{ branch }}\n  Path:   ${{ currentWorktree }}"
   }
 }

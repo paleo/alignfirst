@@ -178,7 +178,6 @@ setInterval(() => {}, 1000);
     );
     const adapters = adaptWorkspaceManifest(
       {
-        schemaVersion: 1,
         workspace: {
           preSetup: [
             { name: "owned tree", run: [process.execPath, "child.cjs", pids] },
@@ -189,7 +188,7 @@ setInterval(() => {}, 1000);
           ],
         },
       },
-      { mainWorktree: root, signal: controller.signal },
+      { recipe: { kind: "defaults" }, mainWorktree: root, signal: controller.signal },
     );
     const task = adapters.workspace.preSetup?.({
       ...base,
@@ -222,7 +221,6 @@ setInterval(() => {}, 1000);
 describe("manifest adapters", () => {
   it("awaits transforms twice, preserves local edits and rejects canonical aliases across file lists", async () => {
     const manifest: WorkspaceManifest = {
-      schemaVersion: 1,
       workspace: {
         gitignoredFiles: [
           {
@@ -241,7 +239,10 @@ describe("manifest adapters", () => {
         ],
       },
     };
-    const adapters = adaptWorkspaceManifest(manifest, { mainWorktree: root });
+    const adapters = adaptWorkspaceManifest(manifest, {
+      recipe: { kind: "defaults" },
+      mainWorktree: root,
+    });
     await seedFiles({
       entries: adapters.workspace.gitignoredFiles,
       ctx: base,
@@ -255,7 +256,6 @@ describe("manifest adapters", () => {
     symlinkSync("nested", join(root, "alias"));
     const aliases = adaptWorkspaceManifest(
       {
-        schemaVersion: 1,
         workspace: {
           gitignoredFiles: [{ path: "nested/out", source: { kind: "content", content: "first" } }],
         },
@@ -264,7 +264,7 @@ describe("manifest adapters", () => {
           runFiles: [{ path: "alias/out", source: { kind: "content", content: "second" } }],
         },
       },
-      { mainWorktree: root },
+      { recipe: { kind: "defaults" }, mainWorktree: root },
     );
     await expect(
       seedFiles({
@@ -281,7 +281,6 @@ describe("manifest adapters", () => {
     const progress: string[] = [];
     const adapters = adaptWorkspaceManifest(
       {
-        schemaVersion: 1,
         workspace: {
           finalize: [
             { name: "install", run: "printf '%s' \"$ALIGNFIRST_CONTEXT\" > context.json" },
@@ -296,7 +295,7 @@ describe("manifest adapters", () => {
           ],
         },
       },
-      { mainWorktree: root },
+      { recipe: { kind: "defaults" }, mainWorktree: root },
     );
     if (!adapters.workspace.finalizeWorkspace) throw new Error("Missing finalizer");
     await adapters.workspace.finalizeWorkspace({
@@ -335,7 +334,6 @@ describe("manifest adapters", () => {
   it("continues requested purge attempts but throws an aggregate, and command stop may be omitted", async () => {
     const adapters = adaptWorkspaceManifest(
       {
-        schemaVersion: 1,
         workspace: {
           purge: [
             { name: "fails", run: "exit 3", continueOnError: true },
@@ -344,7 +342,7 @@ describe("manifest adapters", () => {
         },
         devServer: { servers: [{ kind: "command", name: "database", start: { run: "true" } }] },
       },
-      { mainWorktree: root },
+      { recipe: { kind: "defaults" }, mainWorktree: root },
     );
     await expect(
       adapters.workspace.purgeInfrastructure?.({
@@ -365,14 +363,20 @@ describe("manifest adapters", () => {
     const key = "SIDE32_SCRIPT_INPUT";
     vi.stubEnv(key, "parent-only");
     const manifest: WorkspaceManifest = {
-      schemaVersion: 1,
       devServer: { servers: [], runFilesInputs: [key] },
     };
     const context = { ...base, ports: {} };
-    const inherited = adaptWorkspaceManifest(manifest, { mainWorktree: root });
+    const inherited = adaptWorkspaceManifest(manifest, {
+      recipe: { kind: "defaults" },
+      mainWorktree: root,
+    });
     expect(await inherited.devServer?.runFilesInputs?.(context)).toEqual({ [key]: "parent-only" });
     const env: NodeJS.ProcessEnv = { [key]: "" };
-    const invocation = adaptWorkspaceManifest(manifest, { mainWorktree: root, env });
+    const invocation = adaptWorkspaceManifest(manifest, {
+      recipe: { kind: "defaults" },
+      mainWorktree: root,
+      env,
+    });
     expect(await invocation.devServer?.runFilesInputs?.(context)).toEqual({ [key]: "" });
     env[key] = undefined;
     expect(await invocation.devServer?.runFilesInputs?.(context)).toEqual({});
@@ -385,7 +389,6 @@ describe("manifest adapters", () => {
     async (output) => {
       const adapters = adaptWorkspaceManifest(
         {
-          schemaVersion: 1,
           devServer: {
             servers: [],
             runFilesInputs: {
@@ -395,7 +398,7 @@ describe("manifest adapters", () => {
             },
           },
         },
-        { mainWorktree: root },
+        { recipe: { kind: "defaults" }, mainWorktree: root },
       );
       await expect(adapters.devServer?.runFilesInputs?.({ ...base, ports: {} })).rejects.toThrow(
         /JSON object of strings/,
@@ -406,7 +409,6 @@ describe("manifest adapters", () => {
   it("resolves spawn cwd/env/ports after setup, disables implicit JS errors, and summarizes actual results", async () => {
     const adapters = adaptWorkspaceManifest(
       {
-        schemaVersion: 1,
         devServer: {
           servers: [
             {
@@ -424,7 +426,7 @@ describe("manifest adapters", () => {
           summary: { command: { run: "printf '%s' \"$ALIGNFIRST_CONTEXT\"" } },
         },
       },
-      { mainWorktree: root },
+      { recipe: { kind: "defaults" }, mainWorktree: root },
     );
     const dev = adapters.devServer;
     if (!dev) throw new Error("Missing dev adapter");

@@ -16,13 +16,18 @@ afterEach(() => {
 
 describe("readProjectReport", () => {
   const cwd = tmpdir();
-  const tooOld = `The alignfirst CLI used in ${cwd} is too old: aligndev requires the workspace-aware alignfirst config --json contract (top-level "workspace", locations.alignfirst and "aligndev"). Upgrade alignfirst.`;
+  const tooOld = `The alignfirst CLI used in ${cwd} is too old: aligndev requires the workspace-aware alignfirst config --json contract (merged configuration, developerInstructions, workspaceRuntime and selectionOrigins). Upgrade alignfirst.`;
 
   it.each([
     { source: "root", cli: null, config: null },
     { ...report(cwd), locations: {} },
     Object.fromEntries(Object.entries(report(cwd)).filter(([key]) => key !== "aligndev")),
     Object.fromEntries(Object.entries(report(cwd)).filter(([key]) => key !== "workspace")),
+    Object.fromEntries(Object.entries(report(cwd)).filter(([key]) => key !== "selectionOrigins")),
+    {
+      ...report(cwd),
+      workspace: { location: {}, schemaVersion: null, portRange: null, hasDevServer: false },
+    },
   ])("requires the workspace-aware contract, not a version number: %#", (value) => {
     const command = reportCommand(value);
     const result = readProjectReport(command, cwd, {});
@@ -226,18 +231,29 @@ function report(cwd: string) {
   const names = [
     "alignfirst",
     ".alignfirst-instructions",
-    "DEVELOPERS.md",
+    "developerInstructions",
+    "workspaceRuntime",
     "docs",
     ".plans",
     "_aligndev",
   ];
   return {
     source: null,
-    workspace: { location, schemaVersion: null, portRange: null, hasDevServer: false },
+    workspace: {
+      location,
+      schemaVersion: null,
+      portRange: null,
+      hasDevServer: false,
+      registryDir: join(cwd, ".local-wt/workspace-registry"),
+      runtimeDir: join(cwd, ".local-wt"),
+    },
     config: null,
     companion: null,
     aligndev: null,
-    locations: Object.fromEntries(names.map((name) => [name, location])),
+    locations: Object.fromEntries(
+      names.map((name) => [name, name === "developerInstructions" ? null : location]),
+    ),
+    selectionOrigins: Object.fromEntries(names.map((name) => [name, "builtin"])),
   };
 }
 

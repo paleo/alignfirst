@@ -8,7 +8,6 @@ import {
   defaultCommands,
   detectWorktree,
   findWorkspaceByPath,
-  loadWorkspaceManifest,
   parseDevArgs,
   parseWorkspaceArgs,
   readWorkspaceInventory,
@@ -19,7 +18,7 @@ import {
   runDevServer,
   runWorkspace,
   selectWorkspaceRecord,
-  workspaceRecipe,
+  type WorkspaceRecipe,
   validateRuntimeStorage,
   WorkspaceError,
   type WorkspaceConfig,
@@ -30,14 +29,14 @@ import {
 } from "@alignfirst/workspace";
 import { git, canonicalPath } from "@alignfirst/workspace/git";
 import { realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { CliError } from "../cli-error.js";
 import type { CommandContext } from "../context.js";
 import { resolvePlansMode } from "../plans/mode.js";
 import { resolveProjectConfig } from "../project-config.js";
-import { resolveProjectLayout } from "../project-layout.js";
+import { resolveProjectLayout, projectRoot, type ProjectLayout } from "../project-layout.js";
 
 export async function runWorkspaceCommand(ctx: CommandContext, args: string[]): Promise<number> {
   const controller = new AbortController();
@@ -56,11 +55,11 @@ export async function runWorkspaceCommand(ctx: CommandContext, args: string[]): 
     }
     const root = detectWorktree(ctx.cwd);
     assertRegistryOwnership(root.mainWorktree, root.currentWorktree, registryDirFor(".local-wt"));
-    const config = loadRecipe(ctx, root.currentWorktree, output, controller.signal);
+    const config = loadRecipe(ctx, root.currentWorktree, output, controller.signal, ctx.layout);
     const informational = ["help", "guide", "version", "list", "status"].includes(
       parsed.command.kind,
     );
-    if (!informational) assertRegisteredRecipe(root.currentWorktree);
+    if (!informational) assertRegisteredRecipe(root.currentWorktree, config.recipe);
     const before =
       parsed.json === true && ["teardown", "remove", "prune"].includes(parsed.command.kind)
         ? readWorkspaceInventory({ cwd: ctx.cwd, env: ctx.env }, registryDirFor(config.runtimeDir))
@@ -151,8 +150,11 @@ export async function runDevCommand(ctx: CommandContext, args: string[]): Promis
     const operation = workspaceOperation(ctx, output, controller.signal);
     const root = detectWorktree(ctx.cwd);
     assertRegistryOwnership(root.mainWorktree, root.currentWorktree, registryDirFor(".local-wt"));
-    const manifest = loadWorkspaceManifest(root.currentWorktree);
-    const adapted = adaptWorkspaceManifest(manifest ?? { schemaVersion: 1 }, {
+    const selected = operation.host?.loadWorkspace?.(root.currentWorktree);
+    if (selected === undefined) throw new WorkspaceError("Missing workspace configuration host.");
+    const recipe = selected.recipe;
+    const adapted = adaptWorkspaceManifest(selected.settings ?? {}, {
+      recipe,
       mainWorktree: root.mainWorktree,
       env: ctx.env,
       output,
@@ -171,7 +173,7 @@ export async function runDevCommand(ctx: CommandContext, args: string[]): Promis
         throw new WorkspaceError(
           "No workspace here. Run alignfirst workspace setup before dev setup/start.",
         );
-      assertRegisteredRecipe(root.currentWorktree);
+      assertRegisteredRecipe(root.currentWorktree, recipe);
       validateRuntimeStorage({ cwd: root.mainWorktree, env: ctx.env });
       validateRuntimeStorage({ cwd: root.currentWorktree, env: ctx.env });
       await operation.host?.validateWorkFiles(root.currentWorktree);
@@ -179,6 +181,7 @@ export async function runDevCommand(ctx: CommandContext, args: string[]): Promis
     await runDevServer(
       adapted.devServer ?? {
         runtimeDir: ".local-wt",
+        recipe,
         servers: [],
         signal: controller.signal,
       },
@@ -222,9 +225,24 @@ function alignfirstWorkspaceHost(
   output: WorkspaceOutput,
   signal?: AbortSignal,
 ): WorkspaceHost {
+  const layouts = new Map<string, ProjectLayout>();
+  const callerRoot = canonicalPath(projectRoot(ctx.cwd));
+  const layoutFor = (worktree: string): ProjectLayout => {
+    const key = canonicalPath(worktree);
+    let layout = layouts.get(key);
+    if (layout === undefined) {
+      layout =
+        key === callerRoot && ctx.layout !== undefined
+          ? ctx.layout
+          : resolveProjectLayout(worktree, ctx.home);
+      layouts.set(key, layout);
+    }
+    return layout;
+  };
   return {
     loadWorkspace: (worktree) => {
-      const manifest = loadWorkspaceManifest(worktree);
+      const layout = layoutFor(worktree);
+      const manifest = resolveProjectConfig(layout)?.config;
       assertDistinctDestinations(
         worktree,
         [
@@ -232,10 +250,10 @@ function alignfirstWorkspaceHost(
           ...(manifest?.devServer?.runFiles ?? []),
         ].map((entry) => entry.path),
       );
-      return loadRecipe(ctx, worktree, output, signal);
+      return loadRecipe(ctx, worktree, output, signal, layout);
     },
     validateWorkFiles: (worktree) => {
-      const layout = resolveProjectLayout(worktree, ctx.home);
+      const layout = layoutFor(worktree);
       resolveProjectConfig(layout);
       const plans = layout.locations[".plans"];
       resolvePlansMode(worktree, plans, ctx.form, ctx.home);
@@ -250,13 +268,13 @@ function alignfirstWorkspaceHost(
       }
     },
     sharedDirectoryProtection: (worktree) => {
-      const layout = resolveProjectLayout(worktree, ctx.home);
+      const layout = layoutFor(worktree);
       resolveProjectConfig(layout);
       const paths = [layout.locations[".plans"], layout.locations._aligndev]
         .filter((location) => location.exists)
         .flatMap((location) => existingProtectionPath(location.path));
       if (layout.companion) paths.push(canonicalPath(layout.companion.dir));
-      const manifest = loadWorkspaceManifest(worktree);
+      const manifest = resolveProjectConfig(layout)?.config;
       const { mainWorktree } = detectWorktree(worktree);
       for (const directory of manifest?.workspace?.sharedDirs ?? [])
         paths.push(...existingProtectionPath(resolve(mainWorktree, directory)));
@@ -287,10 +305,13 @@ function loadRecipe(
   worktree: string,
   output: WorkspaceOutput,
   signal?: AbortSignal,
+  layout = resolveProjectLayout(worktree, ctx.home),
 ): WorkspaceConfig {
   const { mainWorktree } = detectWorktree(worktree);
-  const manifest = loadWorkspaceManifest(worktree);
-  const adapted = adaptWorkspaceManifest(manifest ?? { schemaVersion: 1 }, {
+  const manifest = resolveProjectConfig(layout)?.config;
+  const recipe = selectedRecipe(layout);
+  const adapted = adaptWorkspaceManifest(manifest ?? {}, {
+    recipe,
     mainWorktree,
     env: ctx.env,
     output,
@@ -298,18 +319,35 @@ function loadRecipe(
   });
   return {
     ...adapted.workspace,
-    recipe: workspaceRecipe(worktree),
+    recipe,
+    settings: manifest ?? {},
+    configurationDir:
+      manifest === undefined ? undefined : dirname(layout.locations.alignfirst.path),
+    companionDir: layout.companion?.dir,
+    storage: layout.storage,
     hasDevServer: adapted.devServer !== undefined,
   };
 }
 
-function assertRegisteredRecipe(worktree: string): void {
+function selectedRecipe(layout: ProjectLayout): WorkspaceRecipe {
+  const config = resolveProjectConfig(layout)?.config;
+  if (config?.workspace === undefined && config?.devServer === undefined)
+    return { kind: "defaults" };
+  const location = layout.locations.alignfirst;
+  return {
+    kind: "manifest",
+    file: location.path.endsWith(".jsonc") ? "alignfirst.jsonc" : "alignfirst.json",
+    in: location.in,
+  };
+}
+
+function assertRegisteredRecipe(worktree: string, recipe: WorkspaceRecipe): void {
   const root = detectWorktree(worktree);
   const found = findWorkspaceByPath(
     readWorkspaces(root.mainWorktree, registryDirFor(".local-wt")),
     root.currentWorktree,
   );
-  if (found) assertWorkspaceRecipe(root.currentWorktree, found.entry.recipe);
+  if (found) assertWorkspaceRecipe(root.currentWorktree, found.entry.recipe, recipe);
 }
 
 function workspaceOutput(ctx: CommandContext, json: boolean): WorkspaceOutput {

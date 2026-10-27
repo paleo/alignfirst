@@ -38,6 +38,7 @@ import {
 } from "./script-context.js";
 import type { ServerContext, ServerDescriptor } from "./server-descriptor.js";
 import type { PurgeContext, WorkspaceConfig } from "./workspace.js";
+import type { WorkspaceRecipe } from "./workspaces.js";
 
 export interface ManifestAdapters {
   workspace: ManifestWorkspaceHooks;
@@ -58,6 +59,7 @@ type ManifestWorkspaceHooks = Pick<
 
 export interface ManifestAdapterOptions {
   mainWorktree: string;
+  recipe: WorkspaceRecipe;
   signal?: AbortSignal;
   env?: NodeJS.ProcessEnv;
   output?: WorkspaceOutput;
@@ -163,6 +165,7 @@ function adaptDev(
 ): DevServerConfig {
   return {
     runtimeDir: ".local-wt",
+    recipe: options.recipe,
     signal: options.signal,
     ports: dev.ports,
     maxConcurrentDevServers: dev.maxConcurrentDevServers,

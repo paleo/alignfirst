@@ -54,7 +54,7 @@ describe("workspace setup (e2e)", () => {
     "loads every preparation phase from the target branch and keeps noisy JSON output pure",
     () => {
       const { repo } = fixture();
-      const manifestPath = join(repo, "alignfirst-workspace.json");
+      const manifestPath = join(repo, "alignfirst.json");
       const caller = readFileSync(manifestPath, "utf8");
       const target = JSON.parse(caller);
       target.workspace.preSetup = [
@@ -71,7 +71,7 @@ describe("workspace setup (e2e)", () => {
       ];
       target.workspace.summary = { command: { run: "echo noisy-summary" } };
       writeFileSync(manifestPath, JSON.stringify(target));
-      execFileSync("git", ["add", "alignfirst-workspace.json"], { cwd: repo });
+      execFileSync("git", ["add", "alignfirst.json"], { cwd: repo });
       execFileSync("git", ["commit", "-m", "target recipe"], { cwd: repo, stdio: "pipe" });
       execFileSync("git", ["branch", "target-recipe"], { cwd: repo });
       writeFileSync(manifestPath, caller);

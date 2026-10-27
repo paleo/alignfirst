@@ -27,7 +27,6 @@ import {
   type WorkspaceEntry,
   workspacesFilePath,
   writeWorkspaces,
-  workspaceRecipe,
 } from "../src/workspaces.js";
 
 const registryDir = registryDirFor(".local-wt");
@@ -75,12 +74,12 @@ function digest(value: string) {
 }
 
 describe("workspace registration", () => {
-  it("stores version 3, required provenance and pending preparation without allocating ports", async () => {
+  it("stores version 4, required provenance and pending preparation without allocating ports", async () => {
     expect(registryDir).toBe(".local-wt/workspace-registry");
     expect(readWorkspaces(mainWorktree, registryDir)).toEqual({ workspaces: {} });
     expect(await register("/repo/wt-a")).toEqual({ name: "wt-a", status: "pending" });
     expect(JSON.parse(stored())).toEqual({
-      version: 3,
+      version: 4,
       workspaces: {
         "wt-a": {
           ...entry("/repo/wt-a", "pending"),
@@ -136,13 +135,30 @@ describe("workspace registration", () => {
   });
 
   it("refuses a missing registered manifest, allowing an extension-only switch", async () => {
-    const json = join(mainWorktree, "alignfirst-workspace.json");
+    const json = join(mainWorktree, "alignfirst.json");
     writeFileSync(json, '{"schemaVersion":1}');
-    await register(mainWorktree, { recipe: workspaceRecipe(mainWorktree) });
-    expect(entries().main.recipe).toEqual({ kind: "manifest", file: "alignfirst-workspace.json" });
+    await register(mainWorktree, {
+      recipe: { kind: "manifest", file: "alignfirst.json", in: "project" },
+    });
+    expect(entries().main.recipe).toEqual({
+      kind: "manifest",
+      file: "alignfirst.json",
+      in: "project",
+    });
     renameSync(json, `${json}c`);
-    await register(mainWorktree, { recipe: workspaceRecipe(mainWorktree) });
-    expect(entries().main.recipe).toEqual({ kind: "manifest", file: "alignfirst-workspace.jsonc" });
+    await register(mainWorktree, {
+      recipe: { kind: "manifest", file: "alignfirst.jsonc", in: "project" },
+    });
+    expect(entries().main.recipe).toEqual({
+      kind: "manifest",
+      file: "alignfirst.jsonc",
+      in: "project",
+    });
+    await expect(
+      register(mainWorktree, {
+        recipe: { kind: "manifest", file: "alignfirst.json", in: "companion" },
+      }),
+    ).rejects.toThrow("source changed");
     rmSync(`${json}c`);
     const before = stored();
     await expect(register(mainWorktree)).rejects.toThrow("manifest recipe is missing");
@@ -162,7 +178,7 @@ describe("registry format rejection", () => {
     expect(existsSync(workspacesFilePath(mainWorktree, registryDir))).toBe(false);
   });
 
-  it.each([undefined, 1, 2, 4])("rejects version %s before any mutation", async (version) => {
+  it.each([undefined, 1, 2, 3])("rejects version %s before any mutation", async (version) => {
     raw({ version, workspaces: { old: entry("/old/wt") } });
     const before = stored();
     expect(() => entries()).toThrow("unsupported registry");
@@ -174,12 +190,17 @@ describe("registry format rejection", () => {
     { worktree: "/old/wt", createdAt: CREATED_AT, status: "ready" },
     { ...entry("/old/wt"), portIndex: 2 },
     { ...entry("/old/wt"), purgeData: {} },
+    {
+      ...entry("/old/wt"),
+      recipe: { kind: "manifest", file: "alignfirst-workspace.json", in: "project" },
+    },
+    { ...entry("/old/wt"), recipe: { kind: "manifest", file: "alignfirst.json" } },
     entry("../relative"),
     { ...entry("/old/wt"), runFilesWrittenWith: { ports: {}, inputs: { secret: "plaintext" } } },
   ])(
     "preserves bytes for missing provenance, retired fields and malformed entries",
     async (invalid) => {
-      raw({ version: 3, workspaces: { old: invalid } });
+      raw({ version: 4, workspaces: { old: invalid } });
       const before = stored();
       await expect(register(mainWorktree)).rejects.toThrow();
       expect(stored()).toBe(before);
@@ -188,7 +209,7 @@ describe("registry format rejection", () => {
 
   it("rejects malformed JSON and duplicate identities rather than repairing them", async () => {
     raw({
-      version: 3,
+      version: 4,
       workspaces: { a: { ...entry("/old/a"), main: true }, b: { ...entry("/old/b"), main: true } },
     });
     const before = stored();
@@ -203,7 +224,7 @@ describe("registry format rejection", () => {
 
   it("does not invent devSetupAt or repair missing linked paths from basenames", () => {
     mkdirSync(join(root, "wt"));
-    raw({ version: 3, workspaces: { wt: entry("/missing/external/wt") } });
+    raw({ version: 4, workspaces: { wt: entry("/missing/external/wt") } });
     expect(entries().wt).toEqual(entry("/missing/external/wt"));
   });
 });
@@ -281,7 +302,7 @@ describe("main relocation and re-key", () => {
 
   it("reconciles genuine rename evidence on any write, retaining ports and provenance", async () => {
     raw({
-      version: 3,
+      version: 4,
       workspaces: {
         old: {
           ...entry("/previous/old"),
@@ -312,7 +333,7 @@ describe("main relocation and re-key", () => {
   });
 
   it("fresh status updates act on paths after a captured name is re-keyed and reused", async () => {
-    raw({ version: 3, workspaces: { old: { ...entry("/previous/old", "pending"), main: true } } });
+    raw({ version: 4, workspaces: { old: { ...entry("/previous/old", "pending"), main: true } } });
     const warn = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       await updateWorkspaces(mainWorktree, registryDir, (registry) => {
@@ -329,7 +350,7 @@ describe("main relocation and re-key", () => {
 
   it("does not invalidate setup when the registered name remains unchanged", async () => {
     raw({
-      version: 3,
+      version: 4,
       workspaces: {
         main: {
           ...entry("/previous/different"),

@@ -14,7 +14,6 @@ import { errorMessage } from "../errors.js";
 import { parseBareCommandArgs } from "../parse-args.js";
 import { resolvePlansMode } from "../plans/mode.js";
 import { findStoppedRebase } from "../plans/rebase.js";
-import { readWorkspaceConfigReport } from "@alignfirst/workspace/config";
 import { resolveProjectConfig, type ResolvedProjectConfig } from "../project-config.js";
 import {
   type CompanionLayout,
@@ -28,7 +27,6 @@ import {
   layoutOf,
   type ProjectLayout,
   renderItemLocation,
-  projectRoot,
 } from "../project-layout.js";
 import {
   COMMAND_SKILLS,
@@ -55,7 +53,7 @@ export function runDoctor(ctx: CommandContext, args: string[]): number {
     ];
   });
   writeSection(ctx, "Workspace", () => {
-    const report = readWorkspaceConfigReport(projectRoot(ctx.cwd));
+    const report = { location: layoutOf(ctx).locations.alignfirst };
     return [
       {
         level: "ok",
@@ -148,7 +146,7 @@ function describeItem(
 ): DoctorLine {
   const location = layout.locations[name];
   const setting = companion.items[name];
-  const missingCopy = setting === "companion" && !location.exists;
+  const missingCopy = setting === "companion" && location !== null && !location.exists;
   return {
     level: missingCopy ? "warn" : "ok",
     text: renderItemLocation(name, location, setting),

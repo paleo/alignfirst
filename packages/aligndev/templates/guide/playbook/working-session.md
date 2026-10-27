@@ -82,11 +82,11 @@ Any other key is a work conversation. Run `git rev-parse --path-format=absolute 
 
 - PROJECT_PATH is the main worktree of the session's working directory: the parent of `git rev-parse --path-format=absolute --git-common-dir`. PROJECT is its directory name.
 - The workplace is the session's worktree (`git rev-parse --show-toplevel`) and its branch (`git branch --show-current`).
-- Run `{{ALIGNFIRST}} config --json` from PROJECT_PATH. The default branch is `config.git.defaultBranch` in the report, else the default branch identified by the project's instructions or configured remote. Ask when it is unclear. The report also names the project's companion directory, where its AlignFirst files may live.
+- Run `{{ALIGNFIRST}} config --json` from PROJECT_PATH. The default branch is `config.conventions.git.defaultBranch` in the report, else the default branch identified by the project's instructions or configured remote. Ask when it is unclear. The report also names the project's companion directory, where its AlignFirst files may live.
 {{/conversation}}
 {{#codingAgent}}
 {{#developers}}
-- Retain `locations["DEVELOPERS.md"].path` from the report as DEVELOPERS_PATH.
+- Retain `locations.developerInstructions.path` from the report as DEVELOPERS_PATH.
 {{/developers}}
 {{#readme}}
 - Retain `README.md` at the root of PROJECT_PATH as DEVELOPERS_PATH: the project has no `DEVELOPERS.md`, and its README is your guide.

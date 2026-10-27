@@ -13,12 +13,7 @@ import {
   readMarker,
 } from "./markers.js";
 
-const CONFIG_FILENAMES = [
-  "alignfirst.json",
-  "alignfirst.jsonc",
-  "alignfirst-workspace.json",
-  "alignfirst-workspace.jsonc",
-];
+const CONFIG_FILENAMES = ["alignfirst.json", "alignfirst.jsonc"];
 
 export interface ProjectInventory {
   root: string;

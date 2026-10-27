@@ -20,6 +20,7 @@ export interface WorkspaceOutput {
 
 /** AlignFirst supplies these services; the kernel does not discover or spawn its host. */
 export interface WorkspaceHost {
+  /** Target-selected settings, recipe provenance, configuration directory and storage addresses. */
   loadWorkspace?: (worktree: string) => WorkspaceConfig;
   validateWorkFiles: (worktree: string) => void | Promise<void>;
   sharedDirectoryProtection: (

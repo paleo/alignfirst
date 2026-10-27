@@ -6,19 +6,12 @@ import { getNodeValue, type ParseError, parseTree } from "jsonc-parser";
 
 import { ConfigError } from "./errors.js";
 import { type DevPortsConfig, type PortRange, resolveDevPortsConfig } from "./ports.js";
-
-export const WORKSPACE_CONFIG_FAMILY = "alignfirst-workspace";
 const validators = new WeakMap<object, ValidateFunction>();
 const ajv = new Ajv({ allErrors: true, ownProperties: true });
 ajv.addFormat("uri", fullFormats.uri);
 ajv.addFormat("date-time", fullFormats["date-time"]);
-const manifestSchema: object = JSON.parse(
-  readFileSync(new URL("../schemas/workspace-v1.schema.json", import.meta.url), "utf8"),
-);
 
 export interface WorkspaceManifest {
-  schemaVersion: 1;
-  $schema?: string;
   workspace?: WorkspaceSettings;
   devServer?: DevSettings;
 }
@@ -85,7 +78,9 @@ export interface ConfigFileLocation {
 }
 
 export interface WorkspaceConfigReport {
-  location: ConfigFileLocation & { in: "project" };
+  location: ConfigFileLocation & { in: "project" | "companion" };
+  registryDir: string;
+  runtimeDir: string;
   schemaVersion: number | null;
   portRange: PortRange | null;
   hasDevServer: boolean;
@@ -166,14 +161,7 @@ function schemaError(error: ErrorObject): string {
   return `${JSON.stringify(property === "" ? "/" : property)} ${message}`;
 }
 
-export function loadWorkspaceManifest(directory: string): WorkspaceManifest | undefined {
-  const location = resolveConfigFamily(directory, WORKSPACE_CONFIG_FAMILY);
-  if (!location.exists) return;
-  return validateWorkspaceManifest(readConfigFile(location.path), location.path);
-}
-
-export function validateWorkspaceManifest(value: unknown, label: string): WorkspaceManifest {
-  validateConfigSchema<WorkspaceManifest>(value, manifestSchema, label);
+export function validateWorkspaceSettings(value: WorkspaceManifest, label: string): void {
   const dev = value.devServer;
   if (dev?.ports !== undefined) {
     try {
@@ -213,7 +201,6 @@ export function validateWorkspaceManifest(value: unknown, label: string): Worksp
         `Invalid ${label}: devServer.runFiles[${index}].path also occurs in workspace.gitignoredFiles.`,
       );
   }
-  return value;
 }
 
 function validateLogPattern(pattern: string, label: string, field: string): void {
@@ -222,18 +209,4 @@ function validateLogPattern(pattern: string, label: string, field: string): void
   } catch {
     throw new ConfigError(`Invalid ${label}: ${field} must be a regular-expression source.`);
   }
-}
-
-export function readWorkspaceConfigReport(directory: string): WorkspaceConfigReport {
-  const location = resolveConfigFamily(directory, WORKSPACE_CONFIG_FAMILY);
-  const manifest = location.exists
-    ? validateWorkspaceManifest(readConfigFile(location.path), location.path)
-    : undefined;
-  const ports = manifest?.devServer?.ports;
-  return {
-    location: { ...location, in: "project" },
-    schemaVersion: manifest?.schemaVersion ?? null,
-    portRange: ports === undefined ? null : { first: ports.first, last: ports.last },
-    hasDevServer: manifest?.devServer !== undefined,
-  };
 }

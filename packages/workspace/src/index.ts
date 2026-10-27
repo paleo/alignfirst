@@ -12,10 +12,7 @@ export {
   resolveConfigFamily,
   readConfigFile,
   validateConfigSchema,
-  loadWorkspaceManifest,
-  validateWorkspaceManifest,
-  readWorkspaceConfigReport,
-  WORKSPACE_CONFIG_FAMILY,
+  validateWorkspaceSettings,
 } from "./config.js";
 export type {
   WorkspaceManifest,
@@ -30,6 +27,8 @@ export type {
   ConfigFileLocation,
   WorkspaceConfigReport,
 } from "./config.js";
+export { resolveWorkspaceStorage } from "./storage.js";
+export type { WorkspaceStorage, WorkspaceStorageSelection } from "./storage.js";
 export { adaptWorkspaceManifest } from "./manifest-adapter.js";
 export type { ManifestAdapters, ManifestAdapterOptions } from "./manifest-adapter.js";
 export { executeCommand } from "./command-executor.js";
@@ -79,7 +78,6 @@ export {
   registryDirFor,
   markWorkspaceReady,
   markWorkspaceFailed,
-  workspaceRecipe,
   assertWorkspaceRecipe,
   assertWorkspaceCleanupComplete,
 } from "./workspaces.js";

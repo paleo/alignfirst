@@ -183,7 +183,7 @@ describe("guide command", () => {
     git(cwd, "checkout", "-q", "-b", "78/x");
     writeFileSync(
       join(cwd, "alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, ticketIdPattern: "^\\d+$" }),
+      JSON.stringify({ schemaVersion: 1, conventions: { ticketIdPattern: "^\\d+$" } }),
     );
     const detected = await runMain(["guide", "spec"], { cwd });
     expect(detected.stdout).toContain("Current ticket: `78`");
@@ -199,7 +199,7 @@ describe("guide command", () => {
     git(cwd, "checkout", "-q", "main");
     writeFileSync(
       join(cwd, "alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, ticketIdPattern: "^\\d+$" }),
+      JSON.stringify({ schemaVersion: 1, conventions: { ticketIdPattern: "^\\d+$" } }),
     );
     const noMatch = await runMain(["guide", "spec"], { cwd });
     expect(noMatch.stdout).toContain("No ticket id on branch `main`");
@@ -221,9 +221,11 @@ describe("guide command", () => {
       join(cwd, "alignfirst.json"),
       JSON.stringify({
         schemaVersion: 1,
-        git: {
-          defaultBranch: "main",
-          commit: { style: "conventionalCommit", ticketReference: "bracketedHash" },
+        conventions: {
+          git: {
+            defaultBranch: "main",
+            commit: { style: "conventionalCommit", ticketReference: "bracketedHash" },
+          },
         },
       }),
     );

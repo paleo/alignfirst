@@ -158,11 +158,7 @@ describe("explicit companion-only onboarding", () => {
       const before = readReport(fixture, repo);
       expect(before.companion === null).toBe(state !== "registered");
       expect(before.config).toBeNull();
-      expect(before.locations["DEVELOPERS.md"]).toEqual({
-        path: join(state === "registered" ? existingCompanion : repo, "DEVELOPERS.md"),
-        in: state === "registered" ? "companion" : "project",
-        exists: false,
-      });
+      expect(before.locations.developerInstructions).toBeNull();
       expect(before.locations[".plans"].path).toBe(join(repo, ".plans"));
       expect(execGit(repo, "ls-files", "--", ".plans")).toBe("");
       expect(execGit(repo, "check-ignore", ".plans/side-7/A1-request.md")).toBe(
@@ -199,7 +195,7 @@ describe("explicit companion-only onboarding", () => {
       selectedEntry.items = { ...selectedEntry.items, ".plans": "companion" };
       writeRegistry(fixture.home, registeredRegistry);
       const selected = readReport(fixture, repo);
-      for (const item of [".plans", "alignfirst", "DEVELOPERS.md"] as const) {
+      for (const item of [".plans", "alignfirst"] as const) {
         expect(selected.locations[item].in, item).toBe("companion");
         expect(selected.locations[item].path, item).toBe(
           join(dir, item === "alignfirst" ? "alignfirst.json" : item),
@@ -216,11 +212,16 @@ describe("explicit companion-only onboarding", () => {
       } else {
         expect(readdirSync(join(dir, ".plans"))).toEqual([]);
       }
-      writeFileSync(selected.locations.alignfirst.path, '{"schemaVersion":1}\n');
-      writeFileSync(selected.locations["DEVELOPERS.md"].path, "# Developer guide\n");
+      writeFileSync(
+        selected.locations.alignfirst.path,
+        '{"schemaVersion":1,"developerInstructions":"DEVELOPERS.md"}\n',
+      );
+      const instructions = readReport(fixture, repo).locations.developerInstructions;
+      if (instructions === null) throw new Error("Missing configured developer instructions");
+      writeFileSync(instructions.path, "# Developer guide\n");
       const prepared = readReport(fixture, repo);
       expect(prepared.source).toBe("companion");
-      expect(prepared.locations["DEVELOPERS.md"].exists).toBe(true);
+      expect(prepared.locations.developerInstructions?.exists).toBe(true);
       expect(prepared.aligndev).toEqual(state === "missing" ? null : { profile: "kept-profile" });
       const finalRegistry: Registry = JSON.parse(readFileSync(registryPath, "utf8"));
       expect(finalRegistry).toEqual(registeredRegistry);

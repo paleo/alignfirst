@@ -22,14 +22,16 @@ describe("conventions command", () => {
       join(cwd, "alignfirst.json"),
       JSON.stringify({
         schemaVersion: 1,
-        ticketIdPattern: "^\\d+$",
-        plans: { autoArchive: true },
-        git: {
-          defaultBranch: "main",
-          branchNameTemplate: "{TICKET_ID}/{slug-1-3-words}",
-          commit: { style: "conventionalCommit", ticketReference: "bracketedHash" },
-          agentCoauthoring: false,
+        conventions: {
+          ticketIdPattern: "^\\d+$",
+          git: {
+            defaultBranch: "main",
+            branchNameTemplate: "{TICKET_ID}/{slug-1-3-words}",
+            commit: { style: "conventionalCommit", ticketReference: "bracketedHash" },
+            agentCoauthoring: false,
+          },
         },
+        plans: { autoArchive: true },
       }),
     );
     const result = await runMain(["conventions"], { cwd });
@@ -59,7 +61,7 @@ describe("conventions command", () => {
     const cwd = makeProject();
     writeFileSync(
       join(cwd, "alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, git: { agentCoauthoring: false } }),
+      JSON.stringify({ schemaVersion: 1, conventions: { git: { agentCoauthoring: false } } }),
     );
 
     expect((await runMain(["conventions"], { cwd })).stdout).toContain(

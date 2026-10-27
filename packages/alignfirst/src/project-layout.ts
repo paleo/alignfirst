@@ -1,10 +1,13 @@
 import { configFamilyExists, resolveConfigFamily } from "@alignfirst/workspace/config";
+import { resolveWorkspaceStorage, type WorkspaceStorage } from "@alignfirst/workspace";
+import { canonicalPath } from "@alignfirst/workspace/git";
 import {
   existsSync,
   lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -26,11 +29,17 @@ import {
   shapeError,
 } from "./json-shape.js";
 import { warnUnknownSetting } from "./settings-warning.js";
+import {
+  PROJECT_CONFIG_FAMILY,
+  readProjectConfig,
+  type ResolvedProjectConfig,
+} from "./project-config.js";
 
 export const ITEM_NAMES = [
   "alignfirst",
   ".alignfirst-instructions",
-  "DEVELOPERS.md",
+  "developerInstructions",
+  "workspaceRuntime",
   "docs",
   ".plans",
   "_aligndev",
@@ -43,6 +52,7 @@ const itemSetting = literal("companion", "project", "auto");
 const registryProjectShape = object<RegistryProject>(
   {
     dir: optional(dirValue),
+    defaultLocation: optional(itemSetting),
     aligndev: optional(
       object<AligndevProjectSettings>({ profile: profileValue }, warnUnknownRegistrySetting),
     ),
@@ -51,7 +61,8 @@ const registryProjectShape = object<RegistryProject>(
         {
           alignfirst: optional(itemSetting),
           ".alignfirst-instructions": optional(itemSetting),
-          "DEVELOPERS.md": optional(itemSetting),
+          developerInstructions: optional(itemSetting),
+          workspaceRuntime: optional(itemSetting),
           docs: optional(itemSetting),
           ".plans": optional(itemSetting),
           _aligndev: optional(literal("companion", "auto")),
@@ -72,8 +83,16 @@ export type ItemName = (typeof ITEM_NAMES)[number];
 export interface ProjectLayout {
   aligndev: AligndevProjectSettings | null;
   companion: CompanionLayout | null;
-  locations: Record<ItemName, ItemLocation>;
+  locations: ProjectLocations;
+  selectionOrigins: Record<ItemName, SelectionOrigin>;
+  projectConfig?: ResolvedProjectConfig;
+  storage: WorkspaceStorage;
 }
+
+export type SelectionOrigin = "item" | "defaultLocation" | "builtin";
+export type ProjectLocations = Record<Exclude<ItemName, "developerInstructions">, ItemLocation> & {
+  developerInstructions: ItemLocation | null;
+};
 
 export interface AligndevProjectSettings {
   profile: string;
@@ -85,8 +104,9 @@ export interface CompanionLayout {
   exists: boolean;
   /** The registry key, as written. */
   key: string;
-  /** Effective settings: an item the entry does not set is `"auto"`. */
+  /** Effective settings after item overrides and the registration default. */
   items: ItemSettings;
+  defaultLocation: ItemSetting;
 }
 
 export type ItemSettings = Record<ItemName, ItemSetting | AligndevSetting>;
@@ -100,7 +120,10 @@ export interface ItemLocation {
   exists: boolean;
 }
 
-type FileItemName = Exclude<ItemName, "_aligndev">;
+type FileItemName = Exclude<
+  ItemName,
+  "alignfirst" | "_aligndev" | "workspaceRuntime" | "developerInstructions"
+>;
 
 interface RegistryFile {
   projects: Record<string, RegistryProject>;
@@ -110,13 +133,15 @@ interface RegistryProject {
   /** Relative to the real companions directory, or `~/…`, or absolute. */
   dir?: string;
   items?: RegistryItems;
+  defaultLocation?: ItemSetting;
   aligndev?: AligndevProjectSettings;
 }
 
 interface RegistryItems {
   alignfirst?: ItemSetting;
   ".alignfirst-instructions"?: ItemSetting;
-  "DEVELOPERS.md"?: ItemSetting;
+  developerInstructions?: ItemSetting;
+  workspaceRuntime?: ItemSetting;
   docs?: ItemSetting;
   ".plans"?: ItemSetting;
   _aligndev?: AligndevSetting;
@@ -153,18 +178,56 @@ export function layoutOf(ctx: CommandContext): ProjectLayout {
 
 export function resolveProjectLayout(cwd: string, home: string): ProjectLayout {
   const registry = readRegistry(home);
-  const mainWorktree = registry && findMainWorktree(cwd);
+  const mainWorktree = findMainWorktree(cwd);
   const realHome = realOrResolved(home);
   const entry =
     registry && mainWorktree !== undefined
       ? findEntry(registry, mainWorktree, realHome)
       : undefined;
   const companion = registry && entry ? resolveCompanion(registry, entry, realHome) : null;
+  const root = projectRoot(cwd);
+  const alignfirst = locateConfigFamily(root, companion);
+  const projectConfig = alignfirst.exists
+    ? { ...readProjectConfig(alignfirst.path), source: alignfirst.in }
+    : undefined;
+  const storage = resolveWorkspaceStorage(
+    {
+      in: companion?.items.workspaceRuntime === "companion" ? "companion" : "project",
+      mainWorktree: mainWorktree ?? root,
+      companionDir: companion?.dir,
+    },
+    root,
+  );
   return {
     aligndev: entry?.project.aligndev ?? null,
     companion,
-    locations: resolveLocations(projectRoot(cwd), companion),
+    projectConfig,
+    selectionOrigins: selectionOriginsFor(entry?.project),
+    storage,
+    locations: resolveLocations(
+      root,
+      companion,
+      alignfirst,
+      projectConfig?.config.developerInstructions,
+      storage,
+    ),
   };
+}
+
+function selectionOriginsFor(
+  project: RegistryProject | undefined,
+): Record<ItemName, SelectionOrigin> {
+  // Object.fromEntries loses the closed ITEM_NAMES key union.
+  return Object.fromEntries(
+    ITEM_NAMES.map((name) => [
+      name,
+      project?.items?.[name] !== undefined
+        ? "item"
+        : project?.defaultLocation !== undefined
+          ? "defaultLocation"
+          : "builtin",
+    ]),
+  ) as Record<ItemName, SelectionOrigin>;
 }
 
 function resolveCompanion(
@@ -176,13 +239,22 @@ function resolveCompanion(
   const dir = companionDir(entry.project.dir, realHome);
   const items = effectiveItems(entry.project);
   assertValidItems(registry, items, entry);
-  return { dir, exists: pathExists(dir), key: entry.key, items };
+  return {
+    dir,
+    exists: pathExists(dir),
+    key: entry.key,
+    items,
+    defaultLocation: entry.project.defaultLocation ?? "auto",
+  };
 }
 
 function registryProjectValue(value: unknown, path: string, warningPath = path): RegistryProject {
   const project = registryProjectShape(value, path, warningPath);
-  if (project.dir === undefined && project.items !== undefined)
-    throw shapeError(path, 'define "dir" when "items" is set');
+  if (
+    project.dir === undefined &&
+    (project.items !== undefined || project.defaultLocation !== undefined)
+  )
+    throw shapeError(path, 'define "dir" when "items" or "defaultLocation" is set');
   if (project.dir === undefined && project.aligndev === undefined)
     throw shapeError(path, 'define "dir" or "aligndev"');
   return project;
@@ -288,14 +360,15 @@ function companionsRoot(realHome: string): string {
   return normalizePath(COMPANIONS_ROOT, realHome);
 }
 
-function effectiveItems({ items = {} }: RegistryProject): ItemSettings {
+function effectiveItems({ items = {}, defaultLocation = "auto" }: RegistryProject): ItemSettings {
   return {
-    alignfirst: items.alignfirst ?? "auto",
-    ".alignfirst-instructions": items[".alignfirst-instructions"] ?? "auto",
-    "DEVELOPERS.md": items["DEVELOPERS.md"] ?? "auto",
-    docs: items.docs ?? "auto",
-    ".plans": items[".plans"] ?? "auto",
-    _aligndev: items._aligndev ?? "auto",
+    alignfirst: items.alignfirst ?? defaultLocation,
+    ".alignfirst-instructions": items[".alignfirst-instructions"] ?? defaultLocation,
+    developerInstructions: items.developerInstructions ?? defaultLocation,
+    workspaceRuntime: items.workspaceRuntime ?? defaultLocation,
+    docs: items.docs ?? defaultLocation,
+    ".plans": items[".plans"] ?? defaultLocation,
+    _aligndev: items._aligndev ?? (defaultLocation === "companion" ? "companion" : "auto"),
   };
 }
 
@@ -310,13 +383,21 @@ function assertValidItems(registry: Registry, items: ItemSettings, entry: Regist
 function resolveLocations(
   cwd: string,
   companion: CompanionLayout | null,
-): Record<ItemName, ItemLocation> {
+  alignfirst: ItemLocation,
+  instructions: string | undefined,
+  storage: WorkspaceStorage,
+): ProjectLocations {
   const locate = (name: FileItemName) => locateItem(cwd, companion, name);
   const plans = locate(".plans");
   return {
-    alignfirst: locate("alignfirst"),
+    alignfirst,
     ".alignfirst-instructions": locate(".alignfirst-instructions"),
-    "DEVELOPERS.md": locate("DEVELOPERS.md"),
+    developerInstructions: locateInstructions(cwd, companion, instructions),
+    workspaceRuntime: {
+      path: storage.runtimeDir,
+      in: storage.in,
+      exists: pathExists(storage.runtimeDir),
+    },
     docs: locate("docs"),
     ".plans": plans,
     _aligndev:
@@ -329,7 +410,6 @@ function locateItem(
   companion: CompanionLayout | null,
   name: FileItemName,
 ): ItemLocation {
-  if (name === "alignfirst") return locateConfigFamily(cwd, companion);
   const project = projectCopy(cwd, name);
   if (companion === null || companion.items[name] === "project") return project;
   const copy = companionCopy(companion, name);
@@ -353,16 +433,65 @@ function locateConfigFamily(cwd: string, companion: CompanionLayout | null): Ite
       companion !== null &&
       setting !== "project" &&
       (setting === "companion" ||
-        configFamilyExists(companion.dir, "alignfirst") ||
-        !configFamilyExists(cwd, "alignfirst"));
+        configFamilyExists(companion.dir, PROJECT_CONFIG_FAMILY) ||
+        !configFamilyExists(cwd, PROJECT_CONFIG_FAMILY));
     const directory = useCompanion ? companion.dir : cwd;
     return {
-      ...resolveConfigFamily(directory, "alignfirst"),
+      ...resolveConfigFamily(directory, PROJECT_CONFIG_FAMILY),
       in: useCompanion ? "companion" : "project",
     };
   } catch (error) {
     throw new CliError(errorMessage(error));
   }
+}
+
+function locateInstructions(
+  root: string,
+  companion: CompanionLayout | null,
+  name: string | undefined,
+): ItemLocation | null {
+  if (name === undefined) return null;
+  if (name.trim().length === 0 || name.includes("\u0000") || isAbsolute(name))
+    throw new CliError("developerInstructions must be a nonblank relative file path.");
+  const setting = companion?.items.developerInstructions;
+  const useCompanion =
+    companion !== null &&
+    setting !== "project" &&
+    (setting === "companion" ||
+      pathExists(resolve(companion.dir, name)) ||
+      !pathExists(resolve(root, name)));
+  return instructionCopy(
+    useCompanion ? companion.dir : root,
+    name,
+    useCompanion ? "companion" : "project",
+  );
+}
+
+function instructionCopy(
+  root: string,
+  name: string,
+  placement: "project" | "companion",
+): ItemLocation {
+  const path = resolve(root, name);
+  if (
+    !isSameOrInside(path, resolve(root)) ||
+    !isSameOrInside(canonicalInstructionPath(path), canonicalPath(root))
+  )
+    throw new CliError("developerInstructions must remain within its selected root.");
+  return { path, in: placement, exists: pathExists(path) };
+}
+
+function canonicalInstructionPath(path: string, links = new Set<string>()): string {
+  const entry = lstatSync(path, { throwIfNoEntry: false });
+  if (entry?.isSymbolicLink()) {
+    if (links.has(path))
+      throw new CliError("developerInstructions contains a symbolic link cycle.");
+    links.add(path);
+    return canonicalInstructionPath(resolve(dirname(path), readlinkSync(path)), links);
+  }
+  const parent = dirname(path);
+  if (parent === path) return canonicalPath(path);
+  return join(canonicalInstructionPath(parent, links), relative(parent, path));
 }
 
 function projectCopy(cwd: string, name: string): ItemLocation {
@@ -383,10 +512,11 @@ function pathExists(path: string): boolean {
 /** One line: `<name>: <path> (<in>)`, with `, missing` when absent and the setting after the name. */
 export function renderItemLocation(
   name: ItemName,
-  location: ItemLocation,
+  location: ItemLocation | null,
   setting?: ItemSetting | AligndevSetting,
 ): string {
   const label = setting === undefined ? name : `${name} (${setting})`;
+  if (location === null) return `${label}: not configured`;
   return `${label}: ${location.path} (${location.in}${location.exists ? "" : ", missing"})`;
 }
 
@@ -604,7 +734,12 @@ export function unregisterCompanion(
   const { [entry.key]: _removed, ...projects } = registry.raw.projects;
   const aligndev = entry.project.aligndev ?? null;
   if (aligndev !== null) {
-    const { dir: _dir, items: _items, ...remaining } = registry.raw.projects[entry.key];
+    const {
+      dir: _dir,
+      items: _items,
+      defaultLocation: _defaultLocation,
+      ...remaining
+    } = registry.raw.projects[entry.key];
     projects[entry.key] = remaining;
   }
   writeRegistry(registry, projects);

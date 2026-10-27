@@ -31,19 +31,19 @@ export function renderConventions(ctx: CommandContext): string {
 }
 
 function renderTicketIds(ctx: CommandContext): string {
-  const pattern = ctx.projectConfig?.config.ticketIdPattern;
+  const pattern = ctx.projectConfig?.config.conventions?.ticketIdPattern;
   if (pattern === undefined)
     return "Ticket IDs: no configured format; ask the user for the ID. Without a ticket, or when the user asks for a side ticket, use the next `side-N`.";
   return `Ticket IDs: \`${pattern}\`; infer a matching ID from the branch. Without a ticket, or when the user asks for a side ticket, use the next \`side-N\`.`;
 }
 
 function renderBranchNames(ctx: CommandContext): string | undefined {
-  const template = ctx.projectConfig?.config.git?.branchNameTemplate;
+  const template = ctx.projectConfig?.config.conventions?.git?.branchNameTemplate;
   return template === undefined ? undefined : `Branch names: \`${template}\`.`;
 }
 
 function renderCommits(ctx: CommandContext): string | undefined {
-  const git = ctx.projectConfig?.config.git;
+  const git = ctx.projectConfig?.config.conventions?.git;
   if (git?.commit === undefined) {
     return git?.agentCoauthoring === false ? `Commits: ${NO_AGENT_ATTRIBUTION}` : undefined;
   }

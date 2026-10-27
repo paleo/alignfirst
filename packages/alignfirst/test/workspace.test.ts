@@ -35,6 +35,70 @@ afterEach(() => {
 });
 
 describe("unified workspace inventory and defaults", () => {
+  it("uses companion recipes in target cwd and refuses source substitution before cleanup", async () => {
+    const fx = fixture();
+    const companion = join(fx.root, "companion");
+    const marker = join(fx.root, "purged");
+    mkdirSync(companion);
+    const recipe = {
+      schemaVersion: 1,
+      workspace: {
+        preSetup: [
+          {
+            name: "record cwd",
+            run: [
+              process.execPath,
+              "-e",
+              "require('fs').writeFileSync('selected-cwd', process.cwd())",
+            ],
+          },
+        ],
+        purge: [
+          {
+            name: "record purge",
+            run: [
+              process.execPath,
+              "-e",
+              `require('fs').writeFileSync(${JSON.stringify(marker)}, process.cwd())`,
+            ],
+          },
+        ],
+      },
+    };
+    writeFileSync(join(companion, "alignfirst.json"), JSON.stringify(recipe));
+    const select = (source: "project" | "companion") =>
+      writeRegistry(fx.home, {
+        projects: {
+          [fx.repo]: { dir: companion, items: { alignfirst: source, ".plans": "project" } },
+        },
+      });
+    select("companion");
+    const setup = await run(fx, ["setup", "-c", "topic", "--path", fx.target, "--json"]);
+    expect(setup.code, setup.stderr).toBe(0);
+    expect(readFileSync(join(fx.target, "selected-cwd"), "utf8")).toBe(fx.target);
+    const registry = join(fx.repo, ".local-wt/workspace-registry/workspaces.json");
+    const bytes = readFileSync(registry);
+    expect(Object.values(JSON.parse(bytes.toString()).workspaces)).toEqual([
+      expect.objectContaining({
+        recipe: { kind: "manifest", file: "alignfirst.json", in: "companion" },
+      }),
+    ]);
+    writeFileSync(join(fx.target, "alignfirst.json"), JSON.stringify(recipe));
+    select("project");
+    const refused = await run(fx, ["teardown", fx.target, "--json"]);
+    expect(refused.code).toBe(1);
+    expect(refused.stderr).toContain("source changed");
+    expect(existsSync(marker)).toBe(false);
+    expect(readFileSync(registry)).toEqual(bytes);
+    select("companion");
+    rmSync(join(companion, "alignfirst.json"));
+    writeFileSync(join(companion, "alignfirst.jsonc"), JSON.stringify(recipe));
+    const cleaned = await run(fx, ["teardown", fx.target, "--json"]);
+    expect(cleaned.code, cleaned.stderr).toBe(0);
+    expect(readFileSync(marker, "utf8")).toBe(fx.target);
+    expect(existsSync(join(companion, ".local-wt"))).toBe(false);
+  });
+
   it("keeps help independent of Git, plans and malformed project configuration", async () => {
     const fx = fixture();
     writeFileSync(join(fx.root, "alignfirst.json"), "{broken");
@@ -359,7 +423,7 @@ describe("exact adoption and safe sharing", () => {
     async (path) => {
       const fx = fixture();
       writeFileSync(
-        join(fx.repo, "alignfirst-workspace.json"),
+        join(fx.repo, "alignfirst.json"),
         JSON.stringify({ schemaVersion: 1, workspace: { sharedDirs: [path] } }),
       );
       commit(fx.repo);
@@ -530,7 +594,7 @@ describe("exact adoption and safe sharing", () => {
     async (path) => {
       const fx = fixture();
       writeFileSync(
-        join(fx.repo, "alignfirst-workspace.json"),
+        join(fx.repo, "alignfirst.json"),
         JSON.stringify({
           schemaVersion: 1,
           workspace: {
@@ -591,10 +655,10 @@ describe("exact adoption and safe sharing", () => {
     mkdirSync(local);
     symlinkSync(local, join(fx.repo, ".local"));
     writeFileSync(
-      join(fx.repo, "alignfirst-workspace.json"),
+      join(fx.repo, "alignfirst.json"),
       JSON.stringify({ schemaVersion: 1, workspace: { sharedDirs: [".shared"] } }),
     );
-    git(fx.repo, "add", "alignfirst-workspace.json");
+    git(fx.repo, "add", "alignfirst.json");
     git(fx.repo, "commit", "--quiet", "-m", "manifest");
     const added = await run(fx, ["setup", "-c", "topic", "--path", fx.target, "--json"]);
     expect(added.code, added.stderr).toBe(0);
@@ -708,7 +772,7 @@ describe("kernel registry ownership at the public boundary", () => {
           ],
         },
       };
-      const file = join(fx.repo, "alignfirst-workspace.json");
+      const file = join(fx.repo, "alignfirst.json");
       writeFileSync(file, JSON.stringify(manifest));
       const result = await runMain(["dev", "setup"], { cwd: fx.repo, home: fx.home });
       expect(result.code).toBe(1);
@@ -768,7 +832,7 @@ describe("protected deletion", () => {
     if (kind === "extraShared") {
       symlinkSync(shared, join(fx.repo, ".shared"));
       writeFileSync(
-        join(fx.repo, "alignfirst-workspace.json"),
+        join(fx.repo, "alignfirst.json"),
         JSON.stringify({ schemaVersion: 1, workspace: { sharedDirs: [".shared"] } }),
       );
     }

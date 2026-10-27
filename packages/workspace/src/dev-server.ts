@@ -62,7 +62,7 @@ import type {
   SpawnServer,
 } from "./server-descriptor.js";
 import {
-  workspaceRecipe,
+  type WorkspaceRecipe,
   assertWorkspaceRecipe,
   assertWorkspaceCleanupComplete,
   findWorkspaceByPath,
@@ -78,6 +78,7 @@ export type { CallbackServer, ServerContext, ServerDescriptor, SpawnServer };
 
 /** Configuration accepted by {@link runDevServer}. */
 export interface DevServerConfig {
+  recipe: WorkspaceRecipe;
   /** Per-worktree runtime directory, relative to the worktree root (e.g. `.local-wt`). */
   runtimeDir: string;
   /** Maximum concurrent dev-servers across all worktrees. Omit for no limit. */
@@ -146,7 +147,7 @@ export async function runDevServer(
     kernel.worktree.currentWorktree,
   );
   if (registered && operation.command.kind !== "list" && operation.command.kind !== "status") {
-    assertWorkspaceRecipe(registered.entry.worktree, registered.entry.recipe);
+    assertWorkspaceRecipe(registered.entry.worktree, registered.entry.recipe, config.recipe);
   }
   if (["foreground", "up", "restart", "setup"].includes(operation.command.kind))
     assertWorkspaceCleanupComplete(registered?.entry);
@@ -241,7 +242,7 @@ async function dispatch(command: DevCommand, kernel: DevKernel): Promise<void> {
 function devSetupInput(kernel: DevKernel, options: DevSetupOptions): DevSetupInput {
   return {
     worktree: kernel.worktree,
-    recipe: workspaceRecipe(kernel.worktree.currentWorktree),
+    recipe: kernel.config.recipe,
     output: kernel.output,
     commands: kernel.commands,
     registryDir: kernel.registryDir,
@@ -901,7 +902,11 @@ function dispatchStop(kernel: DevKernel, target: DevServerEntry): Promise<void> 
     registryDir: kernel.registryDir,
     target,
     signal: kernel.config.signal,
-    local: { worktree: kernel.worktree.currentWorktree, stop: () => stopLocal(kernel) },
+    local: {
+      worktree: kernel.worktree.currentWorktree,
+      recipe: kernel.config.recipe,
+      stop: () => stopLocal(kernel),
+    },
   });
 }
 

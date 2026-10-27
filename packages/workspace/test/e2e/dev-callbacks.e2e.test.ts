@@ -193,7 +193,7 @@ describe("registered callback identity (e2e)", () => {
         delete registry.workspaces[ctx.name];
         writeWorkspaces(fx.repo, registry);
       }
-      const file = join(root, "alignfirst-workspace.json");
+      const file = join(root, "alignfirst.json");
       const manifest: WorkspaceManifest = JSON.parse(readFileSync(file, "utf8"));
       const dev = manifest.devServer;
       if (!dev?.ports) throw new Error("Missing fixture dev ports");
@@ -384,11 +384,8 @@ describe("registered callback identity (e2e)", () => {
         installResourceRecipe(fx.repo, "caller-version", { service: false });
         expect(runDev(fx.repo, ["setup"]).status).toBe(0);
         expect(readWorkspaces(fx.repo).workspaces.fixrepo.main).toBe(true);
-      } else rmSync(join(fx.repo, "alignfirst-workspace.json"));
-      renameSync(
-        join(other, "alignfirst-workspace.json"),
-        join(other, "alignfirst-workspace.jsonc"),
-      );
+      } else rmSync(join(fx.repo, "alignfirst.json"));
+      renameSync(join(other, "alignfirst.json"), join(other, "alignfirst.jsonc"));
       const result = runDev(fx.repo, ["down", "--all"], ENV);
       expect(result.status, result.stderr).toBe(0);
       expect(stops(fx)).toEqual([...expectedStops(otherCtx), ...expectedStops(ctx)]);
@@ -418,7 +415,7 @@ describe("registered callback identity (e2e)", () => {
       installResourceRecipe(root, "victim-version");
       installResourceRecipe(fx.repo, "caller-version", { service: false });
       expect(runDev(root, ["up"], ENV).status).toBe(0);
-      const path = join(fx.repo, "alignfirst-workspace.json");
+      const path = join(fx.repo, "alignfirst.json");
       const manifest = JSON.parse(readFileSync(path, "utf8"));
       manifest.devServer.maxConcurrentDevServers = 1;
       writeFileSync(path, JSON.stringify(manifest));
@@ -451,7 +448,7 @@ describe("registered callback identity (e2e)", () => {
       const target = prepareTarget();
       const { fx, root, ctx } = target;
       installResourceRecipe(root, "barrier-victim");
-      const callerManifestPath = join(fx.repo, "alignfirst-workspace.json");
+      const callerManifestPath = join(fx.repo, "alignfirst.json");
       const callerManifest = JSON.parse(readFileSync(callerManifestPath, "utf8"));
       callerManifest.devServer.maxConcurrentDevServers = 1;
       writeFileSync(callerManifestPath, JSON.stringify(callerManifest));
@@ -490,7 +487,7 @@ describe("registered callback identity (e2e)", () => {
       const { fx, root, ctx } = prepareTarget();
       expect(runDev(root, ["up"], ENV).status).toBe(0);
       expect(runDev(fx.repo, ["up"], ENV).status).toBe(0);
-      const manifest = join(root, "alignfirst-workspace.json");
+      const manifest = join(root, "alignfirst.json");
       const saved = readFileSync(manifest, "utf8");
       if (kind === "missing") rmSync(manifest);
       else writeFileSync(manifest, "{bad json}");

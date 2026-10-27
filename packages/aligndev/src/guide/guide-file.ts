@@ -13,7 +13,7 @@ export function resolveGuideFile(ctx: ProjectsCallerContext): GuideFileCondition
   if (projectPath === undefined) return "noGuide";
   const report = readProjectReport(ctx.alignfirstCommand, projectPath, ctx.env);
   if ("error" in report) throw new Error(report.error);
-  if (report.locations["DEVELOPERS.md"].exists) return "developers";
+  if (report.locations.developerInstructions?.exists) return "developers";
   return existsSync(join(projectPath, "README.md")) ? "readme" : "noGuide";
 }
 

@@ -1,4 +1,9 @@
-import { readConfigFile, validateConfigSchema } from "@alignfirst/workspace/config";
+import {
+  readConfigFile,
+  validateConfigSchema,
+  validateWorkspaceSettings,
+  type WorkspaceManifest,
+} from "@alignfirst/workspace/config";
 import { readFileSync } from "node:fs";
 
 import { CliError } from "./cli-error.js";
@@ -10,11 +15,16 @@ const projectSchema: object = JSON.parse(
   readFileSync(new URL("../schemas/alignfirst-v1.schema.json", import.meta.url), "utf8"),
 );
 
-export interface ProjectConfig {
+export interface ProjectConfig extends WorkspaceManifest {
   schemaVersion: 1;
   $schema?: string;
-  ticketIdPattern?: string;
+  conventions?: ConventionsConfig;
   plans?: PlansConfig;
+  developerInstructions?: string;
+}
+
+export interface ConventionsConfig {
+  ticketIdPattern?: string;
   git?: GitConfig;
 }
 
@@ -44,9 +54,7 @@ export interface ProjectConfigFile {
 }
 
 export function resolveProjectConfig(layout: ProjectLayout): ResolvedProjectConfig | undefined {
-  const location = layout.locations.alignfirst;
-  if (!location.exists) return;
-  return { ...readProjectConfig(location.path), source: location.in };
+  return layout.projectConfig;
 }
 
 export function readProjectConfig(path: string): ProjectConfigFile {
@@ -63,7 +71,13 @@ export function validateProjectConfig(value: unknown, label: string): ProjectCon
   } catch (error) {
     throw new CliError(errorMessage(error));
   }
-  if (value.ticketIdPattern !== undefined) assertValidPattern(value.ticketIdPattern, label);
+  if (value.conventions?.ticketIdPattern !== undefined)
+    assertValidPattern(value.conventions.ticketIdPattern, label);
+  try {
+    validateWorkspaceSettings(value, label);
+  } catch (error) {
+    throw new CliError(errorMessage(error));
+  }
   return value;
 }
 

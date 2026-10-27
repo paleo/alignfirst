@@ -17,7 +17,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { DevServerEntry } from "../../src/dev-servers-registry.js";
 import type { PurgeContext } from "../../src/workspace.js";
-import type { WorkspaceEntry } from "../../src/workspaces.js";
+import type { WorkspaceEntry, WorkspacesRegistry } from "../../src/workspaces.js";
 import {
   createFixtureRepo,
   type FixtureOptions,
@@ -85,7 +85,7 @@ describe("workspace teardown (e2e)", () => {
       const other = requiredEntry(fx.repo, sibling);
       installResourceRecipe(linked, "deleted-branch");
       installResourceRecipe(fx.repo, "surviving-main");
-      const mainManifestPath = join(fx.repo, "alignfirst-workspace.json");
+      const mainManifestPath = join(fx.repo, "alignfirst.json");
       const mainManifest = JSON.parse(readFileSync(mainManifestPath, "utf8"));
       mainManifest.workspace.purge[0].continueOnError = true;
       mainManifest.workspace.purge.push({
@@ -139,7 +139,7 @@ describe("workspace teardown (e2e)", () => {
     () => {
       const fx = fixture();
       const linked = addWorktree(fx, "orphan/default", "default");
-      rmSync(join(linked, "alignfirst-workspace.json"));
+      rmSync(join(linked, "alignfirst.json"));
       setup(fx.repo, linked);
       const target = requiredEntry(fx.repo, linked);
       expect(target.entry.recipe).toEqual({ kind: "defaults" });
@@ -160,17 +160,12 @@ describe("workspace teardown (e2e)", () => {
       setup(fx.repo, linked, true);
       const target = requiredEntry(fx.repo, linked);
       rmSync(linked, { recursive: true, force: true });
-      rmSync(
-        join(
-          fx.repo,
-          missing === "manifest" ? "alignfirst-workspace.json" : "scripts/lifecycle.mjs",
-        ),
-      );
+      rmSync(join(fx.repo, missing === "manifest" ? "alignfirst.json" : "scripts/lifecycle.mjs"));
       const failed = runCli(fx.repo, ["prune", "--json"]);
       expect(failed.status).toBe(1);
       expect(failed.stdout).toBe("");
       expect(failed.stderr).toContain(
-        missing === "manifest" ? "required purge recipe" : "purge purge",
+        missing === "manifest" ? "manifest recipe is missing" : "purge purge",
       );
       expect(requiredEntry(fx.repo, linked)).toEqual({
         ...target,
@@ -195,7 +190,7 @@ describe("workspace teardown (e2e)", () => {
       if (kind === "shared") {
         mkdirSync(join(linked, "protected"));
         symlinkSync(join(linked, "protected"), join(fx.repo, ".protected"));
-        const path = join(fx.repo, "alignfirst-workspace.json");
+        const path = join(fx.repo, "alignfirst.json");
         const manifest = JSON.parse(readFileSync(path, "utf8"));
         manifest.workspace.sharedDirs = [".protected"];
         writeFileSync(path, JSON.stringify(manifest));
@@ -489,12 +484,12 @@ describe("workspace teardown (e2e)", () => {
   );
 
   it.each(["stopFailure", "noServices"])(
-    "kills recorded PIDs with %s, including a dev-only target",
+    "kills recorded PIDs with %s, including a dev-created identity",
     (mode) => {
       const fx = fixture({ portless: mode === "noServices" });
       const linked = addWorktree(fx, "managed/review", "review");
       if (mode === "stopFailure") setup(fx.repo, linked);
-      else mkdirSync(dirname(registryFile(fx.repo, "dev-servers.json")), { recursive: true });
+      else recordIdentity(fx.repo, linked, "recorded-infra");
       const pid = startSleeper(fx.repo);
       writeDevEntries(fx.repo, [devEntry("recorded-infra", linked, pid)]);
       const result = runCli(fx.repo, ["teardown", linked], {
@@ -517,11 +512,11 @@ describe("workspace teardown (e2e)", () => {
   );
 
   it.each(["noServices", "stopUnregisters", "missingWorktree"])(
-    "retains a dev-only cleanup identity through purge failure: %s",
+    "retains a durable dev-created identity through purge failure: %s",
     (mode) => {
       const fx = fixture({ portless: mode === "noServices" });
       const linked = addWorktree(fx, "outside/review", "review");
-      mkdirSync(dirname(registryFile(fx.repo, "dev-servers.json")), { recursive: true });
+      recordIdentity(fx.repo, linked, "recorded-infra");
       const pid = startSleeper(fx.repo);
       writeDevEntries(fx.repo, [devEntry("recorded-infra", linked, pid)]);
       if (mode === "missingWorktree") rmSync(linked, { recursive: true, force: true });
@@ -561,11 +556,11 @@ describe("workspace teardown (e2e)", () => {
   );
 
   it.each(["path", "name"])(
-    "cleans a dev-only orphan with dead PIDs by its recorded %s without Git pruning",
+    "cleans a durably identified orphan with dead PIDs by its recorded %s without Git pruning",
     (selector) => {
       const fx = fixture({ portless: true });
       const linked = addWorktree(fx, "outside/review", "review");
-      mkdirSync(dirname(registryFile(fx.repo, "dev-servers.json")), { recursive: true });
+      recordIdentity(fx.repo, linked, "recorded-dev-only");
       writeDevEntries(fx.repo, [devEntry("recorded-dev-only", linked)]);
       rmSync(linked, { recursive: true, force: true });
       const before = git(fx.repo, ["worktree", "list", "--porcelain"]);
@@ -660,6 +655,7 @@ describe("workspace teardown (e2e)", () => {
       const first = addWorktree(fx, "one/review", "one");
       const second = addWorktree(fx, "fixrepo/two/review", "two");
       setup(fx.repo, first);
+      recordIdentity(fx.repo, second, "dev-only-identity");
       const original = requiredEntry(fx.repo, first);
       writeDevEntries(fx.repo, [
         devEntry("dev-only-identity", second),
@@ -910,6 +906,19 @@ function devEntry(name: string, worktree: string, pid?: number): DevServerEntry 
     pids: { app: pid ?? 2_147_483_647 },
     startedAt: "2026-01-01T00:00:00.000Z",
   };
+}
+
+function recordIdentity(repo: string, worktree: string, name: string): void {
+  const file = registryFile(repo, "workspaces.json");
+  const registry: WorkspacesRegistry = existsSync(file) ? readWorkspaces(repo) : { workspaces: {} };
+  registry.workspaces[name] = {
+    worktree,
+    createdAt: new Date().toISOString(),
+    status: "failed",
+    recipe: { kind: "manifest", file: "alignfirst.json", in: "project" },
+  };
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify({ ...registry, version: 4 }));
 }
 
 function writeDevEntries(repo: string, servers: DevServerEntry[]): void {

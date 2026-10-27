@@ -6,7 +6,12 @@ import { type DevServerEntry, markDevServerCleanupPending } from "./dev-servers-
 import { WorkspaceError } from "./errors.js";
 import { installedCliCommand } from "./invocation.js";
 import type { WorkspaceOperation } from "./operation.js";
-import { assertWorkspaceRecipe, findWorkspaceByPath, readWorkspaces } from "./workspaces.js";
+import {
+  assertWorkspaceRecipe,
+  findWorkspaceByPath,
+  readWorkspaces,
+  type WorkspaceRecipe,
+} from "./workspaces.js";
 
 export interface TargetStopInput {
   operation: WorkspaceOperation;
@@ -15,7 +20,7 @@ export interface TargetStopInput {
   target: DevServerEntry;
   signal?: AbortSignal;
   retainCleanup?: boolean;
-  local?: { worktree: string; stop: () => Promise<void> };
+  local?: { worktree: string; recipe: WorkspaceRecipe; stop: () => Promise<void> };
 }
 
 /** Only the child-local down path executes a loaded recipe; multi-target callers dispatch here. */
@@ -31,8 +36,19 @@ export async function stopTarget(input: TargetStopInput): Promise<void> {
     readWorkspaces(mainWorktree, registryDir),
     target.worktree,
   );
-  if (registered) assertWorkspaceRecipe(target.worktree, registered.entry.recipe);
-  if (input.local && resolve(input.local.worktree) === resolve(target.worktree)) {
+  const isLocal =
+    input.local !== undefined && resolve(input.local.worktree) === resolve(target.worktree);
+  if (registered) {
+    const selected = isLocal
+      ? input.local?.recipe
+      : operation.host?.loadWorkspace?.(target.worktree).recipe;
+    assertWorkspaceRecipe(
+      target.worktree,
+      registered.entry.recipe,
+      selected ?? { kind: "defaults" },
+    );
+  }
+  if (input.local && isLocal) {
     await input.local.stop();
     return;
   }

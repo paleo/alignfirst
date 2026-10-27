@@ -15,20 +15,24 @@ describe("project config", () => {
     const full = {
       schemaVersion: 1,
       $schema: "https://cdn.jsdelivr.net/npm/alignfirst/schemas/alignfirst-v1.schema.json",
-      ticketIdPattern: "^\\d+$",
-      plans: { repositoryFolder: "project", autoArchive: true },
-      git: {
-        defaultBranch: "main",
-        branchNameTemplate: "{TICKET_ID}/{slug}",
-        commit: { style: "conventionalCommit", ticketReference: "bracketedHash" },
-        agentCoauthoring: false,
+      conventions: {
+        ticketIdPattern: "^\\d+$",
+        git: {
+          defaultBranch: "main",
+          branchNameTemplate: "{TICKET_ID}/{slug}",
+          commit: { style: "conventionalCommit", ticketReference: "bracketedHash" },
+          agentCoauthoring: false,
+        },
       },
+      plans: { repositoryFolder: "project", autoArchive: true },
     };
     expect(validateProjectConfig(full, "config")).toEqual(full);
-    expect(validateProjectConfig({ schemaVersion: 1, plans: {}, git: {} }, "config")).toEqual({
+    expect(
+      validateProjectConfig({ schemaVersion: 1, plans: {}, conventions: { git: {} } }, "config"),
+    ).toEqual({
       schemaVersion: 1,
       plans: {},
-      git: {},
+      conventions: { git: {} },
     });
   });
 
@@ -41,20 +45,26 @@ describe("project config", () => {
     [{ schemaVersion: 1, plans: [] }, "plans"],
     [{ schemaVersion: 1, plans: { autoArchive: "PRIVATE" } }, "autoArchive"],
     [{ schemaVersion: 1, plans: { repositoryFolder: false } }, "repositoryFolder"],
-    [{ schemaVersion: 1, git: null }, "git"],
-    [{ schemaVersion: 1, git: { agentCoauthoring: "PRIVATE" } }, "agentCoauthoring"],
-    [{ schemaVersion: 1, git: { commit: [] } }, "commit"],
+    [{ schemaVersion: 1, conventions: { git: null } }, "git"],
+    [
+      { schemaVersion: 1, conventions: { git: { agentCoauthoring: "PRIVATE" } } },
+      "agentCoauthoring",
+    ],
+    [{ schemaVersion: 1, conventions: { git: { commit: [] } } }, "commit"],
     [
       {
         schemaVersion: 1,
-        git: { commit: { style: "conventionalCommit", ticketReference: false } },
+        conventions: { git: { commit: { style: "conventionalCommit", ticketReference: false } } },
       },
       "ticketReference",
     ],
-    [{ schemaVersion: 1, git: { commit: { style: "other" } } }, "style"],
-    [{ schemaVersion: 1, git: { commit: {} } }, "style"],
-    [{ schemaVersion: 1, ticketIdPattern: "[PRIVATE" }, "regular expression"],
-    [{ schemaVersion: 1, ticketIdPattern: "^ABC-\\d+$|^XYZ-\\d+$" }, "one anchored expression"],
+    [{ schemaVersion: 1, conventions: { git: { commit: { style: "other" } } } }, "style"],
+    [{ schemaVersion: 1, conventions: { git: { commit: {} } } }, "style"],
+    [{ schemaVersion: 1, conventions: { ticketIdPattern: "[PRIVATE" } }, "regular expression"],
+    [
+      { schemaVersion: 1, conventions: { ticketIdPattern: "^ABC-\\d+$|^XYZ-\\d+$" } },
+      "one anchored expression",
+    ],
   ])("rejects malformed retained fields %# without values", (value, message) => {
     expect(() => validateProjectConfig(value, "config")).toThrow(message);
     expect(() => validateProjectConfig(value, "config")).not.toThrow("PRIVATE");
@@ -62,13 +72,15 @@ describe("project config", () => {
 
   it.each([
     { cli: ">=1" },
+    { ticketIdPattern: "^\\d+$" },
+    { git: { defaultBranch: "main" } },
     { portRange: { first: 8100, last: 8199 } },
     { ticketPattern: "PRIVATE" },
     { extra: "PRIVATE" },
     { plans: { folder: "PRIVATE" } },
     { plans: { typo: "PRIVATE" } },
-    { git: { typo: "PRIVATE" } },
-    { git: { commit: { style: "conventionalCommit", typo: "PRIVATE" } } },
+    { conventions: { git: { typo: "PRIVATE" } } },
+    { conventions: { git: { commit: { style: "conventionalCommit", typo: "PRIVATE" } } } },
   ])("rejects retired and unknown settings with update guidance %#", (settings) => {
     expect(() => validateProjectConfig({ schemaVersion: 1, ...settings }, "config")).toThrow(
       "update alignfirst",
@@ -82,10 +94,46 @@ describe("project config", () => {
     "accepts pattern %s",
     (ticketIdPattern) => {
       expect(
-        validateProjectConfig({ schemaVersion: 1, ticketIdPattern }, "config").ticketIdPattern,
+        validateProjectConfig({ schemaVersion: 1, conventions: { ticketIdPattern } }, "config")
+          .conventions?.ticketIdPattern,
       ).toBe(ticketIdPattern);
     },
   );
+
+  it.each([
+    { workspace: { finalise: [] } },
+    { workspace: { preSetup: [{ name: "bad", run: [], env: { SECRET: "PRIVATE" } }] } },
+    { workspace: { finalize: [{ name: "bad", run: "true", continueOnError: true }] } },
+    { devServer: { servers: [{ kind: "command", name: "db", start: { run: "true" } }] } },
+    {
+      devServer: {
+        servers: [
+          { kind: "spawn", name: "../escape", exec: { run: "true" }, ready: { log: "ready" } },
+        ],
+      },
+    },
+    { developerInstructions: "   " },
+    {
+      devServer: {
+        servers: [
+          { kind: "spawn", name: "app", exec: { run: "true", enb: {} }, ready: { log: "ready" } },
+        ],
+      },
+    },
+    {
+      devServer: {
+        servers: [{ kind: "spawn", name: "app", exec: { run: "true" }, ready: { log: "ready" } }],
+        maxConcurrentDevServers: 0,
+      },
+    },
+  ])("rejects malformed merged recipes without exposing values %#", (settings) => {
+    expect(() => validateProjectConfig({ schemaVersion: 1, ...settings }, "config")).toThrow(
+      "Invalid",
+    );
+    expect(() => validateProjectConfig({ schemaVersion: 1, ...settings }, "config")).not.toThrow(
+      "PRIVATE",
+    );
+  });
 
   it.each(["json", "jsonc"])("rejects literal __proto__ in %s without rewriting", (extension) => {
     const path = configPath(extension);
@@ -93,6 +141,26 @@ describe("project config", () => {
     writeFileSync(path, text);
     expect(() => readProjectConfig(path)).toThrow("__proto__");
     expect(() => readProjectConfig(path)).not.toThrow("PRIVATE");
+    expect(readFileSync(path, "utf8")).toBe(text);
+  });
+
+  it("preserves literal prototype-named dictionaries in merged recipes without rewriting", () => {
+    const path = configPath("jsonc");
+    const text =
+      '{/* authored */ "schemaVersion":1,"workspace":{"preSetup":[{"name":"env","run":["true"],"env":{"__proto__":"PRIVATE","constructor":"literal"}}],"gitignoredFiles":[{"path":".env","source":{"kind":"content","content":""},"patch":{"env":{"__proto__":"literal"}}}]},"devServer":{"ports":{"first":8100,"last":8199,"declare":[{"name":"__proto__","mainWorktree":8100},"constructor"]},"servers":[{"kind":"spawn","name":"app","exec":{"run":["true"]},"ready":{"log":""},"port":"__proto__"}]},}';
+    writeFileSync(path, text);
+    const { config } = readProjectConfig(path);
+    expect(Object.entries(config.workspace?.preSetup?.[0].env ?? {})).toContainEqual([
+      "__proto__",
+      "PRIVATE",
+    ]);
+    expect(config.workspace?.gitignoredFiles?.[0].patch).toEqual({
+      env: { ["__proto__"]: "literal" },
+    });
+    expect(config.devServer?.ports?.declare).toEqual([
+      { name: "__proto__", mainWorktree: 8100 },
+      "constructor",
+    ]);
     expect(readFileSync(path, "utf8")).toBe(text);
   });
 
