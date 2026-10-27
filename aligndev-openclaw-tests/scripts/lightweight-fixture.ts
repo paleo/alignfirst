@@ -10,7 +10,13 @@ export interface LightweightFixtureOptions {
 }
 
 export function prepareLightweightFixture({ repo, plans }: LightweightFixtureOptions): void {
-  for (const path of ["scripts/workspace", "node_modules", "pnpm-lock.yaml", "home-page.mjs"]) {
+  for (const path of [
+    "alignfirst-workspace.json",
+    "scripts/workspace",
+    "node_modules",
+    "pnpm-lock.yaml",
+    "home-page.mjs",
+  ]) {
     rmSync(join(repo, path), { recursive: true, force: true });
   }
   writeFileSync(
@@ -36,11 +42,11 @@ test("export label", () => assert.equal(label, "Export"));
 `,
   );
   const instructions =
-    "# Nimbus\n\nThis is a small ESM library. Run `npm test` to test it. No install or build is needed.\nThere is no project workspace tooling, dev server or port allocation.\nUse the AlignDev playbook for isolated branch work.\n";
+    "# Nimbus\n\nThis is a small ESM library. Run `npm test` to test it. No install or build is needed.\nUse `alignfirst workspace` in manifest-free mode. Readiness is protocol-ready; there is no dev server or port allocation.\nUse the AlignDev playbook for isolated branch work.\n";
   writeFileSync(join(repo, "README.md"), instructions);
   writeFileSync(join(repo, "DEVELOPERS.md"), instructions);
   writeFileSync(
-    join(repo, ".alignfirst.json"),
+    join(repo, "alignfirst.json"),
     `${JSON.stringify(
       {
         schemaVersion: 1,

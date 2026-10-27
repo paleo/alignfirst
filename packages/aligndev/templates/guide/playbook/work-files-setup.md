@@ -30,4 +30,4 @@ After approval:
 4. Reread `{{ALIGNFIRST}} config --json`. Verify that `locations[".plans"].in` is `"companion"` and its path is the selected companion's `.plans`. Create that directory if missing, preserving existing contents. Do not create a worktree `.plans` link for companion plans.
 5. Run `{{ALIGNFIRST}} plans check --json` again from PROJECT_PATH, and from any already selected worktree, then resume the interrupted operation.
 
-This is the sole assistant preparation procedure. `{{ALIGNDEV}} worktree add` and coding launches validate work files; they do not authorize this selection or provision missing plans.
+This is the sole assistant preparation procedure. `{{ALIGNFIRST}} workspace setup` and coding launches validate work files; they do not authorize this selection or provision missing plans.

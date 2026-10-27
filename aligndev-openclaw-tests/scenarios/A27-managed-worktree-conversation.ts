@@ -87,12 +87,12 @@ async function assertWorkspaceRegistered(
   ctx: ScenarioContext,
   worktreePath: string,
 ): Promise<void> {
-  const result = await ctx.execInGateway(["pnpm", "workspace", "list"], {
+  const result = await ctx.execInGateway(["alignfirst", "workspace", "list"], {
     cwd: NIMBUS_PROJECT_PATH,
     timeoutMs: 60_000,
   });
   if (result.exitCode !== 0) {
-    throw new Error(`pnpm workspace list failed (exit ${result.exitCode}): ${result.stderr}`);
+    throw new Error(`alignfirst workspace list failed (exit ${result.exitCode}): ${result.stderr}`);
   }
   const row = result.stdout.split("\n").find((line) => line.includes(worktreePath));
   if (row === undefined) {

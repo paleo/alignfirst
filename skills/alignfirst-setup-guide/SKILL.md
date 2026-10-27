@@ -1,7 +1,7 @@
 ---
 name: alignfirst-setup-guide
 description: >-
-  Install, upgrade, recommend, or combine the AlignFirst CLI, skills, docmap, and workspace in a consumer repository, or through a companion directory that leaves the repository untouched; set up AlignDev (`aligndev`), either as a repository and a Linux deployment for OpenClaw, or as a global skill that makes a coding agent the AlignFirst assistant.
+  Install, upgrade, recommend, or combine AlignFirst protocols, skills, Docmap and multi-stack workspaces; prepare projects through repository or companion files; set up AlignDev for an OpenClaw assistant or a coding-agent assistant.
 license: CC0 1.0
 metadata:
   author: Paleo
@@ -11,159 +11,67 @@ metadata:
 
 # AlignFirst Setup Guide
 
-Route by the user's intent. Load only the references needed for that route. Docmap, workspace, and the AlignFirst skills can each be adopted independently.
+Route by the user's intent. Inspect the repository and load the relevant references before changes. Protocols, skills, Docmap and workspaces can each be adopted independently. Require a clean working tree immediately before project mutations; read-only discovery needs no clean-tree gate.
 
-## Terminology
+## Named tool
 
-The **AlignFirst CLI** is the `alignfirst` npm package and bin. It provides `guide`, `ticket`, `sync`,
-`plans`, `docmap`, `conventions`, `context`, `config`, and `doctor`.
+Install or upgrade only what the user requested. Do not add unrelated tools or present the full menu.
 
-The **AlignFirst skills** are stubs that run the CLI. The nine command skills `alspec`, `alplan`,
-`al`, `almerge`, `alreview`, `aldescription`, `alcatchup`, `alcatchupaad`, and `alcatchupspec` keep
-`disable-model-invocation: true`; humans invoke them as `/alspec` in Claude Code, GitHub Copilot,
-Cursor, `$alspec` in Codex, or `/skill:alspec` in Pi. The optional `alignfirst` skill lets the agent recognize a protocol
-named in prose; a project whose instruction file starts with the canonical `alignfirst context`
-section provides this itself.
+- **CLI, protocols or skills:** [alignfirst-skills-setup.md](references/alignfirst-skills-setup.md). Skills invoke the CLI without a separate installation. Existing v1/v2/v3 skills or old home layouts first use [alignfirst-upgrade.md](references/alignfirst-upgrade.md).
+- **Work-files repository:** [plans-setup.md](references/plans-setup.md).
+- **Docmap:** [docmap-setup.md](references/docmap-setup.md). For docs adoption, follow its bootstrapping/migration references when relevant.
+- **Workspace, any stack:** [workspace-setup.md](references/workspace-setup.md). Node, Python, Rust and monorepos use the same `alignfirst workspace`/`alignfirst dev` CLI. No project wrapper or local kernel dependency is needed. Never recommend reimplementing the kernel for another language.
+- **Retired `.alignfirst.json`, workspace wrappers or old runtime registries:** [clean-break upgrade runbook](../../docs/upgrading-multi-stack-workspaces.md). Account for all resources and worktrees before conversion.
+- **AlignDev:** ask whether it serves an OpenClaw assistant or a coding agent. OpenClaw uses [aligndev-openclaw.md](references/aligndev-openclaw.md); a coding-agent assistant uses [coding-agent-assistant.md](references/coding-agent-assistant.md).
 
-A work-files repository is an optional CLI mode configured through `alignfirst plans setup`.
+## Tooling recommendation
 
-`aligndev`, the AlignDev CLI, carries the assistant's playbook, coding-agent delegation, and project
-discovery. An OpenClaw assistant host installs it; a coding-agent assistant runs it through `npx`.
+When asked what to adopt, inspect repository evidence and available skills. Present global skills separately from project tooling. Let the user choose any subset before installation.
 
-## An Untouched Repository
+Global choices are `aligndev` (assistant playbook), `alignfirst` (protocol recognition), `paseo-alignfirst-workspace` (Paseo lifecycle), and command shortcuts `alspec`, `alplan`, `al`, `almerge`, `alreview`, `aldescription`, `alcatchup`, `alcatchupaad`, `alcatchupspec`. Command skills retain `disable-model-invocation: true`. Humans use `/name` in Claude/Copilot/Cursor, `$name` in Codex and `/skill:name` in Pi. The protocol-recognition skill is unnecessary when canonical project context instructions already supply it.
 
-When the user wants nothing written in the repository, every route below goes through [companion-setup.md](references/companion-setup.md). The project's AlignFirst files then live in its companion directory, and only the tools that mode supports apply.
+A missing name in the session's skill list means unavailable here, not absent on disk. If the host exposes no list, availability is unknown. This check needs no filesystem scan or installer. Install globally only with approval, using the selected reference's current command. A skill alone supplies no executable Pi tools. Preserve duplicate-tool audits and native trust/permission policies. For Paseo, read its skill before creating/removing actual workspaces and preserve archive-before-removal.
 
-## Named Tool
+Recommend protocols and Docmap regardless of language. Workspace isolation is also language-neutral; preserve existing project commands by expressing them in a branch-local manifest. An absent manifest supplies protocol-ready defaults. Detect existing tooling and propose conversion rather than running incompatible old wrappers against new registries. Determine whether a separate work-files repository already exists before offering one.
 
-When the user names a tool, inspect the repository and proceed directly to that tool. Install or
-upgrade only what they requested.
+## Project instructions
 
-- **AlignFirst CLI, protocols, or skills**: [alignfirst-skills-setup.md](references/alignfirst-skills-setup.md). Install only the requested components; skills invoke the CLI through `npx` without a separate installation.
-  For an existing v1, v2, or v3 installation, a machine with `~/.config/alignfirst/`, or a companion
-  registry with `paths`, start with [alignfirst-upgrade.md](references/alignfirst-upgrade.md).
-- **Work-files repository**: [plans-setup.md](references/plans-setup.md).
-- **docmap**: [docmap-setup.md](references/docmap-setup.md). An instruction file with the old docmap body ("Mandatory for every task") needs [Update the Docmap Snippet](references/alignfirst-upgrade.md#update-the-docmap-snippet).
-- **workspace**: [workspace-setup.md](references/workspace-setup.md). A `ports` group or `setupProfiles` in `workspace.mjs` needs [Move Workspace Ports to the Dev-Server](references/alignfirst-upgrade.md#move-workspace-ports-to-the-dev-server).
-- **AlignDev (`aligndev`)**: ask the user whether it serves an OpenClaw assistant or a coding agent (Claude Code, Codex or Pi). For OpenClaw, follow [AlignDev for OpenClaw](#aligndev-for-openclaw). For a coding agent, follow [coding-agent-assistant.md](references/coding-agent-assistant.md), which installs the `aligndev` skill globally. An old `~/.alignfirst/aligndev.config.json` needs [Rename the AlignDev Settings](references/alignfirst-upgrade.md#rename-the-aligndev-settings).
+- Protocol adoption uses the canonical `alignfirst context` bootstrap from [skills setup](references/alignfirst-skills-setup.md#project-instructions), replacing redundant Docmap discovery prose while preserving essential-documentation lists and project-specific rules.
+- Docmap-only adoption uses its own discovery snippet.
+- Workspace-only adoption uses [workspace instructions](references/workspace-setup.md#agent-instructions).
 
-Do not present the tooling menu or add unrelated tools on this route.
+Global skills do not opt every repository into protocols. Workspace and Docmap adoption alone do not opt it into protocols either.
 
-## Tooling Recommendation
+## A repository that must stay untouched
 
-When the user asks what they can set up in a project, check the skills listed in your context and inspect the repository. Present global skills separately from project tooling. Let the user choose any subset before installing or configuring it.
+Use [companion-setup.md](references/companion-setup.md). Protocols and Docmap can keep all selected files outside the repository. Workspace adoption additionally creates local `.local-wt` storage and local Git exclusions; obtain approval and disclose that footprint. Companions supply effective plans and project settings, never branch-local workspace recipes or runtime storage.
 
-### Global Skills
+## Prepare a project for an assistant
 
-Use the skill list in your context to check availability for the current agent:
+An assistant coordinates the conversation and delegates coding to the coding **agent** through AlignDev. Prepare these facts before normal ticket/coding effects:
 
-- `aligndev`: the coding-agent assistant's playbook.
-- `alignfirst`: recognition of protocols named in prose.
-- `paseo-alignfirst-workspace`: recommended for Paseo users; explains how to use AlignFirst workspaces with Paseo.
-- Command skills: `alspec`, `alplan`, `al`, `almerge`, `alreview`, `aldescription`, `alcatchup`, `alcatchupaad`, and `alcatchupspec`.
+1. Canonical context bootstrap as the first `##` section of `AGENTS.md` or `CLAUDE.md`, after title/introduction. `alignfirst.json` or `alignfirst.jsonc` with `schemaVersion: 1` is required for an assistant-managed project and optional otherwise. Companion-only projects place selected instructions/settings outside the repository.
+2. Usable effective plans, untracked by the product repository. A separate work-files repository may track them. Use the separately authorized `aligndev guide work-files-setup` for missing/project-tracked plans, before ticket reservation, request capture or coding effects. Preserve old history without unsolicited copying.
+3. Docmap and meaningful project docs. When `docs/` is absent and documentation is part of preparation, follow [docmap-bootstrapping.md](references/docmap-bootstrapping.md).
+4. A unified workspace route through `alignfirst workspace`. The optional branch-local manifest declares project commands; without it, setup is protocol-ready and performs no install/build/start. Prepare ignored/untracked `.local-wt/` and effective plans before setup. Document separate stack commands when defaults are used.
+5. Confirmed runtime requirements. Node projects declare their version through `.nvmrc`, `.node-version` or `engines.node`; ask when none exists. Python and other runtimes retain their documented tools. Running the CLI through Node/Bun does not change project commands.
+6. A project-specific `DEVELOPERS.md`: confirmed commands, architecture, documentation map, workflow and verification. Include the workspace guide pointer and its actual readiness boundary, public URLs when services exist, and external ownership rules.
+7. `aligndev project doctor --root <projects-directory>` passes after settings/manifest creation and before workspace setup. A range belongs solely in `devServer.ports`; use `project free-ports` as a lookup when the inventory owns an enclosing range.
 
-Report which are available and propose installing the missing ones globally for the current agent. A name absent from the list is unavailable in this session; it does not prove the skill is absent on disk. If the host exposes no skill list, report availability as unknown. This check needs no filesystem scan, installer command, or `doctor` run.
+Assistant preparation skips command-skill installation and global bootstrap changes unless separately requested. Companion-only preparation follows its authorization and location checks. Native coding-agent permissions are unchanged; report protected-path refusals rather than bypassing them.
 
-For approved installations, follow [AlignFirst skills setup](references/alignfirst-skills-setup.md#install-the-skills) or [the global `aligndev` skill procedure](references/coding-agent-assistant.md#3-install-the-skill-globally). Installing global skills alone does not configure the project or install Pi tools. The assistant-preparation route still skips command-skill installation unless the user separately requests those shortcuts.
+## Create or operate an OpenClaw assistant
 
-For Paseo users, install `paseo-alignfirst-workspace` globally with approval. Replace `<agent>` with the current agent's installer target (`claude-code`, `codex`, or `pi`):
+Read [aligndev-openclaw.md](references/aligndev-openclaw.md), including its deployment gate, before rendering/upgrading. The generated private admin repository owns installation/operations runbooks. Do not load deployment procedures for ordinary project tooling.
 
-```sh
-npx -y skills add https://github.com/paleo/alignfirst --global --yes \
-  --agent <agent> --skill paseo-alignfirst-workspace </dev/null
-```
+The three overlays use named profiles and inventoried native stores. Pi retains its approved writable `auth.json` exception; other managed resources remain maintenance-protected. Offline template checks do not certify deployment, OS hardening, authentication or conversation behavior. Do not perform live/admin operations without separate authorization.
 
-### Project Tooling
+## A coding agent as the assistant
 
-Recommend global skills, AlignFirst protocols, and Docmap regardless of the project's language or stack. Inspect existing footprints to distinguish adoption from what is already available:
+For Claude Code, Codex or a persistent Pi session on one project, read [coding-agent-assistant.md](references/coding-agent-assistant.md). Pi uses `/skill:aligndev` and separately installed executable capabilities; installing a skill alone provides none. OpenClaw remains the persistent parent for its deployment route.
 
-- **AlignFirst protocols** provide collaborative specification, planning, implementation, merge, review, description, and catch-up workflows through the CLI. Command skills add shortcuts and can be installed on their own. A work-files repository is an optional sub-choice.
-- **docmap** makes the repository's `docs/` tree discoverable to agents and humans. It is available through the AlignFirst CLI or as the standalone `@alignfirst/docmap` package. A missing `docs/` directory is an opportunity to bootstrap documentation, not a reason to omit the recommendation.
-- **workspace** creates isolated git-worktree development environments. For a Node project, recommend installing and using `@alignfirst/workspace` through [workspace setup](references/workspace-setup.md). Detect Node usage from the project's runtime declarations, scripts, dependencies, or documentation; a `package.json` used only for tooling is insufficient. When workspace tooling already exists, recommend its documented workflow rather than a replacement. For other stacks, offer workspace only on request or when repository evidence supports it; keep existing non-Node implementations authoritative.
+## Investigation rules
 
-Determine whether a work-files repository exists before offering that option.
+Detect the package manager from `packageManager`, then root lockfiles, falling back to npm. Translate application commands to the confirmed toolchain. CLI forms remain `npx -y alignfirst` for Node and `bunx --bun alignfirst` for explicit Bun; project scripts are optional conveniences.
 
-## Project Instructions
-
-Choose the `AGENTS.md` or `CLAUDE.md` discovery section from the project's adopted tools:
-
-- **AlignFirst skills or protocols:** use the `alignfirst context` section from [AlignFirst setup](references/alignfirst-skills-setup.md#project-instructions). It replaces `Docmap - Seek Documentation`; preserve any essential-documentation list and project-specific instructions.
-- **Docmap without AlignFirst skills or protocols:** use `Docmap - Seek Documentation` from [Docmap setup](references/docmap-setup.md#agent-instructions), with the project's actual Docmap command.
-- **Workspace only:** add the [workspace instructions](references/workspace-setup.md#agent-instructions).
-
-Installing Docmap or workspace alone does not opt the project into AlignFirst protocols. Installing skills globally does not opt every repository into them.
-
-## AlignDev for OpenClaw
-
-**AlignDev for OpenClaw** turns an OpenClaw **assistant** into a developer who works with AlignFirst. The
-assistant holds a chat identity, its channels and its sessions, and runs repository work through a
-coding **agent** (Claude Code, Codex or Pi) using the AlignFirst protocols.
-
-One deployment is a dedicated Linux service account running the assistant under its own name and
-channel identity, on Slack or Discord, and in the OpenClaw apps. These two terms are used throughout this skill and the
-repositories it renders.
-
-Preparing a project makes its repository compatible with an assistant. Creating an assistant builds and
-deploys it. Before rendering or upgrading, read the [deployment boundary](references/aligndev-openclaw.md#deployment-gate). All three overlays use named profiles and inventoried native stores. Pi preserves native authentication through an explicit writable `auth.json` exception; every other managed resource retains controlled-maintenance protection. Offline template checks do not replace live deployment acceptance.
-
-## Prepare a Project for an Assistant
-
-Inspect the repository before changing it. A prepared project has all of these:
-
-1. The canonical bootstrap section in `AGENTS.md` or `CLAUDE.md`, placed as the first `##` section
-   after the title and introduction. The README may offer a global CLI installation as a convenience.
-   `.alignfirst.json` is required for an assistant-managed project and optional otherwise.
-2. A clean `aligndev project doctor --root <projects-directory>` result after writing
-   `.alignfirst.json` and before workspace setup. Stop preparation when the inventory is unhealthy.
-3. Usable effective work files, untracked by the project's own repository. A separate work-files repository may track them. Before ticket or coding-session effects, follow the `work-files-setup` guide topic of `aligndev` for missing or project-tracked plans; its authorized companion selection leaves project content untouched without copying it.
-4. docmap, including project scripts or CLI instructions. When the repository has no `docs/`
-   directory, bootstrap its documentation through
-   [docmap-bootstrapping.md](references/docmap-bootstrapping.md) as part of the preparation.
-5. A documented worktree route. Existing project workspace tooling, including non-Node implementations, remains authoritative. Installing a full workspace system is optional; when selected, meet [the AlignDev contract](references/workspace-setup.md#the-aligndev-contract). Otherwise use `aligndev worktree` and document separate install/build/test and application-lifecycle commands.
-6. The project's runtime requirements. For Node projects, declare the version (`.nvmrc`, `.node-version` or `engines.node`) so fnm selects it; ask which version when none exists. Other runtimes follow their documented tools.
-7. A project-specific `DEVELOPERS.md` for an unfamiliar developer: commands, architecture,
-   documentation map, development workflow, and verification procedures.
-
-When the user says the repository must stay untouched, follow [companion-setup.md](references/companion-setup.md) with its section [For an Assistant](references/companion-setup.md#for-an-assistant) instead.
-
-Every procedure that prepares a project for an assistant, [a coding agent as the assistant](#a-coding-agent-as-the-assistant) included, skips the AlignFirst command skills and the [global bootstrap line](references/alignfirst-skills-setup.md#repositories-without-alignfirst-instructions). The bootstrap section of item 1 stays. An assistant's service account keeps its global installation of this guide for its delegated coding agent.
-
-Detect and verify the package manager, runtime, build, test, lint, dev-server, ports, shared
-directories, seeded configuration files, and team-plan details. Write only facts confirmed from the
-repository. Follow each selected tool reference above, then complete `DEVELOPERS.md`, naming the Node version declaration.
-
-## Create an Assistant
-
-For creating or operating the assistant deployment itself, read
-[aligndev-openclaw.md](references/aligndev-openclaw.md). Do not load that workflow for ordinary
-tool setup.
-
-## A Coding Agent as the Assistant
-
-For Claude Code, Codex or a persistent Pi session acting as the assistant on one project, without OpenClaw, read [coding-agent-assistant.md](references/coding-agent-assistant.md). Pi uses `/skill:aligndev` and a separately installed generic background tool; a Pi child uses the independent subagent package for plan/review delegation. Installing the skill alone supplies no executable tools.
-
-## Shared Investigation Rules
-
-Detect the package manager from `packageManager` in `package.json`, then the root lockfile:
-`package-lock.json` means npm, `pnpm-lock.yaml` means pnpm, `yarn.lock` means yarn, and `bun.lock` or
-`bun.lockb` means bun. Fall back to npm.
-
-Translate commands to that package manager. npm needs `--` before script flags; pnpm and yarn omit
-`run` and the separator; bun keeps `run` but omits the separator.
-
-Detect existing footprints before proposing changes:
-
-- docmap: a `docmap` script, `@alignfirst/docmap`, `alignfirst docmap` in an instruction file, or `docs/`.
-- workspace: documented workspace procedures, including non-Node tooling; a `workspace` script or `@alignfirst/workspace` is one footprint.
-- A pre-`@alignfirst` install: `@paleo/docmap` or `@paleo/workspace` in the manifest. Before
-  proposing anything else, replace the dependency with the `@alignfirst` name and rewrite the
-  `@paleo/` import specifiers in the wrapper scripts (`scripts/workspace/*.mjs`); the two scopes
-  install side by side, so a manifest-only change leaves the wrappers importing the old package.
-- AlignFirst: `.alignfirst.json`, `.plans/`, a bootstrap section running `alignfirst context` or
-  `npx alignfirst context`, an AlignFirst instruction section, a canonical skill installation, or a
-  companion reported by `npx alignfirst config`.
-- work-files repository: a `.plans` symlink or `plans.repositoryFolder` in `.alignfirst.json`.
-- Assistant preparation: the complete seven-part contract above.
-
-Require a clean working tree immediately before project mutations. Read-only discovery and
-recommendations do not require one.
+Detect protocols through context/bootstrap/configuration, work files through effective `.plans`/`plans.repositoryFolder`, Docmap through commands/docs, and workspaces through manifests, commands or documented old tooling. Legacy package scopes and wrappers are upgrade evidence, not instructions to preserve the old kernel. Consult the runbook before changing formats or retiring state. No global installation, live registry mutation or external repository edit is implied by recommendation or rendering.

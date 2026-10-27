@@ -14,6 +14,18 @@ read_when:
 
 For the consumer-facing blueprint — concepts, config fields, the CLI surface, and how to adapt the system to a repository — see the [workspace setup blueprint](../skills/alignfirst-setup-guide/references/workspace-setup.md). This document covers package internals and edge-case behavior that don't belong in that guide.
 
+## Configuration and host ownership
+
+`alignfirst workspace` and `alignfirst dev` own the public command surface. AlignDev delegates to these commands; consumer JavaScript wrappers and its separate worktree engine are retired. The TypeScript kernel is language-neutral: project-owned commands keep their toolchain, cwd and env. See [the clean-break runbook](upgrading-multi-stack-workspaces.md) before converting old consumers or runtime state.
+
+The data-only `@alignfirst/workspace/config` reader discovers `alignfirst-workspace.json` or `.jsonc` from the Git worktree root. It rejects ambiguity, unknown properties, unsupported schema majors and invalid recognized values without fallback. Strict JSON differs from JSONC only in syntax. Companion selection applies to `alignfirst.json`/`.jsonc`, never workspace recipes. Both families start at independent `schemaVersion: 1`, with packaged editor schemas matching runtime validation. Future breaking majors retain sequential in-memory converters throughout the CLI major; reads do not rewrite committed files. No converter for retired wrappers/settings is provided.
+
+`alignfirst config --json` reports `locations.alignfirst` and validated workspace location/schemaVersion/portRange/hasDevServer, without evaluating commands or exposing runtime secrets. An absent manifest reports canonical `.json` destination, null schema/range and false capability. Project conventions no longer duplicate the range or guard CLI versions.
+
+`preparation.ts` validates effective plans and ignored, untracked `.local-wt/` before Git creation. The AlignFirst host supplies plans resolution and shared-target protection directly. Project-local effective plans must exist and be ignored/untracked by the product repository; companion plans resolve directly. Linked parity is checked after preparation. Setup never provisions plans, changes companion selection or edits tracked ignore rules. Generated sharing exclusions do not conceal tracked/conflicting data. Usable untracked `.local` is optional default sharing; tracked `.local` stays branch-local. Explicit shared dirs cannot overlap mandatory plans/runtime storage.
+
+An absent manifest has the same baseline and synchronous preparation, with no empty finalizer, install/build, seeded application files, ports or services. Its `ready` state means protocol-ready. `--full` and dev startup require declared managed services. Listing/help/cleanup do not require plans readiness, but configuration and deletion safety still validate. The read-only inventory unions exact normalized Git worktree paths and registrations, exposing unprepared, detached, locked, prunable and orphan targets without adopting or cleaning them.
+
 ## Invocation and runtime
 
 The kernel receives a `WorkspaceOperation`: cwd, environment, output channels, optional public command forms, and an `InstalledCliInvocation` containing the absolute runtime executable and installed AlignFirst bin path. `runWorkspace` also receives a parsed command and verbosity; `runDevServer` receives a parsed dev command. Neither reads `process.argv` or configures mutable command state. The outer CLI owns error presentation, exit codes and structured results; foreground signal handlers remain a process boundary.
@@ -224,4 +236,4 @@ A missing purge recipe cannot discover external resources by itself. Cleanup hoo
 
 `workspace --guide` prints `templates/guide.md`, expanded by [`guide.ts`](../packages/workspace/src/guide.ts). The prose lives in the template; code aligns command comments for the host's rendered public command forms.
 
-One manifest-backed capability gates the template: `DEV`, on when managed dev services are declared. `{{#DEV}}…{{/DEV}}` keeps a block when the flag is on, `{{^DEV}}…{{/DEV}}` when it is off. Markers own their line and one regex handles both forms, so a stripped block leaves no stray blank line. A setup-only project therefore reads a guide with no dev-server section and a workspace definition that mentions only symlinks and config files.
+One manifest-backed capability gates the template: `DEV`, on when managed dev services are declared. `{{#DEV}}…{{/DEV}}` keeps a block when the flag is on, `{{^DEV}}…{{/DEV}}` when it is off. Markers own their line and one regex handles both forms, so a stripped block leaves no stray blank line. A setup-only or manifest-free project reads a guide without a dev-server section. It states baseline preparation, effective capabilities and direct CLI forms; default readiness never implies dependency/application readiness. External owners adopt in place and run teardown before their own Git deletion.

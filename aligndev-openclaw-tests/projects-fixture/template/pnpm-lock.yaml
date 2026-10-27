@@ -169,24 +169,8 @@ importers:
       express:
         specifier: 5.3.0
         version: 5.3.0
-    devDependencies:
-      '@alignfirst/docmap':
-        specifier: ~0.11.2
-        version: 0.11.2
-      '@alignfirst/workspace':
-        specifier: ~0.39.0
-        version: 0.39.0
 
 packages:
-
-  '@alignfirst/docmap@0.11.2':
-    resolution: {integrity: sha512-j/1l0qjmTw5l8+eATGToP0jcDF3/bfYLif7RXJw1RRRJyOroJ26j7/c/ZBzIH6qlaNNjAwqQjpRKFsrB2+7S8A==}
-    engines: {node: '>=22.11.0'}
-    hasBin: true
-
-  '@alignfirst/workspace@0.39.0':
-    resolution: {integrity: sha512-0V2BHd4OoSaSoeAl6KpysP1QdQn3PBm2gtHXemXtH1u4GklT5yBE/EYl41T2Zq7ODJyk3SS19TliQ095RI8JvA==}
-    engines: {node: '>=22.11.0'}
 
   accepts@2.0.0:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
@@ -451,10 +435,6 @@ packages:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
 snapshots:
-
-  '@alignfirst/docmap@0.11.2': {}
-
-  '@alignfirst/workspace@0.39.0': {}
 
   accepts@2.0.0:
     dependencies:

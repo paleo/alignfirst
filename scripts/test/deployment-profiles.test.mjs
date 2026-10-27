@@ -21,6 +21,7 @@ import {
   resolveCodeConfig,
   resolveQuotaConfig,
 } from "../../packages/aligndev/dist/config.js";
+import { loadWorkspaceManifest } from "../../packages/workspace/dist/config.js";
 
 const repository = fileURLToPath(new URL("../../", import.meta.url));
 const template = join(
@@ -88,9 +89,21 @@ for (const overlay of Object.keys(agents)) {
             installSettings(fixture);
             validateProfiles(fixture);
             assert.equal(existsSync(join(fixture.rendered, "infra/gateway")), gateway);
-            const config = JSON.parse(
-              readFileSync(join(fixture.rendered, ".alignfirst.json"), "utf8"),
+            const report = JSON.parse(
+              run(fixture, process.execPath, [
+                join(repository, "packages/alignfirst/bin/alignfirst.mjs"),
+                "config",
+                "--json",
+              ]),
             );
+            const config = report.config;
+            assert.equal(
+              report.locations.alignfirst.path,
+              join(fixture.rendered, "alignfirst.jsonc"),
+            );
+            assert.equal(report.workspace.schemaVersion, 1);
+            assert.equal(report.workspace.hasDevServer, false);
+            assert.equal(loadWorkspaceManifest(fixture.rendered).schemaVersion, 1);
             assert.equal(config.plans?.repositoryFolder, plans ? "admin" : undefined);
             const marker = readFileSync(
               join(fixture.infra, "projects/.alignfirst-projects.json"),
@@ -133,7 +146,9 @@ for (const overlay of Object.keys(agents)) {
           writeFileSync(
             join(registry, "registry.json"),
             JSON.stringify({
-              projects: { [fixture.home]: { aligndev: { profile: "missing-project-profile" } } },
+              projects: {
+                [fixture.rendered]: { aligndev: { profile: "missing-project-profile" } },
+              },
             }),
           );
           const args = ["-euc", script, "fixture", functions, fixture.infra];
@@ -888,7 +903,7 @@ function run(fixture, command, args) {
 
 function options(fixture) {
   return {
-    cwd: fixture.home,
+    cwd: fixture.rendered,
     env: fixture.env,
     encoding: "utf8",
     timeout: 15_000,

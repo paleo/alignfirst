@@ -58,7 +58,7 @@ async function seedDuplicateProject(ctx: ScenarioContext): Promise<void> {
   const config = JSON.stringify({ schemaVersion: 1, ticketIdPattern: "^ABC-\\d+$" }, null, 2);
   await assertGatewayCommand(
     ctx,
-    ["sh", "-c", `printf '%s\\n' '${config}' > '${DUPLICATE_PATH}/.alignfirst.json'`],
+    ["sh", "-c", `printf '%s\\n' '${config}' > '${DUPLICATE_PATH}/alignfirst.json'`],
     "duplicate project configuration",
   );
 }

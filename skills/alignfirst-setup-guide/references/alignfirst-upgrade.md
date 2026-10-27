@@ -7,6 +7,8 @@ The sections after [Route the Upgrade](#route-the-upgrade) are one-time migratio
 
 Commands are Unix-style. Adapt them for another shell.
 
+For `.alignfirst.json`, workspace wrappers, old port slots or `aligndev worktree`, follow [Upgrading Multi-Stack Workspaces](../../../docs/upgrading-multi-stack-workspaces.md) before any procedure below. It supersedes the historical workspace conversions in this document and includes all-worktree resource accounting. Use `alignfirst.json`/`alignfirst.jsonc` for current project settings.
+
 ## Preflight
 
 1. Verify the git working tree is clean immediately before mutations.
@@ -35,7 +37,7 @@ generated output.
 - v1: follow [alignfirst-upgrade-from-v1.md](alignfirst-upgrade-from-v1.md).
 - v2: follow [alignfirst-upgrade-from-v2.md](alignfirst-upgrade-from-v2.md).
 - v3: follow [alignfirst-upgrade-from-v3.md](alignfirst-upgrade-from-v3.md).
-- v4: keep the current skills. Set `plans.autoArchive: true` in an existing `.alignfirst.json`; the
+- v4: keep the current skills. Set `plans.autoArchive: true` in the selected `alignfirst.json`/`alignfirst.jsonc`; the
   user can remove it after the upgrade to opt out. When legacy `plans-share` artifacts remain, apply
   the cleanup, command sweep, and verification sections of the v3 upgrade.
 - No detected installation: use [alignfirst-skills-setup.md](alignfirst-skills-setup.md).
@@ -219,13 +221,17 @@ An older `alignfirst` fails on the new shape: update every copy that reads the r
 
 On an AlignDev OpenClaw host, the registry stays service-owned. Convert it as the service account, once `update-assistant.md` has installed `alignfirst` 0.11.0.
 
-## Rename the Work-Files Folder Setting
+## Historical: Rename the Work-Files Folder Setting
+
+The clean-break runbook supersedes this old-file transition on the current CLI; `plans.folder` is now rejected.
 
 `alignfirst` 0.12.0 reads the project's folder in the work-files repository from `plans.repositoryFolder` in `.alignfirst.json`. It still reads the deprecated `plans.folder`, with a warning pointing here, and fails when both keys are present. Rename the key; the value stays. An older `alignfirst` rejects `plans.repositoryFolder`: rename it once every copy that reads the file runs 0.12.0. On an AlignDev OpenClaw host, the file lives in the admin repository: rename it there and re-seed.
 
-## Move Workspace Ports to the Dev-Server
+## Historical: Move Workspace Ports to the Dev-Server
 
-`@alignfirst/workspace` 0.37.0 allocates the ports in the dev-server, at each workspace's first `dev setup`, and provisions infrastructure there. Migrate a project once when its `workspace.mjs` declares `ports` or `setupProfiles`, or when its `finalizeWorkspace` provisions infrastructure. The [workspace blueprint](workspace-setup.md) and the [workspace.mjs](../assets/workspace.mjs) and [dev-server.mjs](../assets/dev-server.mjs) assets show the target shape.
+This describes the pre-manifest release transition. Do not execute it on the current CLI; use the clean-break runbook above.
+
+`@alignfirst/workspace` 0.37.0 allocates the ports in the dev-server, at each workspace's first `dev setup`, and provisions infrastructure there. Migrate a project once when its `workspace.mjs` declares `ports` or `setupProfiles`, or when its `finalizeWorkspace` provisions infrastructure. The old wrapper assets are retired. The current [workspace blueprint](workspace-setup.md) documents manifests and project-owned commands.
 
 1. Move `ports` to `dev-server.mjs` as a range. `first` is the old `base`, and `last` the old range end, `base + maxWorkspaces × perWorkspace − 1`, so `portRange` in `.alignfirst.json` stays valid. `perWorkspace` defaulted to the number of names. Rename `names` to `declare`; a `compute` function becomes the names it returned.
 2. Move the files that carry ports from `gitignoredFiles` to `runFiles` in `dev-server.mjs`. Their `patch` receives `ports` as before.
@@ -238,7 +244,7 @@ On an AlignDev OpenClaw host, the registry stays service-owned. Convert it as th
 
 On an AlignDev OpenClaw host with the dev-server gateway, `REMOTE_DEV_DOMAIN` already comes from `environment.d/common.conf`. A project needs no remote setup step anymore.
 
-## Declare Workspace Ports
+## Historical: Declare Workspace Ports
 
 `@alignfirst/workspace` 0.38.0 refuses `ports.names` and `ports.mainWorktree` in `dev-server.mjs`. Migrate the `ports` group once:
 
@@ -253,9 +259,9 @@ ports: { first: 8100, last: 8199, names: ["server", "frontend"], mainWorktree: {
 ports: { first: 8100, last: 8199, declare: ["server", { name: "frontend", mainWorktree: 8100 }] },
 ```
 
-## Declare the Run-File Inputs
+## Historical: Declare the Run-File Inputs
 
-`@alignfirst/workspace` 0.39.0 rewrites an existing run file at a start only when the ports or the run-file inputs changed since its last write. An explicit `dev setup` still rewrites them all. Migrate once when a run-file patch or `content` function reads a value besides `ports`, such as `REMOTE_DEV_DOMAIN` or `REMOTE_DEV_HOST`. Return those values from `runFilesInputs` in `dev-server.mjs`, as the [dev-server.mjs](../assets/dev-server.mjs) asset does. Without it, a start keeps the values of the last write.
+`@alignfirst/workspace` 0.39.0 rewrites an existing run file at a start only when the ports or the run-file inputs changed since its last write. An explicit `dev setup` still rewrites them all. Migrate once when a run-file patch or `content` function reads a value besides `ports`, such as `REMOTE_DEV_DOMAIN` or `REMOTE_DEV_HOST`. Return those values from `runFilesInputs` in `dev-server.mjs`, as the former wrapper asset did. Without it, a start keeps the values of the last write.
 
 ## Update the Docmap Snippet
 

@@ -22,9 +22,9 @@ Repository specifics:
 
 ## Workspaces
 
-A **workspace** is a git worktree (with its branch) plus its own dev setup: symlinked shared directories and seeded config files. Workspaces are isolated, so you can work on several branches in parallel. This repository has no dev server, so the system runs portless: nothing to start, no `dev` script.
+A **workspace** is a git worktree with effective work files and isolated runtime storage. This repository has no install/build steps, seeded application config or dev services. Usable untracked `.local` is shared when present.
 
-Run `npm run workspace -- --guide` for the full procedures.
+Run `npx -y alignfirst workspace --guide` for the full procedures. The manifest is setup-only; readiness does not imply an application build or running service. Effective plans and ignored, untracked `.local-wt/` must be prepared before setup.
 
 ## Writing OpenClaw workspace files
 

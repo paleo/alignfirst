@@ -69,7 +69,7 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
         "Bootstrap complete in the main worktree. Created: package.json, pnpm-lock.yaml, " +
         "app.mjs, home-page.mjs, comparables.mjs, export-handler.mjs, app.test.mjs, " +
         "README.md, DEVELOPERS.md, docs/, scripts/workspace/ (workspace tooling), local.env.example, " +
-        ".local/, .gitignore, and .alignfirst.json. This minimal scaffold is deliberate and " +
+        ".local/, .gitignore, alignfirst.json and alignfirst-workspace.json. This minimal scaffold is deliberate and " +
         "complete — nothing else is required before the initial commit on main."
       );
     },
@@ -230,22 +230,18 @@ async function declarePackageManager(ctx: ScenarioContext): Promise<void> {
 }
 
 async function copyBootstrapTemplate(ctx: ScenarioContext): Promise<void> {
-  const config = JSON.stringify(
-    { schemaVersion: 1, portRange: { first: 6600, last: 6607 } },
-    null,
-    2,
-  );
+  const config = JSON.stringify({ schemaVersion: 1 }, null, 2);
   const result = await ctx.execInGateway(
     [
       "sh",
       "-c",
       `cp -R /opt/aligndev-openclaw-tests/fixtures/template/. "${NOVA_PROJECT_PATH}/" && ` +
-        `mkdir -p "${NOVA_PROJECT_PATH}/.local" && ` +
+        `mkdir -p "${NOVA_PROJECT_PATH}/.local" "${NOVA_PROJECT_PATH}/.plans" && ` +
         `node --input-type=module -e 'import fs from "node:fs"; ` +
         `import { patchDevServerRange } from "/opt/openclaw-test/scripts/fixture-personalization.ts"; ` +
-        `const p = "${NOVA_PROJECT_PATH}/scripts/workspace/dev-server.mjs"; ` +
+        `const p = "${NOVA_PROJECT_PATH}/alignfirst-workspace.json"; ` +
         `fs.writeFileSync(p, patchDevServerRange(fs.readFileSync(p, "utf8"), 6600, 6607));' && ` +
-        `printf '%s\\n' '${config}' > "${NOVA_PROJECT_PATH}/.alignfirst.json"`,
+        `printf '%s\\n' '${config}' > "${NOVA_PROJECT_PATH}/alignfirst.json"`,
     ],
     { timeoutMs: 30_000 },
   );
@@ -334,12 +330,11 @@ async function assertCreatedRepository(ctx: ScenarioContext): Promise<void> {
   await assertGatewayCommand(
     ctx,
     [
-      "grep",
-      "-F",
-      'sharedDirs: [".local", ".plans"]',
-      `${NOVA_PROJECT_PATH}/scripts/workspace/workspace.mjs`,
+      "node",
+      "-e",
+      `const fs=require('node:fs'); const cp=require('node:child_process'); const r=JSON.parse(cp.execFileSync('alignfirst',['config','--json'],{cwd:${JSON.stringify(NOVA_PROJECT_PATH)},encoding:'utf8'})); if(r.workspace.schemaVersion!==1) process.exit(1);`,
     ],
-    ".local shared workspace configuration",
+    "validated workspace manifest with default .local sharing",
   );
   await assertPreparedProjectContract(ctx);
 }
@@ -347,22 +342,22 @@ async function assertCreatedRepository(ctx: ScenarioContext): Promise<void> {
 async function assertPreparedProjectContract(ctx: ScenarioContext): Promise<void> {
   await assertGatewayCommand(
     ctx,
-    ["grep", "-F", "REMOTE_DEV_DOMAIN", `${NOVA_PROJECT_PATH}/scripts/workspace/dev-server.mjs`],
+    ["grep", "-F", "REMOTE_DEV_DOMAIN", `${NOVA_PROJECT_PATH}/scripts/workspace/run-file.mjs`],
     "public URLs from the environment",
   );
   await assertGatewayCommand(
     ctx,
-    ["grep", "-F", "REMOTE_DEV_HOST", `${NOVA_PROJECT_PATH}/scripts/workspace/dev-server.mjs`],
+    ["grep", "-F", "REMOTE_DEV_HOST", `${NOVA_PROJECT_PATH}/scripts/workspace/run-file.mjs`],
     "direct remote URLs from the environment",
   );
   await assertGatewayCommand(
     ctx,
-    ["grep", "-F", "runFilesInputs", `${NOVA_PROJECT_PATH}/scripts/workspace/dev-server.mjs`],
+    ["grep", "-F", "runFilesInputs", `${NOVA_PROJECT_PATH}/alignfirst-workspace.json`],
     "run-file environment input tracking",
   );
   await assertGatewayCommand(
     ctx,
-    ["grep", "-F", "PUBLIC_URL", `${NOVA_PROJECT_PATH}/scripts/workspace/dev-server.mjs`],
+    ["grep", "-F", "PUBLIC_URL", `${NOVA_PROJECT_PATH}/scripts/workspace/run-file.mjs`],
     "public dev-server URL",
   );
   await assertGatewayCommand(

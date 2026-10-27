@@ -24,10 +24,10 @@ inventory issues.
 
 ## Port claims
 
-Run `{{ALIGNDEV}} project free-ports --size <n>` with the size of the project's port range: port names × expected concurrent workspaces. The directory section identifies the range for each project kind. Pass `--range <code>` for a coded range; the default needs no flag. The setup guide writes the returned block as `portRange` in the project's `.alignfirst.json`.
+Run `{{ALIGNDEV}} project free-ports --size <n>` with the size of the project's port range: port names × expected concurrent workspaces. The directory section identifies the range for each project kind. Pass `--range <code>` for a coded range; the default needs no flag. This is a lookup, not a reservation. The setup guide writes the returned block only in the branch-local workspace manifest's `devServer.ports`.
 
-The project config is its registration. Deleting the project removes it from the listing. The workspace dev-server refuses a command when the project's `portRange` disagrees with the `ports` range of its config.
+Git main-worktree discovery identifies the project. The `alignfirst config --json` report supplies validated workspace metadata; project/companion conventions carry no duplicate port claim.
 
 ## Reported issues
 
-The listing reports invalid project configs, non-main root projects, a `.alignfirst.json` outside a git main worktree, project or nested-directory ranges outside their enclosing range, overlapping project ranges, and projects whose registry entries resolve to the same companion directory.
+The listing reports invalid project configs, non-main root projects, an `alignfirst.json` or `alignfirst.jsonc` outside a git main worktree, project or nested-directory ranges outside their enclosing range, overlapping project ranges, and projects whose registry entries resolve to the same companion directory.

@@ -21,7 +21,7 @@ sudo -H -u {{SERVICE_USER}} bash -lc 'git -C ~/projects clone <repository-url>'
 ```
 
 Prepare the clone through the setup skill's **Prepare a Project for an Assistant** route.
-It writes the bootstrap section and `.alignfirst.json`, and configures docmap, workspace, and
+It writes the bootstrap section and `alignfirst.json` or `alignfirst.jsonc`, and configures docmap, workspace, and
 `DEVELOPERS.md`. It installs no AlignFirst skill.
 
 <!-- TEAM_PLANS_SECTION -->
@@ -38,7 +38,7 @@ fi
 '
 ```
 
-From the new project root, link the work-files folder configured in `.alignfirst.json`:
+From the new project root, link the work-files folder configured in the selected project settings:
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc '
@@ -113,11 +113,11 @@ aligndev project free-ports --size <size>
 '
 ```
 
-When the projects directory declares several ranges, inspect `aligndev guide project` and pass `--range <code>` for the project kind. Record the returned first and last ports as `portRange` in `.alignfirst.json` while preparing the clone, and as `first` and `last` of the `ports` group in the dev-server config. The dev-server checks the claim on every command.
+When the projects directory declares several ranges, inspect `aligndev guide project` and pass `--range <code>` for the project kind. This is a lookup, not a reservation. Record first/last only in the branch-local workspace manifest's `devServer.ports`; companion/project conventions carry no duplicate claim.
 
 ## Check the inventory
 
-After writing `.alignfirst.json` and before workspace setup, run the read-only inventory gate:
+After writing project settings and the optional workspace manifest, prepare usable effective plans and ignored, untracked `.local-wt/`. Before workspace setup, run the read-only inventory gate:
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project doctor'
@@ -128,7 +128,7 @@ Stop when it reports an error. Resolve every configuration, discovery, and port 
 ## Set up the workspace
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm install && npm run workspace -- setup'
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && alignfirst workspace setup'
 ```
 
 <!-- DEV_SERVER_GATEWAY_SECTION -->
@@ -153,7 +153,7 @@ Remove every linked workspace through the project's workspace command, then dele
 next listing no longer shows it:
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npm run workspace -- remove <workspace>'
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && alignfirst workspace remove <workspace>'
 sudo -H -u {{SERVICE_USER}} bash -lc 'rm -rf ~/projects/<repo>'
 sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project list'
 ```

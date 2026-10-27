@@ -9,7 +9,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { fixturePortRange, patchDevServerRange } from "./fixture-personalization.ts";
+import { patchDevServerRange } from "./fixture-personalization.ts";
 
 const TEMPLATE =
   process.env.ALIGNDEV_FIXTURE_TEMPLATE ?? "/opt/aligndev-openclaw-tests/fixtures/template";
@@ -46,13 +46,28 @@ const BASE_BRANCH = "main";
 
 async function main() {
   // Stop while each project's scripts and teardown registry still exist.
-  const projects = [
-    ...FIXTURES.map(({ name, parent }) => `${parent}/${name}`),
-    ...lifecycleProjects(),
-  ];
+  const projects = gitProjects(PRIMARY);
   for (const dst of projects) {
     if (existsSync(dst)) {
-      await runWithTimeout("pnpm", ["-C", dst, "dev", "down", "--all"], 10_000);
+      await runWithTimeout("alignfirst", ["dev", "down", "--all"], 30_000, dst);
+      const inventory = spawnSync("alignfirst", ["workspace", "list", "--json"], {
+        cwd: dst,
+        encoding: "utf8",
+      });
+      if (inventory.error !== undefined || inventory.status !== 0) {
+        throw new Error(`Cannot inspect fixture cleanup in ${dst}: ${inventory.stderr}`);
+      }
+      for (const workspace of JSON.parse(inventory.stdout).workspaces) {
+        if (workspace.name !== null) {
+          await runWithTimeout(
+            "alignfirst",
+            ["workspace", "teardown", workspace.path],
+            30_000,
+            dst,
+          );
+        }
+      }
+      await runWithTimeout("alignfirst", ["workspace", "prune"], 30_000, dst);
     }
   }
   // Wipe everything under the fixture root and origins unconditionally. The
@@ -72,12 +87,12 @@ async function main() {
   }
 }
 
-function lifecycleProjects() {
-  if (!existsSync(LIFECYCLE)) return [];
-  return readdirSync(LIFECYCLE, { withFileTypes: true })
+function gitProjects(directory) {
+  if (!existsSync(directory)) return [];
+  if (existsSync(`${directory}/.git`)) return [directory];
+  return readdirSync(directory, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => `${LIFECYCLE}/${entry.name}`)
-    .filter((path) => existsSync(`${path}/package.json`));
+    .flatMap((entry) => gitProjects(`${directory}/${entry.name}`));
 }
 
 function createProjectsDirectory(path, marker) {
@@ -133,9 +148,8 @@ function patchFixture(dst, name, basePort) {
   const config = {
     schemaVersion: 1,
     ticketIdPattern: "^ABC-\\d+$",
-    portRange: fixturePortRange(basePort, basePort + 19),
   };
-  writeFileSync(`${dst}/.alignfirst.json`, `${JSON.stringify(config, null, 2)}\n`);
+  writeFileSync(`${dst}/alignfirst.json`, `${JSON.stringify(config, null, 2)}\n`);
 
   // Both entry points name the project, so the three otherwise identical copies
   // read distinctly — the app itself stays the "Comparables" product.
@@ -157,9 +171,8 @@ function patchHeading(path, pattern, heading) {
 }
 
 function patchPortRange(dst, basePort) {
-  const wrapperPath = `${dst}/scripts/workspace/dev-server.mjs`;
-  const wrapper = patchDevServerRange(readFileSync(wrapperPath, "utf8"), basePort, basePort + 19);
-  writeFileSync(wrapperPath, wrapper);
+  const path = `${dst}/alignfirst-workspace.json`;
+  writeFileSync(path, patchDevServerRange(readFileSync(path, "utf8"), basePort, basePort + 19));
 }
 
 function runGit(cwd, args, env) {
@@ -169,17 +182,23 @@ function runGit(cwd, args, env) {
   }
 }
 
-function runWithTimeout(cmd, args, timeoutMs) {
-  return new Promise((resolve) => {
-    const child = spawn(cmd, args, { stdio: "ignore" });
+function runWithTimeout(cmd, args, timeoutMs, cwd) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { cwd, stdio: "inherit" });
     const timer = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
-    child.on("exit", () => {
+    child.on("close", (code, signal) => {
       clearTimeout(timer);
-      resolve();
+      if (code === 0) resolve();
+      else
+        reject(
+          new Error(
+            `Fixture cleanup failed in ${cwd}: ${cmd} ${args.join(" ")} (${signal ?? code}); state retained.`,
+          ),
+        );
     });
-    child.on("error", () => {
+    child.on("error", (error) => {
       clearTimeout(timer);
-      resolve();
+      reject(error);
     });
   });
 }

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://cdn.jsdelivr.net/npm/@alignfirst/workspace/schemas/workspace-v1.schema.json",
+  "schemaVersion": 1,
+  "workspace": {
+    "finalize": [{ "name": "Install", "run": ["npm", "ci"] }],
+    "summary": "Workspace ${{ name }} — ${{ status }}\nPath: ${{ currentWorktree }}"
+  },
+  "devServer": {
+    "ports": { "first": 8100, "last": 8199, "declare": ["frontend"] },
+    "runFiles": [
+      {
+        "path": ".env",
+        "source": { "kind": "mainWorktree", "fallback": ".env.example" },
+        "patch": { "env": { "PORT": "${{ ports.frontend }}" } }
+      }
+    ],
+    "servers": [
+      {
+        "kind": "spawn",
+        "name": "frontend",
+        "exec": { "run": ["npm", "run", "dev:app"] },
+        "port": "frontend",
+        "ready": { "log": "ready|listening" }
+      }
+    ]
+  }
+}

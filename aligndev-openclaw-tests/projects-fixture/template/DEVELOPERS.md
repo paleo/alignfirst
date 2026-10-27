@@ -15,9 +15,9 @@ Node.js (≥22), pnpm, [Express 5](https://expressjs.com/). Entrypoint `app.mjs`
 ## Daily Commands
 
 ```sh
-pnpm dev up     # start in background; `pnpm dev down` to stop
-pnpm dev down   # stop the background server in this worktree
-pnpm dev        # start the app (foreground; CTRL+C to stop)
+alignfirst dev up     # start in background
+alignfirst dev down   # stop the background server in this worktree
+alignfirst dev        # start the app (foreground; CTRL+C to stop)
 pnpm test       # run the test suite
 pnpm lint       # syntax-check every module
 ```
@@ -26,7 +26,7 @@ pnpm lint       # syntax-check every module
 
 A **workspace** is a git worktree (with its branch) together with its own dev setup: dedicated ports, config files and a dev server you can bring up or down. Ports and run files arrive with the first `pnpm dev` or `pnpm dev setup`; workspace setup alone stays portless. Workspaces are isolated, so you can run several branches in parallel.
 
-Run `pnpm workspace --guide` for the full procedures (creating/removing workspaces, starting/stopping the dev server).
+Run `alignfirst workspace --guide` for the full procedures. The test harness supplies the built checkout CLI on PATH. `alignfirst-workspace.json` owns the recipe; project scripts consume its JSON ABI. Prepare ignored `.plans/` and `.local-wt/` before setup; setup never provisions missing work files.
 
 ## Conventions
 

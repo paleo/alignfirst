@@ -96,6 +96,8 @@ The harness runs `openclaw gateway call <method> --params '<json>' --json` insid
 
 ### Managed-worktree ownership
 
+Current AlignFirst lifecycle guidance uses `alignfirst workspace setup` to adopt, and `workspace teardown` before the external owner's deletion. Adoption alone does not transfer ownership. The observations and verification table below describe the dated OpenClaw probe, including its explicitly tested removal path; they are not authorization to replace external deletion with `remove`.
+
 OpenClaw removes a session's checkout after archiving, or after 7 idle days, only while HEAD is on the recorded `openclaw/<name>` branch. Switching the checkout to a ticket branch keeps it: `openclaw worktrees list --json` marks the record `gcProtection: "branch-moved"`, and `openclaw worktrees gc` defers it with that reason. From then on AlignDev's workspace rules apply. `workspace setup` without a branch adopts the checkout under its directory name.
 
 After `workspace remove` deletes the checkout, archiving succeeds and the next cleanup pass retires the orphan record: it leaves `worktrees list`, with no snapshot. The `openclaw/<name>` branch stays in the project repository in both cases. Capacity eviction (`worktreeMaxCount`, default 4096) can still purge a `branch-moved` checkout.

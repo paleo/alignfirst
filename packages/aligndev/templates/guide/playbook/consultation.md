@@ -21,13 +21,13 @@ Run `{{ALIGNFIRST}} context` from PROJECT_PATH.
 {{/codingAgent}}
 
 {{#thread}}
-Use the main worktree on the configured default branch. When the question explicitly concerns a branch or a PR, or follows ongoing branch work in this thread, use that branch's existing registered workspace instead: resolve it through the project's documented workspace list, or `{{ALIGNDEV}} worktree list --json` when no tooling exists. Report the limitation rather than inspecting a different branch when no worktree exists. Do not create a worktree merely to answer a question.
+Use the main worktree on the configured default branch. When the question explicitly concerns a branch or a PR, or follows ongoing branch work in this thread, use that branch's existing registered workspace instead: resolve it through `{{ALIGNFIRST}} workspace list --json`. Report the limitation rather than inspecting a different branch when no worktree exists. Do not create a worktree merely to answer a question.
 {{/thread}}
 {{#app}}
-When this conversation started in a linked worktree of the project, use that worktree and its branch as they are. Otherwise use the main worktree on the configured default branch. When the question explicitly concerns another branch or a PR, or follows ongoing branch work in this conversation, use that branch's existing registered workspace instead: resolve it through the project's documented workspace list, or `{{ALIGNDEV}} worktree list --json` when no tooling exists. Report the limitation rather than inspecting a different branch when no worktree exists. Do not create a worktree merely to answer a question.
+When this conversation started in a linked worktree of the project, use that worktree and its branch as they are. Otherwise use the main worktree on the configured default branch. When the question explicitly concerns another branch or a PR, or follows ongoing branch work in this conversation, use that branch's existing registered workspace instead: resolve it through `{{ALIGNFIRST}} workspace list --json`. Report the limitation rather than inspecting a different branch when no worktree exists. Do not create a worktree merely to answer a question.
 {{/app}}
 {{#codingAgent}}
-Use the session's worktree and its branch as they are. When the question explicitly concerns another branch or a PR, use that branch's existing registered workspace instead: resolve it through the project's documented workspace list, or `{{ALIGNDEV}} worktree list --json` when no tooling exists. Report the limitation rather than inspecting a different branch when no worktree exists. Do not create a worktree merely to answer a question.
+Use the session's worktree and its branch as they are. When the question explicitly concerns another branch or a PR, use that branch's existing registered workspace instead: resolve it through `{{ALIGNFIRST}} workspace list --json`. Report the limitation rather than inspecting a different branch when no worktree exists. Do not create a worktree merely to answer a question.
 {{/codingAgent}}
 
 {{#openclaw}}

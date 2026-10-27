@@ -1,92 +1,52 @@
 # Set Up a Project Through Its Companion
 
-Use this procedure for a repository that must stay untouched. Its AlignFirst files live in a **companion directory**: one directory per project, outside the repository, that reproduces the project's layout for AlignFirst files only. The companion registry, `~/.alignfirst/companions/registry.json`, declares which projects have one, and where. `alignfirst` and `aligndev` read each item from the companion, so nothing is written in the repository.
+A companion holds selected AlignFirst files outside the product repository. Protocols, work files and Docmap can leave repository files untouched. Workspace adoption additionally requires local `.local-wt` runtime storage and Git exclusions; obtain approval for that footprint. Companions supply neither workspace recipes nor runtime storage.
 
-This mode supports the AlignFirst protocols, the skills, the work files and docmap through the `alignfirst` CLI. It excludes the workspace system, the standalone `@alignfirst/docmap` package, a local `alignfirst` dependency, and any instruction-file section.
+## 1. Confirm scope
 
-For a project prepared for an assistant, apply [For an Assistant](#for-an-assistant) to the steps below.
+Inspect the project and obtain onboarding authorization. Install global command skills only when requested through [skills setup](alignfirst-skills-setup.md#install-the-skills). Assistant preparation skips command skills and global bootstrap installation. Do not change native coding-agent permission policy as part of workspace setup.
 
-## 1. Skills
+## 2. Register and select
 
-The commands below run the CLI through `npx`, with no installation. Install the skills through [Install the Skills](alignfirst-skills-setup.md#install-the-skills) when the user wants them. The `alignfirst` skill is unnecessary: `alignfirst context` prints the protocols.
-
-## 2. Declare the companion
-
-From the repository, register the project and read the layout, even when its existing plans are usable:
+From the main repository:
 
 ```sh
 npx -y alignfirst companion register [--dir <path>]
 npx -y alignfirst config --json
 ```
 
-`companion register` adds a companion for the project's main worktree, unless it already has one. A profile-only entry retains its original key and selection when gaining a directory. The new entry is `{ "dir": <path> }`. Pass `--dir` when the user wants the companion in a specific directory; without it, the companion goes under `~/.alignfirst/companions/`, with a name derived from the project path. The command refuses a directory that is or contains the home directory or `~/.alignfirst/companions`, or that overlaps the project or another companion.
+The default companion is under `~/.alignfirst/companions/`; relative `--dir` resolves there. Registration preserves independent profile selection and refuses unsafe overlaps. The registry is `~/.alignfirst/companions/registry.json`, keyed by main-worktree path under `projects`. Every linked worktree shares the selection.
 
-The new entry leaves every item on `"auto"`: an existing companion copy wins, else an existing project copy stays in use, else the companion is the creation target. For this companion-only procedure, explicitly select companion plans before creating them. Read `~/.alignfirst/companions/registry.json` and set only `projects[companion.key].items[".plans"]` to `"companion"`, using the key reported by config. Preserve all other registry fields, item settings, profile selections, and entries. Existing project plans stay untouched and unused; do not copy, merge, migrate, archive, or delete them.
+For companion-only work files, set only `projects[companion.key].items[".plans"]` to `"companion"`, using the report's key. Preserve other entries, fields, item selections and profiles. Existing project plans stay untouched and unused; do not copy, merge, migrate, archive or delete them.
 
-Reread `npx -y alignfirst config --json`. `companion.dir` is the companion directory, and `locations` gives each item's path. The independent top-level `aligndev` field reports a project profile selection or null. Verify that `.plans` and every item to write resolve inside `companion.dir`; missing `.alignfirst.json` and `DEVELOPERS.md` must have companion destinations. Stop and resolve any conflicting explicit selection with the user before writing.
+The six logical items are `alignfirst`, `.alignfirst-instructions`, `DEVELOPERS.md`, `docs`, `.plans` and `_aligndev`. `items.alignfirst` selects the configuration family, not an extension. With `auto`, an existing companion family wins, then project, then companion as creation destination. Explicit project/companion settings remain authoritative. Resolve location before extension; both JSON variants in the selected location fail. Legacy item keys require [the clean-break runbook](../../../docs/upgrading-multi-stack-workspaces.md).
 
-Write each item below at its verified `locations` path. Skip an existing item located in the project (`"in": "project"`): the repository provides it.
+Reread config. Verify `.plans` and each intended write resolve inside `companion.dir`. `locations.alignfirst` gives the actual selected filename or canonical `alignfirst.json` destination. Stop when explicit selection sends a required write into the project; resolve it with the user. Skip project-owned items that are already supplied there.
 
-## 3. Project config
+## 3. Prepare selected files
 
-Write `.alignfirst.json`, following [With `.alignfirst.json`](alignfirst-skills-setup.md#with-alignfirstjson). The `.gitignore` line does not apply.
+Write the project family using [project settings](alignfirst-skills-setup.md#with-alignfirstjson), including `schemaVersion: 1`. Add `.alignfirst-instructions/context.md` for project instructions beyond settings, without a bootstrap section. `alignfirst context` prints it.
 
-## 4. Project instructions
+Use existing repository docs; otherwise bootstrap selected companion docs when requested. Write `DEVELOPERS.md` at its verified destination for an assistant, documenting actual runtimes and install/build/test commands. No project runtime/version file is written in untouched mode.
 
-Write `.alignfirst-instructions/context.md` when the project needs instructions beyond `.alignfirst.json`, such as an essential-documentation list. It holds the prose a prepared project keeps in its `AGENTS.md`, without the bootstrap section. `alignfirst context` prints it.
+Create effective companion `.plans` while preserving existing content. With a separately authorized work-files repository, `alignfirst plans setup <clone>` creates its link at that location. For assistant preparation, follow `aligndev guide work-files-setup` before ticket reservation, request capture or coding delegation, even when project plans are usable. Verify the same target/selection from existing linked worktrees. No redundant project `.plans` link is needed.
 
-## 5. Docs
+## 4. Optional workspaces
 
-A `docs/` directory in the repository stays in use. Otherwise, bootstrap one at the companion path through [docmap-bootstrapping.md](docmap-bootstrapping.md) when the user wants project documentation. `alignfirst docmap` reads it there.
+Use `npx -y alignfirst workspace` for every stack, with or without a manifest. Without a branch-local manifest, readiness is protocol-ready and performs no application installation, build, port allocation or startup. Do not place a port claim in companion settings. A configured project range belongs only in branch-local `devServer.ports` and requires separate repository-change approval.
 
-## 6. Work files
+Before setup, obtain approval to ignore `.local-wt/` through local Git exclusions and create local runtime storage. This changes Git metadata/filesystem state even when tracked files stay untouched. External owners adopt with setup and run teardown before their own deletion. See [workspace setup](workspace-setup.md).
 
-Create `.plans` at the verified companion location, preserving any contents already there. With a work-files repository, run `npx -y alignfirst plans setup <clone>` from the repository: it creates the link at the companion location. Otherwise:
+## 5. Bootstrap and access
 
-```sh
-mkdir -p <companion>/.plans
-```
+For a direct interactive developer, offer the project-specific [global context line](alignfirst-skills-setup.md#repositories-without-alignfirst-instructions) with approval. The agent does not auto-read companion `AGENTS.md`. Assistant deployments skip this: AlignDev supplies context to the coding child and retains existing native permission handling. A shared symlink does not grant sandbox access; report a refusal without widening permissions silently.
 
-## 7. Agent bootstrap
+## 6. Check
 
-An agent reads a repository's `AGENTS.md` on its own, never a companion. Add the [global bootstrap line](alignfirst-skills-setup.md#repositories-without-alignfirst-instructions) for this project to the agent's global instruction file, after the user confirms. When the file already has the section, add the project's line to it.
+Run `npx -y alignfirst doctor` and `git status`. In untouched protocol/docmap mode the repository must show no change. For an assistant, run `aligndev project doctor --root <projects-directory>` before workspace setup. No live registry or external consumer edits are authorized merely by reading this procedure.
 
-## 8. Write access
+## Independent profiles and session trees
 
-An interactive coding agent asks before it writes outside the repository, and the companion lies outside it. With the user's consent, add the companions root to the agent's writable directories, or the companion directory itself when its `dir` lies outside that root:
+A registry entry `{ "aligndev": { "profile": "name" } }` selects a profile without a companion or file relocation. A combined entry retains that selection when `companion unregister` removes `dir/items`; companion contents remain unless separately authorized for removal.
 
-- Claude Code: `permissions.additionalDirectories` in `~/.claude/settings.json`;
-- Codex: `sandbox_workspace_write.writable_roots` in `~/.codex/config.toml`.
-
-Write real paths: when `~/.alignfirst/companions` is a symlink, add its target. `companion.dir` from step 2 is already a real path. Skip a path the setting already covers.
-
-## 9. Check
-
-```sh
-npx -y alignfirst doctor
-git status
-```
-
-The doctor must pass, and `git status` in the repository must show no change.
-
-## For an Assistant
-
-The [assistant contract](../SKILL.md#prepare-a-project-for-an-assistant) lives in the companion, except repository-local tooling and runtime files. Full workspace installation is optional. It changes these steps:
-
-- **Skills, bootstrap and write access (steps 1, 7 and 8):** skip them. The deployment installs the CLI globally, and `aligndev code` puts context into the launched agent's prompt. Claude Code/Codex normal modes receive `--add-dir <companion>`; Pi uses ordinary OS access and saved project trust.
-- **Companion (step 2):** always register and verify the companion under the user's onboarding authorization, independently of plans readiness. Retain the verified companion `DEVELOPERS.md` destination as DEVELOPERS_PATH.
-- **Work files (step 6):** before ticket reservation, request capture or coding delegation, follow the `work-files-setup` guide topic of `aligndev` starting at section 3 under that authorization, even when project plans are usable. Its recipe performs step 2's explicit companion-plans selection for all worktrees without copying existing work files. A separate work-files repository and an unused tracked project copy do not block usable selected companion plans.
-- **Project config (step 3):** `.alignfirst.json` is required. For a project that declares ports, reserve its block with `aligndev project free-ports --size <n>` first, then write it as `portRange`.
-- **Docs (step 5):** bootstrap `docs/` in the companion when the repository has none.
-- **Developer guide:** write `DEVELOPERS.md` in the companion. Document existing project workspace tooling when present, including non-Node implementations. Otherwise use `aligndev worktree` for isolated work and record the repository's separate install/build/test and application-lifecycle commands. Companion plans resolve directly from every worktree, without a `.plans` link. Name runtime requirements there; the repository receives no version file.
-- **Check (step 9):** `aligndev project doctor --root <projects-directory>` must pass too.
-
-## Select a Profile Without a Companion
-
-The same registry accepts `{ "aligndev": { "profile": "<name>" } }` under the project's main-worktree key. Edit it by hand; AlignDev validates the selected name against `code.profiles` in its settings. This entry creates no companion or separate session tree. Linked worktrees share the selection and keep their own project file locations.
-
-An entry can contain both `dir` and `aligndev`. `companion unregister` removes `dir/items`, preserving the selection and reporting the remaining profile-only entry. Remove that selection through a separate registry edit. An entry with only `aligndev` has no companion to unregister.
-
-## Keep Only aligndev's Session Files Out
-
-When usable project-local plans stay effective and only `aligndev`'s session files must live elsewhere, the entry's `items` is `{ ".plans": "project", "_aligndev": "companion" }`. AlignFirst requires those plans to be untracked by the project's own repository; shared mode through a separate work-files repository remains supported. The full companion procedure does not apply.
+When only sessions should stay outside usable project plans, use `items: { ".plans": "project", "_aligndev": "companion" }`. Effective plans must remain untracked by the product repository. Shared work-files repositories are supported; a separate session tree stays independent.

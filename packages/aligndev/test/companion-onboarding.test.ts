@@ -78,7 +78,7 @@ describe("explicit companion-only onboarding", () => {
       expect(route).toContain("even when existing project plans are usable");
       expect(route).toContain("starting at section 3");
       expect(route).toContain("every item to write resolve inside `companion.dir`");
-      expect(route).toContain("Missing `.alignfirst.json` and `DEVELOPERS.md`");
+      expect(route).toContain("Missing `locations.alignfirst` and `DEVELOPERS.md`");
       expect(route).toContain("stop and resolve that selection with the user");
       expect(route).toContain("without copying them");
     },
@@ -112,18 +112,15 @@ describe("explicit companion-only onboarding", () => {
 
   it("keeps companion declaration and explicit plans selection in the setup skill", () => {
     const reference = readFileSync(COMPANION_SETUP, "utf8");
-    const assistant = reference.split("## For an Assistant\n")[1].split("\n## Select a Profile")[0];
-    expect(assistant).toContain("**Companion (step 2):** always register and verify the companion");
-    expect(assistant).toContain("independently of plans readiness");
-    expect(assistant).toContain("starting at section 3 under that authorization");
-    expect(assistant).toContain("even when project plans are usable");
-    expect(assistant).not.toContain("Usable plans need no preparation");
+    expect(reference).toContain("obtain onboarding authorization");
+    expect(reference).toContain("npx -y alignfirst companion register");
+    expect(reference).toContain("even when project plans are usable");
+    expect(reference).toContain("before ticket reservation, request capture or coding delegation");
+    expect(reference).not.toContain("Usable plans need no preparation");
     expect(reference).toContain('`projects[companion.key].items[".plans"]` to `"companion"`');
-    expect(reference).toContain(
-      "Preserve all other registry fields, item settings, profile selections",
-    );
-    expect(reference).toContain("every item to write resolve inside `companion.dir`");
-    expect(reference).toContain("do not copy, merge, migrate, archive, or delete them");
+    expect(reference).toContain("Preserve other entries, fields, item selections and profiles");
+    expect(reference).toContain("each intended write resolve inside `companion.dir`");
+    expect(reference).toMatch(/do not copy, merge, migrate, archive,? or delete them/);
   });
 
   it.each(REGISTRATION_STATES)(

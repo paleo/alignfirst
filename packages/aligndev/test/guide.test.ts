@@ -485,17 +485,18 @@ describe("aligndev guide playbook", () => {
     expect(session.stdout).toContain("Write `{TICKET_DIR}A1-request.md`");
   });
 
-  it("uses lightweight worktrees and optional full workspace onboarding", async () => {
+  it("uses unified workspace preparation and optional manifests", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, OPENCLAW_CONFIG);
     for (const topic of ["project-workspace-setup", "working-session", "project-lifecycle"]) {
       const result = await runGuide(fixture, ["--channel", "slack", topic]);
       expect(result.stdout, topic).not.toContain("main-worktree mode");
       expect(result.stdout, topic).not.toContain("git switch -c {TICKET_ID}/{1-3-words}");
-      expect(result.stdout, topic).toContain("aligndev worktree");
+      expect(result.stdout, topic).toContain("alignfirst workspace");
+      expect(result.stdout, topic).not.toContain("aligndev worktree");
     }
     const lifecycle = (await runGuide(fixture, ["--channel", "slack", "project-lifecycle"])).stdout;
-    expect(lifecycle).toContain("The workspace system is optional");
+    expect(lifecycle).toContain("The workspace manifest is optional");
     expect(lifecycle).toContain("The project is prepared when DEVELOPERS_PATH exists");
     expect(lifecycle).toContain("Wait for explicit confirmation of those exact paths");
     expect(lifecycle).toContain("Stop immediately if any removal fails");
@@ -861,11 +862,9 @@ describe("app conversations", () => {
       expect(step2.indexOf("A status request never creates a branch")).toBeLessThan(
         step2.indexOf("`git switch -c {TICKET_ID}/{1-3-words} origin/<default>`"),
       );
-      expect(step2).toContain(
-        "`workspace setup` without a branch for the AlignFirst workspace system",
-      );
-      expect(step2).toContain("run `aligndev worktree setup --json` in that worktree");
-      expect(step2).toContain("Neither runs on the main worktree.");
+      expect(step2).toContain("run `alignfirst workspace setup --json` in the selected worktree");
+      expect(step2).toContain("adopts its exact path and branch");
+      expect(step2).toContain("in the foreground");
       const ownership = "so OpenClaw retains it and never removes it";
       if (app) expect(step2).toContain(ownership);
       else expect(step2).not.toContain(ownership);
@@ -878,7 +877,7 @@ describe("app conversations", () => {
   );
 });
 
-describe("work-files and lightweight worktree runbooks", () => {
+describe("work-files and unified workspace runbooks", () => {
   it.each(PLATFORMS)("keeps coding discussions out of consultation for %s", async (platform) => {
     const fixture = makeFixture();
     writeConfig(fixture.home, {
@@ -1005,15 +1004,15 @@ describe("work-files and lightweight worktree runbooks", () => {
       );
       for (const text of [
         "You run",
-        `${forms.aligndev} worktree list/add/setup/remove`,
+        `${forms.alignfirst} workspace`,
         "External tools may own Git creation and deletion",
         "rather than creating another branch",
-        "repair reported conflicts and retry after partial preparation",
-        "repository preparation and shutdown remain separate",
-        "no lightweight teardown command or pre-deletion hook",
-        "When an external tool owns deletion, follow its lifecycle",
+        "Repair reported conflicts and retry partial setup",
+        "Default readiness is protocol-ready",
+        `${forms.alignfirst} workspace teardown`,
+        "When an external tool owns deletion",
         "A branch worked on in place stays checked out",
-        "needs no coding launch or work-files preparation",
+        "needs a coding launch or work-files preparation",
         "only when that PR/MR is merged",
         "Leave the others intact: in-place work, no PR/MR, or an unmerged PR/MR",
         "Stop on the first failed removal",
@@ -1031,22 +1030,18 @@ describe("work-files and lightweight worktree runbooks", () => {
         `\`${forms.alignfirst} plans check\` verifies it, and \`${guide} work-files-setup\` prepares it.`,
       );
       for (const text of [
-        "whatever the implementation",
-        `${forms.aligndev} worktree list --json`,
-        `${forms.aligndev} worktree add <path> <existing-branch> --json`,
-        `${forms.aligndev} worktree add <path> -b <new-branch> <explicit-base-ref> --json`,
-        `${forms.aligndev} worktree setup <exact-worktree-root> --json`,
-        "Registration alone does not prove readiness",
-        "including for externally created worktrees",
-        "without creating or switching branches",
-        "current root even from nested cwd",
-        "exact registered root of the same repository",
+        "configured and manifest-free projects",
+        `${forms.alignfirst} workspace list --json`,
+        `${forms.alignfirst} workspace setup <existing-branch> --json`,
+        `${forms.alignfirst} workspace setup -c <new-branch> --from <explicit-base-ref> --json`,
+        `${forms.alignfirst} workspace setup --path <exact-worktree-root> --json`,
+        "preserves the selected path and branch",
+        "current root, including from nested cwd",
         "Conflicts remain untouched",
-        "retry the idempotent setup to complete partial preparation",
-        "follow the project's documented readiness/setup procedure when it has tooling",
-        "An external tool owning Git creation and deletion is a separate case",
-        `run \`${forms.aligndev} worktree add\` yourself`,
-        "absolute sibling path",
+        "retry setup",
+        "external owner retains Git creation and deletion",
+        "Run preparation yourself before coding delegation",
+        "--path <absolute-path>",
         "a dangling symlink included",
         "reuse the path it reports for an occupied branch",
         "for a status request, end the turn",
@@ -1059,8 +1054,9 @@ describe("work-files and lightweight worktree runbooks", () => {
         "If Step 4 was skipped, select and fetch the base ref as described there",
         "a tracked `.local` that stays branch-local",
         "before any `git` inspection or prose",
-        "`ready` covers the worktree and work files only",
-        "documented install/build/test preparation separately",
+        "describe `ready` as protocol-ready",
+        "Do not claim dependencies are installed",
+        "install/build/test work separately",
         "matches the explicit user choice",
         "rather than choosing another ticket branch",
       ])
@@ -1076,7 +1072,7 @@ describe("work-files and lightweight worktree runbooks", () => {
         expect(setup).toContain("**Any other branch**");
       }
       const consultation = guides.consultation;
-      expect(consultation).toContain(`${forms.aligndev} worktree list --json`);
+      expect(consultation).toContain(`${forms.alignfirst} workspace list --json`);
       expect(consultation).toContain("Do not create a worktree merely to answer a question");
       const delegate = consultation.slice(
         consultation.indexOf("## Step 3"),
@@ -1545,7 +1541,9 @@ describe("aligndev guide project", () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toMatch(/^# Projects guide\n/);
     expect(result.stdout).toContain("aligndev guide project [--root <path>]");
-    expect(result.stdout).toContain("setup guide writes the returned block as `portRange`");
+    expect(result.stdout).toContain(
+      "setup guide writes the returned block only in the branch-local workspace manifest's `devServer.ports`",
+    );
     expect(result.stdout).toContain("`~/.alignfirst/companions/registry.json`");
     expect(result.stdout).not.toContain("## Directory");
     expect(result.stdout).not.toContain("{{");
