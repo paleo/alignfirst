@@ -940,10 +940,10 @@ describe("workspace teardown (e2e)", () => {
     TEST_TIMEOUT_MS,
   );
 
-  it(
-    "preserves files created by purge unless removal was explicitly forced",
-    () => {
-      const fx = fixture({ portless: true });
+  it.each([false, true])(
+    "preserves purge-created files hidden by Git config unless explicitly forced (companion runtime=%s)",
+    (companionRuntime) => {
+      const fx = fixture({ portless: true, companionRuntime });
       const path = join(fx.repo, "alignfirst.json");
       const manifest = JSON.parse(readFileSync(path, "utf8"));
       manifest.workspace.purge.push({
@@ -959,14 +959,36 @@ describe("workspace teardown (e2e)", () => {
       git(fx.repo, ["commit", "-m", "Add purge recovery evidence"]);
       const linked = addWorktree(fx, "managed/review", "review");
       setup(fx.repo, linked);
+      git(fx.repo, ["config", "status.showUntrackedFiles", "no"]);
+      const beforeGit = git(fx.repo, ["worktree", "list", "--porcelain"]);
+      const beforeRefs = git(fx.repo, ["show-ref"]);
+      const beforeGitFile = readFileSync(join(linked, ".git"), "utf8");
+      const runtimeDir = companionRuntime
+        ? externalStorage(fx, linked).runtimeDir
+        : join(linked, ".local-wt");
       const result = runCli(fx.repo, ["remove", linked]);
       expect(result.status, result.stderr).toBe(1);
       expect(result.stderr).toContain("Git worktree operation failed");
       expect(readFileSync(join(linked, "valuable.txt"), "utf8")).toBe("preserve after purge\n");
-      expect(git(fx.repo, ["worktree", "list", "--porcelain"])).toContain(linked);
-      expect(runCli(fx.repo, ["remove", linked, "--force"]).status).toBe(0);
+      expect(git(linked, ["status", "--porcelain"])).toBe("");
+      expect(git(fx.repo, ["worktree", "list", "--porcelain"])).toBe(beforeGit);
+      expect(git(fx.repo, ["show-ref"])).toBe(beforeRefs);
+      expect(readFileSync(join(linked, ".git"), "utf8")).toBe(beforeGitFile);
+      expect(entryAt(fx.repo, linked)).toBeUndefined();
+      expect(existsSync(join(runtimeDir, "logs/workspace-setup.log"))).toBe(true);
+      if (companionRuntime)
+        expect(Object.values(readWorkspaces(fx.repo).runtimeOwners ?? {})).toMatchObject([
+          { state: "deletionPending", runtimeDir },
+        ]);
+      expect(purges(fx.repo)).toHaveLength(1);
+      const retry = runCli(fx.repo, ["remove", linked, "--force"]);
+      expect(retry.status, retry.stderr).toBe(0);
       expect(existsSync(linked)).toBe(false);
+      expect(existsSync(runtimeDir)).toBe(false);
+      expect(git(fx.repo, ["worktree", "list", "--porcelain"])).not.toContain(linked);
       expect(git(fx.repo, ["branch", "--list", "review"])).toContain("review");
+      expect(purges(fx.repo)).toHaveLength(1);
+      if (companionRuntime) expect(readWorkspaces(fx.repo).runtimeOwners).toEqual({});
     },
     TEST_TIMEOUT_MS,
   );

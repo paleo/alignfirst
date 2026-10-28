@@ -296,7 +296,18 @@ export function getWorktreeBranch(worktreePath: string): string | undefined {
 }
 
 export function removeWorktree(worktreePath: string, run: RunCtx, force: boolean): void {
-  runGitWorktree(["worktree", "remove", ...(force ? ["--force"] : []), worktreePath], run.cwd, run);
+  runGitWorktree(
+    [
+      "-c",
+      "status.showUntrackedFiles=all",
+      "worktree",
+      "remove",
+      ...(force ? ["--force"] : []),
+      worktreePath,
+    ],
+    run.cwd,
+    run,
+  );
 }
 
 /** Pure function that produces the basename of a worktree directory from a branch. */
