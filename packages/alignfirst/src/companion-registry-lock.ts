@@ -1,12 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
   closeSync,
-  fstatSync,
   linkSync,
   mkdirSync,
   openSync,
   readFileSync,
-  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -14,15 +12,6 @@ import { dirname } from "node:path";
 import { setTimeout } from "node:timers/promises";
 
 import { CliError } from "./cli-error.js";
-
-const STALE_INCOMPLETE_MS = 30_000;
-
-interface LockSnapshot {
-  content: string;
-  dev: number;
-  ino: number;
-  mtimeMs: number;
-}
 
 /** Companion mutations never hold this lock while acquiring a workspace runtime lock. */
 export async function withCompanionRegistryLock<T>(path: string, mutate: () => T): Promise<T> {
@@ -44,10 +33,14 @@ export async function withCompanionRegistryLock<T>(path: string, mutate: () => T
         break;
       } catch (error) {
         if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
-        const previous = readLock(lock);
-        if (previous && staleLock(previous)) recoverLock(lock, previous);
+        // Recovery requires quiescing all writers and waiters, including paused publishers.
         if (Date.now() >= deadline)
-          throw new CliError(`Timed out waiting for companion registry lock ${lock}.`);
+          throw new CliError(
+            `Timed out waiting for companion registry lock ${lock}. ` +
+              "If abandoned or incomplete, quiesce all companion-registry writers and waiters, " +
+              "including paused publishers and older CLI processes, before removing only this lock and retrying. " +
+              "A dead recorded PID alone does not establish safe recovery.",
+          );
         await setTimeout(25);
       }
     }
@@ -59,62 +52,6 @@ export async function withCompanionRegistryLock<T>(path: string, mutate: () => T
   } finally {
     rmSync(candidate, { force: true });
   }
-}
-
-function readLock(path: string): LockSnapshot | undefined {
-  let fd: number;
-  try {
-    fd = openSync(path, "r");
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
-    throw error;
-  }
-  try {
-    const content = readFileSync(fd, "utf8");
-    const { dev, ino, mtimeMs } = fstatSync(fd);
-    return { content, dev, ino, mtimeMs };
-  } finally {
-    closeSync(fd);
-  }
-}
-
-function staleLock(snapshot: LockSnapshot): boolean {
-  const pid = Number(snapshot.content.split(":")[0]);
-  if (Number.isSafeInteger(pid) && pid > 0) return !processAlive(pid);
-  return Date.now() - snapshot.mtimeMs >= STALE_INCOMPLETE_MS;
-}
-
-function recoverLock(path: string, previous: LockSnapshot): void {
-  if (!sameLock(path, previous)) return;
-  const aside = `${path}.${randomUUID()}`;
-  try {
-    renameSync(path, aside);
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
-    throw error;
-  }
-  try {
-    if (!sameLock(aside, previous)) {
-      try {
-        linkSync(aside, path);
-      } catch (error) {
-        if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
-      }
-    }
-  } finally {
-    rmSync(aside, { force: true });
-  }
-}
-
-function sameLock(path: string, previous: LockSnapshot): boolean {
-  const current = readLock(path);
-  return (
-    current !== undefined &&
-    current.dev === previous.dev &&
-    current.ino === previous.ino &&
-    current.mtimeMs === previous.mtimeMs &&
-    current.content === previous.content
-  );
 }
 
 function lockContent(path: string): string | undefined {
