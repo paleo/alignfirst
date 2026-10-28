@@ -1,5 +1,16 @@
 # alignfirst
 
+## 0.16.0
+
+### Minor Changes
+
+- 3611bd2: Added multi-stack workspace/dev commands, unified `alignfirst.json`/`.jsonc` configuration, companion recipes/runtime storage and explicit developer instructions. Before upgrading, follow `docs/upgrading-multi-stack-workspaces.md` to account for resources and convert retired wrappers, settings, script context and runtime state together.
+
+### Patch Changes
+
+- Updated dependencies [3611bd2]
+  - @alignfirst/workspace@0.42.0
+
 ## 0.15.0
 
 ### Minor Changes
