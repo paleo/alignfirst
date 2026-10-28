@@ -1,6 +1,6 @@
 import type { Invocation, InvocationCommand } from "@alignfirst/docmap/invocation";
 import type { WorkspaceCommands } from "@alignfirst/workspace";
-import type { ResolvedProjectConfig } from "./project-config.js";
+import type { ResolvedProjectConfig } from "./project-config-types.js";
 import type { ProjectLayout } from "./project-layout.js";
 
 export interface Output {

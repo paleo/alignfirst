@@ -7,7 +7,7 @@ import { errorMessage } from "./errors.js";
 import { displayPath } from "./format.js";
 import { gitOutputOrUndefined, gitSucceeds } from "./git.js";
 import { resolvePlansMode } from "./plans/mode.js";
-import type { CommitConfig } from "./project-config.js";
+import type { CommitConfig } from "./project-config-types.js";
 import { layoutOf } from "./project-layout.js";
 
 const NO_AGENT_ATTRIBUTION =

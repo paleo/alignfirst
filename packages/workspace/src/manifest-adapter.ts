@@ -12,7 +12,7 @@ import type {
   TextOutput,
   WorkspaceManifest,
   WorkspaceSettings,
-} from "./config.js";
+} from "./workspace-config-types.js";
 import { resolveDevServerLimit } from "./config.js";
 import type { RunFilesInputsProvider } from "./dev-setup.js";
 import type {

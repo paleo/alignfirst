@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { WorkspaceManifest, Command } from "../../src/config.js";
+import type { WorkspaceManifest, Command } from "../../src/workspace-config-types.js";
 import type { WorkspacesRegistry } from "../../src/workspaces.js";
 
 export const packageRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));

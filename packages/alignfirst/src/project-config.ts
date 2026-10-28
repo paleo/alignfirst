@@ -2,56 +2,22 @@ import {
   readConfigFile,
   validateConfigSchema,
   validateWorkspaceSettings,
-  type WorkspaceManifest,
 } from "@alignfirst/workspace/config";
 import { readFileSync } from "node:fs";
 
 import { CliError } from "./cli-error.js";
 import { errorMessage } from "./errors.js";
 import type { ProjectLayout } from "./project-layout.js";
+import type {
+  ProjectConfig,
+  ProjectConfigFile,
+  ResolvedProjectConfig,
+} from "./project-config-types.js";
 
 export const PROJECT_CONFIG_FAMILY = "alignfirst";
 const projectSchema: object = JSON.parse(
   readFileSync(new URL("../schemas/alignfirst-v1.schema.json", import.meta.url), "utf8"),
 );
-
-export interface ProjectConfig extends WorkspaceManifest {
-  schemaVersion: 1;
-  $schema?: string;
-  conventions?: ConventionsConfig;
-  plans?: PlansConfig;
-  developerInstructions?: string;
-}
-
-export interface ConventionsConfig {
-  ticketIdPattern?: string;
-  git?: GitConfig;
-}
-
-export interface PlansConfig {
-  repositoryFolder?: string;
-  autoArchive?: boolean;
-}
-
-export interface GitConfig {
-  defaultBranch?: string;
-  branchNameTemplate?: string;
-  commit?: CommitConfig;
-  agentCoauthoring?: boolean;
-}
-
-export interface CommitConfig {
-  style: "conventionalCommit";
-  ticketReference?: "bracketed" | "bracketedHash";
-}
-
-export interface ResolvedProjectConfig extends ProjectConfigFile {
-  source: "project" | "companion";
-}
-
-export interface ProjectConfigFile {
-  config: ProjectConfig;
-}
 
 export function resolveProjectConfig(layout: ProjectLayout): ResolvedProjectConfig | undefined {
   return layout.projectConfig;

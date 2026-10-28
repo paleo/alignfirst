@@ -14,7 +14,8 @@ import { errorMessage } from "../errors.js";
 import { parseBareCommandArgs } from "../parse-args.js";
 import { resolvePlansMode } from "../plans/mode.js";
 import { findStoppedRebase } from "../plans/rebase.js";
-import { resolveProjectConfig, type ResolvedProjectConfig } from "../project-config.js";
+import { resolveProjectConfig } from "../project-config.js";
+import type { ResolvedProjectConfig } from "../project-config-types.js";
 import {
   type CompanionLayout,
   type NestedCompanionDir,

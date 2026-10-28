@@ -9,8 +9,8 @@ import {
   resolveConfigFamily,
   resolveDevServerLimit,
   validateWorkspaceSettings,
-  type WorkspaceManifest,
 } from "../src/config.js";
+import type { WorkspaceManifest } from "../src/workspace-config-types.js";
 
 const dirs: string[] = [];
 afterEach(() => {

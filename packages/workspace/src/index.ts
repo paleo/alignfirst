@@ -28,7 +28,7 @@ export type {
   Server,
   ConfigFileLocation,
   WorkspaceConfigReport,
-} from "./config.js";
+} from "./workspace-config-types.js";
 export { resolveWorkspaceStorage, runtimeDirForTarget } from "./storage.js";
 export type { WorkspaceStorage, WorkspaceStorageSelection, RuntimePathInput } from "./storage.js";
 export { adaptWorkspaceManifest } from "./manifest-adapter.js";

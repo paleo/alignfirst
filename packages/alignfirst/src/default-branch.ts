@@ -1,5 +1,5 @@
 import { gitOutputOrUndefined, gitSucceeds } from "./git.js";
-import type { ProjectConfig } from "./project-config.js";
+import type { ProjectConfig } from "./project-config-types.js";
 
 export interface DefaultBranch {
   name: string;

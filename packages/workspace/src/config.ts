@@ -5,96 +5,29 @@ import { fullFormats } from "ajv-formats/dist/formats.js";
 import { getNodeValue, type ParseError, parseTree } from "jsonc-parser";
 
 import { ConfigError } from "./errors.js";
-import { type DevPortsConfig, type PortRange, resolveDevPortsConfig } from "./ports.js";
+import { resolveDevPortsConfig } from "./ports.js";
+import type { ConfigFileLocation, EnvNumber, WorkspaceManifest } from "./workspace-config-types.js";
+
 const validators = new WeakMap<object, ValidateFunction>();
 const ajv = new Ajv({ allErrors: true, ownProperties: true });
 ajv.addFormat("uri", fullFormats.uri);
 ajv.addFormat("date-time", fullFormats["date-time"]);
 
-export interface WorkspaceManifest {
-  workspace?: WorkspaceSettings;
-  devServer?: DevSettings;
-}
-
-export interface WorkspaceSettings {
-  sharedDirs?: string[];
-  gitignoredFiles?: FileEntry[];
-  preSetup?: Step[];
-  finalize?: Step[];
-  purge?: PurgeStep[];
-  summary?: TextOutput;
-}
-
-export interface DevSettings {
-  ports?: DevPortsConfig;
-  runFiles?: FileEntry[];
-  runFilesInputs?: string[] | { command: Command };
-  setup?: Step[];
-  servers: Server[];
-  maxConcurrentDevServers?: number | EnvNumber;
-  summary?: TextOutput;
-}
-
-export interface EnvNumber {
-  env: string;
-  default: number;
-}
-
-export interface FileEntry {
-  path: string;
-  source:
-    | { kind: "mainWorktree"; fallback?: string }
-    | { kind: "committed"; path: string }
-    | { kind: "content"; content: TextOutput };
-  patch?: { env: Record<string, string> } | { command: Command };
-  optional?: boolean;
-}
-
-export type TextOutput = string | { command: Command };
-
-export interface Command {
-  run: string | string[];
-  cwd?: string;
-  env?: Record<string, string>;
-}
-
-export interface Step extends Command {
-  name: string;
-}
-
-export interface PurgeStep extends Step {
-  continueOnError?: boolean;
-}
-
-export type Server =
-  | {
-      kind: "spawn";
-      name: string;
-      exec: Command;
-      port?: string | number;
-      ready: { log: string };
-      error?: ServerError;
-    }
-  | { kind: "command"; name: string; start: Command; stop?: Command };
-
-export interface ServerError {
-  preset?: "node";
-  log?: string;
-}
-
-export interface ConfigFileLocation {
-  path: string;
-  exists: boolean;
-}
-
-export interface WorkspaceConfigReport {
-  location: ConfigFileLocation & { in: "project" | "companion" };
-  registryDir: string;
-  runtimeDir: string;
-  schemaVersion: number | null;
-  portRange: PortRange | null;
-  hasDevServer: boolean;
-}
+export type {
+  WorkspaceManifest,
+  WorkspaceSettings,
+  DevSettings,
+  EnvNumber,
+  FileEntry,
+  TextOutput,
+  Command,
+  Step,
+  PurgeStep,
+  Server,
+  ServerError,
+  ConfigFileLocation,
+  WorkspaceConfigReport,
+} from "./workspace-config-types.js";
 
 /** Presence only: callers can select a location before rejecting ambiguous extensions. */
 export function configFamilyExists(directory: string, family: string): boolean {

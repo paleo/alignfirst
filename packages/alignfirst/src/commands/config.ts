@@ -3,11 +3,8 @@ import { CliError } from "../cli-error.js";
 import { parseArgs } from "node:util";
 import type { CommandContext } from "../context.js";
 import { parseCommandArgs } from "../parse-args.js";
-import {
-  type ProjectConfig,
-  resolveProjectConfig,
-  type ResolvedProjectConfig,
-} from "../project-config.js";
+import { resolveProjectConfig } from "../project-config.js";
+import type { ProjectConfig, ResolvedProjectConfig } from "../project-config-types.js";
 import {
   type AligndevProjectSettings,
   type CompanionLayout,

@@ -37,11 +37,8 @@ import {
   shapeError,
 } from "./json-shape.js";
 import { warnUnknownSetting } from "./settings-warning.js";
-import {
-  PROJECT_CONFIG_FAMILY,
-  readProjectConfig,
-  type ResolvedProjectConfig,
-} from "./project-config.js";
+import { PROJECT_CONFIG_FAMILY, readProjectConfig } from "./project-config.js";
+import type { ResolvedProjectConfig } from "./project-config-types.js";
 
 export const ITEM_NAMES = [
   "alignfirst",

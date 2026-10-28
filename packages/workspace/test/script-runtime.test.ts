@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { executeCommand } from "../src/command-executor.js";
-import type { Command, ServerError, WorkspaceManifest } from "../src/config.js";
+import type { Command, ServerError, WorkspaceManifest } from "../src/workspace-config-types.js";
 import { seedFiles, type SetupContextBase } from "../src/file-entries.js";
 import { adaptWorkspaceManifest } from "../src/manifest-adapter.js";
 import { isProcessAlive, killProcessGroup } from "../src/process-control.js";

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
-import type { Command } from "./config.js";
+import type { Command } from "./workspace-config-types.js";
 import { ConfigError } from "./errors.js";
 import type { SetupContextBase } from "./file-entries.js";
 import { composeProjectName } from "./helpers.js";

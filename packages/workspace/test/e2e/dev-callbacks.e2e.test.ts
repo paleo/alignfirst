@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { resolveWorkspaceStorage } from "../../src/storage.js";
-import type { WorkspaceManifest } from "../../src/config.js";
+import type { WorkspaceManifest } from "../../src/workspace-config-types.js";
 import type { DevServerEntry } from "../../src/dev-servers-registry.js";
 import type { ServerContext } from "../../src/server-descriptor.js";
 import {
