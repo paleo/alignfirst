@@ -1,4 +1,5 @@
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -133,11 +134,11 @@ describe("installed workspace CLI cancellation", () => {
       const name = Object.keys(captured.workspaces)[0];
       expect(captured.workspaces[name].cleanupOwner?.pid).toBe(running.child.pid);
       expect(captured.workspaces[name].ports).toBeDefined();
+      const exited = once(running.child, "exit");
       running.child.kill("SIGKILL");
-      await waitUntil(
-        () => running.child.pid !== undefined && !isAlive(running.child.pid),
-        "cleaner death",
-      );
+      // Reap the CLI before synchronous retries; purge still holds its output pipes open.
+      await exited;
+      expect(running.child.signalCode).toBe("SIGKILL");
       expect(pids.every(isAlive)).toBe(true);
       for (const args of [
         ["teardown", linked],
