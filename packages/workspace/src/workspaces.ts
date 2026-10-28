@@ -96,6 +96,7 @@ const REGISTRY_SCHEMA = {
           },
           failure: FAILURE_SCHEMA,
           cleanupPending: { type: "boolean" },
+          cleanupOwner: CLAIM_SCHEMA,
           preparationOwner: CLAIM_SCHEMA,
           main: { type: "boolean" },
           neverFinalized: { type: "boolean" },
@@ -149,6 +150,8 @@ export interface WorkspaceEntry {
   failure?: { at: string; message: string };
   /** Destructive workspace cleanup must succeed before any new preparation or startup. */
   cleanupPending?: boolean;
+  /** Exclusive stop/purge owner. Only an explicit cleaner may replace a dead PID's token. */
+  cleanupOwner?: OwnershipClaim;
   preparationOwner?: OwnershipClaim;
   /** `true` for the main-worktree entry. Absent on linked entries. */
   main?: boolean;

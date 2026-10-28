@@ -4,12 +4,13 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { WorkspaceManifest } from "../../src/config.js";
+import type { WorkspaceManifest } from "../../src/workspace-config-types.js";
 import {
   alignfirstBin,
   cliExecutable,
   createFixtureRepo,
   type FixtureRepo,
+  type FixtureOptions,
   readWorkspaces,
   runCli,
   runDev,
@@ -44,7 +45,11 @@ afterEach(async () => {
   ownedPids.clear();
   for (const fx of fixtures.splice(0)) {
     const entries = readWorkspaces(fx.repo).workspaces;
-    if (Object.values(entries).some((entry) => entry.status === "pending")) {
+    if (
+      Object.values(entries).some(
+        (entry) => entry.status === "pending" && entry.cleanupPending !== true,
+      )
+    ) {
       const result = runCli(fx.repo, ["wait"]);
       expect(result.status, result.stderr).toBe(0);
     }
@@ -53,6 +58,84 @@ afterEach(async () => {
 });
 
 describe("installed workspace CLI cancellation", () => {
+  it.each([false, true])(
+    "excludes a second cleaner while permitting unrelated cleanup, companion=%s",
+    async (companionRuntime) => {
+      const fx = fixture({ companionRuntime });
+      const linked = join(fx.root, "linked");
+      const sibling = join(fx.root, "sibling");
+      for (const [branch, path] of [
+        ["linked", linked],
+        ["sibling", sibling],
+      ]) {
+        execFileSync("git", ["worktree", "add", "-b", branch, path], { cwd: fx.repo });
+        expect(runCli(fx.repo, ["setup", "--path", path]).status).toBe(0);
+      }
+      installBarrier(fx, linked, "purge");
+      const resource = join(linked, "replacement-resource");
+      writeFileSync(resource, "original");
+      const purgeScript = join(linked, "scripts/interrupt.mjs");
+      writeFileSync(
+        purgeScript,
+        `${readFileSync(purgeScript, "utf8")}\nrmSync(${JSON.stringify(resource)}, { force: true });\n`,
+      );
+      writeFileSync(join(fx.root, "home/release"), "release");
+      const running = startCli(fx, fx.repo, ["workspace", "teardown", linked]);
+      const pids = await waitForOwnedCommand(fx);
+      const competing = runCli(fx.repo, ["teardown", linked], {
+        INTERRUPT_DIR: join(fx.root, "home"),
+      });
+      expect(competing.status, competing.stderr).toBe(1);
+      expect(competing.stderr).toMatch(/cleanup.*in progress/i);
+      expect(existsSync(join(fx.root, "later"))).toBe(false);
+      expect(readFileSync(resource, "utf8")).toBe("original");
+      expect(runCli(fx.repo, ["setup", "--path", linked, "--force"]).status).toBe(1);
+      const unrelated = runCli(fx.repo, ["teardown", sibling]);
+      expect(unrelated.status, unrelated.stderr).toBe(0);
+      expect(running.closed).toBe(false);
+      writeFileSync(join(fx.root, "release"), "release");
+      await waitUntil(() => running.closed, "first cleanup settlement");
+      expect(running.code, running.output).toBe(0);
+      await waitUntil(() => pids.every((pid) => !isAlive(pid)), "purge command exit");
+      const adopted = runCli(fx.repo, ["setup", "--path", linked]);
+      expect(adopted.status, adopted.stderr).toBe(0);
+      expect(existsSync(resource)).toBe(false);
+      writeFileSync(resource, "replacement");
+      expect(Object.values(readWorkspaces(fx.repo).workspaces)).toMatchObject([
+        { worktree: linked, status: "ready" },
+      ]);
+      expect(readFileSync(resource, "utf8")).toBe("replacement");
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "rejects a stale cleaner at local settlement without releasing its replacement claim",
+    async () => {
+      const fx = fixture();
+      expect(runCli(fx.repo, ["setup"]).status).toBe(0);
+      installBarrier(fx, fx.repo, "purge");
+      const running = startCli(fx, fx.repo, ["workspace", "teardown"]);
+      await waitForOwnedCommand(fx);
+      const file = join(fx.repo, ".local-wt/workspace-registry/workspaces.json");
+      const registry = JSON.parse(readFileSync(file, "utf8"));
+      const name = Object.keys(registry.workspaces)[0];
+      const entry = registry.workspaces[name];
+      expect(entry.cleanupOwner).toMatchObject({ pid: running.child.pid });
+      entry.cleanupOwner.token = "replacement-cleaner";
+      writeFileSync(file, JSON.stringify(registry));
+      writeFileSync(join(fx.root, "release"), "release");
+      await waitUntil(() => running.closed, "stale cleaner exit");
+      expect(running.code, running.output).toBe(1);
+      expect(running.output).toMatch(/cleanup ownership lost/i);
+      expect(readWorkspaces(fx.repo).workspaces[name]).toEqual(entry);
+      const retry = runCli(fx.repo, ["teardown"], { INTERRUPT_DIR: fx.root });
+      expect(retry.status, retry.stderr).toBe(0);
+      expect(Object.values(readWorkspaces(fx.repo).workspaces)).toEqual([]);
+    },
+    TIMEOUT_MS,
+  );
+
   it(
     "awaits interrupted preparation and its descendants, skips later steps and permits plain retry",
     async () => {
@@ -72,13 +155,26 @@ describe("installed workspace CLI cancellation", () => {
     TIMEOUT_MS,
   );
 
-  it.each(["teardown", "removeHere"])(
+  it.each(["teardown", "removeHere", "abandonedPreparation"])(
     "retains interrupted target-owned purge through %s, including internal re-exec cleanup",
     async (command) => {
       const fx = fixture();
       const linked = join(fx.root, "linked");
       execFileSync("git", ["worktree", "add", "-b", "linked", linked], { cwd: fx.repo });
       expect(runCli(fx.repo, ["setup", "--path", linked]).status).toBe(0);
+      if (command === "abandonedPreparation") {
+        const file = join(fx.repo, ".local-wt/workspace-registry/workspaces.json");
+        const registry = JSON.parse(readFileSync(file, "utf8"));
+        const entry = registry.workspaces[Object.keys(registry.workspaces)[0]];
+        const deadPid = Number(
+          execFileSync(cliExecutable, ["-p", "process.pid"], { encoding: "utf8" }),
+        );
+        Object.assign(entry, {
+          status: "pending",
+          preparationOwner: { pid: deadPid, token: "abandoned-preparation" },
+        });
+        writeFileSync(file, JSON.stringify(registry));
+      }
       installBarrier(fx, linked, "purge");
       const cwd = command === "removeHere" ? linked : fx.repo;
       const args =
@@ -87,6 +183,11 @@ describe("installed workspace CLI cancellation", () => {
           : ["workspace", "teardown", linked, "--json"];
       const running = startCli(fx, cwd, args);
       const pids = await waitForOwnedCommand(fx);
+      const active = Object.values(readWorkspaces(fx.repo).workspaces).find(
+        (entry) => entry.worktree === linked,
+      );
+      expect(active?.cleanupOwner?.token).toEqual(expect.any(String));
+      expect(active?.cleanupOwner && isAlive(active.cleanupOwner.pid)).toBe(true);
       running.child.kill("SIGTERM");
       await assertInterrupted(running, pids);
       expect(existsSync(join(fx.root, "later"))).toBe(false);
@@ -95,6 +196,7 @@ describe("installed workspace CLI cancellation", () => {
         (entry) => entry.worktree === linked,
       );
       expect(retained?.cleanupPending).toBe(true);
+      expect(retained?.cleanupOwner).toBeUndefined();
       expect(runCli(fx.repo, ["setup", "--path", linked, "--force"]).status).toBe(1);
       writeFileSync(join(fx.root, "release"), "release");
       const retry = runCli(fx.repo, ["teardown", linked], { INTERRUPT_DIR: fx.root });
@@ -204,8 +306,8 @@ describe("installed workspace CLI cancellation", () => {
   );
 });
 
-function fixture(): FixtureRepo {
-  const fx = createFixtureRepo();
+function fixture(options?: FixtureOptions): FixtureRepo {
+  const fx = createFixtureRepo(options);
   fixtures.push(fx);
   return fx;
 }
@@ -249,7 +351,7 @@ function installBarrier(
     `
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
 const dir = process.env.INTERRUPT_DIR;

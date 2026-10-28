@@ -492,6 +492,8 @@ describe("workspace teardown (e2e)", () => {
       expect(failed.status).not.toBe(0);
       expect(failed.stderr).toContain("e2e purge boom");
       expect(requiredEntry(fx.repo, linked).name).toBe(target.name);
+      expect(requiredEntry(fx.repo, linked).entry.cleanupOwner).toBeUndefined();
+      expect(requiredEntry(fx.repo, linked).entry.cleanupPending).toBe(true);
       expect(devEntries(fx.repo)).toMatchObject([{ cleanupPending: true }]);
       expect(runCli(fx.repo, ["teardown", linked]).status).toBe(0);
       expect(entryAt(fx.repo, linked)).toBeUndefined();
@@ -523,6 +525,7 @@ describe("workspace teardown (e2e)", () => {
         status: "ready",
         cleanupPending: true,
       });
+      expect(requiredEntry(fx.repo, linked).entry.cleanupOwner).toBeUndefined();
       const forced = runCli(fx.repo, ["setup", "--force"], undefined, linked);
       expect(forced.status).toBe(1);
       expect(forced.stderr).toContain("cleanup is pending");
@@ -933,6 +936,37 @@ describe("workspace teardown (e2e)", () => {
       expect(runCli(fx.repo, ["teardown", second]).status).toBe(0);
       setup(fx.repo, first);
       expect(requiredEntry(fx.repo, first).name).toBe("review");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "preserves files created by purge unless removal was explicitly forced",
+    () => {
+      const fx = fixture({ portless: true });
+      const path = join(fx.repo, "alignfirst.json");
+      const manifest = JSON.parse(readFileSync(path, "utf8"));
+      manifest.workspace.purge.push({
+        name: "Create untracked recovery evidence",
+        run: [
+          process.execPath,
+          "-e",
+          'require("node:fs").writeFileSync("valuable.txt", "preserve after purge\\n")',
+        ],
+      });
+      writeFileSync(path, JSON.stringify(manifest));
+      git(fx.repo, ["add", "alignfirst.json"]);
+      git(fx.repo, ["commit", "-m", "Add purge recovery evidence"]);
+      const linked = addWorktree(fx, "managed/review", "review");
+      setup(fx.repo, linked);
+      const result = runCli(fx.repo, ["remove", linked]);
+      expect(result.status, result.stderr).toBe(1);
+      expect(result.stderr).toContain("Git worktree operation failed");
+      expect(readFileSync(join(linked, "valuable.txt"), "utf8")).toBe("preserve after purge\n");
+      expect(git(fx.repo, ["worktree", "list", "--porcelain"])).toContain(linked);
+      expect(runCli(fx.repo, ["remove", linked, "--force"]).status).toBe(0);
+      expect(existsSync(linked)).toBe(false);
+      expect(git(fx.repo, ["branch", "--list", "review"])).toContain("review");
     },
     TEST_TIMEOUT_MS,
   );

@@ -268,7 +268,7 @@ function firstFreeBranchName(requestedBranch: string, cwd: string): string {
 
 export function isWorktreeDirty(worktreePath: string): boolean {
   try {
-    const out = execFileSync("git", ["status", "--porcelain"], {
+    const out = execFileSync("git", ["status", "--porcelain", "--untracked-files=all"], {
       stdio: "pipe",
       cwd: worktreePath,
       encoding: "utf-8",
@@ -295,8 +295,8 @@ export function getWorktreeBranch(worktreePath: string): string | undefined {
   }
 }
 
-export function removeWorktree(worktreePath: string, run: RunCtx): void {
-  runGitWorktree(["worktree", "remove", "--force", worktreePath], run.cwd, run);
+export function removeWorktree(worktreePath: string, run: RunCtx, force: boolean): void {
+  runGitWorktree(["worktree", "remove", ...(force ? ["--force"] : []), worktreePath], run.cwd, run);
 }
 
 /** Pure function that produces the basename of a worktree directory from a branch. */

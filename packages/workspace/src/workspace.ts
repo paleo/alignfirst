@@ -35,7 +35,7 @@ import {
   findOwnEntry,
   liveWorktrees,
   readDevServers,
-  completeDevServerCleanup,
+  updateDevServers,
   markDevServerCleanupPending,
   assertNoPendingCleanup,
 } from "./dev-servers-registry.js";
@@ -53,8 +53,14 @@ import { findOrphanNames } from "./orphans.js";
 import { defaultCommands, devCmd, installedCliCommand, wsCmd } from "./invocation.js";
 import type { WorkspaceOperation, WorkspaceOutput } from "./operation.js";
 import type { WorkspaceStorage } from "./storage.js";
-import type { WorkspaceManifest } from "./config.js";
+import type { WorkspaceManifest } from "./workspace-config-types.js";
 import { executeCommand } from "./command-executor.js";
+import {
+  assertCleanupOwnership,
+  claimCleanupOwnership,
+  releaseCleanupOwnership,
+  type CleanupOwnership,
+} from "./cleanup-ownership.js";
 import { stopTarget } from "./target-stop.js";
 import { formatPorts } from "./ports.js";
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
@@ -1084,6 +1090,7 @@ async function runPrune(kernel: Kernel, verbose: boolean): Promise<void> {
             mainWorktree: ctx.mainWorktree,
             name: entry.name,
             recipe: entry.entry.recipe,
+            createdAt: entry.entry.createdAt,
             verbose,
           },
           true,
@@ -1139,10 +1146,14 @@ async function disposeTargetRuntime(
   await disposeRuntime(disposal, kernel.config.signal);
 }
 
+interface CleanupRequest extends PurgeContext {
+  createdAt: string;
+}
+
 async function cleanupTarget(
   kernel: Kernel,
   ctx: WorktreeContext,
-  target: PurgeContext,
+  target: CleanupRequest,
   orphanOnly = false,
   mode: "retain" | "delete" = "retain",
 ): Promise<{ stopped: number; runtime?: RuntimeOwner }> {
@@ -1155,9 +1166,6 @@ async function cleanupTarget(
   if (exists) refusePendingCleanup(ctx, registryDir, target.worktree);
   const storage =
     kernel.config.storage && resolveWorkspaceStorage(kernel.config.storage, target.worktree);
-  const runtime = Object.values(
-    readWorkspaces(ctx.mainWorktree, registryDir).runtimeOwners ?? {},
-  ).find((owner) => owner.worktree === target.worktree);
   const recipeRoot = exists ? target.worktree : ctx.mainWorktree;
   const config = kernel.host?.loadWorkspace?.(recipeRoot) ?? kernel.config;
   assertWorkspaceRecipe(target.worktree, target.recipe, config.recipe);
@@ -1169,87 +1177,102 @@ async function cleanupTarget(
     throw new WorkspaceError(
       `Cannot purge manifest-backed orphan ${target.name}: restore a main-worktree manifest with its required purge recipe.`,
     );
-  await retainCleanupIdentity(ctx, registryDir, target);
-  const dev = findOwnEntry(ctx.mainWorktree, registryDir, target.worktree);
-  let stopFailure: unknown;
-  if (exists && dev) {
-    try {
-      await stopTarget({
-        operation: kernel,
-        mainWorktree: ctx.mainWorktree,
-        registryDir,
-        target: dev,
-        signal,
-        retainCleanup: true,
-      });
-    } catch (error) {
-      stopFailure = error;
+  const { cleanup, dev, runtime } = await retainCleanupIdentity(
+    ctx,
+    registryDir,
+    { ...target, signal },
+    orphanOnly,
+  );
+  try {
+    let stopFailure: unknown;
+    if (exists && dev) {
+      try {
+        await stopTarget({
+          operation: kernel,
+          mainWorktree: ctx.mainWorktree,
+          registryDir,
+          target: dev,
+          signal,
+          retainCleanup: true,
+        });
+      } catch (error) {
+        stopFailure = error;
+      }
     }
+    signal?.throwIfAborted();
+    const leftover = await killRecordedDevServer(ctx.mainWorktree, registryDir, target.worktree);
+    if (leftover > 0)
+      kernel.output.diagnostic(
+        `Stopped ${leftover} recorded dev-server process(es) by PID fallback; recipe cleanup is still required.`,
+      );
+    if (stopFailure !== undefined) throw stopFailure;
+    signal?.throwIfAborted();
+    if (exists || target.recipe.kind === "manifest")
+      await runPurgeInfrastructure(config, { ...target, signal });
+    signal?.throwIfAborted();
+    if (dev)
+      await updateDevServers(ctx.mainWorktree, registryDir, (data) => {
+        assertCleanupOwnership(readWorkspaces(ctx.mainWorktree, registryDir), cleanup);
+        data.servers = data.servers.filter(
+          (entry) =>
+            entry.worktree !== dev.worktree ||
+            entry.startedAt !== dev.startedAt ||
+            entry.instanceId !== dev.instanceId,
+        );
+      });
+    if (orphanOnly && existsSync(target.worktree))
+      throw new WorkspaceError(`Target is no longer orphaned: ${target.worktree}.`);
+    if (storage?.in === "companion") {
+      if (!runtime)
+        throw new WorkspaceError(`Missing runtime cleanup identity for ${target.worktree}.`);
+      await releaseRuntimeResources(storage, runtime.generation, mode, cleanup);
+    } else {
+      await deleteWorkspaceEntry(ctx.mainWorktree, registryDir, cleanup);
+    }
+    return { stopped: leftover, runtime };
+  } catch (error) {
+    await releaseCleanupOwnership(ctx.mainWorktree, registryDir, cleanup);
+    throw error;
   }
-  signal?.throwIfAborted();
-  const leftover = await killRecordedDevServer(ctx.mainWorktree, registryDir, target.worktree);
-  if (leftover > 0)
-    kernel.output.diagnostic(
-      `Stopped ${leftover} recorded dev-server process(es) by PID fallback; recipe cleanup is still required.`,
-    );
-  if (stopFailure !== undefined) throw stopFailure;
-  signal?.throwIfAborted();
-  if (exists || target.recipe.kind === "manifest")
-    await runPurgeInfrastructure(config, { ...target, signal });
-  signal?.throwIfAborted();
-  if (dev)
-    await completeDevServerCleanup(
-      ctx.mainWorktree,
-      registryDir,
-      target.worktree,
-      dev.startedAt,
-      dev.instanceId,
-    );
-  if (orphanOnly && existsSync(target.worktree))
-    throw new WorkspaceError(`Target is no longer orphaned: ${target.worktree}.`);
-  if (storage?.in === "companion") {
-    if (!runtime)
-      throw new WorkspaceError(`Missing runtime cleanup identity for ${target.worktree}.`);
-    await releaseRuntimeResources(storage, runtime.generation, mode);
-  } else {
-    await deleteWorkspaceEntry(ctx.mainWorktree, registryDir, target.worktree);
-  }
-  return { stopped: leftover, runtime };
 }
 
-/** A stop child can release the dev record before infrastructure purge has succeeded. */
+/** The workspace claim belongs to this parent; retain-cleanup stop children never compete. */
 async function retainCleanupIdentity(
   ctx: WorktreeContext,
   registryDir: string,
-  target: PurgeContext,
-): Promise<void> {
-  await updateWorkspaces(ctx.mainWorktree, registryDir, (registry) => {
+  target: CleanupRequest,
+  orphanOnly: boolean,
+) {
+  return updateWorkspaces(ctx.mainWorktree, registryDir, (registry) => {
+    target.signal?.throwIfAborted();
+    if (orphanOnly && existsSync(target.worktree))
+      throw new WorkspaceError(`Target is no longer orphaned: ${target.worktree}.`);
     const existing = findWorkspaceByPath(registry, target.worktree)?.entry;
-    if (existing) {
-      recoverPreparationForCleanup(existing);
-      recoverStartupForCleanup(ctx.mainWorktree, registryDir, target.worktree, registry);
-      return;
-    }
-    if (Object.hasOwn(registry.workspaces, target.name)) {
-      throw new WorkspaceError(`Workspace name ${target.name} belongs to a different worktree.`);
-    }
-    const now = new Date().toISOString();
-    registry.workspaces[target.name] = {
-      worktree: resolve(target.worktree),
-      createdAt: now,
-      status: "failed",
-      cleanupPending: true,
-      recipe: target.recipe,
-      failure: { at: now, message: "Infrastructure cleanup incomplete; retry workspace teardown." },
-      ...(resolve(target.worktree) === resolve(ctx.mainWorktree) ? { main: true } : {}),
-    };
+    if (!existing || existing.createdAt !== target.createdAt)
+      throw new WorkspaceError(
+        `Cleanup identity changed for ${target.worktree}; retry from fresh state.`,
+      );
+    if (
+      existing.status === "pending" &&
+      !existing.preparationOwner &&
+      existing.cleanupPending !== true
+    )
+      throw new WorkspaceError(`Setup is still in progress for ${target.worktree}.`);
+    assertWorkspaceRecipe(target.worktree, existing.recipe, target.recipe);
+    const cleanup = claimCleanupOwnership(registry, target.worktree);
+    recoverPreparationForCleanup(existing);
     recoverStartupForCleanup(ctx.mainWorktree, registryDir, target.worktree, registry);
+    const dev = findOwnEntry(ctx.mainWorktree, registryDir, target.worktree);
+    const runtime = Object.values(registry.runtimeOwners ?? {}).find(
+      (owner) => owner.worktree === target.worktree,
+    );
+    return { cleanup, dev, runtime };
   });
 }
 
 function refusePendingCleanup(ctx: WorktreeContext, registryDir: string, worktree: string): void {
   const found = findWorkspaceByPath(readWorkspaces(ctx.mainWorktree, registryDir), worktree);
-  if (found?.entry.status !== "pending") return;
+  if (found?.entry.status !== "pending" || found.entry.cleanupPending === true) return;
   if (found.entry.preparationOwner && !isProcessAlive(found.entry.preparationOwner.pid)) return;
   throw new WorkspaceError(
     `Setup is still in progress for workspace ${found.name}. ` +
@@ -1285,11 +1308,11 @@ async function runPurgeInfrastructure(config: WorkspaceConfig, ctx: PurgeContext
 async function deleteWorkspaceEntry(
   mainWorktree: string,
   registryDir: string,
-  worktree: string,
+  cleanup: CleanupOwnership,
 ): Promise<void> {
   await updateWorkspaces(mainWorktree, registryDir, (registry) => {
-    const found = findWorkspaceByPath(registry, worktree);
-    if (found) delete registry.workspaces[found.name];
+    assertCleanupOwnership(registry, cleanup);
+    delete registry.workspaces[cleanup.name];
   });
 }
 
@@ -1492,7 +1515,7 @@ async function handleTeardown(
 
 interface CleanupTarget {
   worktree: string;
-  identity?: { name: string; recipe: WorkspaceRecipe };
+  identity?: { name: string; recipe: WorkspaceRecipe; createdAt: string };
 }
 
 function resolveCleanupTarget(
@@ -1508,7 +1531,11 @@ function resolveCleanupTarget(
   if (workspace) {
     return {
       worktree: path,
-      identity: { name: workspace.name, recipe: workspace.entry.recipe },
+      identity: {
+        name: workspace.name,
+        recipe: workspace.entry.recipe,
+        createdAt: workspace.entry.createdAt,
+      },
     };
   }
   const dev = devServers.find((entry) => resolve(entry.worktree) === path);
@@ -1519,7 +1546,7 @@ function resolveCleanupTarget(
     if (Object.hasOwn(registry.workspaces, selector.dir)) {
       return {
         worktree: entry.worktree,
-        identity: { name: selector.dir, recipe: entry.recipe },
+        identity: { name: selector.dir, recipe: entry.recipe, createdAt: entry.createdAt },
       };
     }
     const namedDev = devServers.find((entry) => entry.name === selector.dir);
@@ -1528,7 +1555,7 @@ function resolveCleanupTarget(
       return {
         worktree: resolve(namedDev.worktree),
         identity: owner
-          ? { name: owner.name, recipe: owner.entry.recipe }
+          ? { name: owner.name, recipe: owner.entry.recipe, createdAt: owner.entry.createdAt }
           : missingRecipeIdentity(namedDev.worktree),
       };
     }
@@ -1597,7 +1624,7 @@ async function handleRemove(
   if (existsSync(worktree)) refusePendingCleanup(ctx, registryDir, worktree);
   const storage = kernel.config.storage && resolveWorkspaceStorage(kernel.config.storage, worktree);
   let runtime = target.identity === undefined && storage ? retainedRuntime(storage) : undefined;
-  const cleanup: PurgeContext | undefined =
+  const cleanup: CleanupRequest | undefined =
     target.identity === undefined
       ? undefined
       : {
@@ -1631,7 +1658,7 @@ async function handleRemove(
   }
   kernel.config.signal?.throwIfAborted();
 
-  removeWorktree(worktree, { ...run, cwd: ctx.mainWorktree });
+  removeWorktree(worktree, { ...run, cwd: ctx.mainWorktree }, command.force === true);
   await disposeTargetRuntime(kernel, worktree, runtime, false);
 
   kernel.output.text(`Removed workspace ${name} (branch "${branch}"). Branch "${branch}" kept.`);

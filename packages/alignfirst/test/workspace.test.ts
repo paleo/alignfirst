@@ -971,9 +971,13 @@ describe("protected deletion", () => {
       const path = join(fx.target, kind === "untracked" ? "new" : "README.md");
       writeFileSync(path, "preserve");
       if (kind === "staged") git(fx.target, "add", "README.md");
+      if (kind === "untracked") git(fx.target, "config", "status.showUntrackedFiles", "no");
+      const registrations = git(fx.repo, "worktree", "list", "--porcelain", "-z");
       const result = await run(fx, ["remove", fx.target, "--json"]);
-      expect(result.code).toBe(1);
+      expect(result.code, result.stderr).toBe(1);
+      expect(result.stderr).toContain("Uncommitted changes");
       expect(readFileSync(path, "utf8")).toBe("preserve");
+      expect(git(fx.repo, "worktree", "list", "--porcelain", "-z")).toBe(registrations);
       expect(git(fx.repo, "branch", "--list", "topic")).toContain("topic");
     },
   );

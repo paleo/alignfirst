@@ -3,6 +3,7 @@ import { existsSync, lstatSync, readdirSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 
+import { assertCleanupOwnership, type CleanupOwnership } from "./cleanup-ownership.js";
 import { readDevServers } from "./dev-servers-registry.js";
 import { WorkspaceError } from "./errors.js";
 import { canonicalPath } from "./git.js";
@@ -106,6 +107,7 @@ export async function releaseRuntimeResources(
   storage: WorkspaceStorage,
   generation: string,
   mode: "retain" | "delete",
+  cleanup?: CleanupOwnership,
 ): Promise<void> {
   assertStorage(storage);
   await updateWorkspaces(storage.mainWorktree, storage.registryDir, (registry) => {
@@ -115,8 +117,15 @@ export async function releaseRuntimeResources(
     if (runtime.deletionClaim && isProcessAlive(runtime.deletionClaim.pid))
       throw pendingError(storage);
     const found = findWorkspaceByPath(registry, storage.currentWorktree);
-    if (found && found.entry.cleanupPending !== true)
-      throw new WorkspaceError(`Cleanup gate missing for ${storage.currentWorktree}.`);
+    if (found || cleanup) {
+      if (
+        !cleanup ||
+        cleanup.worktree !== storage.currentWorktree ||
+        cleanup.runtimeGeneration !== generation
+      )
+        throw new WorkspaceError(`Cleanup ownership lost for ${storage.currentWorktree}.`);
+      assertCleanupOwnership(registry, cleanup);
+    }
     recoverStartupForCleanup(storage.mainWorktree, storage.registryDir, storage.currentWorktree);
     if (found) delete registry.workspaces[found.name];
     runtime.state = mode === "retain" ? "retained" : "deletionPending";
