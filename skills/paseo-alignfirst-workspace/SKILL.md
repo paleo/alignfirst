@@ -37,4 +37,4 @@ Before removing a workspace or worktree, archive the workspace in Paseo: `paseo 
 paseo workspace archive <workspace-id>
 ```
 
-Archiving keeps a registered worktree on disk.
+Archiving keeps a registered worktree on disk. Remove it afterwards through the usual procedure.
