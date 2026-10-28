@@ -1,38 +1,10 @@
 # Work-Files Repository Setup
 
-Share `.plans/` through a dedicated team repository, the work-files repository. Solo users keep `.plans/` as a local directory.
+Share `.plans/` through a separate team repository, or keep it as an ignored local directory. Protocols and Docmap work independently of workspace adoption.
 
-## How It Works
+## Project settings
 
-The team hosts one private, multi-project work-files repository:
-
-```text
-myteam-plans/
-  project-a/
-    250/
-      A1-spec.md
-    _archives/
-  project-b/
-    103/
-```
-
-Each developer clones this repository once per machine with their own credentials, anywhere they
-choose, typically beside the code repositories. In a configured project, `.plans` is a symlink to
-the folder named by `plans.repositoryFolder` in `.alignfirst.json`. Linked worktrees continue
-through the main worktree's symlink.
-
-A contributor without access to the work-files repository uses a plain `.plans` directory. The CLI
-accepts both modes. Run `npx alignfirst plans check` to report the current mode.
-
-Set `plans.autoArchive: true`. Then `npx alignfirst sync` publishes changes and archives stale ticket
-directories and no-ticket session files under `_archives/`. The user can remove the field to opt out.
-`ALIGNFIRST_ARCHIVE_DAYS` sets the threshold in days and defaults to `7`.
-
-In shared mode, `sync` snapshots changes except running session logs (`_aligndev/*.running.md`) and consolidates pending `sync` commits before pulling. A lock in the clone serializes syncs; a busy lock or an advancing remote gets up to three attempts. An unresolvable conflict aborts the rebase, keeping local commits. Resolve it by hand with `git pull --rebase` in the work-files clone, then run `npx alignfirst sync` again.
-
-## Configure the Project
-
-Write the project folder into `.alignfirst.json`:
+In `alignfirst.json` (strict JSON) or `alignfirst.jsonc` (comments/trailing commas):
 
 ```json
 {
@@ -41,69 +13,29 @@ Write the project folder into `.alignfirst.json`:
 }
 ```
 
-When `.alignfirst.json` already exists without `plans.repositoryFolder`, supply the folder once while linking:
+The team repository contains one folder per project, with ticket directories and `_archives/`. `repositoryFolder` selects that folder. The deprecated `plans.folder` spelling is rejected. Existing `.alignfirst.json` users follow [the clean-break runbook](upgrading-multi-stack-workspaces.md).
+
+## Each machine
+
+Clone with the developer's credentials, then link from the project:
 
 ```sh
-npx alignfirst plans setup <plans-clone-path> --folder project-a
-```
-
-With the `alignfirst context` bootstrap section, the CLI delivers the sync instruction. Otherwise, ensure the instruction file says:
-
-> After every change in `.plans/`, run `npx alignfirst sync`.
-
-For a project prepared for an assistant, the `.plans/` entry in `DEVELOPERS.md` also
-names the work-files repository and the sync command.
-
-## Configure Each Machine
-
-Clone the work-files repository with the developer's own credentials. From the project root, link it:
-
-```sh
-git clone <plans-repository-url> ../myteam-plans
-npx alignfirst plans setup ../myteam-plans
-npx alignfirst sync
-```
-
-`npx alignfirst plans setup` creates the configured project folder in the clone, migrates an existing
-local `.plans`, and replaces it with a relative symlink. Re-run it after moving the clone.
-
-For local mode, create the directory instead:
-
-```sh
-mkdir .plans
-```
-
-## With the Workspace System
-
-When the project also uses workspace, check the link before setting up the main worktree:
-
-```js
-preSetup: ({ isMainWorktree, currentWorktree }) => {
-  if (!isMainWorktree) return;
-  execFileSync("npx", ["alignfirst", "plans", "check"], {
-    cwd: currentWorktree,
-    stdio: "inherit",
-  });
-},
-```
-
-Keep the `isMainWorktree` gate. `preSetup` runs before the kernel creates shared-directory symlinks,
-so a fresh linked worktree has no `.plans` yet. The check accepts a usable `.plans` symlink and a local
-directory, both untracked by the project.
-
-Document these new-machine steps in `README.md` before workspace setup:
-
-```sh
-npm install
 git clone <plans-repository-url> <plans-clone-path>
-npx alignfirst plans setup <plans-clone-path>
-npm run workspace -- setup
+npx -y alignfirst plans setup <plans-clone-path>
+npx -y alignfirst plans check
+npx -y alignfirst sync
 ```
 
-For a public repository, make local mode the default and avoid naming a private repository:
+Without `repositoryFolder`, supply `--folder project-a` once. `plans setup` creates the configured folder and may migrate existing local plans into the separate repository; obtain authorization before moving existing history. It creates a relative symlink at the effective plans location, including a selected companion. Re-run after moving the clone.
 
-```sh
-npm install
-mkdir .plans   # or run npx alignfirst plans setup with the work-files clone
-npm run workspace -- setup
-```
+For local mode, create `.plans/` and ignore it. A public project's README should offer local mode without exposing a private work-files URL. The product repository must not track effective plans; a separate work-files repository may track them.
+
+`plans.autoArchive: true` makes sync archive stale tickets and completed no-ticket sessions under `_archives/`; remove it to opt out. `ALIGNFIRST_ARCHIVE_DAYS` defaults to 7. Running `_aligndev/*.running.md` logs are excluded from snapshots. Shared sync serializes through a clone lock, consolidates pending sync commits and retries busy/advancing remotes up to three times. A conflict aborts rebase and retains local commits; resolve it in the clone with `git pull --rebase`, then retry sync.
+
+With the canonical `alignfirst context` bootstrap, the CLI supplies the sync instruction. Otherwise document: after every `.plans/` change, run `npx -y alignfirst sync`. The assistant's explicitly referenced developer guide names the repository and sync command.
+
+## Before workspace setup
+
+Prepare effective plans and selected runtime storage (ignore `.local-wt/` only for project-local runtime) before `npx -y alignfirst workspace setup`. No pre-setup wrapper check is needed: the CLI validates main before creating a branch/worktree, then validates linked-worktree parity. Main's project-local plans are shared through a link; companion plans resolve directly without one. Setup never provisions missing plans, selects companions or edits tracked ignore rules.
+
+For an assistant, use the separately authorized `aligndev guide work-files-setup` procedure before ticket reservation, request capture or coding effects. Preserve existing tracked/missing-history boundaries and companion selections. See [workspace setup](workspace-setup.md#required-baseline-and-defaults).

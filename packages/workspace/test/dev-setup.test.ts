@@ -1,9 +1,12 @@
+// biome-ignore-all lint/suspicious/noTemplateCurlyInString: Manifest expressions are literal fixtures.
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { adaptWorkspaceManifest } from "../src/manifest-adapter.js";
+import { resolveDevPortsConfig } from "../src/ports.js";
 import { writeDevServers } from "../src/dev-servers-registry.js";
 import { type DevSetupInput, runDevSetup } from "../src/dev-setup.js";
 import {
@@ -14,6 +17,9 @@ import {
   updateWorkspaces,
 } from "../src/workspaces.js";
 
+const fingerprintA = "sha256:559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd";
+const fingerprintB = "sha256:df7e70e5021544f4834bbee64a9e3789febc4be81470df629cad6ddb03320a5c";
+
 let root: string;
 let input: DevSetupInput;
 
@@ -23,6 +29,13 @@ beforeEach(() => {
   mkdirSync(mainWorktree);
   input = {
     worktree: { currentWorktree: mainWorktree, mainWorktree, isMainWorktree: true },
+    recipe: { kind: "defaults" },
+    output: {
+      text: (message) => console.log(message),
+      diagnostic: (message) => console.warn(message),
+      write: () => {},
+      isTTY: false,
+    },
     registryDir: registryDirFor(".wt"),
     runtimeDir: ".wt",
     runFiles: [],
@@ -63,7 +76,10 @@ describe("run-file write batches", () => {
         },
       ];
       await runDevSetup(input);
-      expect(currentEntry().runFilesWrittenWith).toEqual({ ports: {}, inputs: { host: "A" } });
+      expect(currentEntry().runFilesWrittenWith).toEqual({
+        ports: {},
+        inputs: { host: fingerprintA },
+      });
 
       if (scenario === "changed inputs") host = "B";
       else {
@@ -80,7 +96,10 @@ describe("run-file write batches", () => {
       input.options.beforeStart = true;
       await runDevSetup(input);
       expect(fileContent("host.env")).toBe("HOST=A\n");
-      expect(currentEntry().runFilesWrittenWith).toEqual({ ports: {}, inputs: { host: "A" } });
+      expect(currentEntry().runFilesWrittenWith).toEqual({
+        ports: {},
+        inputs: { host: fingerprintA },
+      });
       expect(currentEntry().devSetupFailure).toBeUndefined();
     },
   );
@@ -121,7 +140,10 @@ describe("run-file write batches", () => {
     await runDevSetup(input);
     expect(fileContent("derived.txt")).toBe("hand edit\n");
     expect(generations).toBe(2);
-    expect(currentEntry().runFilesWrittenWith).toEqual({ ports: {}, inputs: { host: "B" } });
+    expect(currentEntry().runFilesWrittenWith).toEqual({
+      ports: {},
+      inputs: { host: fingerprintB },
+    });
   });
 
   it("reports preceding updates when a later generated source fails", async () => {
@@ -180,14 +202,155 @@ describe("run-file write batches", () => {
   });
 });
 
+describe("computed run-file inputs", () => {
+  it("reconciles invocation environment changes and removal without exposing input values", async () => {
+    const key = "SIDE32_INVOCATION_INPUT";
+    const env: NodeJS.ProcessEnv = { ...process.env, [key]: "private-invocation-A" };
+    const { devServer } = adaptWorkspaceManifest(
+      {
+        devServer: {
+          runFilesInputs: [key],
+          runFiles: [
+            {
+              path: "invocation.txt",
+              source: {
+                kind: "content",
+                content: {
+                  command: {
+                    run: [
+                      process.execPath,
+                      "-e",
+                      `process.stdout.write(process.env.${key} ?? 'absent')`,
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+          servers: [],
+        },
+      },
+      { recipe: { kind: "defaults" }, mainWorktree: input.worktree.mainWorktree, env },
+    );
+    if (!devServer) throw new Error("Missing dev adapter");
+    input.runFilesInputs = devServer.runFilesInputs;
+    input.runFiles = devServer.runFiles ?? [];
+    await runDevSetup(input);
+    const first = currentEntry().runFilesWrittenWith?.inputs[key];
+    expect(first).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(fileContent("invocation.txt")).toBe("private-invocation-A");
+
+    env[key] = "private-invocation-B";
+    await runDevSetup(input);
+    expect(currentEntry().runFilesWrittenWith?.inputs[key]).not.toBe(first);
+    expect(fileContent("invocation.txt")).toBe("private-invocation-B");
+
+    delete env[key];
+    await runDevSetup(input);
+    expect(currentEntry().runFilesWrittenWith?.inputs).toEqual({});
+    expect(fileContent("invocation.txt")).toBe("absent");
+    expect(console.warn).toHaveBeenCalledTimes(2);
+    for (const [warning] of vi.mocked(console.warn).mock.calls)
+      expect(warning).toContain(`inputs changed (${key})`);
+    const recorded = [
+      readFileSync(filePath(`${input.registryDir}/workspaces.json`), "utf8"),
+      ...vi.mocked(console.warn).mock.calls.flat(),
+      ...vi.mocked(console.log).mock.calls.flat(),
+    ].join("\n");
+    expect(recorded).not.toContain("private-invocation-");
+  });
+
+  it("runs command producers in order after ports, fingerprints inputs and detects removal", async () => {
+    const secret = "private-host-value";
+    const { devServer } = adaptWorkspaceManifest(
+      {
+        devServer: {
+          ports: { first: 28100, last: 28199, declare: ["constructor", "__proto__", "fo-api"] },
+          runFilesInputs: {
+            command: {
+              run: [
+                process.execPath,
+                "-e",
+                "process.stdout.write(JSON.stringify({host:process.env.HOST}))",
+              ],
+              env: { HOST: secret },
+            },
+          },
+          runFiles: [
+            { path: "first.txt", source: { kind: "content", content: "${{ ports.__proto__ }}" } },
+            {
+              path: "second.txt",
+              source: {
+                kind: "content",
+                content: {
+                  command: {
+                    run: [
+                      process.execPath,
+                      "-e",
+                      "process.stdout.write(require('fs').readFileSync('first.txt'))",
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+          servers: [],
+        },
+      },
+      { recipe: { kind: "defaults" }, mainWorktree: input.worktree.mainWorktree },
+    );
+    if (!devServer?.ports) throw new Error("Missing dev adapter");
+    input.ports = resolveDevPortsConfig(devServer.ports);
+    input.runFiles = devServer.runFiles ?? [];
+    input.runFilesInputs = devServer.runFilesInputs;
+    const result = await runDevSetup(input);
+    expect(Object.keys(result.ports)).toEqual(["constructor", "__proto__", "fo-api"]);
+    expect(currentEntry().ports).toEqual(result.ports);
+    expect(fileContent("second.txt")).toBe(String(Reflect.get(result.ports, "__proto__")));
+    expect(currentEntry().runFilesWrittenWith?.inputs.host).toMatch(/^sha256:[a-f0-9]{64}$/);
+    const registryText = readFileSync(filePath(`${input.registryDir}/workspaces.json`), "utf8");
+    expect(registryText).not.toContain(secret);
+    input.runFilesInputs = async () => ({ host: "" });
+    await runDevSetup(input);
+    expect(currentEntry().runFilesWrittenWith?.inputs.host).toBe(
+      "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    );
+    input.runFilesInputs = undefined;
+    input.ports = undefined;
+    input.runFiles = [{ path: "first.txt", source: { kind: "content", content: "no ports" } }];
+    await runDevSetup(input);
+    expect(currentEntry().ports).toEqual({});
+    expect(currentEntry().runFilesWrittenWith).toEqual({ ports: {}, inputs: {} });
+    expect(console.warn).toHaveBeenLastCalledWith(expect.stringContaining("inputs changed (host)"));
+    expect(vi.mocked(console.warn).mock.calls.flat().join("\n")).not.toContain(secret);
+  });
+});
+
 describe("registered main identity", () => {
+  it("records the selected recipe on automatic main creation and refuses a missing registered manifest", async () => {
+    const path = join(input.worktree.mainWorktree, "alignfirst.json");
+    writeFileSync(path, '{"schemaVersion":1}');
+    input.recipe = { kind: "manifest", file: "alignfirst.json", in: "project" };
+    await runDevSetup(input);
+    expect(currentEntry().recipe).toEqual(input.recipe);
+    renameSync(path, `${path}c`);
+    input.recipe = { kind: "manifest", file: "alignfirst.jsonc", in: "project" };
+    await runDevSetup(input);
+    rmSync(`${path}c`);
+    input.recipe = { kind: "defaults" };
+    await expect(runDevSetup(input)).rejects.toThrow("manifest recipe is missing");
+    expect(currentEntry().recipe.kind).toBe("manifest");
+  });
+
   it("shares allocation with registration and preserves a suffix, ports and setup state", async () => {
+    input.ports = resolveDevPortsConfig({ first: 8200, last: 8299, declare: ["web"] });
     const { mainWorktree } = input.worktree;
     await registerWorkspace({
       currentWorktree: "/external/main",
       mainWorktree,
       registryDir: input.registryDir,
       isMainWorktree: false,
+      recipe: { kind: "defaults" },
     });
     const provisioned: string[] = [];
     input.setup = (ctx) => {
@@ -215,6 +378,7 @@ describe("registered main identity", () => {
     const registered = await registerWorkspace({
       ...input.worktree,
       registryDir: input.registryDir,
+      recipe: { kind: "defaults" },
     });
     expect(registered).toEqual({ name: first.workspace.name, status: "pending" });
     expect(currentEntry().neverFinalized).toBeUndefined();

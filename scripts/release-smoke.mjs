@@ -1,25 +1,34 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
+  appendFileSync,
   copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readPackedFilename } from "./npm-pack.mjs";
+import { verifyPackagedWorkspaces } from "./test/packaged-workspace-acceptance.mjs";
 
 const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const installRoot = mkdtempSync(join(tmpdir(), "alignfirst-release-"));
 
 try {
   smokeTestRelease();
-} finally {
   rmSync(installRoot, { force: true, recursive: true });
+} catch (error) {
+  console.error(
+    `Release smoke failed; retained owned fixtures/tarballs for recovery: ${installRoot}`,
+  );
+  throw error;
 }
 
 function smokeTestRelease() {
@@ -27,9 +36,18 @@ function smokeTestRelease() {
     process.argv.slice(2).every((arg) => arg === "--cli-only"),
     "Unknown smoke option",
   );
-  const [docmap, alignfirst, aligndev] = ["docmap", "alignfirst", "aligndev"].map(packWorkspace);
-  const cliRoot = disposableInstall("cli", [docmap, alignfirst, aligndev]);
-  for (const packed of [docmap, alignfirst, aligndev]) {
+  const [docmap, workspace, alignfirst, aligndev] = [
+    "docmap",
+    "workspace",
+    "alignfirst",
+    "aligndev",
+  ].map(packWorkspace);
+  const cliRoot = disposableInstall("cli", [docmap, workspace, alignfirst, aligndev]);
+  for (const packed of [docmap, workspace, alignfirst, aligndev]) {
+    assert.equal(installedManifest(cliRoot, packed.name).version, packed.version);
+    const installed = join(cliRoot, "node_modules", packed.name);
+    assert.equal(realpathSync(installed), installed, `${packed.name} must come from its tarball`);
+    assert.equal(existsSync(join(cliRoot, "node_modules", packed.name, "dist")), true);
     const manifest = installedManifest(cliRoot, packed.name);
     assert.equal(manifest.pi, undefined, `${packed.name} must remain a CLI`);
     assert.deepEqual(manifest.peerDependencies ?? {}, {});
@@ -45,6 +63,33 @@ function smokeTestRelease() {
   verifyCliVersion(cliRoot, "aligndev", ["--version"], aligndev.version);
   verifyCliVersion(cliRoot, "docmap", ["--version"], docmap.version);
   verifyInvocationConsumers(cliRoot);
+  for (const [name, schema] of [["alignfirst", "alignfirst-v1"]]) {
+    const asset = join(cliRoot, "node_modules", name, "schemas", `${schema}.schema.json`);
+    const installedSchema = JSON.parse(readFileSync(asset, "utf8"));
+    assert.equal(installedSchema.type, "object");
+    assert.deepEqual(Object.keys(installedSchema.properties).sort(), [
+      "$schema",
+      "conventions",
+      "devServer",
+      "developerInstructions",
+      "plans",
+      "schemaVersion",
+      "workspace",
+    ]);
+    assert.equal(
+      existsSync(
+        join(cliRoot, "node_modules/@alignfirst/workspace/schemas/workspace-v1.schema.json"),
+      ),
+      false,
+    );
+  }
+  verifyPackagedWorkspaces({
+    executable: process.execPath,
+    entry: join(cliRoot, "node_modules/alignfirst/bin/alignfirst.mjs"),
+    root: installRoot,
+    env: isolatedEnvironment(cliRoot),
+    evidence: process.env.PACKAGED_WORKSPACE_EVIDENCE,
+  });
   for (const executable of ["alignfirst", "aligndev", "docmap"]) {
     assert.match(
       execFileSync(join(cliRoot, "node_modules/.bin", executable), ["--help"], {
@@ -56,7 +101,7 @@ function smokeTestRelease() {
     );
   }
   console.log(
-    `CLI release smoke passed: docmap@${docmap.version}, alignfirst@${alignfirst.version}, aligndev@${aligndev.version}.`,
+    `CLI release smoke passed: docmap@${docmap.version}, workspace@${workspace.version}, alignfirst@${alignfirst.version}, aligndev@${aligndev.version}.`,
   );
   if (process.argv.includes("--cli-only")) return;
   const [subagent, background] = ["pi-subagent", "pi-background"].map(packWorkspace);
@@ -112,17 +157,23 @@ function verifyInvocationConsumers(root) {
   execFileSync(
     process.execPath,
     [
+      "--experimental-import-meta-resolve",
       "--input-type=module",
       "--eval",
       `import assert from "node:assert/strict";
        import { realpathSync } from "node:fs";
        import { join } from "node:path";
-       import { fileURLToPath } from "node:url";
+       import { fileURLToPath, pathToFileURL } from "node:url";
        import { createCommand, renderCommand } from "@alignfirst/docmap/invocation";
        assert.equal(renderCommand(createCommand("bunx", ["--bun", "alignfirst"])),
          "bunx --bun alignfirst");
        assert.equal(realpathSync(fileURLToPath(import.meta.resolve("@alignfirst/docmap/invocation"))),
-         join(process.cwd(), "node_modules/@alignfirst/docmap/dist/invocation.js"));`,
+         join(process.cwd(), "node_modules/@alignfirst/docmap/dist/invocation.js"));
+       for (const consumer of ["alignfirst", "aligndev"]) {
+         const parent = pathToFileURL(join(process.cwd(), "node_modules", consumer, "package.json"));
+         assert.equal(realpathSync(fileURLToPath(import.meta.resolve("@alignfirst/workspace", parent))),
+           join(process.cwd(), "node_modules/@alignfirst/workspace/dist/index.js"));
+       }`,
     ],
     { cwd: root, env: isolatedEnvironment(root), stdio: "inherit", timeout: 10000 },
   );
@@ -147,6 +198,18 @@ function verifyInvocationConsumers(root) {
   assert.equal(report.path, project, "Packed AlignDev must load the real AlignFirst config report");
   assert.equal(report.companion, null);
   assert.equal(report.locations.docs.path, join(project, "docs"));
+  assert.equal(report.locations.alignfirst.path, join(project, "alignfirst.json"));
+  assert.equal(report.portRange, null);
+  const config = JSON.parse(
+    execFileSync(join(root, "node_modules/.bin/alignfirst"), ["config", "--json"], {
+      cwd: project,
+      env,
+      encoding: "utf8",
+    }),
+  );
+  assert.equal(config.workspace.location.path, join(project, "alignfirst.json"));
+  assert.equal(config.workspace.hasDevServer, false);
+  assert.equal(Object.hasOwn(config, "cli"), false);
 }
 
 function packWorkspace(directory) {
@@ -157,13 +220,23 @@ function packWorkspace(directory) {
   if (typeof manifest.version !== "string" || typeof filename !== "string") {
     throw new Error(`Could not pack packages/${directory}.`);
   }
-  return { tarball: join(installRoot, filename), version: manifest.version, name: manifest.name };
-}
-
-function readPackedFilename(packed) {
-  // npm 11 prints an array of packed packages; npm 12 prints an object keyed by package name.
-  const [first] = Array.isArray(packed) ? packed : Object.values(packed ?? {});
-  return first?.filename;
+  const packed = {
+    tarball: join(installRoot, filename),
+    version: manifest.version,
+    name: manifest.name,
+  };
+  if (process.env.PACKAGED_WORKSPACE_EVIDENCE !== undefined)
+    appendFileSync(
+      process.env.PACKAGED_WORKSPACE_EVIDENCE,
+      `${JSON.stringify({
+        kind: "localTarball",
+        ...packed,
+        sha256: createHash("sha256").update(readFileSync(packed.tarball)).digest("hex"),
+        executable: process.execPath,
+        node: process.version,
+      })}\n`,
+    );
+  return packed;
 }
 
 function disposableInstall(name, packages, host = false) {

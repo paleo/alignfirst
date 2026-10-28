@@ -471,13 +471,13 @@ export function setupCodingAgentMock(
             );
             return 1;
           }
-          const exec = await ctx.execInGateway(
-            ["pnpm", "--dir", projectPath, "workspace", "list"],
-            { timeoutMs: 30_000 },
-          );
+          const exec = await ctx.execInGateway(["alignfirst", "workspace", "list"], {
+            cwd: projectPath,
+            timeoutMs: 30_000,
+          });
           if (exec.exitCode !== 0) {
             stderr.write(
-              `mock-coding-agent: pnpm workspace list failed (exit ${exec.exitCode}).\n` +
+              `mock-coding-agent: alignfirst workspace list failed (exit ${exec.exitCode}).\n` +
                 `stdout:\n${exec.stdout}\nstderr:\n${exec.stderr}\n`,
             );
             return exec.exitCode;
@@ -494,12 +494,12 @@ export function setupCodingAgentMock(
             return 1;
           }
           const exec = await ctx.execInGateway(
-            ["pnpm", "--dir", parsed.projectPath, "workspace", "setup", parsed.branch],
-            { timeoutMs: 120_000 },
+            ["alignfirst", "workspace", "setup", parsed.branch],
+            { cwd: parsed.projectPath, timeoutMs: 120_000 },
           );
           if (exec.exitCode !== 0) {
             stderr.write(
-              `mock-coding-agent: pnpm workspace setup ${parsed.branch} failed (exit ${exec.exitCode}).\n` +
+              `mock-coding-agent: alignfirst workspace setup ${parsed.branch} failed (exit ${exec.exitCode}).\n` +
                 `stdout:\n${exec.stdout}\nstderr:\n${exec.stderr}\n`,
             );
             return exec.exitCode;
@@ -517,12 +517,12 @@ export function setupCodingAgentMock(
             return 1;
           }
           const exec = await ctx.execInGateway(
-            ["pnpm", "--dir", parsed.projectPath, "workspace", "setup", parsed.branch, "-c"],
-            { timeoutMs: 120_000 },
+            ["alignfirst", "workspace", "setup", "-c", parsed.branch],
+            { cwd: parsed.projectPath, timeoutMs: 120_000 },
           );
           if (exec.exitCode !== 0) {
             stderr.write(
-              `mock-coding-agent: pnpm workspace setup ${parsed.branch} -c failed (exit ${exec.exitCode}).\n` +
+              `mock-coding-agent: alignfirst workspace setup -c ${parsed.branch} failed (exit ${exec.exitCode}).\n` +
                 `stdout:\n${exec.stdout}\nstderr:\n${exec.stderr}\n`,
             );
             return exec.exitCode;

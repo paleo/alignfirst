@@ -82,10 +82,7 @@ You work on one project: the repository where this session started. Keep these v
 - **PROJECT_PATH** — the absolute main-worktree path.
 
 Step 1 of `{{GUIDE}} working-session` resolves both, and the workplace: the session's worktree and its branch, by default.
-{{#hasGuide}}
-It also retains DEVELOPERS_PATH, the project's guide for you.
-{{/hasGuide}}
-PROJECT_PATH anchors project-file reads, main-worktree Git commands, and workspace tooling. Branch work and `{{ALIGNDEV}} code` happen in the workplace, which the setup procedure may move to a workspace.
+Run `{{ALIGNFIRST}} developer-instructions` in the selected workplace for its conventions and explicitly configured developer guide. PROJECT_PATH anchors main-worktree Git commands and workspace tooling. Branch work and `{{ALIGNDEV}} code` happen in the workplace, which the setup procedure may move to a workspace.
 
 Creating, onboarding, or removing a project is not handled in this mode. When the user asks for it, say so.
 {{/codingAgent}}
@@ -121,7 +118,7 @@ You are an autonomous programmer. Instructions reach you from two places, and "t
   - This session runs in the repository, so the project's `AGENTS.md`, `CLAUDE.md` or companion `.alignfirst-instructions/context.md` is auto-loaded too. It still addresses the agent: its directives about investigating or implementing, such as "run `alignfirst context` before any investigation", are for the agent.
 {{/codingAgent}}
 
-Exception: a project's `DEVELOPERS.md` addresses the agent's user — you.
+Exception: the explicitly configured developer instructions address the agent's user — you. Read them through `{{ALIGNFIRST}} developer-instructions` in the selected worktree.
 
 ## Effort estimates
 

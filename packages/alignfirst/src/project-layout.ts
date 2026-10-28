@@ -1,9 +1,20 @@
+import { configFamilyExists, resolveConfigFamily } from "@alignfirst/workspace/config";
+import {
+  inspectKnownWorkspaceState,
+  withRegistryLock,
+  resolveWorkspaceStorage,
+  type WorkspaceStorage,
+} from "@alignfirst/workspace";
+import { randomUUID } from "node:crypto";
+import { withCompanionRegistryLock, processAlive } from "./companion-registry-lock.js";
+import { canonicalPath } from "@alignfirst/workspace/git";
 import {
   existsSync,
   lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -14,9 +25,10 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { CliError } from "./cli-error.js";
 import type { CommandContext } from "./context.js";
 import { errorMessage } from "./errors.js";
-import { findMainWorktree } from "./git.js";
+import { findMainWorktree, gitOutput, optionalRepositoryId } from "./git.js";
 import {
   literal,
+  integerBetween,
   nonEmptyString,
   object,
   optional,
@@ -25,11 +37,14 @@ import {
   shapeError,
 } from "./json-shape.js";
 import { warnUnknownSetting } from "./settings-warning.js";
+import { PROJECT_CONFIG_FAMILY, readProjectConfig } from "./project-config.js";
+import type { ResolvedProjectConfig } from "./project-config-types.js";
 
 export const ITEM_NAMES = [
-  ".alignfirst.json",
+  "alignfirst",
   ".alignfirst-instructions",
-  "DEVELOPERS.md",
+  "developerInstructions",
+  "workspaceRuntime",
   "docs",
   ".plans",
   "_aligndev",
@@ -42,15 +57,23 @@ const itemSetting = literal("companion", "project", "auto");
 const registryProjectShape = object<RegistryProject>(
   {
     dir: optional(dirValue),
+    defaultLocation: optional(itemSetting),
+    removalClaim: optional(
+      object<RemovalClaim>({
+        pid: integerBetween(1, Number.MAX_SAFE_INTEGER),
+        token: nonEmptyString,
+      }),
+    ),
     aligndev: optional(
       object<AligndevProjectSettings>({ profile: profileValue }, warnUnknownRegistrySetting),
     ),
     items: optional(
       object<RegistryItems>(
         {
-          ".alignfirst.json": optional(itemSetting),
+          alignfirst: optional(itemSetting),
           ".alignfirst-instructions": optional(itemSetting),
-          "DEVELOPERS.md": optional(itemSetting),
+          developerInstructions: optional(itemSetting),
+          workspaceRuntime: optional(itemSetting),
           docs: optional(itemSetting),
           ".plans": optional(itemSetting),
           _aligndev: optional(literal("companion", "auto")),
@@ -71,8 +94,16 @@ export type ItemName = (typeof ITEM_NAMES)[number];
 export interface ProjectLayout {
   aligndev: AligndevProjectSettings | null;
   companion: CompanionLayout | null;
-  locations: Record<ItemName, ItemLocation>;
+  locations: ProjectLocations;
+  selectionOrigins: Record<ItemName, SelectionOrigin>;
+  projectConfig?: ResolvedProjectConfig;
+  storage: WorkspaceStorage;
 }
+
+export type SelectionOrigin = "item" | "defaultLocation" | "builtin";
+export type ProjectLocations = Record<Exclude<ItemName, "developerInstructions">, ItemLocation> & {
+  developerInstructions: ItemLocation | null;
+};
 
 export interface AligndevProjectSettings {
   profile: string;
@@ -84,8 +115,9 @@ export interface CompanionLayout {
   exists: boolean;
   /** The registry key, as written. */
   key: string;
-  /** Effective settings: an item the entry does not set is `"auto"`. */
+  /** Effective settings after item overrides and the registration default. */
   items: ItemSettings;
+  defaultLocation: ItemSetting;
 }
 
 export type ItemSettings = Record<ItemName, ItemSetting | AligndevSetting>;
@@ -99,7 +131,10 @@ export interface ItemLocation {
   exists: boolean;
 }
 
-type FileItemName = Exclude<ItemName, "_aligndev">;
+type FileItemName = Exclude<
+  ItemName,
+  "alignfirst" | "_aligndev" | "workspaceRuntime" | "developerInstructions"
+>;
 
 interface RegistryFile {
   projects: Record<string, RegistryProject>;
@@ -109,13 +144,21 @@ interface RegistryProject {
   /** Relative to the real companions directory, or `~/…`, or absolute. */
   dir?: string;
   items?: RegistryItems;
+  defaultLocation?: ItemSetting;
   aligndev?: AligndevProjectSettings;
+  removalClaim?: RemovalClaim;
+}
+
+interface RemovalClaim {
+  pid: number;
+  token: string;
 }
 
 interface RegistryItems {
-  ".alignfirst.json"?: ItemSetting;
+  alignfirst?: ItemSetting;
   ".alignfirst-instructions"?: ItemSetting;
-  "DEVELOPERS.md"?: ItemSetting;
+  developerInstructions?: ItemSetting;
+  workspaceRuntime?: ItemSetting;
   docs?: ItemSetting;
   ".plans"?: ItemSetting;
   _aligndev?: AligndevSetting;
@@ -152,18 +195,56 @@ export function layoutOf(ctx: CommandContext): ProjectLayout {
 
 export function resolveProjectLayout(cwd: string, home: string): ProjectLayout {
   const registry = readRegistry(home);
-  const mainWorktree = registry && findMainWorktree(cwd);
+  const mainWorktree = findMainWorktree(cwd);
   const realHome = realOrResolved(home);
   const entry =
     registry && mainWorktree !== undefined
       ? findEntry(registry, mainWorktree, realHome)
       : undefined;
   const companion = registry && entry ? resolveCompanion(registry, entry, realHome) : null;
+  const root = projectRoot(cwd);
+  const alignfirst = locateConfigFamily(root, companion);
+  const projectConfig = alignfirst.exists
+    ? { ...readProjectConfig(alignfirst.path), source: alignfirst.in }
+    : undefined;
+  const storage = resolveWorkspaceStorage(
+    {
+      in: companion?.items.workspaceRuntime === "companion" ? "companion" : "project",
+      mainWorktree: mainWorktree ?? root,
+      companionDir: companion?.dir,
+    },
+    root,
+  );
   return {
     aligndev: entry?.project.aligndev ?? null,
     companion,
-    locations: resolveLocations(cwd, companion),
+    projectConfig,
+    selectionOrigins: selectionOriginsFor(entry?.project),
+    storage,
+    locations: resolveLocations(
+      root,
+      companion,
+      alignfirst,
+      projectConfig?.config.developerInstructions,
+      storage,
+    ),
   };
+}
+
+function selectionOriginsFor(
+  project: RegistryProject | undefined,
+): Record<ItemName, SelectionOrigin> {
+  // Object.fromEntries loses the closed ITEM_NAMES key union.
+  return Object.fromEntries(
+    ITEM_NAMES.map((name) => [
+      name,
+      project?.items?.[name] !== undefined
+        ? "item"
+        : project?.defaultLocation !== undefined
+          ? "defaultLocation"
+          : "builtin",
+    ]),
+  ) as Record<ItemName, SelectionOrigin>;
 }
 
 function resolveCompanion(
@@ -175,13 +256,22 @@ function resolveCompanion(
   const dir = companionDir(entry.project.dir, realHome);
   const items = effectiveItems(entry.project);
   assertValidItems(registry, items, entry);
-  return { dir, exists: pathExists(dir), key: entry.key, items };
+  return {
+    dir,
+    exists: pathExists(dir),
+    key: entry.key,
+    items,
+    defaultLocation: entry.project.defaultLocation ?? "auto",
+  };
 }
 
 function registryProjectValue(value: unknown, path: string, warningPath = path): RegistryProject {
   const project = registryProjectShape(value, path, warningPath);
-  if (project.dir === undefined && project.items !== undefined)
-    throw shapeError(path, 'define "dir" when "items" is set');
+  if (
+    project.dir === undefined &&
+    (project.items !== undefined || project.defaultLocation !== undefined)
+  )
+    throw shapeError(path, 'define "dir" when "items" or "defaultLocation" is set');
   if (project.dir === undefined && project.aligndev === undefined)
     throw shapeError(path, 'define "dir" or "aligndev"');
   return project;
@@ -287,14 +377,15 @@ function companionsRoot(realHome: string): string {
   return normalizePath(COMPANIONS_ROOT, realHome);
 }
 
-function effectiveItems({ items = {} }: RegistryProject): ItemSettings {
+function effectiveItems({ items = {}, defaultLocation = "auto" }: RegistryProject): ItemSettings {
   return {
-    ".alignfirst.json": items[".alignfirst.json"] ?? "auto",
-    ".alignfirst-instructions": items[".alignfirst-instructions"] ?? "auto",
-    "DEVELOPERS.md": items["DEVELOPERS.md"] ?? "auto",
-    docs: items.docs ?? "auto",
-    ".plans": items[".plans"] ?? "auto",
-    _aligndev: items._aligndev ?? "auto",
+    alignfirst: items.alignfirst ?? defaultLocation,
+    ".alignfirst-instructions": items[".alignfirst-instructions"] ?? defaultLocation,
+    developerInstructions: items.developerInstructions ?? defaultLocation,
+    workspaceRuntime: items.workspaceRuntime ?? defaultLocation,
+    docs: items.docs ?? defaultLocation,
+    ".plans": items[".plans"] ?? defaultLocation,
+    _aligndev: items._aligndev ?? (defaultLocation === "companion" ? "companion" : "auto"),
   };
 }
 
@@ -309,13 +400,21 @@ function assertValidItems(registry: Registry, items: ItemSettings, entry: Regist
 function resolveLocations(
   cwd: string,
   companion: CompanionLayout | null,
-): Record<ItemName, ItemLocation> {
+  alignfirst: ItemLocation,
+  instructions: string | undefined,
+  storage: WorkspaceStorage,
+): ProjectLocations {
   const locate = (name: FileItemName) => locateItem(cwd, companion, name);
   const plans = locate(".plans");
   return {
-    ".alignfirst.json": locate(".alignfirst.json"),
+    alignfirst,
     ".alignfirst-instructions": locate(".alignfirst-instructions"),
-    "DEVELOPERS.md": locate("DEVELOPERS.md"),
+    developerInstructions: locateInstructions(cwd, companion, instructions),
+    workspaceRuntime: {
+      path: storage.runtimeDir,
+      in: storage.in,
+      exists: pathExists(storage.runtimeDir),
+    },
     docs: locate("docs"),
     ".plans": plans,
     _aligndev:
@@ -333,6 +432,83 @@ function locateItem(
   const copy = companionCopy(companion, name);
   if (companion.items[name] === "companion" || copy.exists || !project.exists) return copy;
   return project;
+}
+
+export function projectRoot(cwd: string): string {
+  if (
+    optionalRepositoryId(cwd) === undefined ||
+    gitOutput(cwd, "rev-parse", "--is-bare-repository") === "true"
+  )
+    return cwd;
+  return gitOutput(cwd, "rev-parse", "--show-toplevel");
+}
+
+function locateConfigFamily(cwd: string, companion: CompanionLayout | null): ItemLocation {
+  try {
+    const setting = companion?.items.alignfirst;
+    const useCompanion =
+      companion !== null &&
+      setting !== "project" &&
+      (setting === "companion" ||
+        configFamilyExists(companion.dir, PROJECT_CONFIG_FAMILY) ||
+        !configFamilyExists(cwd, PROJECT_CONFIG_FAMILY));
+    const directory = useCompanion ? companion.dir : cwd;
+    return {
+      ...resolveConfigFamily(directory, PROJECT_CONFIG_FAMILY),
+      in: useCompanion ? "companion" : "project",
+    };
+  } catch (error) {
+    throw new CliError(errorMessage(error));
+  }
+}
+
+function locateInstructions(
+  root: string,
+  companion: CompanionLayout | null,
+  name: string | undefined,
+): ItemLocation | null {
+  if (name === undefined) return null;
+  if (name.trim().length === 0 || name.includes("\u0000") || isAbsolute(name))
+    throw new CliError("developerInstructions must be a nonblank relative file path.");
+  const setting = companion?.items.developerInstructions;
+  const useCompanion =
+    companion !== null &&
+    setting !== "project" &&
+    (setting === "companion" ||
+      pathExists(resolve(companion.dir, name)) ||
+      !pathExists(resolve(root, name)));
+  return instructionCopy(
+    useCompanion ? companion.dir : root,
+    name,
+    useCompanion ? "companion" : "project",
+  );
+}
+
+function instructionCopy(
+  root: string,
+  name: string,
+  placement: "project" | "companion",
+): ItemLocation {
+  const path = resolve(root, name);
+  if (
+    !isSameOrInside(path, resolve(root)) ||
+    !isSameOrInside(canonicalInstructionPath(path), canonicalPath(root))
+  )
+    throw new CliError("developerInstructions must remain within its selected root.");
+  return { path, in: placement, exists: pathExists(path) };
+}
+
+function canonicalInstructionPath(path: string, links = new Set<string>()): string {
+  const entry = lstatSync(path, { throwIfNoEntry: false });
+  if (entry?.isSymbolicLink()) {
+    if (links.has(path))
+      throw new CliError("developerInstructions contains a symbolic link cycle.");
+    links.add(path);
+    return canonicalInstructionPath(resolve(dirname(path), readlinkSync(path)), links);
+  }
+  const parent = dirname(path);
+  if (parent === path) return canonicalPath(path);
+  return join(canonicalInstructionPath(parent, links), relative(parent, path));
 }
 
 function projectCopy(cwd: string, name: string): ItemLocation {
@@ -353,10 +529,11 @@ function pathExists(path: string): boolean {
 /** One line: `<name>: <path> (<in>)`, with `, missing` when absent and the setting after the name. */
 export function renderItemLocation(
   name: ItemName,
-  location: ItemLocation,
+  location: ItemLocation | null,
   setting?: ItemSetting | AligndevSetting,
 ): string {
   const label = setting === undefined ? name : `${name} (${setting})`;
+  if (location === null) return `${label}: not configured`;
   return `${label}: ${location.path} (${location.in}${location.exists ? "" : ", missing"})`;
 }
 
@@ -389,7 +566,18 @@ export interface CompanionRegistrationOptions {
  * Registers the main worktree of `cwd` with every item on `"auto"`, unless it is registered.
  * Creates the registry when it is missing, and the companion directory with `createDir`.
  */
-export function registerCompanion(
+export async function registerCompanion(
+  cwd: string,
+  home: string,
+  options: CompanionRegistrationOptions,
+): Promise<CompanionRegistration> {
+  requireMainWorktree(cwd);
+  return withCompanionRegistryLock(registryPath(home), () =>
+    registerCompanionLocked(cwd, home, options),
+  );
+}
+
+function registerCompanionLocked(
   cwd: string,
   home: string,
   options: CompanionRegistrationOptions,
@@ -402,6 +590,7 @@ export function registerCompanion(
     raw: { projects: {} },
   };
   const registered = findEntry(registry, mainWorktree, realHome);
+  assertNoCompanionRemoval(registered);
   const existing =
     registered?.project.dir === undefined
       ? undefined
@@ -542,6 +731,7 @@ export interface CompanionUnregistration {
   /** `removeDir` kept the directory: it is outside the companions root. */
   keptOutsideRoot: boolean;
   aligndev: AligndevProjectSettings | null;
+  retainedRuntimePaths: string[];
 }
 
 /**
@@ -549,10 +739,96 @@ export interface CompanionUnregistration {
  * removes its directory inside the companions root: a non-empty one requires `force`.
  * Fails before any change.
  */
-export function unregisterCompanion(
+export async function unregisterCompanion(
+  cwd: string,
+  home: string,
+  options: { removeDir: boolean; force: boolean },
+): Promise<CompanionUnregistration> {
+  const path = registryPath(home);
+  const claim = { pid: process.pid, token: randomUUID() };
+  const mainWorktree = requireMainWorktree(cwd);
+  let original: string | undefined;
+  const key = await withCompanionRegistryLock(path, () => {
+    const registry = readRegistry(home);
+    const entry = registry && findEntry(registry, requireMainWorktree(cwd), realOrResolved(home));
+    if (!registry || !entry) throw new CliError(`${mainWorktree} is not registered in ${path}.`);
+    if (entry.project.dir === undefined)
+      throw new CliError(`${entry.key} has no companion in ${path}.`);
+    assertNoCompanionRemoval(entry);
+    original = readFileSync(path, "utf8");
+    writeRegistry(registry, {
+      ...registry.raw.projects,
+      [entry.key]: { ...registry.raw.projects[entry.key], removalClaim: claim },
+    });
+    return entry.key;
+  });
+  try {
+    const layout = resolveProjectLayout(cwd, home);
+    const inspect = () =>
+      inspectKnownWorkspaceState(layout.storage.mainWorktree, layout.storage.registryDir);
+    const state = pathExists(layout.storage.registryDir)
+      ? await withRegistryLock(layout.storage.mainWorktree, layout.storage.registryDir, inspect)
+      : inspect();
+    if (state.requiresCleanup)
+      throw new CliError(
+        "Companion still owns workspace resources or incomplete cleanup. Complete teardown/removal under the current selection before unregistering, including with --force.",
+      );
+    const removal = await withCompanionRegistryLock(path, () => {
+      const registry = readRegistry(home);
+      if (registry?.projects[key]?.removalClaim?.token !== claim.token)
+        throw new CliError("Companion removal ownership lost.");
+      return planCompanionUnregistration(
+        cwd,
+        home,
+        options,
+        state.retainedWorktrees.map(
+          (worktree) => resolveWorkspaceStorage(layout.storage, worktree).runtimeDir,
+        ),
+      );
+    });
+    if (removal.removed) rmSync(removal.dir, { recursive: true, force: true });
+    await withCompanionRegistryLock(path, () => {
+      const registry = readRegistry(home);
+      if (registry?.projects[key]?.removalClaim?.token !== claim.token)
+        throw new CliError("Companion removal ownership lost.");
+      const projects = { ...registry.raw.projects };
+      const {
+        dir: _dir,
+        items: _items,
+        defaultLocation: _default,
+        removalClaim: _claim,
+        ...remaining
+      } = projects[key];
+      if (registry.projects[key].aligndev) projects[key] = remaining;
+      else delete projects[key];
+      writeRegistry(registry, projects);
+    });
+    return removal;
+  } finally {
+    await withCompanionRegistryLock(path, () => {
+      const registry = readRegistry(home);
+      if (registry?.projects[key]?.removalClaim?.token !== claim.token) return;
+      const raw = { ...registry.raw.projects[key] };
+      delete raw.removalClaim;
+      const projects = { ...registry.raw.projects, [key]: raw };
+      const restored = { ...registry.raw, projects };
+      if (
+        original !== undefined &&
+        JSON.stringify(JSON.parse(original)) === JSON.stringify(restored)
+      ) {
+        const temporary = `${path}.${randomUUID()}.tmp`;
+        writeFileSync(temporary, original);
+        renameSync(temporary, path);
+      } else writeRegistry(registry, projects);
+    });
+  }
+}
+
+function planCompanionUnregistration(
   cwd: string,
   home: string,
   { removeDir, force }: { removeDir: boolean; force: boolean },
+  retainedRuntimePaths: string[],
 ): CompanionUnregistration {
   const mainWorktree = requireMainWorktree(cwd);
   const realHome = realOrResolved(home);
@@ -571,15 +847,8 @@ export function unregisterCompanion(
   const deletable = removeDir && isSameOrInside(dir, root);
   if (deletable)
     assertRemovableDir(registry, companionEntry, entries, { force, mainWorktree, realHome });
-  const { [entry.key]: _removed, ...projects } = registry.raw.projects;
   const aligndev = entry.project.aligndev ?? null;
-  if (aligndev !== null) {
-    const { dir: _dir, items: _items, ...remaining } = registry.raw.projects[entry.key];
-    projects[entry.key] = remaining;
-  }
-  writeRegistry(registry, projects);
   const removed = deletable && entries !== undefined;
-  if (removed) rmSync(dir, { recursive: true, force: true });
   return {
     registry: path,
     key: entry.key,
@@ -588,7 +857,30 @@ export function unregisterCompanion(
     removed,
     keptOutsideRoot: removeDir && !deletable && entries !== undefined,
     aligndev,
+    retainedRuntimePaths: removed ? [] : retainedRuntimePaths,
   };
+}
+
+function assertNoCompanionRemoval(entry: RegistryEntry | undefined): void {
+  const claim = entry?.project.removalClaim;
+  if (claim && processAlive(claim.pid))
+    throw new CliError("Companion removal is in progress. Retry after it completes.");
+}
+
+/** Called inside the selected runtime lock. It only reads the companion registry. */
+export function assertCompanionLifecycleAdmission(home: string, selected: ProjectLayout): void {
+  const registry = readRegistry(home);
+  const realHome = realOrResolved(home);
+  const entry = registry && findEntry(registry, selected.storage.mainWorktree, realHome);
+  assertNoCompanionRemoval(entry);
+  const current = registry && entry ? resolveCompanion(registry, entry, realHome) : null;
+  if (
+    current?.dir !== selected.companion?.dir ||
+    ITEM_NAMES.some((item) => current?.items[item] !== selected.companion?.items[item])
+  )
+    throw new CliError(
+      "Companion selection changed during workspace admission. Retry with the current selection; clean old resources before manually changing registration.",
+    );
 }
 
 function assertRemovableDir(

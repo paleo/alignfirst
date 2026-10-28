@@ -110,7 +110,7 @@ export function escapeRegExp(value: string): string {
 
 /**
  * Pre-seed a branch + worktree for `project` so the agent finds an existing
- * registered workspace. Runs the real `pnpm workspace setup … -c` in the
+ * registered workspace. Runs the real `alignfirst workspace setup … -c` in the
  * gateway (setup blocks until READY/FAILED). Waits until the worktree
  * directory appears.
  */
@@ -121,13 +121,13 @@ export async function seedWorktree(
   desc: string,
 ): Promise<string> {
   const branch = `${ticket}/${desc}`;
-  const exec = await ctx.execInGateway(["pnpm", "workspace", "setup", branch, "-c"], {
+  const exec = await ctx.execInGateway(["alignfirst", "workspace", "setup", "-c", branch], {
     cwd: projectPath,
     timeoutMs: 120_000,
   });
   if (exec.exitCode !== 0) {
     throw new Error(
-      `seedWorktree: pnpm workspace setup ${branch} -c failed (exit ${exec.exitCode}).\n` +
+      `seedWorktree: alignfirst workspace setup -c ${branch} failed (exit ${exec.exitCode}).\n` +
         `stdout:\n${exec.stdout}\nstderr:\n${exec.stderr}`,
     );
   }

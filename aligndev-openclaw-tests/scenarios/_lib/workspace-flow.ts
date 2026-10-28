@@ -1,5 +1,5 @@
 import type { ScenarioContext } from "@alignfirst/openclaw-test";
-import { execMatches, readsFile } from "./agent-tool-calls.ts";
+import { execMatches, readsDeveloperInstructions } from "./agent-tool-calls.ts";
 import { assertBranchForTicket, escapeRegExp, waitForAnyWorktreeDir } from "./fixture-state.ts";
 import { isMetaNarration } from "./meta-narration.ts";
 import { expectCodingDelegation, type CodingAgentMockHandle } from "./mock-coding-agent.ts";
@@ -63,17 +63,14 @@ export async function runWorkspaceFlow(
     timeoutMs: delegationTimeoutMs,
   });
 
-  // The setup flow's documented prerequisites (project-workspace-setup.md): the
-  // agent must read the project's DEVELOPERS.md — the worktree-setup entry
-  // point — and run `workspace --guide` to discover the setup commands. Tool
-  // calls surface in the session transcript as they happen, but when queued
-  // inbounds and the exec wake coalesce the whole conversation into one run,
-  // these calls can come minutes into it — hence timeouts well past the 30s
-  // default.
-  await ctx.waitForAgentToolCall((c) => readsFile(c, `${projectPath}/DEVELOPERS.md`), {
-    label: "agent reads the project DEVELOPERS.md",
-    timeoutMs: 120_000,
-  });
+  // Instructions are selected by the invoked worktree, not discovered by filename.
+  await ctx.waitForAgentToolCall(
+    (c) => readsDeveloperInstructions(c, projectPath) || readsDeveloperInstructions(c, worktreeDir),
+    {
+      label: "agent reads the project developer instructions",
+      timeoutMs: 120_000,
+    },
+  );
   await ctx.waitForAgentToolCall((c) => execMatches(c, /workspace\s+--guide/), {
     label: "agent runs `workspace --guide`",
     timeoutMs: 120_000,

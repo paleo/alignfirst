@@ -3,7 +3,24 @@ import { test } from "node:test";
 import {
   invokesAligndevCode,
   invokesCodingAgentDirectly,
+  readsDeveloperInstructions,
 } from "../scenarios/_lib/agent-tool-calls.ts";
+
+test("instruction observation follows the command and selected worktree, not a filename read", () => {
+  const call = { toolName: "exec", toolUseId: "instructions" };
+  for (const input of [
+    { command: "alignfirst developer-instructions", workdir: "/projects/nimbus/src" },
+    { command: "cd /projects/nimbus && npx -y alignfirst developer-instructions" },
+  ]) {
+    assert.equal(readsDeveloperInstructions({ ...call, input }, "/projects/nimbus"), true);
+  }
+  for (const input of [
+    { command: "cat DEVELOPERS.md", workdir: "/projects/nimbus" },
+    { command: "alignfirst developer-instructions", workdir: "/projects/nimbus-other" },
+  ]) {
+    assert.equal(readsDeveloperInstructions({ ...call, input }, "/projects/nimbus"), false);
+  }
+});
 
 for (const agent of ["claude", "codex", "pi"]) {
   for (const command of [

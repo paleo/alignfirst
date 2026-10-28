@@ -78,7 +78,10 @@ describe("explicit companion-only onboarding", () => {
       expect(route).toContain("even when existing project plans are usable");
       expect(route).toContain("starting at section 3");
       expect(route).toContain("every item to write resolve inside `companion.dir`");
-      expect(route).toContain("Missing `.alignfirst.json` and `DEVELOPERS.md`");
+      expect(route).toContain("Missing `locations.alignfirst` must have a companion destination");
+      expect(route).toContain(
+        "`locations.developerInstructions` is null until a reference is configured",
+      );
       expect(route).toContain("stop and resolve that selection with the user");
       expect(route).toContain("without copying them");
     },
@@ -112,18 +115,15 @@ describe("explicit companion-only onboarding", () => {
 
   it("keeps companion declaration and explicit plans selection in the setup skill", () => {
     const reference = readFileSync(COMPANION_SETUP, "utf8");
-    const assistant = reference.split("## For an Assistant\n")[1].split("\n## Select a Profile")[0];
-    expect(assistant).toContain("**Companion (step 2):** always register and verify the companion");
-    expect(assistant).toContain("independently of plans readiness");
-    expect(assistant).toContain("starting at section 3 under that authorization");
-    expect(assistant).toContain("even when project plans are usable");
-    expect(assistant).not.toContain("Usable plans need no preparation");
+    expect(reference).toContain("obtain onboarding authorization");
+    expect(reference).toContain("npx -y alignfirst companion register");
+    expect(reference).toContain("even when project plans are usable");
+    expect(reference).toContain("before ticket reservation, request capture or coding delegation");
+    expect(reference).not.toContain("Usable plans need no preparation");
     expect(reference).toContain('`projects[companion.key].items[".plans"]` to `"companion"`');
-    expect(reference).toContain(
-      "Preserve all other registry fields, item settings, profile selections",
-    );
-    expect(reference).toContain("every item to write resolve inside `companion.dir`");
-    expect(reference).toContain("do not copy, merge, migrate, archive, or delete them");
+    expect(reference).toContain("Preserve other entries, fields, item selections and profiles");
+    expect(reference).toContain("each intended write resolve inside `companion.dir`");
+    expect(reference).toMatch(/do not copy, merge, migrate, archive,? or delete them/);
   });
 
   it.each(REGISTRATION_STATES)(
@@ -161,11 +161,10 @@ describe("explicit companion-only onboarding", () => {
       const before = readReport(fixture, repo);
       expect(before.companion === null).toBe(state !== "registered");
       expect(before.config).toBeNull();
-      expect(before.locations["DEVELOPERS.md"]).toEqual({
-        path: join(state === "registered" ? existingCompanion : repo, "DEVELOPERS.md"),
-        in: state === "registered" ? "companion" : "project",
-        exists: false,
-      });
+      expect(before.locations.developerInstructions).toBeNull();
+      const conventionsOnly = runFirst(fixture, repo, ["developer-instructions"]);
+      expect(conventionsOnly).toContain("# Project Conventions");
+      expect(conventionsOnly).not.toContain("# Developer Instructions");
       expect(before.locations[".plans"].path).toBe(join(repo, ".plans"));
       expect(execGit(repo, "ls-files", "--", ".plans")).toBe("");
       expect(execGit(repo, "check-ignore", ".plans/side-7/A1-request.md")).toBe(
@@ -202,9 +201,11 @@ describe("explicit companion-only onboarding", () => {
       selectedEntry.items = { ...selectedEntry.items, ".plans": "companion" };
       writeRegistry(fixture.home, registeredRegistry);
       const selected = readReport(fixture, repo);
-      for (const item of [".plans", ".alignfirst.json", "DEVELOPERS.md"] as const) {
+      for (const item of [".plans", "alignfirst"] as const) {
         expect(selected.locations[item].in, item).toBe("companion");
-        expect(selected.locations[item].path, item).toBe(join(dir, item));
+        expect(selected.locations[item].path, item).toBe(
+          join(dir, item === "alignfirst" ? "alignfirst.json" : item),
+        );
       }
       mkdirSync(selected.locations[".plans"].path, { recursive: true });
       runFirst(fixture, repo, ["plans", "check"]);
@@ -217,11 +218,26 @@ describe("explicit companion-only onboarding", () => {
       } else {
         expect(readdirSync(join(dir, ".plans"))).toEqual([]);
       }
-      writeFileSync(selected.locations[".alignfirst.json"].path, '{"schemaVersion":1}\n');
-      writeFileSync(selected.locations["DEVELOPERS.md"].path, "# Developer guide\n");
+      writeFileSync(
+        selected.locations.alignfirst.path,
+        '{"schemaVersion":1,"developerInstructions":"handbook/workflow.md"}\n',
+      );
+      const instructions = readReport(fixture, repo).locations.developerInstructions;
+      if (instructions === null) throw new Error("Missing configured developer instructions");
+      expect(instructions).toMatchObject({
+        in: "companion",
+        path: join(dir, "handbook", "workflow.md"),
+        exists: false,
+      });
+      mkdirSync(join(dir, "handbook"));
+      writeFileSync(instructions.path, "# Developer guide\n\nSee [details](./details.md).\n");
+      const developerInstructions = runFirst(fixture, repo, ["developer-instructions"]);
+      expect(developerInstructions).toContain(
+        `Source: ${instructions.path}\n\n# Developer guide\n\nSee [details](./details.md).\n`,
+      );
       const prepared = readReport(fixture, repo);
       expect(prepared.source).toBe("companion");
-      expect(prepared.locations["DEVELOPERS.md"].exists).toBe(true);
+      expect(prepared.locations.developerInstructions?.exists).toBe(true);
       expect(prepared.aligndev).toEqual(state === "missing" ? null : { profile: "kept-profile" });
       const finalRegistry: Registry = JSON.parse(readFileSync(registryPath, "utf8"));
       expect(finalRegistry).toEqual(registeredRegistry);

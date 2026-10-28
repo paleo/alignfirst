@@ -11,10 +11,12 @@ import {
   statSync,
   writeSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { WorkspaceError } from "./errors.js";
 import { isProcessAlive } from "./process-control.js";
+import { assertRegistryPath, assertSelectedRegistry } from "./registry-ownership.js";
+import { claimRegistryStorage } from "./registry-storage.js";
 
 const LOCK_FILENAME = "workspaces.lock";
 const RETRY_MS = 50;
@@ -38,22 +40,34 @@ export async function withRegistryLock<T>(
   fn: () => T | Promise<T>,
   timings: LockTimings = {},
 ): Promise<T> {
-  const lockPath = join(mainWorktree, registryDir, LOCK_FILENAME);
+  const directory = resolve(mainWorktree, registryDir);
+  assertSelectedRegistry(mainWorktree, directory);
+  const lockPath = join(directory, LOCK_FILENAME);
   const content = `${process.pid}:${randomBytes(8).toString("hex")}`;
-  await acquireLock(lockPath, content, timings);
+  await acquireLock(mainWorktree, lockPath, content, timings);
   try {
+    assertSelectedRegistry(mainWorktree, directory);
+    claimRegistryStorage(mainWorktree, directory);
     return await fn();
   } finally {
+    assertRegistryPath(mainWorktree, directory, lockPath);
     releaseLock(lockPath, content);
   }
 }
 
-async function acquireLock(lockPath: string, content: string, timings: LockTimings): Promise<void> {
+async function acquireLock(
+  mainWorktree: string,
+  lockPath: string,
+  content: string,
+  timings: LockTimings,
+): Promise<void> {
   const retryMs = timings.retryMs ?? RETRY_MS;
   const staleMs = timings.staleMs ?? STALE_MS;
   const deadline = Date.now() + (timings.timeoutMs ?? TIMEOUT_MS);
+  assertRegistryPath(mainWorktree, dirname(lockPath), lockPath);
   mkdirSync(dirname(lockPath), { recursive: true });
   for (;;) {
+    assertRegistryPath(mainWorktree, dirname(lockPath), lockPath);
     if (tryCreateLock(lockPath, content)) return;
     const staleContent = findStaleLock(lockPath, staleMs);
     if (staleContent !== undefined) {

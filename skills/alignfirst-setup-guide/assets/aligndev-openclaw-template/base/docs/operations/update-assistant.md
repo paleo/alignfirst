@@ -11,6 +11,10 @@ read_when:
 
 Open a report in `.reports/` and record the versions the verify step prints.
 
+## Multi-stack workspace cutover gate
+
+Before replacing AlignFirst/AlignDev, inspect every participating project/worktree for retired `.alignfirst.json`, JavaScript workspace wrappers and old runtime registries. If present, stop this update sequence and follow [Upgrading Multi-Stack Workspaces](https://github.com/paleo/alignfirst/blob/main/docs/upgrading-multi-stack-workspaces.md) with the operator's approval. Account for pending finalizers, running services and persistent resources, preserve required data, and complete old-tool cleanup before changing formats. Never delete registries to bypass cleanup. Convert settings, companion item keys, project scripts and instructions together; then resume this runbook. No automatic migration or consumer bulk edit is included.
+
 ## Maintenance controls
 
 Pull the repository and reinstall its root-owned controls before opening any maintenance window:
@@ -195,7 +199,7 @@ openclaw plugins list --json | grep -q "\"alignfirst-service\"" &&
 
 On the first profile-aware upgrade, re-seed now through the `config instructions` command in [configure-assistant.md](configure-assistant.md), before any CLI help, delegation or restart. This replaces the protected direct launch settings; the new CLI ignores them with warnings, so they no longer preserve the deployment's launch policy.
 
-Immediately replace the projects marker, then validate with the new CLI. The wrapper refreshes the seed before each unlock and keeps the gateway stopped between these commands. The old marker's `portRange` key is rejected by the new CLI; individual project `.alignfirst.json` files retain their singular `portRange` claims:
+Immediately replace the projects marker, then validate with the new CLI. The wrapper refreshes the seed before each unlock and keeps the gateway stopped between these commands. The old marker's `portRange` key is rejected by the new CLI; individual projects declare their range only in the selected merged `alignfirst.json`/`.jsonc` under `devServer.ports`. Before upgrading consumers with retired settings/wrappers/state, follow the setup guide's multi-stack upgrade runbook, accounting for all worktrees, pending finalizers and resources before format changes:
 
 ```sh
 sudo /usr/local/sbin/alignfirst-assistant-maintenance projects -- bash -lc '

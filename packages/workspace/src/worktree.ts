@@ -1,8 +1,18 @@
-import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
 import { WorkspaceError } from "./errors.js";
+import {
+  canonicalPath,
+  git,
+  headCommit,
+  isInside,
+  pathExists,
+  readRepository,
+  worktreeRoot,
+} from "./git.js";
+import type { WorkspaceOutput } from "./operation.js";
 
 const MAX_ALIGNED_SUFFIX_ATTEMPTS = 100;
 
@@ -14,20 +24,15 @@ export interface WorktreeContext {
 
 export interface RunCtx {
   verbose: boolean;
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  output?: WorkspaceOutput;
 }
 
-export function detectWorktree(cwd: string = process.cwd()): WorktreeContext {
-  const currentWorktree = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-    cwd,
-    encoding: "utf-8",
-    stdio: "pipe",
-  }).trim();
-  const gitCommonDir = execFileSync(
-    "git",
-    ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-    { cwd, encoding: "utf-8", stdio: "pipe" },
-  ).trim();
-  const mainWorktree = dirname(gitCommonDir);
+export function detectWorktree(cwd: string): WorktreeContext {
+  const source = { cwd, env: process.env };
+  const currentWorktree = worktreeRoot(source);
+  const { mainWorktree } = readRepository(source);
   const isMainWorktree = resolve(currentWorktree) === resolve(mainWorktree);
   return { currentWorktree, mainWorktree, isMainWorktree };
 }
@@ -37,12 +42,44 @@ export function useExistingBranch(
   ctx: WorktreeContext,
   run: RunCtx,
   dirNameFn: WorktreeDirNameFn = defaultWorktreeDirName,
+  options: CreateBranchOptions = {},
 ): WorktreeContext {
-  if (!branchExists(branch)) {
-    throw new WorkspaceError(`Branch "${branch}" does not exist locally or on the remote.`);
+  const source = { cwd: ctx.currentWorktree, env: run.env ?? process.env };
+  const repo = readRepository(source);
+  const occupied = repo.worktrees.find((tree) => tree.branch === branch);
+  if (occupied)
+    throw new WorkspaceError(`Branch ${branch} is already checked out at ${occupied.path}.`);
+  const local = git(source, "for-each-ref", "--format=%(refname)", "refs/heads").split("\n");
+  let start = `refs/heads/${branch}`;
+  let tracking = false;
+  if (!local.includes(start)) {
+    const remotes = git(source, "for-each-ref", "--format=%(refname)", "refs/remotes")
+      .split("\n")
+      .filter((ref) => ref.slice("refs/remotes/".length).split("/").slice(1).join("/") === branch);
+    if (remotes.length !== 1)
+      throw new WorkspaceError(
+        remotes.length === 0
+          ? `No local or fetched remote branch: ${branch}`
+          : `Ambiguous remote branch ${branch}: ${remotes.join(", ")}.`,
+      );
+    start = remotes[0];
+    tracking = true;
   }
-  const worktreePath = dedupeWorktreePath(computeWorktreePath(ctx.mainWorktree, branch, dirNameFn));
-  execFileSync("git", ["worktree", "add", worktreePath, branch], { stdio: stdioFor(run) });
+  validateBranch(branch, source);
+  const worktreePath = selectDestination(ctx, run, branch, dirNameFn, options.path);
+  options.beforeCreate?.(start);
+  runGitWorktree(
+    [
+      "worktree",
+      "add",
+      ...(tracking ? ["--track", "-b", branch] : []),
+      "--",
+      worktreePath,
+      tracking ? start : branch,
+    ],
+    ctx.currentWorktree,
+    run,
+  );
   return { ...ctx, currentWorktree: worktreePath, isMainWorktree: false };
 }
 
@@ -52,6 +89,8 @@ export interface CreateBranchOptions {
   from?: string;
   /** When the name is taken, append `-2`, `-3`… instead of failing. */
   dedupe?: boolean;
+  path?: string;
+  beforeCreate?: (commit: string) => void;
 }
 
 export function createBranch(
@@ -61,9 +100,15 @@ export function createBranch(
   options: CreateBranchOptions = {},
 ): WorktreeContext {
   const { dirNameFn = defaultWorktreeDirName, from, dedupe = false } = options;
-  if (from !== undefined) verifyFromRef(from);
+  const source = { cwd: ctx.currentWorktree, env: run.env ?? process.env };
+  validateBranch(requestedBranch, source);
+  if (from !== undefined) verifyFromRef(from, ctx.currentWorktree);
+  else if (headCommit(source) === undefined)
+    throw new WorkspaceError(
+      "HEAD has no commit. Make the initial commit before creating a linked workspace.",
+    );
 
-  const ancestor = findAncestorBranchConflict(requestedBranch);
+  const ancestor = findAncestorBranchConflict(requestedBranch, ctx.currentWorktree);
   if (ancestor !== undefined) {
     throw new WorkspaceError(
       `Branch name "${requestedBranch}" conflicts with existing branch "${ancestor}": ` +
@@ -73,9 +118,12 @@ export function createBranch(
   }
 
   const finalBranch = resolveNewBranchName(requestedBranch, ctx, dirNameFn, dedupe);
-  const worktreePath = dedupeWorktreePath(
-    computeWorktreePath(ctx.mainWorktree, finalBranch, dirNameFn),
-  );
+  if (finalBranch !== requestedBranch)
+    run.output?.diagnostic(
+      `Warning: Branch "${requestedBranch}" is taken; using "${finalBranch}" instead.`,
+    );
+  const worktreePath = selectDestination(ctx, run, finalBranch, dirNameFn, options.path);
+  options.beforeCreate?.(from ?? "HEAD");
   const addArgs = [
     "worktree",
     "add",
@@ -86,15 +134,48 @@ export function createBranch(
     worktreePath,
   ];
   if (from !== undefined) addArgs.push(from);
-  execFileSync("git", addArgs, { stdio: stdioFor(run) });
+  runGitWorktree(addArgs, ctx.currentWorktree, run);
   return { ...ctx, currentWorktree: worktreePath, isMainWorktree: false };
 }
 
-function verifyFromRef(from: string): void {
+function validateBranch(branch: string, source: { cwd: string; env: NodeJS.ProcessEnv }): void {
+  if (branch.startsWith("-") || branch === "HEAD") throw new WorkspaceError("Invalid branch name.");
+  git(source, "check-ref-format", `refs/heads/${branch}`);
+}
+
+function selectDestination(
+  ctx: WorktreeContext,
+  run: RunCtx,
+  branch: string,
+  dirNameFn: WorktreeDirNameFn,
+  path?: string,
+): string {
+  const candidate =
+    path === undefined
+      ? dedupeWorktreePath(computeWorktreePath(ctx.mainWorktree, branch, dirNameFn))
+      : resolve(run.cwd ?? ctx.currentWorktree, path);
+  if (pathExists(candidate)) throw new WorkspaceError(`Destination already exists: ${candidate}`);
+  const destination = canonicalPath(candidate);
+  let ancestor = dirname(destination);
+  while (!pathExists(ancestor)) ancestor = dirname(ancestor);
+  if (!statSync(ancestor).isDirectory())
+    throw new WorkspaceError(`Destination parent is not a directory: ${ancestor}`);
+  const repo = readRepository({ cwd: ctx.currentWorktree, env: run.env ?? process.env });
+  for (const tree of repo.worktrees) {
+    if (isInside(tree.path, destination) || isInside(destination, tree.path))
+      throw new WorkspaceError(
+        `Destination overlaps registered worktree ${tree.path}. Choose a new sibling directory.`,
+      );
+  }
+  return destination;
+}
+
+function verifyFromRef(from: string, cwd: string): void {
   try {
     // `^{commit}` accepts any commit-ish: branch, origin/x, tag, SHA.
     // `--end-of-options` guards against option-like refs (rev-parse treats args after `--` as paths).
     execFileSync("git", ["rev-parse", "--verify", "--end-of-options", `${from}^{commit}`], {
+      cwd,
       stdio: "pipe",
     });
   } catch {
@@ -103,12 +184,12 @@ function verifyFromRef(from: string): void {
 }
 
 /** Returns an existing ancestor prefix (`a`, then `a/b` for `a/b/c`) that would block nesting. */
-function findAncestorBranchConflict(branch: string): string | undefined {
+function findAncestorBranchConflict(branch: string, cwd: string): string | undefined {
   const parts = branch.split("/");
   let prefix = "";
   for (let i = 0; i < parts.length - 1; ++i) {
     prefix = prefix === "" ? parts[i] : `${prefix}/${parts[i]}`;
-    if (branchExists(prefix)) return prefix;
+    if (branchExists(prefix, cwd)) return prefix;
   }
   return undefined;
 }
@@ -119,8 +200,8 @@ function resolveNewBranchName(
   dirNameFn: WorktreeDirNameFn,
   dedupe: boolean,
 ): string {
-  const exact = branchExists(requestedBranch);
-  const namespace = exact ? undefined : findNamespaceConflict(requestedBranch);
+  const exact = branchExists(requestedBranch, ctx.currentWorktree);
+  const namespace = exact ? undefined : findNamespaceConflict(requestedBranch, ctx.currentWorktree);
   if (!exact && namespace === undefined) return requestedBranch;
   if (!dedupe) {
     const detail = exact
@@ -131,28 +212,29 @@ function resolveNewBranchName(
   return dedupeBranchName(requestedBranch, ctx, dirNameFn);
 }
 
-function branchNameTaken(name: string): boolean {
-  return branchExists(name) || findNamespaceConflict(name) !== undefined;
+function branchNameTaken(name: string, cwd: string): boolean {
+  return branchExists(name, cwd) || findNamespaceConflict(name, cwd) !== undefined;
 }
 
-/** Returns an example ref under `refs/heads/<branch>/` or `refs/remotes/origin/<branch>/`, if any. */
-function findNamespaceConflict(branch: string): string | undefined {
-  try {
-    const out = execFileSync(
-      "git",
-      [
-        "for-each-ref",
-        "--count=1",
-        "--format=%(refname:short)",
-        `refs/heads/${branch}/`,
-        `refs/remotes/origin/${branch}/`,
-      ],
-      { stdio: "pipe", encoding: "utf-8" },
-    ).trim();
-    return out.length > 0 ? out : undefined;
-  } catch {
-    return undefined;
-  }
+function findNamespaceConflict(branch: string, cwd: string): string | undefined {
+  return branchNames(cwd).find((name) => name.startsWith(`${branch}/`));
+}
+
+function branchNames(cwd: string): string[] {
+  return git(
+    { cwd, env: process.env },
+    "for-each-ref",
+    "--format=%(refname)",
+    "refs/heads",
+    "refs/remotes",
+  )
+    .split("\n")
+    .filter((ref) => ref !== "")
+    .map((ref) =>
+      ref.startsWith("refs/heads/")
+        ? ref.slice("refs/heads/".length)
+        : ref.slice("refs/remotes/".length).split("/").slice(1).join("/"),
+    );
 }
 
 /**
@@ -169,41 +251,33 @@ function dedupeBranchName(
   let firstFree: string | undefined;
   for (let suffix = 2; suffix < 2 + MAX_ALIGNED_SUFFIX_ATTEMPTS; ++suffix) {
     const candidate = `${requestedBranch}-${suffix}`;
-    if (branchNameTaken(candidate)) continue;
+    if (branchNameTaken(candidate, ctx.currentWorktree)) continue;
     firstFree ??= candidate;
-    if (!existsSync(computeWorktreePath(ctx.mainWorktree, candidate, dirNameFn))) {
-      return warnSuffix(requestedBranch, candidate);
+    if (!pathExists(computeWorktreePath(ctx.mainWorktree, candidate, dirNameFn))) {
+      return candidate;
     }
   }
-  return warnSuffix(requestedBranch, firstFree ?? firstFreeBranchName(requestedBranch));
+  return firstFree ?? firstFreeBranchName(requestedBranch, ctx.currentWorktree);
 }
 
-function firstFreeBranchName(requestedBranch: string): string {
+function firstFreeBranchName(requestedBranch: string, cwd: string): string {
   let suffix = 2 + MAX_ALIGNED_SUFFIX_ATTEMPTS;
-  while (branchNameTaken(`${requestedBranch}-${suffix}`)) ++suffix;
+  while (branchNameTaken(`${requestedBranch}-${suffix}`, cwd)) ++suffix;
   return `${requestedBranch}-${suffix}`;
-}
-
-function warnSuffix(requestedBranch: string, finalBranch: string): string {
-  console.warn(
-    `Warning: Branch "${requestedBranch}" already exists; using "${finalBranch}" instead.`,
-  );
-  return finalBranch;
 }
 
 export function isWorktreeDirty(worktreePath: string): boolean {
   try {
-    const out = execFileSync("git", ["status", "--porcelain"], {
+    const out = execFileSync("git", ["status", "--porcelain", "--untracked-files=all"], {
       stdio: "pipe",
       cwd: worktreePath,
       encoding: "utf-8",
     });
     return out.trim().length > 0;
   } catch {
-    console.error(
-      `Error: Cannot check for uncommitted changes in ${worktreePath}. Pass --force to remove anyway.`,
+    throw new WorkspaceError(
+      `Cannot check for uncommitted changes in ${worktreePath}. Pass --force to remove anyway.`,
     );
-    process.exit(1);
   }
 }
 
@@ -221,8 +295,19 @@ export function getWorktreeBranch(worktreePath: string): string | undefined {
   }
 }
 
-export function removeWorktree(worktreePath: string, run: RunCtx): void {
-  execFileSync("git", ["worktree", "remove", "--force", worktreePath], { stdio: stdioFor(run) });
+export function removeWorktree(worktreePath: string, run: RunCtx, force: boolean): void {
+  runGitWorktree(
+    [
+      "-c",
+      "status.showUntrackedFiles=all",
+      "worktree",
+      "remove",
+      ...(force ? ["--force"] : []),
+      worktreePath,
+    ],
+    run.cwd,
+    run,
+  );
 }
 
 /** Pure function that produces the basename of a worktree directory from a branch. */
@@ -261,28 +346,29 @@ export function computeWorktreePath(
 }
 
 function dedupeWorktreePath(candidate: string): string {
-  if (!existsSync(candidate)) return candidate;
+  if (!pathExists(candidate)) return candidate;
   let suffix = 2;
-  while (existsSync(`${candidate}-${suffix}`)) {
+  while (pathExists(`${candidate}-${suffix}`)) {
     ++suffix;
   }
   return `${candidate}-${suffix}`;
 }
 
-function branchExists(branch: string): boolean {
-  try {
-    execFileSync("git", ["rev-parse", "--verify", branch], { stdio: "pipe" });
-    return true;
-  } catch {
-    try {
-      execFileSync("git", ["rev-parse", "--verify", `origin/${branch}`], { stdio: "pipe" });
-      return true;
-    } catch {
-      return false;
-    }
-  }
+function branchExists(branch: string, cwd: string): boolean {
+  return branchNames(cwd).includes(branch);
 }
 
-function stdioFor(ctx: RunCtx): "inherit" | "pipe" {
-  return ctx.verbose ? "inherit" : "pipe";
+function runGitWorktree(args: string[], cwd: string | undefined, run: RunCtx): void {
+  const result = spawnSync("git", args, { cwd, env: run.env, encoding: "utf8", stdio: "pipe" });
+  if (run.verbose) {
+    if (result.stdout !== null && result.stdout !== "") run.output?.write(result.stdout);
+    if (result.stderr !== null && result.stderr !== "")
+      run.output?.diagnostic(result.stderr.trimEnd());
+  }
+  if (result.error || result.signal !== null || result.status !== 0) {
+    throw new WorkspaceError(
+      `Git worktree operation failed: ${result.stderr?.trim() ?? result.error?.message ?? result.signal}`,
+      { cause: result.error },
+    );
+  }
 }

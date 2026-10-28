@@ -110,11 +110,13 @@ function parseSetupArgs(
   const configFolder = ctx.projectConfig?.config.plans?.repositoryFolder;
   if (values.folder !== undefined && configFolder !== undefined && values.folder !== configFolder)
     throw new CliError(
-      `--folder "${values.folder}" differs from plans.repositoryFolder "${configFolder}" in .alignfirst.json.`,
+      `--folder "${values.folder}" differs from plans.repositoryFolder "${configFolder}" in ${layoutOf(ctx).locations.alignfirst.path}.`,
     );
   const folder = values.folder ?? configFolder;
   if (folder === undefined)
-    throw new CliError("Pass --folder <name> or set plans.repositoryFolder in .alignfirst.json.");
+    throw new CliError(
+      `Pass --folder <name> or set plans.repositoryFolder in ${layoutOf(ctx).locations.alignfirst.path}.`,
+    );
   return { dir: positionals[0], folder };
 }
 

@@ -42,6 +42,19 @@ function namesFile(command: string, workdir: string | undefined, fileName: strin
   return inDir && command.includes(base);
 }
 
+export function readsDeveloperInstructions(call: AgentToolCall, projectPath?: string): boolean {
+  const command = execCommandOf(call);
+  if (command === undefined || !/\balignfirst\s+developer-instructions\b/.test(command))
+    return false;
+  if (projectPath === undefined) return true;
+  const workdir = inputOf(call).workdir;
+  return (
+    (typeof workdir === "string" &&
+      (workdir === projectPath || workdir.startsWith(`${projectPath}/`))) ||
+    command.includes(projectPath)
+  );
+}
+
 /** True when the call is an `exec` whose command matches `pattern`. */
 export function execMatches(call: AgentToolCall, pattern: RegExp): boolean {
   const command = execCommandOf(call);

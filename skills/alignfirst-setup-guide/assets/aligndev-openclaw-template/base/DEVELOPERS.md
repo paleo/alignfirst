@@ -6,7 +6,7 @@ This repository holds the configuration of `{{SERVER_HOST}}`: runbooks under `do
 
 - `docs/` — runbooks and notes, listed by `npx -y alignfirst docmap`.
 - `infra/openclaw/` — `seed.sh` and its modules, `environment.d/`, `bin/`, `projects/`, `workspace/`, `coding-agent/`. `.env` is gitignored.
-- `scripts/workspace/` — the portless workspace wrapper.
+- `alignfirst.jsonc` — nested conventions, explicit developer-instructions reference and setup-only workspace recipe.
 - `.reports/` — one journal per operator task, committed.
 <!-- TEAM_PLANS_SECTION -->
 - `.plans/` — work files. Symlinked across worktrees, and into a clone of the work-files repository so the team shares them. Run `npx -y alignfirst sync` after changing anything under it.
@@ -17,7 +17,7 @@ This repository holds the configuration of `{{SERVER_HOST}}`: runbooks under `do
 
 A **workspace** is a git worktree (with its branch) plus its own dev setup: symlinked shared directories and seeded config files. This repository is portless: nothing to start, no `dev` script.
 
-Run `npm run workspace -- --guide` for the procedures.
+Run `npm run workspace -- --guide` for the procedures. Project-local runtime requires ignored/untracked `.local-wt/`; companion runtime uses external storage without checkout links. Teardown retains runtime/logs; remove/prune dispose verified target runtime. Clean under the old selection before changing placement or configuration source.
 
 ## Everyday commands
 
@@ -26,7 +26,7 @@ Run `npm run workspace -- --guide` for the procedures.
 | `npx -y alignfirst context` | Conventions, documentation index and protocols; read it first |
 | `npx -y alignfirst docmap` | Browse the documentation |
 | `npm run workspace -- <command>` | Manage worktree workspaces (`--guide` for the procedures) |
-| `npm run validate` | docmap check and a syntax check of the wrapper |
+| `npm run validate` | Check configuration and Docmap |
 <!-- TEAM_PLANS_SECTION -->
 | `npx -y alignfirst sync` | Publish and retrieve the work files (`.plans`) |
 <!-- TEAM_PLANS_SECTION -->

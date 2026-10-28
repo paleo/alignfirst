@@ -130,11 +130,14 @@ export async function runLightweightApprovalCase(
     `
     const fs = await import('node:fs'); const cp = await import('node:child_process');
     const main=${JSON.stringify(NIMBUS_PROJECT_PATH)};
-    const inventory=JSON.parse(cp.execFileSync('aligndev',['worktree','list','--json'],{cwd:main,encoding:'utf8'}));
-    const selected=inventory.worktrees.find(entry=>entry.branch?.startsWith('side-1/'));
+    const inventory=JSON.parse(cp.execFileSync('alignfirst',['workspace','list','--json'],{cwd:main,encoding:'utf8'}));
+    const selected=inventory.workspaces.find(entry=>entry.branch?.startsWith('side-1/'));
     if(!selected || selected.path!==${JSON.stringify(call.cwd)}) throw Error('delegation did not use the registered ticket worktree');
     const worktree=selected.path;
     const config=JSON.parse(cp.execFileSync('alignfirst',['config','--json'],{cwd:worktree,encoding:'utf8'}));
+    if(config.workspace.hasDevServer || config.config.workspace || config.config.devServer) throw Error('lightweight recipe was retained');
+    if(config.config.conventions?.ticketIdPattern!=='^ABC-\\\\d+$' || config.config.developerInstructions!=='DEVELOPERS.md') throw Error('lightweight configuration lost');
+    if(selected.recipe!=='defaults' || selected.preparation!=='ready') throw Error('not protocol-ready defaults');
     const plans=config.locations['.plans'].path;
     const registry=JSON.parse(fs.readFileSync(process.env.HOME+'/.alignfirst/companions/registry.json','utf8'));
     const key=Object.keys(registry.projects).find(key=>(key.startsWith('~/')?process.env.HOME+'/'+key.slice(2):key)===main);
@@ -157,7 +160,7 @@ export async function runLightweightApprovalCase(
   const commands = calls.map(execCommandOf).filter((command) => command !== undefined);
   const register = commands.findIndex((command) => /companion\s+register/.test(command));
   const reserve = commands.findIndex((command) => /ticket\s+--side/.test(command));
-  const add = commands.findIndex((command) => /aligndev\s+worktree\s+add/.test(command));
+  const add = commands.findIndex((command) => /alignfirst\s+workspace\s+setup/.test(command));
   assert(
     register >= 0 && reserve > register && add > reserve,
     "separate companion preparation must precede ticket reservation and real worktree add",

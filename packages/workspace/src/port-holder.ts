@@ -96,14 +96,17 @@ export async function waitForPortsFree(ports: number[], timeoutMs: number): Prom
   return pending;
 }
 
-export async function sweepStalePorts(
-  servers: ResolvedServerDescriptor[],
-  cwd: string,
-): Promise<void> {
+export interface SweepPort {
+  name: string;
+  port?: number;
+}
+
+export async function sweepStalePorts(servers: SweepPort[], cwd: string): Promise<void> {
   if (platform() === "win32") return;
   const ourCwd = canonicalCwd(cwd);
-  for (const server of spawnServersOf(servers)) {
-    await sweepOnePort(server, ourCwd);
+  for (const server of servers) {
+    if (server.port === undefined) continue;
+    await sweepOnePort({ name: server.name, port: server.port }, ourCwd);
   }
 }
 
@@ -113,7 +116,10 @@ function spawnServersOf(servers: ResolvedServerDescriptor[]): ListeningSpawnServ
   );
 }
 
-async function sweepOnePort(server: ListeningSpawnServer, ourCanonicalCwd: string): Promise<void> {
+async function sweepOnePort(
+  server: { name: string; port: number },
+  ourCanonicalCwd: string,
+): Promise<void> {
   const holder = findPortHolder(server.port);
   if (holder === undefined) return;
   if (isPidOurs(holder, ourCanonicalCwd)) {

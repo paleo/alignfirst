@@ -182,8 +182,8 @@ describe("guide command", () => {
     git(cwd, "commit", "--quiet", "-m", "init");
     git(cwd, "checkout", "-q", "-b", "78/x");
     writeFileSync(
-      join(cwd, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, ticketIdPattern: "^\\d+$" }),
+      join(cwd, "alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, conventions: { ticketIdPattern: "^\\d+$" } }),
     );
     const detected = await runMain(["guide", "spec"], { cwd });
     expect(detected.stdout).toContain("Current ticket: `78`");
@@ -192,20 +192,20 @@ describe("guide command", () => {
     git(cwd, "checkout", "-q", "-b", "side-8/x");
     const sideWithPattern = await runMain(["guide", "spec"], { cwd });
     expect(sideWithPattern.stdout).toContain("Current ticket: `side-8`");
-    writeFileSync(join(cwd, ".alignfirst.json"), '{"schemaVersion":1}');
+    writeFileSync(join(cwd, "alignfirst.json"), '{"schemaVersion":1}');
     const sideWithoutPattern = await runMain(["guide", "spec"], { cwd });
     expect(sideWithoutPattern.stdout).toContain("Current ticket: `side-8`");
 
     git(cwd, "checkout", "-q", "main");
     writeFileSync(
-      join(cwd, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, ticketIdPattern: "^\\d+$" }),
+      join(cwd, "alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, conventions: { ticketIdPattern: "^\\d+$" } }),
     );
     const noMatch = await runMain(["guide", "spec"], { cwd });
     expect(noMatch.stdout).toContain("No ticket id on branch `main`");
     expect(noMatch.stdout).toContain("alignfirst ticket <id> --next spec.md --new-cycle");
 
-    writeFileSync(join(cwd, ".alignfirst.json"), '{"schemaVersion":1}');
+    writeFileSync(join(cwd, "alignfirst.json"), '{"schemaVersion":1}');
     const noPattern = await runMain(["guide"], { cwd });
     expect(noPattern.stdout).toContain("Ask the user for the ticket ID when it is not given.");
   });
@@ -218,12 +218,14 @@ describe("guide command", () => {
 
     mkdirSync(join(cwd, ".plans"));
     writeFileSync(
-      join(cwd, ".alignfirst.json"),
+      join(cwd, "alignfirst.json"),
       JSON.stringify({
         schemaVersion: 1,
-        git: {
-          defaultBranch: "main",
-          commit: { style: "conventionalCommit", ticketReference: "bracketedHash" },
+        conventions: {
+          git: {
+            defaultBranch: "main",
+            commit: { style: "conventionalCommit", ticketReference: "bracketedHash" },
+          },
         },
       }),
     );

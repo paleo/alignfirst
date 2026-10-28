@@ -98,7 +98,7 @@ printf '%s\n' .plans >> .gitignore
 
 Detect the conventions first. Take the ticket format from branches and tickets: `^\d+$` for issue numbers, `^[A-Z]+-\d+$` for Jira-like keys, or none without a convention. The pattern is one anchored expression; alternatives go inside a group, as in `^(ABC|XYZ)-\d+$`. Take the branch-name template from existing branches, and the commit style from `git log --oneline -20`. Resolve the default branch with `git ls-remote --symref origin HEAD`; use the sole remote when `origin` is absent, and ask the user when several non-`origin` remotes exist. Omit any convention that repository evidence cannot establish.
 
-### Without `.alignfirst.json`
+### Without `alignfirst.json`
 
 Add a `### Conventions` sub-section at the end of the bootstrap section from **Project Instructions**, in the format `alignfirst context` prints:
 
@@ -112,26 +112,27 @@ Add a `### Conventions` sub-section at the end of the bootstrap section from **P
 
 Add `- Default branch: {DEFAULT_BRANCH}.` only when `git symbolic-ref refs/remotes/<remote>/HEAD` fails; otherwise the CLI reads it from git. When an existing section states these conventions, move them here.
 
-### With `.alignfirst.json`
+### With `alignfirst.json`
 
-Write `.alignfirst.json` with the detected fields:
+Write `alignfirst.json` with the detected fields. Use `alignfirst.jsonc` for comments or trailing commas; never leave both variants in the selected location:
 
 ```json
 {
   "schemaVersion": 1,
-  "ticketIdPattern": "^\\d+$",
-  "plans": { "repositoryFolder": "acme-web", "autoArchive": true },
-  "portRange": { "first": 8100, "last": 8299 },
-  "git": {
-    "defaultBranch": "main",
-    "branchNameTemplate": "{TICKET_ID}/{slug-1-3-words}",
-    "commit": { "style": "conventionalCommit", "ticketReference": "bracketedHash" },
-    "agentCoauthoring": false
-  }
+  "conventions": {
+    "ticketIdPattern": "^\\d+$",
+    "git": {
+      "defaultBranch": "main",
+      "branchNameTemplate": "{TICKET_ID}/{slug-1-3-words}",
+      "commit": { "style": "conventionalCommit", "ticketReference": "bracketedHash" },
+      "agentCoauthoring": false
+    }
+  },
+  "plans": { "repositoryFolder": "acme-web", "autoArchive": true }
 }
 ```
 
-Keep `plans.autoArchive: true`, including in local mode; the user can remove it to opt out. Keep only the other applicable optional fields. Omit `cli` unless the user asks to pin the CLI version. It takes a range of full `x.y.z` versions, each with an optional `^`, `~`, `>=`, `>`, `<=`, `<` or `=`. Spaces join versions that must all hold; `||` joins alternatives. The version guard then rejects a mismatching CLI and prints the matching `npx -y alignfirst@"<range>"` command.
+Keep `plans.autoArchive: true`, including in local mode; the user can remove it to opt out. Keep only applicable optional fields. Unknown properties are rejected. The selected document also holds optional `workspace`/`devServer`; port ranges belong only in `devServer.ports`. One required schema version covers all sections. Optional `$schema` is URI metadata and is never fetched. Future breaking formats require in-memory converters retained through the CLI major. Existing retired settings/wrappers follow [the upgrade runbook](upgrading-multi-stack-workspaces.md).
 
 ### Local installation
 
@@ -139,7 +140,7 @@ By default a project declares no `alignfirst` dependency. Add one only when the 
 
 Add the exact current `alignfirst` version as a dev dependency with the project package manager, and install dependencies before invoking it. The instruction file keeps `npx -y alignfirst context`, which then resolves the pinned binary. No npm script is required.
 
-The CLI's only dependency is `@alignfirst/docmap`. A repository with such gates must allow it too, since the CLI tracks its releases closely.
+The CLI includes the Docmap and workspace kernel dependencies. Apply installation gates to its complete dependency tree.
 
 Continue with [plans-setup.md](plans-setup.md) when the team has a work-files repository. Finish with:
 
@@ -150,7 +151,7 @@ npx alignfirst doctor
 
 ## Project Instructions
 
-When the repository adopts AlignFirst skills or protocols, read the existing `AGENTS.md` or `CLAUDE.md` before editing it. Insert this as its first `##` section, after any frontmatter, `#` title, or introductory prose. When other `##` sections exist, place it immediately before the first. It works with or without `.alignfirst.json`:
+When the repository adopts AlignFirst skills or protocols, read the existing `AGENTS.md` or `CLAUDE.md` before editing it. Insert this as its first `##` section, after any frontmatter, `#` title, or introductory prose. When other `##` sections exist, place it immediately before the first. It works with or without the project configuration family:
 
 ```markdown
 ## Start every session with the project context
@@ -158,7 +159,7 @@ When the repository adopts AlignFirst skills or protocols, read the existing `AG
 Run `npx -y alignfirst context` from the repository root as your first command, whatever the task. It prints the project conventions (ticket IDs, branch names, commits), the documentation map, and the AlignFirst protocols.
 ```
 
-Replace any `Docmap - Seek Documentation` section and redundant protocol instructions. Preserve essential-documentation lists and project conventions that are not represented in `.alignfirst.json`.
+Replace any `Docmap - Seek Documentation` section and redundant protocol instructions. Preserve essential-documentation lists and project conventions that are not represented in `alignfirst.json` or `alignfirst.jsonc`.
 
 ### Repositories Without AlignFirst Instructions
 

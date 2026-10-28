@@ -106,6 +106,8 @@ function matrix() {
   scriptAndLockMatrix(npm, npx);
   literalScriptMatrix(npm);
   externalNativeMatrix(npm);
+  workspaceLifecycle(node, "node");
+  workspaceLifecycle(bun, "bun");
   console.log(
     "PASS real launch matrix, verified scripts, conflicting locks and packed package help",
   );
@@ -311,7 +313,7 @@ function prepareProject() {
   );
   writeFileSync(
     join(root, ".gitignore"),
-    "node_modules/\n.plans/\n.wt/\nartifacts/\n.workers/\nowned-worktree/\n*.jsonl\n",
+    "node_modules/\n.plans/\n.local-wt/\nartifacts/\n.workers/\nowned-worktree/\n*.jsonl\n",
   );
   check("git-init", "git", ["init", "-b", "main"]);
   check("git-add", "git", ["add", "."]);
@@ -334,15 +336,11 @@ function alignfirstLifecycle() {
   af("ticket-catchup", ["ticket", "side-1", "--catchup"]);
   af("ticket-reservation", ["ticket", "--side", "--json"]);
   af("sync", ["sync"]);
-  writeFileSync(
-    join(root, ".alignfirst.json"),
-    JSON.stringify({ schemaVersion: 1, cli: ">=99.0.0 <100.0.0" }),
-  );
-  af("version-range-recovery", ["context"], {
-    status: 1,
-    contains: "bunx --bun 'alignfirst@>=99.0.0 <100.0.0' context",
-  });
-  rmSync(join(root, ".alignfirst.json"));
+  writeFileSync(join(root, "alignfirst.json"), JSON.stringify({ schemaVersion: 1 }));
+  const report = JSON.parse(af("new-config-report", ["config", "--json"]));
+  assert.equal(report.locations.alignfirst.path, join(root, "alignfirst.json"));
+  assert.equal(report.workspace.location.path, join(root, "alignfirst.json"));
+  assert.equal(Object.hasOwn(report, "cli"), false);
   for (const args of [[], ["runtime.md"], ["--search", "runtime"], ["--check"], ["--guide"]]) {
     af(`embedded-docmap-${args.join("-")}`, ["docmap", ...args]);
   }
@@ -405,18 +403,18 @@ async function alignDevLifecycle() {
   });
   shell("emitted-project-init", "bunx --bun aligndev project init", "bun");
   ad("project-list", ["project", "list", "--json"]);
-  ad("worktree-list", ["worktree", "list", "--json"]);
+  af("unified-workspace-list", ["workspace", "list", "--json"]);
   const worktree = join(dirname(root), "aligndev-owned-worktree");
-  ad("aligndev-worktree-add", [
-    "worktree",
-    "add",
-    worktree,
-    "-b",
+  af("unified-workspace-add", [
+    "workspace",
+    "setup",
+    "-c",
     "side-2/runtime",
-    "main",
+    "--path",
+    worktree,
     "--json",
   ]);
-  ad("aligndev-worktree-remove", ["worktree", "remove", worktree, "--json"]);
+  af("unified-workspace-remove", ["workspace", "remove", worktree, "--json"]);
   ad("delegation", [
     "code",
     "new",
@@ -571,37 +569,156 @@ function exampleCommand(text, prefix) {
   return line.split(/\s+#/)[0].trim();
 }
 
-async function workspaceLifecycle() {
+function workspaceLifecycle(executable = bun, runtime = "bun") {
+  const project = join(output, `${tier} ${runtime} workspace`);
+  const linked = join(output, `${tier} ${runtime} linked with spaces`);
+  const probes = join(output, `${tier}-${runtime}-workspace-probes.jsonl`);
+  // A Bun CLI may deliberately run a Node project command; those are separate runtime claims.
+  const projectRuntime = tier === "matrix" ? node : bun;
+  prepareWorkspaceFixture(project, probes, projectRuntime);
+  const invoke = (label, args, cwd = project) =>
+    check(`${runtime}-${label}`, executable, [entries.alignfirst, ...args], { runtime, cwd });
+  for (const args of [
+    ["init", "-b", "main"],
+    ["add", "."],
+    ["commit", "-m", "workspace fixture"],
+  ])
+    check(`${runtime}-workspace-git`, "git", args, { cwd: project });
+  const companion = tier === "matrix" && runtime === "bun";
+  if (companion) {
+    const registration = join(process.env.HOME, ".alignfirst/companions/registry.json");
+    mkdirSync(dirname(registration), { recursive: true });
+    const registry = existsSync(registration) ? JSON.parse(readFileSync(registration, "utf8")) : {};
+    registry.projects ??= {};
+    registry.projects[project] = {
+      dir: join(output, "runtime companion"),
+      items: { workspaceRuntime: "companion", ".plans": "project" },
+    };
+    writeFileSync(registration, JSON.stringify(registry));
+  }
+  const before = readRecords(audit).length;
+  try {
+    invoke("workspace-guide", ["workspace", "--guide"]);
+    invoke("workspace-detached-setup", [
+      "workspace",
+      "setup",
+      "-c",
+      "runtime-child",
+      "--path",
+      linked,
+      "-d",
+      "--full",
+    ]);
+    invoke("workspace-wait", ["workspace", "wait", linked]);
+    const report = JSON.parse(invoke("workspace-config", ["config", "--json"], linked));
+    assert.ok(existsSync(join(report.workspace.runtimeDir, "finalized.txt")));
+    if (companion) {
+      assert.equal(report.locations.workspaceRuntime.in, "companion");
+      assert.equal(existsSync(join(linked, ".local-wt")), false);
+      assert.equal(existsSync(join(project, ".local-wt")), false);
+    }
+    for (const path of ["package.json", "node_modules", "dist"])
+      assert.equal(existsSync(join(linked, path)), false);
+    invoke("dev-up", ["dev", "up"], linked);
+    invoke("dev-down-all", ["dev", "down", "--all"]);
+    invoke("workspace-teardown", ["workspace", "teardown", linked]);
+    invoke("workspace-reregister", ["workspace", "setup"], linked);
+    invoke("workspace-remove-from-target", ["workspace", "remove", "--force"], linked);
+    assert.equal(existsSync(linked), false);
+    assert.equal(readFileSync(join(project, ".plans/preserved.txt"), "utf8"), "preserve plans");
+    verifyWorkspaceRuntime({
+      before,
+      project,
+      linked,
+      executable,
+      runtime,
+      probes,
+      projectRuntime,
+    });
+  } finally {
+    invoke("workspace-cleanup-stop", ["dev", "down", "--all"]);
+    if (existsSync(linked))
+      invoke("workspace-cleanup-remove", ["workspace", "remove", linked, "--force"]);
+  }
+}
+
+function prepareWorkspaceFixture(project, probes, projectRuntime) {
+  mkdirSync(join(project, ".plans"), { recursive: true });
+  writeFileSync(join(project, ".plans/preserved.txt"), "preserve plans");
+  writeFileSync(join(project, ".gitignore"), ".plans/\n.local-wt/\n");
   writeFileSync(
-    join(root, "workspace.mjs"),
-    `import {runWorkspace} from '@alignfirst/workspace';\nimport {appendFileSync,writeFileSync} from 'node:fs';\nawait runWorkspace({workspaceScript:import.meta.filename,devServerScript:new URL('./dev.mjs',import.meta.url).pathname,sharedDirs:['node_modules'],gitignoredFiles:[],runtimeDir:'.wt',formatSummary:()=> 'Packed workspace ready.',finalizeWorkspace:async(ctx)=>{appendFileSync(${JSON.stringify(join(root, "finalizers.jsonl"))},JSON.stringify({pid:process.pid,runtime:process.versions.bun})+'\\n');await new Promise(r=>setTimeout(r,100));writeFileSync(ctx.currentWorktree+'/finalized.txt','ready');},purgeInfrastructure:()=>{}});\n`,
+    join(project, "probe.mjs"),
+    `import {appendFileSync,readFileSync,writeFileSync} from 'node:fs';
+const context=JSON.parse(process.env.ALIGNFIRST_WORKSPACE_CONTEXT);
+appendFileSync(${JSON.stringify(probes)},JSON.stringify({context,cwd:process.cwd(),executable:process.execPath,runtime:process.versions.bun===undefined?'node':'bun',parentArgv:readFileSync('/proc/'+process.ppid+'/cmdline','utf8').split('\\0').filter(Boolean)})+'\\n');
+if(context.phase==='finalize') writeFileSync(context.runtimeDir+'/finalized.txt','ready');
+if(process.argv[2]==='serve'){console.log('RUNTIME_READY');setInterval(()=>{},1000);}
+`,
   );
+  const probe = (action) => ({ run: [projectRuntime, "probe.mjs", action] });
   writeFileSync(
-    join(root, "dev.mjs"),
-    "import {runDevServer} from '@alignfirst/workspace'; await runDevServer({runtimeDir:'.wt',ports:{first:47900,last:47909,declare:['web']},runFiles:[],setup:async()=>{},servers:[]});\n",
+    join(project, "alignfirst.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      workspace: {
+        finalize: [{ name: "runtime evidence", ...probe("finalize") }],
+        purge: [{ name: "purge evidence", ...probe("purge") }],
+      },
+      devServer: {
+        servers: [
+          { kind: "command", name: "resource", start: probe("start"), stop: probe("stop") },
+          {
+            kind: "spawn",
+            name: "application",
+            exec: probe("serve"),
+            ready: { log: "RUNTIME_READY" },
+          },
+        ],
+      },
+    }),
   );
-  check("commit-workspace", "git", ["add", "workspace.mjs", "dev.mjs"]);
-  check("commit-workspace-config", "git", ["commit", "--allow-empty", "-m", "workspace fixture"]);
-  const ws = (label, args, options = {}) =>
-    check(label, bun, ["--bun", "run", "workspace", ...args], { runtime: "bun", ...options });
-  const guide = ws("workspace-guide", ["--guide"], { contains: "bun --bun run workspace setup" });
-  assert.ok(guide.includes(bun));
-  shell("emitted-workspace-list", exampleCommand(guide, "bun --bun run workspace list"), "bun");
-  ws("workspace-detached-setup", ["setup", "-c", "runtime-child", "-d"]);
-  ws("workspace-wait", ["wait", "consumer-runtime-child"]);
-  assert.ok(existsSync(join(dirname(root), "consumer-runtime-child/finalized.txt")));
-  check("direct-workspace-bootstrap", bun, [join(root, "workspace.mjs"), "list"], {
-    runtime: "bun",
-  });
-  check("dev-setup", bun, ["--bun", "run", "dev", "setup"], { runtime: "bun" });
-  check("dev-down", bun, ["--bun", "run", "dev", "down"], { runtime: "bun" });
-  ws("workspace-teardown", ["teardown", "consumer-runtime-child"]);
-  ws("workspace-reregister", ["setup"], { cwd: join(dirname(root), "consumer-runtime-child") });
-  ws("workspace-remove", ["remove", "consumer-runtime-child", "--force"]);
-  assert.equal(existsSync(join(dirname(root), "consumer-runtime-child")), false);
-  for (const record of readRecords(join(root, "finalizers.jsonl"))) {
-    assert.equal(record.runtime, "1.4.4");
-    await waitUntil(() => !executing(record.pid));
+}
+
+function verifyWorkspaceRuntime({
+  before,
+  project,
+  linked,
+  executable,
+  runtime,
+  probes,
+  projectRuntime,
+}) {
+  const observed = readRecords(audit)
+    .slice(before)
+    .filter((record) => /\/alignfirst(?:\.mjs)?$/.test(record.argv[0] ?? ""));
+  for (const args of [
+    ["workspace", "__finalize"],
+    ["dev", "setup"],
+    ["dev", "down"],
+    ["workspace", "remove"],
+  ]) {
+    const child = observed.find(
+      (record) =>
+        record.argv.slice(1, 3).join(" ") === args.join(" ") &&
+        (args[1] === "remove" ? record.cwd === project : record.cwd === linked),
+    );
+    assert.ok(child, `missing installed child ${args.join(" ")}`);
+    assert.equal(child.runtime, runtime);
+    assert.equal(child.executable, executable);
+    assert.equal(
+      child.entry,
+      entries.alignfirst.replace("/.bin/alignfirst", "/alignfirst/bin/alignfirst.mjs"),
+    );
+  }
+  const actions = readRecords(probes);
+  for (const phase of ["finalize", "start", "stop", "purge"]) {
+    const action = actions.find((record) => record.context.phase === phase);
+    assert.ok(action, `missing project ${phase}`);
+    assert.equal(action.cwd, linked);
+    assert.equal(action.context.currentWorktree, linked);
+    assert.equal(action.context.name, `${tier} ${runtime} linked with spaces`);
+    assert.equal(action.runtime, tier === "matrix" ? "node" : "bun");
+    assert.equal(action.executable, projectRuntime);
   }
 }
 
@@ -641,8 +758,10 @@ async function harnessLifecycle() {
     }),
   );
   mkdirSync(join(root, "workspace"), { recursive: true });
-  const emittedBuild = initialized.match(/3\. (bun --bun run env:build)/)[1];
-  check("emitted-harness-env-build", "/bin/sh", ["-c", emittedBuild], { runtime: "bun", env });
+  mkdirSync(join(root, "scenarios"), { recursive: true });
+  for (const name of ["case", "first", "second"])
+    writeFileSync(join(root, "scenarios", `${name}.ts`), "export default async function () {}\n");
+  assert.ok(initialized.includes("bun --bun run env:build"));
   check("generated-harness-env-down", "/bin/sh", ["-c", "bun --bun run env:down"], {
     runtime: "bun",
     env,

@@ -54,7 +54,9 @@ for (const mode of ["shared", "missing", "tracked"] as const) {
     mkdirSync(repo);
     mkdirSync(bin);
     // Keep npm test from selecting npx instead of the built-source PATH shim.
-    const { npm_config_user_agent: _userAgent, ...baseEnv } = process.env;
+    const baseEnv = Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => !key.startsWith("npm_")),
+    );
     const env = {
       ...baseEnv,
       HOME: home,
@@ -83,8 +85,17 @@ for (const mode of ["shared", "missing", "tracked"] as const) {
     };
     try {
       git("init", "-q", "-b", "main");
-      writeFileSync(join(repo, ".gitignore"), ".plans/\n.local/\n");
-      git("add", ".gitignore");
+      writeFileSync(join(repo, ".gitignore"), ".plans/\n.local/\n.local-wt/\n");
+      const config = {
+        schemaVersion: 1,
+        conventions: { ticketIdPattern: "^ABC-\\d+$" },
+        developerInstructions: "DEVELOPERS.md",
+        plans: { autoArchive: true },
+        workspace: { finalize: [{ name: "Must be removed", run: ["false"] }] },
+        devServer: { maxConcurrentDevServers: 2 },
+      };
+      writeFileSync(join(repo, "alignfirst.json"), JSON.stringify(config));
+      git("add", ".gitignore", "alignfirst.json");
       git("commit", "-qm", "init");
       git("init", "-q", "--bare", "-b", "main", join(base, "origin.git"));
       git("remote", "add", "origin", join(base, "origin.git"));
@@ -100,6 +111,12 @@ for (const mode of ["shared", "missing", "tracked"] as const) {
         { env, encoding: "utf8" },
       );
       assert.equal(transformed.status, 0, transformed.stderr);
+      const { workspace, devServer, ...retainedConfig } = config;
+      assert.deepEqual(
+        JSON.parse(cli(alignfirst, repo, "config", "--json")).config,
+        retainedConfig,
+      );
+      assert.match(cli(alignfirst, repo, "developer-instructions"), /small ESM library/);
       assert.equal(
         JSON.parse(readFileSync(join(repo, "package.json"), "utf8")).dependencies,
         undefined,
@@ -113,7 +130,18 @@ for (const mode of ["shared", "missing", "tracked"] as const) {
       if (mode !== "shared") {
         const failed = spawnSync(
           process.execPath,
-          [aligndev, "worktree", "add", worktree, "-b", "side-1/label", "main", "--json"],
+          [
+            alignfirst,
+            "workspace",
+            "setup",
+            "--path",
+            worktree,
+            "-c",
+            "side-1/label",
+            "--from",
+            "main",
+            "--json",
+          ],
           { cwd: repo, env, encoding: "utf8" },
         );
         assert.equal(failed.status, 1);
@@ -147,10 +175,23 @@ for (const mode of ["shared", "missing", "tracked"] as const) {
       assert.match(reservation, /side-1/);
       writeFileSync(join(plans, "side-1/A1-request.md"), "Change Export to Download.\n");
       const added = JSON.parse(
-        cli(aligndev, repo, "worktree", "add", worktree, "-b", "side-1/label", "main", "--json"),
+        cli(
+          alignfirst,
+          repo,
+          "workspace",
+          "setup",
+          "--path",
+          worktree,
+          "-c",
+          "side-1/label",
+          "--from",
+          "main",
+          "--json",
+        ),
       );
-      assert.equal(added.worktree.path, worktree);
-      assert.equal(added.directories[".plans"].mode, mode === "shared" ? "symlink" : "companion");
+      assert.equal(added.workspace.path, worktree);
+      assert.equal(added.workspace.preparation, "ready");
+      assert.equal(added.workspace.recipe, "defaults");
       assert.equal(
         JSON.parse(cli(alignfirst, worktree, "config", "--json")).locations[".plans"].path,
         mode === "shared" ? join(worktree, ".plans") : plans,
@@ -159,8 +200,8 @@ for (const mode of ["shared", "missing", "tracked"] as const) {
         readFileSync(join(plans, "side-1/A1-request.md"), "utf8"),
         "Change Export to Download.\n",
       );
-      const inventory = JSON.parse(cli(aligndev, repo, "worktree", "list", "--json"));
-      const existing = inventory.worktrees.find(
+      const inventory = JSON.parse(cli(alignfirst, repo, "workspace", "list", "--json"));
+      const existing = inventory.workspaces.find(
         (entry: { branch: string }) => entry.branch === "side-1/label",
       );
       assert.equal(
@@ -169,12 +210,12 @@ for (const mode of ["shared", "missing", "tracked"] as const) {
         "reuse/branch consultation discover the exact Git-registered path",
       );
       assert.equal(
-        cli(aligndev, worktree, "worktree", "list", "--json"),
-        cli(aligndev, repo, "worktree", "list", "--json"),
+        cli(alignfirst, worktree, "workspace", "list", "--json"),
+        cli(alignfirst, repo, "workspace", "list", "--json"),
       );
       const duplicate = spawnSync(
         process.execPath,
-        [aligndev, "worktree", "add", join(base, "duplicate"), "side-1/label"],
+        [alignfirst, "workspace", "setup", "--path", join(base, "duplicate"), "side-1/label"],
         { cwd: repo, env, encoding: "utf8" },
       );
       assert.equal(duplicate.status, 1);
@@ -185,7 +226,7 @@ for (const mode of ["shared", "missing", "tracked"] as const) {
       assert.match(working, /for a status request, end the turn/);
       const beforeStatus = git("worktree", "list", "--porcelain");
       assert.equal(git("branch", "--list", "side-2/*"), "");
-      cli(aligndev, repo, "worktree", "list", "--json");
+      cli(alignfirst, repo, "workspace", "list", "--json");
       assert.equal(
         git("worktree", "list", "--porcelain"),
         beforeStatus,
@@ -196,7 +237,7 @@ for (const mode of ["shared", "missing", "tracked"] as const) {
         mode === "shared"
           ? undefined
           : readFileSync(join(home, ".alignfirst/companions/registry.json"), "utf8");
-      cli(aligndev, repo, "worktree", "remove", worktree, "--json");
+      cli(alignfirst, repo, "workspace", "remove", worktree, "--json");
       assert.equal(existsSync(worktree), false);
       assert.equal(readFileSync(join(repo, ".local/keep.txt"), "utf8"), "shared local data\n");
       assert(existsSync(join(plans, "side-1/A1-request.md")));

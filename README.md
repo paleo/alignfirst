@@ -18,7 +18,7 @@ Nine Agent Skill stubs expose the CLI through commands such as `/alspec` in Clau
 
 ## Workspaces - Local environments with worktrees
 
-`@alignfirst/workspace` runs multiple dev environments side by side using git worktrees. See [packages/workspace/README.md](packages/workspace/README.md).
+`alignfirst workspace` and `alignfirst dev`, backed by `@alignfirst/workspace`, prepare and run language-neutral Git-worktree environments without consumer JavaScript wrappers. See [packages/workspace/README.md](packages/workspace/README.md).
 
 ## AlignDev - Autonomous software development
 
@@ -59,9 +59,10 @@ At the end, feel free to uninstall the skill. It won't be used by your project a
 After a fresh clone:
 
 ```sh
-npm install
-npm run build --workspace @alignfirst/workspace
-npm run workspace -- setup
+fnm exec --using=.nvmrc npm install
+fnm exec --using=.nvmrc npm run build
+# Prepare ignored effective .plans separately, then:
+fnm exec --using=.nvmrc npm run workspace -- setup
 ```
 
-The everyday workflow is in [`DEVELOPERS.md`](DEVELOPERS.md).
+Tracked settings, nested conventions, the developer-instructions reference and the workspace recipe live in one `alignfirst.json`. A fresh linked worktree must bootstrap from the already built main-checkout CLI while retaining the target cwd; see [`DEVELOPERS.md`](DEVELOPERS.md) for the exact command and Paseo teardown ownership. Existing old runtime state needs the [coordinated upgrade](docs/upgrading-multi-stack-workspaces.md) before lifecycle use.

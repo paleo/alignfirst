@@ -1,18 +1,18 @@
 ---
 title: aligndev Architecture
-summary: How `aligndev` works internally — coding sessions and adapters, lightweight worktrees, project inventory and port claims.
+summary: How `aligndev` works internally — coding sessions and adapters, unified workspace delegation, project inventory and port claims.
 read_when:
   - onboarding to the aligndev codebase
   - changing how `aligndev code` launches, tracks or terminates a coding agent
   - changing session files, `aligndev code status` or the `_aligndev` location
-  - changing lightweight worktree creation, setup, inventory or removal
+  - changing assistant workspace preparation or cleanup instructions
   - changing the project inventory, its marker or port claims
   - adding a coding agent
 ---
 
 # aligndev Architecture
 
-`aligndev` is the CLI an assistant uses: it prints the playbook (`guide`), delegates work to a coding agent (`code`), inventories the host's projects (`project`), and manages lightweight Git worktrees (`worktree`). Its users are agents, so its `--help` and guides are the user reference. This document covers what they leave out. The [README](../packages/aligndev/README.md) covers setup and configuration.
+`aligndev` is the CLI an assistant uses: it prints the playbook (`guide`), delegates work to a coding agent (`code`), inventories the host's projects (`project`), and uses AlignFirst's unified workspace lifecycle. Its users are agents, so its `--help` and guides are the user reference. This document covers what they leave out. The [README](../packages/aligndev/README.md) covers setup and configuration.
 
 ## Source Structure
 
@@ -21,9 +21,9 @@ read_when:
 | `src/cli.ts` | Entry point: dispatches commands and loads settings; creates command-scoped model discovery. |
 | `src/config.ts` | `~/.alignfirst/aligndev.settings.json`: tolerant settings, reference validation, effective selection and child environment. |
 | `src/code/` | `aligndev code`: arguments, prompt, run, session file, adapters, models, quota. |
-| `src/guide/` | `aligndev guide [--channel <surface>]`: topics by context, the template renderer, and the project's guide file (`guide-file.ts`). |
+| `src/guide/` | `aligndev guide [--channel <surface>]`: topics by context and the template renderer. |
 | `src/project/` | `aligndev project`: discovery, markers, status, port allocation; AlignFirst report parsing and work-files gate calls. |
-| `src/worktree/` | Git-backed worktree inventory, add/setup preparation, directory policy and non-force removal. |
+| `@alignfirst/workspace/git` | Shared Git inventory/path helpers; lifecycle commands belong to AlignFirst. |
 | `templates/guide/` | The dispatcher, the playbook and the guides, rendered per platform and surface. |
 
 Templates use `{{ALIGNDEV}}`, `{{ALIGNFIRST}}` placeholders for rendered command forms. `src/command-form.ts` resolves invocation once through `@alignfirst/docmap/invocation`, separating launcher (`direct`, `packageRunner`, `projectScript`) from actual runtime (`node`, `bun`). Explicit runner evidence wins over lockfiles; a project script requires manifest, entry-point and immediate-parent agreement. User-agent metadata alone does not prove either a script or a runtime.
@@ -32,18 +32,17 @@ Under npm/npx, counterpart commands use `npx -y alignfirst`; under Bun runtime t
 
 `src/alignfirst-cli.ts` spawns the structured executable and fixed argv plus operation arguments, never split rendered text. This covers config reports, plans checks, ticket open/reservation/catchup, companion context and diagnostic `--version` probes. Missing/outdated-report diagnostics describe the selected runner, explicit Bun runtime when applicable, and direct executable resolution. Delegated prompts use the same counterpart selection; the native coding agent keeps its own executable policy and prerequisites.
 
-A render has a platform, a surface under `openclaw` (`--channel slack|discord|app`), and a guide-file condition under `codingAgent`. Without a topic, `aligndev guide` prints the dispatcher, the only `openclaw` render without a surface. `code` without `--channel` renders the `app` surface, for operators who validate profiles outside any session. `--channel` alone prints the surface's playbook. The entry topics, `working-session` and `channel-handling`, print the playbook first. The topics are keyed by context: `thread` (Slack and Discord), `app`, `codingAgent`. `{{GUIDE}}` renders as `aligndev guide --channel <surface>` or `aligndev guide`, so every later guide call keeps the surface.
+A render has a platform and a surface under `openclaw` (`--channel slack|discord|app`). Without a topic, `aligndev guide` prints the dispatcher, the only `openclaw` render without a surface. `code` without `--channel` renders the `app` surface, for operators who validate profiles outside any session. `--channel` alone prints the surface's playbook. The entry topics, `working-session` and `channel-handling`, print the playbook first. The topics are keyed by context: `thread` (Slack and Discord), `app`, `codingAgent`. `{{GUIDE}}` renders as `aligndev guide --channel <surface>` or `aligndev guide`, so every later guide call keeps the surface.
 
 Variants sit in blocks, each marker alone on its line. A block names a fact, and a line is kept when every block around it holds:
 
 - A platform block, `{{#openclaw}}` or `{{#codingAgent}}`, sits at the top level.
 - A surface block, `{{#slack}}`, `{{#discord}}` or `{{#app}}`, and `{{#thread}}` never sit inside a `{{#codingAgent}}` block.
 - `{{#conversation}}` sits anywhere.
-- A condition block, `{{#developers}}`, `{{#readme}}`, `{{#noGuide}}` or `{{#hasGuide}}` (both guide files), sits inside a `{{#codingAgent}}` block, at any depth.
 
 `thread` and `conversation` are derived: `thread` holds on Slack and Discord, `conversation` on `app` and under `codingAgent`.
 
-The condition names the project's guide file for the assistant. Under `codingAgent`, `aligndev guide` resolves it once per playbook-topic call: it runs `alignfirst config --json` in PROJECT_PATH, the main worktree of the working directory, and a report error fails the command. `DEVELOPERS.md` at its reported location gives `developers`; otherwise `README.md` at the root of PROJECT_PATH gives `readme`; otherwise, outside git included, `noGuide`. Ordinary OpenClaw playbooks read no report. The `code` topic reads the report in the actual cwd for project profile selection, independently of the main-worktree guide-file policy.
+Playbook-topic rendering reads no project report and performs no guide-file discovery. Every platform asks the assistant to run `alignfirst developer-instructions` in the selected workplace. AlignFirst prints shared conventions and optional explicitly configured content, reporting its absolute source path; missing configured content fails instead of falling back to README. Editing uses nullable `locations.developerInstructions` from `alignfirst config --json` in that worktree. With no reference, the assistant proposes a file and explicit configuration under the existing authorization policy. Developer instructions and coding-agent context remain distinct. The `code` topic still reads the report in the actual cwd for independent project profile selection.
 
 ## Running the Agent
 
@@ -133,23 +132,17 @@ The command runs [`scripts/coding-profiles-smoke.mjs`](../scripts/coding-profile
 
 This is CLI integration, not OpenClaw deployment, Docker, conversation or provider acceptance. Run it deliberately; it is outside root `npm test`, CI, release smoke and all test matrices.
 
-## Lightweight Worktrees
+## Unified workspaces
 
-`aligndev worktree` dispatches before coding settings, model discovery and project-marker checks. Git's worktree registry is its only inventory, including externally created, detached, missing, locked and prunable entries. `src/worktree/git.ts` parses Git's NUL-delimited output; project status adapts it to its existing report shape. CLI help owns command forms and JSON schemas.
+`alignfirst workspace` owns creation, adoption, preparation, inventory and cleanup. AlignDev has no second lifecycle engine or command aliases. The assistant runs standard preparation directly, in the foreground, and keeps coding delegation separate. It uses the same commands for configured and manifest-free projects. The latter are protocol-ready, with no dependency installation, build, port allocation or service startup.
 
-Add validates branch, destination and main-worktree effective plans before Git creation, then applies the shared preparation in `src/worktree/setup.ts`. Setup adopts an existing registered worktree without changing its path, branch, index or Git registration. Without a path, it discovers the current root even from a subdirectory. An explicit path resolves relative to the caller and must be an exact registered root of the same repository. Main and detached worktrees are supported; main setup validates and reports existing directories without creating links or exclusions.
-
-Linked preparation shares usable untracked main-worktree `.plans` and optional `.local` through symlinks, with root-anchored exclusions in shared local Git metadata. It checks HEAD and the index: tracked `.local` stays branch-local with a warning, and project-tracked effective plans fail. Companion plans resolve directly, without a link or exclusion. All required link destinations are checked before writes; conflicting entries and unrelated dirty work remain untouched. Existing links to the expected real target retain their link text. Missing links and exclusions are added idempotently, with links pointing through the main-worktree path so source repairs propagate.
-
-The finished worktree must pass `alignfirst plans check --json`, including linked-worktree parity with the main worktree. Failures retain the branch, worktree and partial preparation, name the failed step and give a quoted setup retry command. Repair the reported problem, then retry setup; no rollback deletes user data.
+The host validates effective work files and selected runtime storage before creation. Project runtime requires ignored, untracked `.local-wt/`; companion runtime creates no checkout runtime directory or link. Linked worktrees share main's effective project-local plans and usable untracked `.local`; companion plans resolve directly. Tracked `.local` stays branch-local. Failures retain branch/files/identity and print a precise retry command. See [Workspace Architecture](workspace-architecture.md) for runtime state and target-owned cleanup.
 
 `src/project/plans.ts` runs `alignfirst plans check --json` and returns `plans.target`. AlignFirst refuses project-tracked effective plans through both logical and resolved paths. From a linked worktree, it requires the same real target and `in` as the main worktree. Separate work-files repositories remain supported; an unused tracked project copy does not block companion plans. New/resumed coding launches apply this gate before stale-session reconciliation, ticket/session writes or model discovery. Historical status, help and inventory remain readable. The playbook's work-files runbook calls `alignfirst plans check`.
 
-The playbook selects documented project workspace tooling first, including non-Node implementations. Without it, the assistant directly orchestrates lightweight list/add/setup/remove, then delegates from the selected path. The `work-files-setup` guide topic is the sole separately authorized companion-preparation recipe and runs before ticket reservation or request capture. The CLI never writes the companion registry or provisions missing plans.
+The `work-files-setup` topic is the sole separately authorized companion preparation recipe, before ticket reservation, request capture or coding effects. Workspace setup never provisions missing plans or changes companion selection. A shared link grants no sandbox access; native coding-agent permissions remain unchanged.
 
-Readiness covers Git and work files only. Install/build/test preparation follows repository commands separately; add/setup manages no ports, environment seeding, infrastructure or application processes. A shared symlink grants no sandbox permissions. Companion access retains existing handling; missing access must be surfaced without silently changing permission policy.
-
-Remove uses ordinary non-force Git removal for one exact linked root. It refuses dirty, locked, main and protected shared-target paths, and any target containing another registered worktree root, even a locked or missing child. It preserves branches and companion registration and never follows shared links for deletion. Stop project activity separately; lightweight removal is not process or infrastructure teardown. External owners such as Paseo can run `npx -y aligndev worktree setup` inside a worktree after creating it and retain ownership of Git deletion. There is no lightweight teardown command or pre-deletion hook: AlignDev has no services, ports or separate registry to release.
+External tools adopt through `alignfirst workspace setup` and run `teardown` before their own deletion. `remove` adds protected Git deletion while retaining branches; stop/purge failures retain retry state. Consultation and no-branch status exceptions create no worktree. Existing installations follow [the clean-break upgrade runbook](upgrading-multi-stack-workspaces.md).
 
 ## Project Inventory
 
@@ -167,11 +160,11 @@ A projects directory carries a `.alignfirst-projects.json` marker, with an optio
 
 - A direct child that is a Git main worktree is a project. Its linked worktrees are its workspaces.
 - A child directory may be a nested projects directory.
-- These are inventory issues: a child outside Git with a root `.alignfirst.json`, and two projects sharing one companion directory. `aligndev project doctor` succeeds only without any issue.
+- These are inventory issues: a child outside Git with a root `alignfirst.json` or `alignfirst.jsonc`, and two projects sharing one companion directory. `aligndev project doctor` succeeds only without any issue.
 - `list` and `status` carry the registry's independent `aligndev: { profile } | null` selection alongside companion and location data. Inventory reports it without resolving a launch profile or requiring an available coding agent. A missing top-level `aligndev` field in `alignfirst config --json` is an outdated contract and requires an AlignFirst upgrade.
 - `--root` defaults to `projectsRoot` in the config, then to the working directory.
-- A marker with the old `"portRange": { … }` key is rejected. A project's `.alignfirst.json` keeps its singular `portRange`.
+- A marker with the old `"portRange": { … }` key is rejected. A project's sole range declaration is `devServer.ports` in its selected merged configuration, including companion-selected recipes.
 
 ### Port Claims
 
-`aligndev project free-ports --size <n>` returns a free block in a marker range. The size is the project's port range: port names × expected concurrent workspaces. A range without a code is the default; `--range <code>` selects a coded one. The setup guide writes the block as `portRange` in the project's `.alignfirst.json`.
+`aligndev project free-ports --size <n>` returns a free block in a marker range. The size is the project's port range: port names × expected concurrent workspaces. A range without a code is the default; `--range <code>` selects a coded one. This lookup does not reserve ports. The setup guide writes the block in the selected configuration's `devServer.ports`. AlignDev requires the merged report contract: top-level `workspace` metadata with registry/runtime addresses, `selectionOrigins`, `locations.alignfirst`, nullable `locations.developerInstructions` and `locations.workspaceRuntime`. It reads nested `config.conventions`, accepts full authored recipes and inventories `workspace.portRange` without evaluating scripts. Missing contract fields produce an actionable AlignFirst upgrade diagnostic.

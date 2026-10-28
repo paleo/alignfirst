@@ -2,15 +2,22 @@ import { spawn } from "node:child_process";
 import { closeSync, mkdirSync, openSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-import { type DevCommand, parseDevArgs, printDevHelp } from "./cli.js";
+import { type DevCommand, renderDevHelp } from "./cli.js";
 import {
   type DevSetupContext,
   type DevSetupInput,
   type DevSetupOptions,
+  type RunFilesInputsProvider,
   runDevSetup,
+  admitDevWorkspace,
 } from "./dev-setup.js";
 import {
   type DevServerEntry,
+  assertNoPendingCleanup,
+  completeDevServerCleanup,
+  markDevServerCleanupPending,
+  hasLiveSpawnPids,
+  liveDevServers,
   evictOldest,
   findOwnEntry,
   listDevServers,
@@ -18,14 +25,14 @@ import {
   printActiveServers,
   pruneAndPersist,
   registerDevServer,
-  removeDevServerEntryByWorktree,
+  readDevServers,
   stopAllRegistered,
-  unregisterDevServer,
 } from "./dev-servers-registry.js";
-import { ConfigError, StartupError, WorkspaceError } from "./errors.js";
+import { stopTarget } from "./target-stop.js";
+import { claimStartup, releaseStartup } from "./startup-ownership.js";
+import type { StartupOwner } from "./startup-registry.js";
+import { ConfigError, errorMessage, StartupError, WorkspaceError } from "./errors.js";
 import type { RunFileEntry } from "./file-entries.js";
-import { detectCommonJsError } from "./helpers.js";
-import { refuseOldRegistry } from "./migrate.js";
 import {
   awaitAllReady,
   followLogFile,
@@ -34,8 +41,8 @@ import {
   type PollableServer,
   replayTail,
 } from "./log-polling.js";
-import { configureCommands, devCmd } from "./package-manager.js";
-import { checkPortClaim } from "./port-claim.js";
+import { defaultCommands, devCmd, installedCliCommand } from "./invocation.js";
+import type { WorkspaceOperation, WorkspaceOutput } from "./operation.js";
 import {
   canonicalCwd,
   detectPortConflicts,
@@ -46,14 +53,24 @@ import {
 } from "./port-holder.js";
 import { type DevPortsConfig, type ResolvedDevPorts, resolveDevPortsConfig } from "./ports.js";
 import { isProcessAlive, stopProcessGroup } from "./process-control.js";
+import { assertRegistryOwnership } from "./registry-ownership.js";
+import { runtimeDirForTarget, resolveWorkspaceStorage, type WorkspaceStorage } from "./storage.js";
+import { assertRuntimeOwnership } from "./runtime-ownership.js";
+import { resolveServers } from "./server-descriptor.js";
 import type {
   CallbackServer,
+  ResolvedSpawnServer,
   ResolvedServerDescriptor,
   ServerContext,
   ServerDescriptor,
   SpawnServer,
 } from "./server-descriptor.js";
 import {
+  type WorkspaceRecipe,
+  assertWorkspaceRecipe,
+  assertWorkspaceCleanupComplete,
+  findWorkspaceByPath,
+  readWorkspaces,
   registryDirFor,
   resolveCurrentWorkspace,
   type ResolvedWorkspace,
@@ -65,10 +82,14 @@ export type { CallbackServer, ServerContext, ServerDescriptor, SpawnServer };
 
 /** Configuration accepted by {@link runDevServer}. */
 export interface DevServerConfig {
+  recipe: WorkspaceRecipe;
+  storage?: WorkspaceStorage;
   /** Per-worktree runtime directory, relative to the worktree root (e.g. `.local-wt`). */
   runtimeDir: string;
-  /** Maximum concurrent dev-servers across all worktrees. Omit for no limit. */
+  /** Maximum concurrent dev environments across worktrees. Zero or omission means unlimited. */
   maxConcurrentDevServers?: number;
+  /** Evaluated only for a real start, before any startup mutation. */
+  resolveStartSettings?: () => DevStartSettings;
   /** The project's port range and the ports declared in it. Omit for a portless dev-server. */
   ports?: DevPortsConfig;
   /**
@@ -81,7 +102,8 @@ export interface DevServerConfig {
    * The values the run files depend on besides the ports, such as the environment variables their
    * patches read. A start rewrites the run files when one changes. `undefined` values are ignored.
    */
-  runFilesInputs?: () => Record<string, string | undefined>;
+  runFilesInputs?: RunFilesInputsProvider;
+  signal?: AbortSignal;
   /**
    * Workspace infrastructure: database, seed. Runs once per workspace, at its first `dev setup`,
    * and again with `dev setup --force`. MUST be idempotent. Names every resource it creates after
@@ -91,11 +113,17 @@ export interface DevServerConfig {
   /** One entry per server to start. Started in array order; stopped in reverse order. */
   servers: ServerDescriptor[];
   /** Builds the post-start summary printed to stdout. Defaults to a generic layout. */
-  formatSummary?: (ctx: DevServerSummaryContext) => string;
+  formatSummary?: DevSummaryFormatter;
 }
 
-function logFileFor(cwd: string, runtimeDir: string, name: string): string {
-  return resolve(cwd, runtimeDir, "logs", `${name}.log`);
+export interface DevStartSettings {
+  maxConcurrentDevServers?: number;
+}
+
+export type DevSummaryFormatter = (ctx: DevServerSummaryContext) => string | Promise<string>;
+
+function logFileFor(runtimeDir: string, name: string): string {
+  return resolve(runtimeDir, "logs", `${encodeURIComponent(name)}.log`);
 }
 
 /**
@@ -103,58 +131,68 @@ function logFileFor(cwd: string, runtimeDir: string, name: string): string {
  * `kind: "spawn"` servers; callback servers expose neither.
  */
 export interface DevServerSummaryContext {
+  signal?: AbortSignal;
   workspace: ResolvedWorkspace;
-  servers: { server: ServerDescriptor; port?: number; pid?: number }[];
+  ports: Record<string, number>;
+  servers: { server: ResolvedServerDescriptor; port?: number; pid?: number; logFile?: string }[];
 }
 
-export async function runDevServer(config: DevServerConfig): Promise<void> {
-  configureCommands({ dev: process.argv[1] });
-  let command: DevCommand;
-  try {
-    command = parseDevArgs();
-  } catch (err) {
-    if (err instanceof ConfigError) {
-      console.error(`Warning: ${err.message}`);
-      printDevHelp();
-      process.exit(1);
-    }
-    throw err;
-  }
-
-  if (command.kind === "help") {
-    printDevHelp();
+export async function runDevServer(
+  config: DevServerConfig,
+  operation: WorkspaceOperation & { command: DevCommand },
+): Promise<void> {
+  if (operation.command.kind === "help") {
+    operation.output.text(renderDevHelp(operation.commands ?? defaultCommands));
     return;
   }
-
-  try {
-    const kernel = createKernel(config);
-    refuseOldRegistry(kernel.worktree.mainWorktree, kernel.registryDir);
-    await dispatch(command, kernel);
-  } catch (err) {
-    if (err instanceof WorkspaceError || err instanceof ConfigError) {
-      console.error(`Error: ${err.message}`);
-      process.exit(1);
-    }
-    throw err;
+  installedCliCommand(operation.invocation, []);
+  const kernel = createKernel(config, operation);
+  assertRegistryOwnership(
+    kernel.worktree.mainWorktree,
+    kernel.worktree.currentWorktree,
+    kernel.registryDir,
+  );
+  readDevServers(kernel.worktree.mainWorktree, kernel.registryDir);
+  const registered = findWorkspaceByPath(
+    readWorkspaces(kernel.worktree.mainWorktree, kernel.registryDir),
+    kernel.worktree.currentWorktree,
+  );
+  if (registered && operation.command.kind !== "list" && operation.command.kind !== "status") {
+    assertWorkspaceRecipe(registered.entry.worktree, registered.entry.recipe, config.recipe);
   }
+  if (["foreground", "up", "restart", "setup"].includes(operation.command.kind)) {
+    assertWorkspaceCleanupComplete(registered?.entry);
+  }
+  await dispatch(operation.command, kernel);
 }
 
 /** Per-invocation state shared by every dev-server command. */
-interface DevKernel {
-  config: DevServerConfig;
+interface DevKernel extends WorkspaceOperation {
+  config: RuntimeDevConfig;
   /** The validated `ports` group. `undefined` for a portless dev-server. */
   ports?: ResolvedDevPorts;
   worktree: WorktreeContext;
-  /** The registry directory, relative to a worktree root. */
+  /** Absolute shared registry address, independent of the target runtime directory. */
   registryDir: string;
 }
 
-function createKernel(config: DevServerConfig): DevKernel {
+interface RuntimeDevConfig extends DevServerConfig {
+  output: WorkspaceOutput;
+}
+
+function createKernel(config: DevServerConfig, operation: WorkspaceOperation): DevKernel {
   const ports = config.ports === undefined ? undefined : resolveDevPortsConfig(config.ports);
   checkSpawnPortNames(config.servers, ports);
-  const worktree = detectWorktree();
-  checkPortClaim(worktree.currentWorktree, ports);
-  return { config, ports, worktree, registryDir: registryDirFor(config.runtimeDir) };
+  const worktree = detectWorktree(operation.cwd);
+  return {
+    ...operation,
+    config: { ...config, output: operation.output },
+    ports,
+    worktree,
+    registryDir:
+      config.storage?.registryDir ??
+      resolve(worktree.mainWorktree, registryDirFor(config.runtimeDir)),
+  };
 }
 
 function checkSpawnPortNames(
@@ -182,18 +220,18 @@ async function dispatch(command: DevCommand, kernel: DevKernel): Promise<void> {
   const { worktree, registryDir } = kernel;
   switch (command.kind) {
     case "list":
-      listDevServers(worktree.mainWorktree, registryDir);
+      await listDevServers(worktree.mainWorktree, registryDir, kernel.output);
       return;
     case "down":
       if (command.all) {
         await stopAllRegistered({
           mainWorktree: worktree.mainWorktree,
           registryDir,
-          callbackServers: callbackServersOf(kernel.config),
-          portsOf: portsLookup(kernel),
+          stopTarget: (target) => dispatchStop(kernel, target),
+          output: kernel.output,
         });
       } else {
-        await stopLocal(kernel);
+        await stopLocal(kernel, command.retainCleanup);
       }
       return;
     case "up":
@@ -203,14 +241,14 @@ async function dispatch(command: DevCommand, kernel: DevKernel): Promise<void> {
       await start(kernel, { evict: command.evict, restart: true });
       return;
     case "status":
-      printStatus(kernel);
+      await printStatus(kernel);
       return;
     case "foreground":
       await runForeground(kernel, { evict: command.evict, restart: command.restart });
       return;
     case "setup":
       await runDevSetup(devSetupInput(kernel, { ...command, beforeStart: false }));
-      console.log("Dev setup done.");
+      kernel.output.text("Dev setup done.");
       return;
   }
 }
@@ -218,17 +256,25 @@ async function dispatch(command: DevCommand, kernel: DevKernel): Promise<void> {
 function devSetupInput(kernel: DevKernel, options: DevSetupOptions): DevSetupInput {
   return {
     worktree: kernel.worktree,
+    recipe: kernel.config.recipe,
+    output: kernel.output,
+    commands: kernel.commands,
     registryDir: kernel.registryDir,
-    runtimeDir: kernel.config.runtimeDir,
+    storage: kernel.config.storage,
+    assertLifecycleAdmission: kernel.host?.assertLifecycleAdmission,
+    runtimeDir: runtimeDirForTarget(kernel.config, kernel.worktree.currentWorktree),
     ports: kernel.ports,
     runFiles: kernel.config.runFiles ?? [],
     runFilesInputs: kernel.config.runFilesInputs,
     setup: kernel.config.setup,
+    signal: kernel.config.signal,
     options: {
       force: options.force,
       resetPorts: options.resetPorts,
       fromFinalize: options.fromFinalize,
+      preparationToken: options.preparationToken,
       beforeStart: options.beforeStart,
+      verbose: options.verbose,
     },
   };
 }
@@ -238,37 +284,30 @@ function portsLookup(kernel: DevKernel): PortsLookup {
   return (worktree) => storedPortsOf(kernel.worktree.mainWorktree, kernel.registryDir, worktree);
 }
 
-function printStatus(kernel: DevKernel): void {
+async function printStatus(kernel: DevKernel): Promise<void> {
   const { worktree, registryDir } = kernel;
   const cwd = worktree.currentWorktree;
   const entry = findOwnEntry(worktree.mainWorktree, registryDir, cwd);
   if (!entry || !Object.values(entry.pids).some(isProcessAlive)) {
-    console.log("Dev-server status: DOWN.");
+    kernel.output.text(
+      entry?.cleanupPending === true
+        ? "Dev-server status: cleanup pending."
+        : "Dev-server status: DOWN.",
+    );
     return;
   }
-  console.log("Dev-server status: UP.");
-  printStartSummary(
+  kernel.output.text("Dev-server status: UP.");
+  await printStartSummary(
     kernel.config,
     resolveCurrentWorkspace(worktree.mainWorktree, registryDir, worktree.currentWorktree),
-    resolveSpawnPorts(kernel.config.servers, portsLookup(kernel)(cwd)),
+    resolveServers(kernel.config.servers, {
+      name: entry.name,
+      cwd,
+      ports: portsLookup(kernel)(cwd),
+    }),
     entry.pids,
+    portsLookup(kernel)(cwd),
   );
-}
-
-/**
- * Maps each spawn server's `port` to a number: a port name resolves through the workspace's
- * ports. A name the workspace has no port for yet leaves the server without a port.
- */
-function resolveSpawnPorts(
-  servers: ServerDescriptor[],
-  ports: Record<string, number>,
-): ResolvedServerDescriptor[] {
-  return servers.map((server): ResolvedServerDescriptor => {
-    if (server.kind !== "spawn") return server;
-    const { port, ...rest } = server;
-    if (typeof port !== "string") return { ...rest, port };
-    return { ...rest, port: ports[port], portName: port };
-  });
 }
 
 function callbackServersOf(config: DevServerConfig): CallbackServer[] {
@@ -286,16 +325,12 @@ interface StartOptions {
 }
 
 async function start(kernel: DevKernel, options: StartOptions): Promise<void> {
-  const { config, worktree, registryDir } = kernel;
   const prepared = await runStartChecks(kernel, options);
   if (!prepared) return;
   const { workspace, ctx, servers } = prepared;
 
-  const state: StartState = { spawnPids: {}, startedCallbacks: [] };
-  await spawnWithRollback(config, ctx, state);
-
-  registerStartedServer(worktree.mainWorktree, registryDir, workspace, state.spawnPids);
-  printStartSummary(config, workspace, servers, state.spawnPids);
+  const state: StartState = { spawnPids: Object.create(null), startedCallbacks: [] };
+  await spawnWithRollback(kernel, workspace, ctx, state, servers, prepared.owner);
 }
 
 /**
@@ -306,13 +341,17 @@ async function start(kernel: DevKernel, options: StartOptions): Promise<void> {
 async function runForeground(kernel: DevKernel, options: StartOptions): Promise<void> {
   const { config, worktree, registryDir } = kernel;
   const { mainWorktree } = worktree;
-  let ctx: ServerContext | undefined;
+  const controller = new AbortController();
+  config.signal =
+    config.signal === undefined
+      ? controller.signal
+      : AbortSignal.any([config.signal, controller.signal]);
   if (!options.restart) {
     const running = findOwnLiveEntry(mainWorktree, registryDir, worktree.currentWorktree);
     if (running) return attachForeground(config, running);
   }
 
-  const state: StartState = { spawnPids: {}, startedCallbacks: [] };
+  const state: StartState = { spawnPids: Object.create(null), startedCallbacks: [] };
   let started = false;
   let shuttingDown = false;
 
@@ -321,39 +360,36 @@ async function runForeground(kernel: DevKernel, options: StartOptions): Promise<
     shuttingDown = true;
     if (started) {
       void shutdownForeground(kernel);
-    } else if (ctx) {
-      void rollbackStart(state.spawnPids, state.startedCallbacks, ctx).then(() =>
-        process.exit(130),
-      );
     } else {
-      process.exit(130);
+      controller.abort();
     }
   };
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);
 
-  const prepared = await runStartChecks(kernel, options);
-  if (shuttingDown) await new Promise<never>(() => {});
-  if (!prepared) process.exit(0);
-  const { workspace, servers } = prepared;
-  ctx = prepared.ctx;
-
-  // Stream logs from the first byte so the whole startup (e.g. a slow build) is visible live.
-  const streamLogs = (): void =>
-    tailLogs(config, workspace.worktree, state.spawnPids, { fromStart: true });
-  // A signal during startup hands teardown to onSignal (rollback + exit 130); block so we
-  // neither roll back twice nor register a server that is being torn down.
-  if (!(await spawnWithRollback(config, ctx, state, () => shuttingDown, streamLogs))) {
-    await new Promise<never>(() => {});
+  let prepared: PreparedStart | undefined;
+  try {
+    prepared = await runStartChecks(kernel, options);
+    if (!prepared) process.exit(0);
+    const { workspace, ctx, servers } = prepared;
+    const streamLogs = (): void =>
+      tailLogs(config, workspace.worktree, state.spawnPids, { fromStart: true });
+    await spawnWithRollback(kernel, workspace, ctx, state, servers, prepared.owner, streamLogs);
+    ctx.signal?.throwIfAborted();
+  } catch (error) {
+    process.removeListener("SIGINT", onSignal);
+    process.removeListener("SIGTERM", onSignal);
+    if (shuttingDown) {
+      kernel.output.diagnostic(errorMessage(error));
+      process.exit(130);
+    }
+    throw error;
   }
-
-  registerStartedServer(mainWorktree, registryDir, workspace, state.spawnPids);
   started = true;
-  printStartSummary(config, workspace, servers, state.spawnPids);
   watchForExternalStop(Object.values(state.spawnPids), () => {
     if (shuttingDown) return;
     shuttingDown = true;
-    console.log(`\nDev-server stopped externally (e.g. \`${devCmd("down")}\`). Exiting.`);
+    kernel.output.text(`\nDev-server stopped externally (e.g. \`${devCmd("down")}\`). Exiting.`);
     process.exit(0);
   });
   await new Promise<never>(() => {});
@@ -365,28 +401,31 @@ function findOwnLiveEntry(
   cwd: string,
 ): DevServerEntry | undefined {
   const entry = findOwnEntry(mainWorktree, registryDir, cwd);
+  assertNoPendingCleanup(mainWorktree, registryDir, cwd);
   if (!entry) return;
-  return Object.values(entry.pids).some(isProcessAlive) ? entry : undefined;
+  return hasLiveSpawnPids(entry) ? entry : undefined;
 }
 
 /**
  * Attach to a dev-server already running in this worktree: replay the recent log, follow it live,
  * and exit when it stops. CTRL+C only detaches — this session does not own the server.
  */
-async function attachForeground(config: DevServerConfig, entry: DevServerEntry): Promise<void> {
+async function attachForeground(config: RuntimeDevConfig, entry: DevServerEntry): Promise<void> {
   const pidList = Object.entries(entry.pids)
     .map(([name, pid]) => `${name}=${pid}`)
     .join(", ");
-  console.log(
+  config.output.text(
     `Attaching to the dev-server in this worktree (workspace ${entry.name}, pids: ${pidList}).`,
   );
-  console.log("Showing live logs. Press CTRL+C to detach — the dev-server keeps running.");
+  config.output.text("Showing live logs. Press CTRL+C to detach — the dev-server keeps running.");
 
   let detaching = false;
   const onSignal = (): void => {
     if (detaching) return;
     detaching = true;
-    console.log(`\nDetached. The dev-server is still running (\`${devCmd("down")}\` to stop it).`);
+    config.output.text(
+      `\nDetached. The dev-server is still running (\`${devCmd("down")}\` to stop it).`,
+    );
     process.exit(0);
   };
   process.on("SIGINT", onSignal);
@@ -396,31 +435,70 @@ async function attachForeground(config: DevServerConfig, entry: DevServerEntry):
   watchForExternalStop(Object.values(entry.pids).filter(isProcessAlive), () => {
     if (detaching) return;
     detaching = true;
-    console.log(`\nDev-server stopped externally (e.g. \`${devCmd("down")}\`). Exiting.`);
+    config.output.text(`\nDev-server stopped externally (e.g. \`${devCmd("down")}\`). Exiting.`);
     process.exit(0);
   });
   await new Promise<never>(() => {});
 }
 
 async function shutdownForeground(kernel: DevKernel): Promise<void> {
-  console.log("\nStopping dev servers...");
-  await stopLocal(kernel);
-  console.log("Stopped.");
-  process.exit(0);
+  kernel.output.text("\nStopping dev servers...");
+  try {
+    await stopLocal(kernel);
+    kernel.output.text("Stopped.");
+    process.exit(0);
+  } catch (error) {
+    kernel.output.diagnostic(errorMessage(error));
+    process.exit(1);
+  }
 }
 
 interface PreparedStart {
+  owner: StartupOwner;
   workspace: ResolvedWorkspace;
   ctx: ServerContext;
   servers: ResolvedServerDescriptor[];
 }
 
-/** Prepares the authoritative identity and ports before any server callback can run. */
+/** Claims the worktree before setup, restart, eviction or stale-port cleanup can run. */
 async function runStartChecks(
   kernel: DevKernel,
-  { evict, restart }: StartOptions,
+  options: StartOptions,
 ): Promise<PreparedStart | undefined> {
   const { mainWorktree, currentWorktree } = kernel.worktree;
+  if (!options.restart && (await handleAlreadyRunning(kernel, currentWorktree, false))) return;
+  const settings = kernel.config.resolveStartSettings?.();
+  if (settings) kernel.config.maxConcurrentDevServers = settings.maxConcurrentDevServers;
+  await admitDevWorkspace(
+    devSetupInput(kernel, {
+      force: false,
+      resetPorts: false,
+      fromFinalize: false,
+      beforeStart: true,
+    }),
+  );
+  const owner = await claimStartup(
+    mainWorktree,
+    kernel.registryDir,
+    currentWorktree,
+    kernel.host?.assertLifecycleAdmission,
+  );
+  let prepared: PreparedStart | undefined;
+  try {
+    prepared = await prepareStart(kernel, options, owner);
+    return prepared;
+  } finally {
+    if (!prepared) await releaseStartup(mainWorktree, kernel.registryDir, owner);
+  }
+}
+
+async function prepareStart(
+  kernel: DevKernel,
+  { evict, restart }: StartOptions,
+  owner: StartupOwner,
+): Promise<PreparedStart | undefined> {
+  const { mainWorktree, currentWorktree } = kernel.worktree;
+  assertNoPendingCleanup(mainWorktree, kernel.registryDir, currentWorktree);
   if (await handleAlreadyRunning(kernel, currentWorktree, restart)) return;
   const { workspace, ports } = await runDevSetup(
     devSetupInput(kernel, {
@@ -430,39 +508,68 @@ async function runStartChecks(
       beforeStart: true,
     }),
   );
-  const ctx: ServerContext = { name: workspace.name, cwd: workspace.worktree, ports };
+  const ctx: ServerContext = {
+    name: workspace.name,
+    cwd: workspace.worktree,
+    ports,
+    signal: kernel.config.signal,
+  };
+  ctx.signal?.throwIfAborted();
   await enforceCap(kernel, evict);
-  checkNoLocalRegistryConflict(mainWorktree, kernel.registryDir, ctx.cwd);
-  const servers = resolveSpawnPorts(kernel.config.servers, ports);
+  await checkNoLocalRegistryConflict(mainWorktree, kernel.registryDir, ctx.cwd);
+  const servers = resolveServers(kernel.config.servers, ctx);
   const pins = workspace.main === true ? (kernel.ports?.mainWorktree ?? {}) : {};
-  await checkPortsFree(servers, ctx.cwd, pins);
-  return { workspace, ctx, servers };
+  await checkPortsFree(servers, ctx.cwd, pins, kernel.output);
+  return { workspace, ctx, servers, owner };
 }
 
 /**
- * Spawn and await readiness, rolling back on failure. Returns `false` when `isAborted` reports a
- * concurrent shutdown — the caller must then yield teardown to whoever set it, not proceed.
+ * Spawn the resolved descriptors and await readiness, rolling back on failure or cancellation.
  */
 async function spawnWithRollback(
-  config: DevServerConfig,
+  kernel: DevKernel,
+  workspace: ResolvedWorkspace,
   ctx: ServerContext,
   state: StartState,
-  isAborted: () => boolean = () => false,
+  servers: ResolvedServerDescriptor[],
+  owner: StartupOwner,
   onSpawned?: () => void,
-): Promise<boolean> {
+): Promise<void> {
+  const { config } = kernel;
+  const entry: DevServerEntry = {
+    name: workspace.name,
+    worktree: workspace.worktree,
+    pids: state.spawnPids,
+    startedAt: new Date().toISOString(),
+    instanceId: owner.id,
+    ...(workspace.main ? { main: true } : {}),
+  };
   try {
-    await spawnAndAwait(config, ctx, state, onSpawned);
+    await spawnAndAwait(config, ctx, state, servers, onSpawned);
+    ctx.signal?.throwIfAborted();
+    await registerDevServer(kernel.worktree.mainWorktree, kernel.registryDir, entry, owner);
+    ctx.signal?.throwIfAborted();
+    await printStartSummary(config, workspace, servers, state.spawnPids, ctx.ports);
+    ctx.signal?.throwIfAborted();
   } catch (err) {
-    if (isAborted()) return false;
-    await rollbackStart(state.spawnPids, state.startedCallbacks, ctx);
+    try {
+      await rollbackStart(kernel, entry, state.startedCallbacks, ctx, owner);
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [err, cleanupError],
+        `${errorMessage(err)}; ${errorMessage(cleanupError)}`,
+      );
+    }
+    ctx.signal?.throwIfAborted();
     if (err instanceof StartupError) {
       // The foreground (onSpawned set) already streamed the log live, so skip the redundant tail.
-      handleStartupFailure(err, { includeTail: onSpawned === undefined });
-      process.exit(1);
+      handleStartupFailure(err, { includeTail: onSpawned === undefined, output: config.output });
+      throw new WorkspaceError(`${err.label}: ${err.reason}`, { cause: err });
     }
     throw err;
+  } finally {
+    await releaseStartup(kernel.worktree.mainWorktree, kernel.registryDir, owner);
   }
-  return !isAborted();
 }
 
 /**
@@ -476,19 +583,26 @@ export function toCallbackStartupError(name: string, err: unknown): StartupError
 }
 
 async function spawnAndAwait(
-  config: DevServerConfig,
+  config: RuntimeDevConfig,
   ctx: ServerContext,
   state: StartState,
+  servers: ResolvedServerDescriptor[],
   onSpawned?: () => void,
 ): Promise<void> {
-  for (const server of config.servers) {
-    console.log(`Starting ${server.name} dev server...`);
+  for (const server of servers) {
+    ctx.signal?.throwIfAborted();
+    config.output.text(`Starting ${server.name} dev server...`);
     if (server.kind === "spawn") {
-      state.spawnPids[server.name] = spawnServer(server, config.runtimeDir, ctx.cwd);
+      if (config.storage) assertRuntimeOwnership(resolveWorkspaceStorage(config.storage, ctx.cwd));
+      state.spawnPids[server.name] = await spawnServer(
+        server,
+        runtimeDirForTarget(config, ctx.cwd),
+      );
     } else {
       try {
         await server.start(ctx);
       } catch (err) {
+        ctx.signal?.throwIfAborted();
         throw toCallbackStartupError(server.name, err);
       }
       state.startedCallbacks.push(server);
@@ -496,49 +610,52 @@ async function spawnAndAwait(
   }
   onSpawned?.();
 
-  const spawnEntries = config.servers.filter((s): s is SpawnServer => s.kind === "spawn");
+  ctx.signal?.throwIfAborted();
+  const spawnEntries = servers.filter((s): s is ResolvedSpawnServer => s.kind === "spawn");
   const pollables: PollableServer[] = spawnEntries.map((s) => ({
     name: s.name,
-    logFile: logFileFor(ctx.cwd, config.runtimeDir, s.name),
+    logFile: logFileFor(runtimeDirForTarget(config, ctx.cwd), s.name),
     detectReady: s.detectReady,
-    detectError: s.detectError ?? detectCommonJsError,
+    detectError: s.detectError,
   }));
   const pollPids = spawnEntries.map((s) => state.spawnPids[s.name]);
-  await awaitAllReady(pollables, pollPids);
+  await awaitAllReady(pollables, pollPids, { signal: ctx.signal });
 }
 
-function registerStartedServer(
-  mainWorktree: string,
-  registryDir: string,
-  workspace: ResolvedWorkspace,
-  spawnPids: Record<string, number>,
-): void {
-  const devEntry: DevServerEntry = {
-    name: workspace.name,
-    worktree: workspace.worktree,
-    pids: spawnPids,
-    startedAt: new Date().toISOString(),
-  };
-  if (workspace.main) devEntry.main = true;
-  registerDevServer(mainWorktree, registryDir, devEntry);
-}
-
-function printStartSummary(
-  config: DevServerConfig,
+async function printStartSummary(
+  config: RuntimeDevConfig,
   workspace: ResolvedWorkspace,
   servers: ResolvedServerDescriptor[],
   spawnPids: Record<string, number>,
-): void {
+  ports: Record<string, number>,
+): Promise<void> {
   const summaryServers = servers.map((server) => {
     if (server.kind === "spawn") {
-      return { server, port: server.port, pid: spawnPids[server.name] };
+      return {
+        server,
+        port: server.port,
+        pid: spawnPids[server.name],
+        logFile: logFileFor(runtimeDirForTarget(config, workspace.worktree), server.name),
+      };
     }
     return { server };
   });
   if (config.formatSummary) {
-    console.log(config.formatSummary({ workspace, servers: summaryServers }));
+    config.output.text(
+      await config.formatSummary({
+        workspace,
+        servers: summaryServers,
+        ports,
+        signal: config.signal,
+      }),
+    );
   } else {
-    defaultPrintSummary(workspace, summaryServers, config.runtimeDir);
+    defaultPrintSummary(
+      workspace,
+      summaryServers,
+      runtimeDirForTarget(config, workspace.worktree),
+      config.output,
+    );
   }
 }
 
@@ -549,7 +666,7 @@ const LIVENESS_POLL_MS = 1000;
 type TailMode = { fromStart: true } | { replayLines: number };
 
 function tailLogs(
-  config: DevServerConfig,
+  config: RuntimeDevConfig,
   cwd: string,
   spawnPids: Record<string, number>,
   mode: TailMode,
@@ -557,10 +674,11 @@ function tailLogs(
   const names = Object.keys(spawnPids);
   const prefixed = names.length > 1;
   for (const name of names) {
-    const path = logFileFor(cwd, config.runtimeDir, name);
+    const path = logFileFor(runtimeDirForTarget(config, cwd), name);
     const prefix = prefixed ? `[${name}] ` : "";
-    const offset = "fromStart" in mode ? 0 : replayTail(path, prefix, mode.replayLines);
-    followLogFile(path, prefix, offset);
+    const offset =
+      "fromStart" in mode ? 0 : replayTail(path, prefix, mode.replayLines, config.output.write);
+    followLogFile(path, prefix, offset, config.output.write);
   }
 }
 
@@ -585,26 +703,63 @@ export function watchForExternalStop(
 }
 
 async function rollbackStart(
-  spawnPids: Record<string, number>,
-  startedCallbacks: CallbackServer[],
+  kernel: DevKernel,
+  entry: DevServerEntry,
+  callbacks: CallbackServer[],
+  ctx: ServerContext,
+  owner: StartupOwner,
+): Promise<void> {
+  const marked = await markDevServerCleanupPending(
+    kernel.worktree.mainWorktree,
+    kernel.registryDir,
+    ctx.cwd,
+    entry,
+    owner,
+  );
+  if (!marked) throw new WorkspaceError(`Startup rollback identity changed for ${ctx.cwd}.`);
+  kernel.output.diagnostic("\nStopping dev servers...");
+  await stopOwnedServices(kernel, entry, callbacks, {
+    ...ctx,
+    signal: new AbortController().signal,
+  });
+  await completeDevServerCleanup(
+    kernel.worktree.mainWorktree,
+    kernel.registryDir,
+    ctx.cwd,
+    entry.startedAt,
+    entry.instanceId,
+  );
+}
+
+async function stopOwnedServices(
+  kernel: DevKernel,
+  entry: DevServerEntry,
+  callbacks: CallbackServer[],
   ctx: ServerContext,
 ): Promise<void> {
-  console.error("\nStopping dev servers...");
-  for (const pid of Object.values(spawnPids)) {
+  const failures: unknown[] = [];
+  for (const [name, pid] of Object.entries(entry.pids).reverse()) {
+    if (!isProcessAlive(pid)) continue;
+    kernel.output.text(`Stopping ${name} (PID ${pid})...`);
     try {
       await stopProcessGroup(pid);
-    } catch (err) {
-      console.error(`  Failed to stop PID ${pid}: ${(err as Error).message}`);
+    } catch (error) {
+      failures.push(error);
     }
   }
-  for (const server of [...startedCallbacks].reverse()) {
-    console.log(`Stopping ${server.name}...`);
+  for (const server of [...callbacks].reverse()) {
+    kernel.output.text(`Stopping ${server.name}...`);
     try {
       await server.stop(ctx);
-    } catch (err) {
-      console.error(`  Failed to stop ${server.name}: ${(err as Error).message}`);
+    } catch (error) {
+      failures.push(error);
     }
   }
+  if (failures.length > 0)
+    throw new AggregateError(
+      failures,
+      `Cleanup pending for ${entry.worktree}: ${failures.map(errorMessage).join("; ")}`,
+    );
 }
 
 /**
@@ -617,22 +772,23 @@ async function handleAlreadyRunning(
   cwd: string,
   restart: boolean,
 ): Promise<boolean> {
-  const entry = findOwnEntry(kernel.worktree.mainWorktree, kernel.registryDir, cwd);
+  const entry = findOwnLiveEntry(kernel.worktree.mainWorktree, kernel.registryDir, cwd);
   if (!entry) return false;
   const livePids = Object.entries(entry.pids).filter(([, pid]) => isProcessAlive(pid));
-  if (livePids.length === 0) return false;
 
   if (restart) {
-    console.log("Restarting dev-server in this worktree...");
+    kernel.output.text("Restarting dev-server in this worktree...");
     await stopLocal(kernel);
     return false;
   }
 
   const pidList = livePids.map(([name, pid]) => `${name}=${pid}`).join(", ");
-  console.log(
+  kernel.output.text(
     `dev-server already running for this worktree (workspace ${entry.name}, pids: ${pidList}).`,
   );
-  console.log(`Run \`${devCmd("down")}\` to stop it, or re-run with \`--restart\` to restart.`);
+  kernel.output.text(
+    `Run \`${devCmd("down")}\` to stop it, or re-run with \`--restart\` to restart.`,
+  );
   return true;
 }
 
@@ -643,30 +799,29 @@ async function enforceCap(kernel: DevKernel, evict: boolean): Promise<void> {
   const { config, registryDir } = kernel;
   const { mainWorktree } = kernel.worktree;
   const limit = config.maxConcurrentDevServers;
-  if (limit === undefined) return;
-  const active = pruneAndPersist(mainWorktree, registryDir).servers;
+  if (limit === undefined || limit === 0) return;
+  const active = liveDevServers(await pruneAndPersist(mainWorktree, registryDir));
   if (active.length < limit) return;
 
   if (!evict) {
-    console.error(`Error: dev-server cap reached (${active.length}/${limit}). Active dev-servers:`);
-    printActiveServers(active);
-    console.error(`Run \`${devCmd("down")}\` in another worktree, or \`${devCmd("down --all")}\`.`);
-    console.error("Re-run with `--evict` to evict the oldest.");
-    process.exit(1);
+    printActiveServers(active, kernel.output);
+    throw new WorkspaceError(
+      `dev-server cap reached (${active.length}/${limit}). Run \`${devCmd("down")}\` in another worktree, or re-run with --evict.`,
+    );
   }
 
   const toEvict = active.length - limit + 1;
-  console.log(`Evicting ${toEvict} dev-server(s) to make room (cap ${limit}).`);
+  kernel.output.text(`Evicting ${toEvict} dev-server(s) to make room (cap ${limit}).`);
   const evicted = await evictOldest({
     mainWorktree,
     registryDir,
-    callbackServers: callbackServersOf(config),
-    portsOf: portsLookup(kernel),
+    stopTarget: (target) => dispatchStop(kernel, target),
     count: toEvict,
+    output: kernel.output,
   });
   for (const entry of evicted) {
     const branch = getWorktreeBranch(entry.worktree) ?? "(detached)";
-    console.log(
+    kernel.output.text(
       `Evicted workspace ${entry.name} (branch=${branch}, startedAt=${entry.startedAt}).`,
     );
   }
@@ -677,26 +832,25 @@ async function checkPortsFree(
   servers: ResolvedServerDescriptor[],
   cwd: string,
   pins: Record<string, number>,
+  output: WorkspaceOutput,
 ): Promise<void> {
   const conflicts = await detectPortConflicts(servers, canonicalCwd(cwd));
   const foreign = conflicts.filter(
     (c): c is Extract<PortConflict, { kind: "foreign" }> => c.kind === "foreign",
   );
   if (foreign.length > 0) {
-    for (const c of foreign) console.error(foreignHolderMessage(c, pins));
-    process.exit(1);
+    throw new WorkspaceError(foreign.map((c) => foreignHolderMessage(c, pins)).join("\n"));
   }
   const ours = conflicts.filter(
     (c): c is Extract<PortConflict, { kind: "ours" }> => c.kind === "ours",
   );
   if (ours.length === 0) return;
   for (const c of ours) {
-    console.warn(
+    output.diagnostic(
       `Stale ${c.server.name} dev-server detected on port ${c.server.port} (PID ${c.holder.pid}: ${c.holder.cmd}). Cleaning up...`,
     );
     if (c.holder.pgid === undefined) {
-      console.error(`  Cannot kill: pgid unknown for PID ${c.holder.pid}.`);
-      process.exit(1);
+      throw new WorkspaceError(`Cannot kill: pgid unknown for PID ${c.holder.pid}.`);
     }
     await stopProcessGroup(c.holder.pgid);
   }
@@ -705,13 +859,7 @@ async function checkPortsFree(
     2000,
   );
   if (stillBusy.length > 0) {
-    for (const port of stillBusy) {
-      const server = ours.find((c) => c.server.port === port)?.server;
-      console.error(
-        `Error: Port ${port}${server ? ` (${server.name})` : ""} still in use after cleanup attempt.`,
-      );
-    }
-    process.exit(1);
+    throw new WorkspaceError(`Ports ${stillBusy.join(", ")} still in use after cleanup attempt.`);
   }
 }
 
@@ -740,88 +888,107 @@ function describeHolder(holder: PortHolder | undefined): string {
   return `PID ${holder.pid}: ${holder.cmd}${holder.cwd ? `, cwd ${holder.cwd}` : ""}`;
 }
 
-function checkNoLocalRegistryConflict(
+async function checkNoLocalRegistryConflict(
   mainWorktree: string,
   registryDir: string,
   cwd: string,
-): void {
+): Promise<void> {
+  assertNoPendingCleanup(mainWorktree, registryDir, cwd);
   const entry = findOwnEntry(mainWorktree, registryDir, cwd);
   if (!entry) return;
   for (const [name, pid] of Object.entries(entry.pids)) {
     if (isProcessAlive(pid)) {
-      console.error(`Error: ${name} is already running (PID ${pid}).`);
-      process.exit(1);
+      throw new WorkspaceError(`${name} is already running (PID ${pid}).`);
     }
   }
   // Stale entry — drop it so registration overwrites cleanly.
-  removeDevServerEntryByWorktree(mainWorktree, registryDir, cwd);
+  await completeDevServerCleanup(mainWorktree, registryDir, cwd, entry.startedAt, entry.instanceId);
 }
 
-async function stopLocal(kernel: DevKernel): Promise<void> {
+async function stopLocal(kernel: DevKernel, retainCleanup = false): Promise<void> {
   const { config, registryDir } = kernel;
   const { mainWorktree, currentWorktree } = kernel.worktree;
   const entry = findOwnEntry(mainWorktree, registryDir, currentWorktree);
   const cwd = entry?.worktree ?? currentWorktree;
   const ports = portsLookup(kernel)(cwd);
-  const servers = resolveSpawnPorts(config.servers, ports);
+  const servers = config.servers.flatMap((server) => {
+    if (server.kind !== "spawn") return [];
+    const port = typeof server.port === "string" ? ports[server.port] : server.port;
+    return port === undefined ? [] : [{ name: server.name, port }];
+  });
   if (!entry) {
-    console.log("No dev-server running in this worktree.");
+    kernel.output.text("No dev-server running in this worktree.");
     await sweepStalePorts(servers, cwd);
     return;
   }
-  const ctx: ServerContext = { name: entry.name, cwd, ports };
-  for (const [name, pid] of Object.entries(entry.pids)) {
-    if (!isProcessAlive(pid)) continue;
-    console.log(`Stopping ${name} (PID ${pid})...`);
-    await stopProcessGroup(pid);
-  }
-  const callbacks = callbackServersOf(config);
-  for (const server of [...callbacks].reverse()) {
-    console.log(`Stopping ${server.name}...`);
-    try {
-      await server.stop(ctx);
-    } catch (err) {
-      console.error(`  Failed to stop ${server.name}: ${(err as Error).message}`);
-    }
-  }
-  unregisterDevServer(mainWorktree, registryDir, ctx.cwd);
+  await markDevServerCleanupPending(mainWorktree, registryDir, cwd);
+  const ctx: ServerContext = { name: entry.name, cwd, ports, signal: config.signal };
+  await stopOwnedServices(kernel, entry, callbackServersOf(config), ctx);
   await sweepStalePorts(servers, ctx.cwd);
+  if (!retainCleanup)
+    await completeDevServerCleanup(
+      mainWorktree,
+      registryDir,
+      ctx.cwd,
+      entry.startedAt,
+      entry.instanceId,
+    );
+}
+
+function dispatchStop(kernel: DevKernel, target: DevServerEntry): Promise<void> {
+  return stopTarget({
+    operation: kernel,
+    mainWorktree: kernel.worktree.mainWorktree,
+    registryDir: kernel.registryDir,
+    target,
+    signal: kernel.config.signal,
+    local: {
+      worktree: kernel.worktree.currentWorktree,
+      recipe: kernel.config.recipe,
+      stop: () => stopLocal(kernel),
+    },
+  });
 }
 
 function defaultPrintSummary(
   workspace: ResolvedWorkspace,
   servers: DevServerSummaryContext["servers"],
   runtimeDir: string,
+  output: WorkspaceOutput,
 ): void {
-  console.log("\nDev servers started!");
-  console.log(`  Workspace: ${workspace.name}`);
+  output.text("\nDev servers started!");
+  output.text(`  Workspace: ${workspace.name}`);
   for (const { server, port, pid } of servers) {
     if (server.kind !== "spawn") {
-      console.log(`  ${server.name}: ready`);
+      output.text(`  ${server.name}: ready`);
       continue;
     }
     const target = port === undefined ? `PID ${pid}` : `http://localhost:${port}/  (PID ${pid})`;
-    console.log(`  ${server.name}: ${target}`);
-    console.log(`    log: ${logFileFor(workspace.worktree, runtimeDir, server.name)}`);
+    output.text(`  ${server.name}: ${target}`);
+    output.text(`    log: ${logFileFor(runtimeDir, server.name)}`);
   }
-  console.log("");
+  output.text("");
 }
 
-function spawnServer(server: SpawnServer, runtimeDir: string, cwd: string): number {
-  const logFile = logFileFor(cwd, runtimeDir, server.name);
+async function spawnServer(server: ResolvedSpawnServer, runtimeDir: string): Promise<number> {
+  const logFile = logFileFor(runtimeDir, server.name);
   mkdirSync(dirname(logFile), { recursive: true });
   const logFd = openSync(logFile, "w");
   const child = spawn(server.exec.command, server.exec.args, {
     detached: true,
     stdio: ["ignore", logFd, logFd],
-    cwd,
+    cwd: server.exec.cwd,
+    env: server.exec.env,
   });
-  if (child.pid === undefined) {
-    closeSync(logFd);
-    console.error(`Error: failed to spawn ${server.name}.`);
-    process.exit(1);
-  }
-  child.unref();
   closeSync(logFd);
+  await new Promise<void>((resolve, reject) => {
+    child.once("spawn", resolve);
+    child.once("error", () =>
+      reject(new StartupError(server.name, "process launch failed", logFile)),
+    );
+  });
+  if (child.pid === undefined)
+    throw new StartupError(server.name, "process launch failed", logFile);
+  child.unref();
   return child.pid;
 }

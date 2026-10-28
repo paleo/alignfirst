@@ -41,7 +41,6 @@ git config --global user.email "<email>"
 git clone git@{{SERVER_HOST}}-admin:<repository-path> ~/{{ADMIN_REPOSITORY_NAME}}
 cd ~/{{ADMIN_REPOSITORY_NAME}}
 npm install -g alignfirst
-npm install
 ```
 
 <!-- TEAM_PLANS_SECTION -->
@@ -67,7 +66,9 @@ alignfirst plans check
 ```sh
 cd ~/{{ADMIN_REPOSITORY_NAME}}
 mkdir -p .plans .local
-npm run workspace -- setup
+alignfirst plans check
+alignfirst config --json
+alignfirst workspace setup
 alignfirst context
 ```
 

@@ -1,14 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { buildWorktreeReadyMessage } from "../src/dev-setup.js";
-import type { PackageManagerCommands } from "../src/package-manager.js";
+import type { WorkspaceCommands } from "../src/invocation.js";
 import type { WorkspaceEntry } from "../src/workspaces.js";
 
 const NOW = Date.parse("2026-05-17T00:00:00.000Z");
 
-const PM: PackageManagerCommands = {
-  install: "npm install",
-  runtime: "node",
+const PM: WorkspaceCommands = {
   workspace: { base: "npm run workspace", withArgs: "npm run workspace --" },
   dev: { base: "npm run dev", withArgs: "npm run dev --" },
 };
@@ -30,6 +28,7 @@ describe("buildWorktreeReadyMessage", () => {
       worktree: "/tmp/wt",
       createdAt: "2026-05-16T23:00:00.000Z",
       status: "ready",
+      recipe: { kind: "defaults" },
     };
     expect(buildWorktreeReadyMessage(input(entry))).toEqual({ ok: true });
   });
@@ -39,6 +38,7 @@ describe("buildWorktreeReadyMessage", () => {
       worktree: "/tmp/wt",
       createdAt: "2026-05-16T23:00:00.000Z",
       status: "pending",
+      recipe: { kind: "defaults" },
     };
     const result = buildWorktreeReadyMessage(input(entry));
     expect(result.ok).toBe(false);
@@ -54,6 +54,7 @@ describe("buildWorktreeReadyMessage", () => {
       worktree: "/tmp/wt",
       createdAt: "2026-05-16T23:00:00.000Z",
       status: "pending",
+      recipe: { kind: "defaults" },
     };
     expect(buildWorktreeReadyMessage({ ...input(entry), acceptPending: true })).toEqual({
       ok: true,
@@ -65,6 +66,7 @@ describe("buildWorktreeReadyMessage", () => {
       worktree: "/tmp/wt",
       createdAt: "2026-05-16T22:00:00.000Z",
       status: "failed",
+      recipe: { kind: "defaults" },
     };
     expect(buildWorktreeReadyMessage({ ...input(entry), acceptPending: true }).ok).toBe(false);
   });
@@ -74,6 +76,7 @@ describe("buildWorktreeReadyMessage", () => {
       worktree: "/tmp/wt",
       createdAt: "2026-05-16T22:00:00.000Z",
       status: "failed",
+      recipe: { kind: "defaults" },
       failure: { at: "2026-05-16T23:30:00.000Z", message: "boom" },
     };
     const result = buildWorktreeReadyMessage(input(entry));
@@ -90,6 +93,7 @@ describe("buildWorktreeReadyMessage", () => {
       worktree: "/tmp/wt",
       createdAt: "2026-05-16T22:00:00.000Z",
       status: "failed",
+      recipe: { kind: "defaults" },
     };
     const result = buildWorktreeReadyMessage(input(entry));
     expect(result.ok).toBe(false);

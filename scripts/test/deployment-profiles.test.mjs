@@ -88,9 +88,34 @@ for (const overlay of Object.keys(agents)) {
             installSettings(fixture);
             validateProfiles(fixture);
             assert.equal(existsSync(join(fixture.rendered, "infra/gateway")), gateway);
-            const config = JSON.parse(
-              readFileSync(join(fixture.rendered, ".alignfirst.json"), "utf8"),
+            const report = JSON.parse(
+              run(fixture, process.execPath, [
+                join(repository, "packages/alignfirst/bin/alignfirst.mjs"),
+                "config",
+                "--json",
+              ]),
             );
+            const config = report.config;
+            assert.equal(
+              report.locations.alignfirst.path,
+              join(fixture.rendered, "alignfirst.jsonc"),
+            );
+            assert.equal(report.workspace.schemaVersion, 1);
+            assert.equal(report.workspace.hasDevServer, false);
+            assert.equal(config.schemaVersion, 1);
+            assert.equal(config.conventions.git.defaultBranch, "main");
+            assert.equal(config.developerInstructions, "DEVELOPERS.md");
+            assert.equal(
+              report.locations.developerInstructions.path,
+              join(fixture.rendered, "DEVELOPERS.md"),
+            );
+            assert.equal(report.locations.developerInstructions.exists, true);
+            assert.equal(report.workspace.location.path, report.locations.alignfirst.path);
+            assert.equal(
+              report.workspace.registryDir,
+              join(fixture.rendered, ".local-wt/workspace-registry"),
+            );
+            assert.equal(existsSync(join(fixture.rendered, ".local-wt")), false);
             assert.equal(config.plans?.repositoryFolder, plans ? "admin" : undefined);
             const marker = readFileSync(
               join(fixture.infra, "projects/.alignfirst-projects.json"),
@@ -133,7 +158,9 @@ for (const overlay of Object.keys(agents)) {
           writeFileSync(
             join(registry, "registry.json"),
             JSON.stringify({
-              projects: { [fixture.home]: { aligndev: { profile: "missing-project-profile" } } },
+              projects: {
+                [fixture.rendered]: { aligndev: { profile: "missing-project-profile" } },
+              },
             }),
           );
           const args = ["-euc", script, "fixture", functions, fixture.infra];
@@ -888,7 +915,7 @@ function run(fixture, command, args) {
 
 function options(fixture) {
   return {
-    cwd: fixture.home,
+    cwd: fixture.rendered,
     env: fixture.env,
     encoding: "utf8",
     timeout: 15_000,

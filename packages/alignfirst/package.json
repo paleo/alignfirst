@@ -29,7 +29,8 @@
   "files": [
     "bin",
     "dist",
-    "templates"
+    "templates",
+    "schemas"
   ],
   "publishConfig": {
     "access": "public"
@@ -42,7 +43,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@alignfirst/docmap": "~0.12.0"
+    "@alignfirst/docmap": "~0.12.0",
+    "@alignfirst/workspace": "~0.41.0"
   },
   "devDependencies": {
     "@types/node": "~26.6.5",

@@ -1,6 +1,7 @@
 import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { consoleWorkspaceOutput, type WorkspaceOutput } from "./operation.js";
 import { StartupError } from "./errors.js";
 import { lastLines } from "./helpers.js";
 import { isProcessAlive as defaultIsAlive } from "./process-control.js";
@@ -21,6 +22,7 @@ export interface AwaitOptions {
   timeoutMs?: number;
   pollIntervalMs?: number;
   isAlive?: (pid: number) => boolean;
+  signal?: AbortSignal;
 }
 
 export async function awaitAllReady(
@@ -34,19 +36,21 @@ export async function awaitAllReady(
 export interface StartupFailureOptions {
   /** When false (the foreground already streamed the log live), skip the redundant log tail. */
   includeTail?: boolean;
+  output?: WorkspaceOutput;
 }
 
 export function handleStartupFailure(err: StartupError, options: StartupFailureOptions = {}): void {
-  console.error(`\nError: ${err.label} ${err.reason}.`);
+  const output = options.output ?? consoleWorkspaceOutput();
+  output.diagnostic(`\nError: ${err.label} ${err.reason}.`);
   if (!err.logFile || !existsSync(err.logFile)) return;
   const fullLog = resolve(err.logFile);
   if (options.includeTail ?? true) {
-    console.error(`\n--- ${err.label} log tail (last ${LOG_TAIL_LINES} lines) ---`);
-    console.error(lastLines(readFileSync(err.logFile, "utf-8"), LOG_TAIL_LINES));
-    console.error(`--- end ---\nFull log: ${fullLog}`);
+    output.diagnostic(`\n--- ${err.label} log tail (last ${LOG_TAIL_LINES} lines) ---`);
+    output.diagnostic(lastLines(readFileSync(err.logFile, "utf-8"), LOG_TAIL_LINES));
+    output.diagnostic(`--- end ---\nFull log: ${fullLog}`);
     return;
   }
-  console.error(`Full log: ${fullLog}`);
+  output.diagnostic(`Full log: ${fullLog}`);
 }
 
 async function waitForReady(
@@ -60,6 +64,7 @@ async function waitForReady(
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
+    options.signal?.throwIfAborted();
     if (!isAlive(pid)) {
       throw new StartupError(server.name, "process exited unexpectedly", server.logFile);
     }
@@ -89,7 +94,12 @@ export interface LogFollower {
 }
 
 /** Streams new bytes appended to `path` to stdout, starting at `initialOffset`. */
-export function followLogFile(path: string, prefix: string, initialOffset: number): LogFollower {
+export function followLogFile(
+  path: string,
+  prefix: string,
+  initialOffset: number,
+  write: (text: string) => void = (text) => process.stdout.write(text),
+): LogFollower {
   let offset = initialOffset;
   const drain = (): void => {
     if (!existsSync(path)) return;
@@ -102,7 +112,7 @@ export function followLogFile(path: string, prefix: string, initialOffset: numbe
     const bytesRead = readSync(fd, buffer, 0, length, offset);
     closeSync(fd);
     offset += bytesRead;
-    writeWithPrefix(buffer.subarray(0, bytesRead).toString("utf8"), prefix);
+    writeWithPrefix(buffer.subarray(0, bytesRead).toString("utf8"), prefix, write);
   };
   const timer = setInterval(drain, TAIL_INTERVAL_MS);
   return {
@@ -116,14 +126,23 @@ export function followLogFile(path: string, prefix: string, initialOffset: numbe
 /** Prints the last `lines` of the log, then returns the byte offset where {@link followLogFile}
  * resumes (the file's current size). Reads raw bytes so the offset matches the file even if it
  * holds invalid UTF-8, which a decoded string's byte length would not. */
-export function replayTail(path: string, prefix: string, lines: number): number {
+export function replayTail(
+  path: string,
+  prefix: string,
+  lines: number,
+  write: (text: string) => void = (text) => process.stdout.write(text),
+): number {
   if (!existsSync(path)) return 0;
   const buffer = readFileSync(path);
   const tail = lastLines(buffer.toString("utf8"), lines);
-  if (tail.length > 0) writeWithPrefix(tail.endsWith("\n") ? tail : `${tail}\n`, prefix);
+  if (tail.length > 0) writeWithPrefix(tail.endsWith("\n") ? tail : `${tail}\n`, prefix, write);
   return buffer.length;
 }
 
-export function writeWithPrefix(text: string, prefix: string): void {
-  process.stdout.write(prefix === "" ? text : text.replace(/^(?=.)/gm, prefix));
+export function writeWithPrefix(
+  text: string,
+  prefix: string,
+  write: (text: string) => void = (text) => process.stdout.write(text),
+): void {
+  write(prefix === "" ? text : text.replace(/^(?=.)/gm, prefix));
 }

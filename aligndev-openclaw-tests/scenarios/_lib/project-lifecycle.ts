@@ -50,7 +50,8 @@ export function readProjectConfig(path: string): ProjectConfig | undefined {
   if (!existsSync(configPath)) return;
   const value: unknown = JSON.parse(readFileSync(configPath, "utf8"));
   if (!isRecord(value)) throw new Error(`invalid project config: ${configPath}`);
-  const portRange = parsePortRange(value.portRange, configPath);
+  const dev = value.devServer;
+  const portRange = parsePortRange(isRecord(dev) ? dev.ports : undefined, configPath);
   return portRange === undefined ? {} : { portRange };
 }
 

@@ -167,7 +167,8 @@ describe("doctor command", () => {
     expect(result.code).toBe(0);
     for (const section of [
       "CLI",
-      ".alignfirst.json",
+      "alignfirst",
+      "Workspace",
       "Companion",
       "Git",
       "Work files",
@@ -175,7 +176,7 @@ describe("doctor command", () => {
       "Skills",
     ])
       expect(result.stdout).toContain(`] ${section}:`);
-    expect(result.stdout).toContain("[ok] .alignfirst.json: none");
+    expect(result.stdout).toContain(`[ok] alignfirst: ${join(cwd, "alignfirst.json")} (missing)`);
     expect(result.stdout).toContain(
       `[ok] Companion: registry absent (${join(cwd, ".alignfirst", "companions", "registry.json")})\n[ok] Companion: none\n`,
     );
@@ -183,7 +184,6 @@ describe("doctor command", () => {
     expect(result.stdout).toContain("[ok] Docmap: docs/ none");
     expect(result.stdout).toContain("[ok] Skills: alignfirst none");
     expect(result.stdout).toContain("[ok] Skills: no command skill installed");
-    expect(result.stdout).not.toContain("missing");
     expect(result.stdout).not.toContain("Skills: aligndev");
   });
 
@@ -201,9 +201,10 @@ describe("doctor command", () => {
         `[ok] Companion: registry valid (${join(home, ".alignfirst", "companions", "registry.json")})`,
         "[ok] Companion: key ~/app",
         `[ok] Companion: directory ${companion} (missing)`,
-        `[ok] Companion: .alignfirst.json (auto): ${join(companion, ".alignfirst.json")} (companion, missing)`,
+        `[ok] Companion: alignfirst (auto): ${join(companion, "alignfirst.json")} (companion, missing)`,
         `[ok] Companion: .alignfirst-instructions (auto): ${join(companion, ".alignfirst-instructions")} (companion, missing)`,
-        `[ok] Companion: DEVELOPERS.md (auto): ${join(companion, "DEVELOPERS.md")} (companion, missing)`,
+        "[ok] Companion: developerInstructions (auto): not configured",
+        `[ok] Companion: workspaceRuntime (auto): ${join(project, ".local-wt")} (project, missing)`,
         `[warn] Companion: docs (companion): ${join(companion, "docs")} (companion, missing)`,
         `[ok] Companion: .plans (project): ${join(project, ".plans")} (project)`,
         `[ok] Companion: _aligndev (auto): ${join(project, ".plans")} (project)`,
@@ -297,65 +298,38 @@ describe("doctor command", () => {
     writeRegistry(cwd, {});
     const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
     expect(result.code).toBe(0);
-    for (const section of [".alignfirst.json", "Companion", "Work files", "Docmap"])
+    for (const section of ["alignfirst", "Companion", "Work files", "Docmap"])
       expect(result.stdout).toContain(
         `[error] ${section}: Invalid ${cwd}/.alignfirst/companions/registry.json: projects`,
       );
     expect(result.stdout).toContain("[ok] Skills: alignfirst none");
   });
 
-  it("reports an excluded CLI range without failing", async () => {
+  it("reports invalid merged settings in dependent sections", async () => {
     const cwd = temp();
-    writeFileSync(
-      join(cwd, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, cli: ">=1.0.0" }),
-    );
-    const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
-    expect(result.code).toBe(0);
-    expect(result.stdout).toContain("[ok] .alignfirst.json: present");
-    expect(result.stdout).toContain("[error] .alignfirst.json: does not satisfy >=1.0.0");
-  });
-
-  it("warns when the CLI is ahead of the range", async () => {
-    const cwd = temp();
-    writeFileSync(
-      join(cwd, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, cli: "<0.1.0" }),
-    );
-    const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
-    expect(result.stdout).toContain("[error] .alignfirst.json: does not satisfy <0.1.0");
-    expect(result.stdout).toMatch(
-      /\[warn\] \.alignfirst\.json: \d+\.\d+\.\d+ is ahead of <0\.1\.0/,
-    );
-  });
-
-  it("warns about a deprecated key", async () => {
-    const cwd = temp();
-    writeFileSync(
-      join(cwd, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, plans: { folder: "x" } }),
-    );
-    const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
+    writeFileSync(join(cwd, "alignfirst.jsonc"), '{"schemaVersion":1,"plans":{"folder":"x"}}');
+    const result = await runMain(["doctor"], { cwd, home: cwd });
     expect(result).toMatchObject({ code: 0, stderr: "" });
-    expect(result.stdout).toContain(
-      `[warn] .alignfirst.json: ${join(cwd, ".alignfirst.json")}: plans.folder is deprecated`,
-    );
+    expect(result.stdout).toContain(`[error] alignfirst: Invalid ${join(cwd, "alignfirst.jsonc")}`);
+    expect(result.stdout).toContain("/plans/folder");
+    expect(result.stdout).toContain("[error] Workspace:");
+    expect(result.stdout).toContain("update alignfirst");
   });
 
   it("continues after an invalid project config", async () => {
     const cwd = temp();
-    writeFileSync(join(cwd, ".alignfirst.json"), "{");
+    writeFileSync(join(cwd, "alignfirst.json"), "{");
     const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("[error] .alignfirst.json: Invalid");
+    expect(result.stdout).toContain("[error] alignfirst: Invalid");
     expect(result.stdout).toContain("] Work files:");
   });
 
   it("reports the configured default branch and skill generation", async () => {
     const cwd = temp();
     writeFileSync(
-      join(cwd, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, git: { defaultBranch: "main" } }),
+      join(cwd, "alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, conventions: { git: { defaultBranch: "main" } } }),
     );
     const skillDir = join(cwd, ".agents", "skills", "alignfirst");
     mkdirSync(skillDir, { recursive: true });

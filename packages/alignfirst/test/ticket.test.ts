@@ -402,11 +402,13 @@ describe("ticket command", () => {
     const cwd = makeProject();
     git(cwd, "checkout", "-q", "-b", "78/unified-cli");
     writeFileSync(
-      join(cwd, ".alignfirst.json"),
+      join(cwd, "alignfirst.json"),
       JSON.stringify({
         schemaVersion: 1,
-        ticketIdPattern: "^\\d+$",
-        git: { branchNameTemplate: "{TICKET_ID}/{slug-1-3-words}" },
+        conventions: {
+          ticketIdPattern: "^\\d+$",
+          git: { branchNameTemplate: "{TICKET_ID}/{slug-1-3-words}" },
+        },
       }),
     );
     const result = await runMain(["ticket", "--json"], { cwd });
@@ -435,21 +437,26 @@ describe("ticket command", () => {
 
   it("detects side tickets before patterns and follows branch templates", async () => {
     const cwd = makeProject();
-    const configPath = join(cwd, ".alignfirst.json");
+    const configPath = join(cwd, "alignfirst.json");
     git(cwd, "checkout", "-q", "-b", "side-8/slug");
     writeFileSync(
       configPath,
       JSON.stringify({
         schemaVersion: 1,
-        ticketIdPattern: "^\\d+$",
-        git: { branchNameTemplate: "{TICKET_ID}/{slug-1-3-words}" },
+        conventions: {
+          ticketIdPattern: "^\\d+$",
+          git: { branchNameTemplate: "{TICKET_ID}/{slug-1-3-words}" },
+        },
       }),
     );
     expect(
       JSON.parse((await runMain(["ticket", "--json", "--dry-run"], { cwd })).stdout),
     ).toMatchObject({ TICKET_ID: "side-8", branch: "side-8/slug" });
 
-    writeFileSync(configPath, JSON.stringify({ schemaVersion: 1, ticketIdPattern: "^\\d+$" }));
+    writeFileSync(
+      configPath,
+      JSON.stringify({ schemaVersion: 1, conventions: { ticketIdPattern: "^\\d+$" } }),
+    );
     expect(
       JSON.parse((await runMain(["ticket", "--json", "--dry-run"], { cwd })).stdout),
     ).toMatchObject({ TICKET_ID: "side-8" });
@@ -463,8 +470,10 @@ describe("ticket command", () => {
       configPath,
       JSON.stringify({
         schemaVersion: 1,
-        ticketIdPattern: "^\\d+$",
-        git: { branchNameTemplate: "feature/{TICKET_ID}-{slug}" },
+        conventions: {
+          ticketIdPattern: "^\\d+$",
+          git: { branchNameTemplate: "feature/{TICKET_ID}-{slug}" },
+        },
       }),
     );
     expect(
@@ -476,8 +485,10 @@ describe("ticket command", () => {
       configPath,
       JSON.stringify({
         schemaVersion: 1,
-        ticketIdPattern: "^\\d+$",
-        git: { branchNameTemplate: "{TICKET_ID}/{slug-1-3-words}" },
+        conventions: {
+          ticketIdPattern: "^\\d+$",
+          git: { branchNameTemplate: "{TICKET_ID}/{slug-1-3-words}" },
+        },
       }),
     );
     const noMatch = await runMain(["ticket", "--dry-run"], { cwd });
@@ -489,14 +500,16 @@ describe("ticket command", () => {
 
   it("uses the ticket grammar to disambiguate template placeholders", async () => {
     const cwd = makeProject();
-    const configPath = join(cwd, ".alignfirst.json");
+    const configPath = join(cwd, "alignfirst.json");
     const writeConfig = (ticketIdPattern: string) =>
       writeFileSync(
         configPath,
         JSON.stringify({
           schemaVersion: 1,
-          ticketIdPattern,
-          git: { branchNameTemplate: "feature/{TICKET_ID}-{slug}" },
+          conventions: {
+            ticketIdPattern,
+            git: { branchNameTemplate: "feature/{TICKET_ID}-{slug}" },
+          },
         }),
       );
 
@@ -534,8 +547,8 @@ describe("ticket command", () => {
       "Invalid ticket id: _archives",
     );
     writeFileSync(
-      join(cwd, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, ticketIdPattern: "^\\d+$" }),
+      join(cwd, "alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, conventions: { ticketIdPattern: "^\\d+$" } }),
     );
     expect((await runMain(["ticket", "abc"], { cwd })).code).toBe(0);
     expect((await runMain(["ticket", "side-2"], { cwd })).code).toBe(0);

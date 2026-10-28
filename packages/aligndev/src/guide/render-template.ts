@@ -4,11 +4,6 @@ import { readTemplate } from "../templates.js";
 
 export const SURFACES = ["slack", "discord", "app"] as const;
 
-const GUIDE_FILE_CONDITIONS = ["developers", "readme", "noGuide"] as const;
-
-// Active for both guide files: `developers` and `readme`.
-const HAS_GUIDE = "hasGuide";
-
 // Derived facts: `thread` holds on Slack and Discord; `conversation` in an app conversation and
 // under codingAgent.
 const THREAD = "thread";
@@ -19,13 +14,9 @@ const MARKER = /^\{\{([#/])([A-Za-z]+)\}\}$/;
 // The OpenClaw surface a guide is rendered for.
 export type Surface = (typeof SURFACES)[number];
 
-// The project's guide file for the assistant: `DEVELOPERS.md`, `README.md`, or none.
-export type GuideFileCondition = (typeof GUIDE_FILE_CONDITIONS)[number];
-
 export interface ActiveBlocks {
   platform: Platform;
   surface?: Surface; // openclaw only
-  guideFile?: GuideFileCondition; // codingAgent only
 }
 
 interface OpenBlock {
@@ -33,9 +24,7 @@ interface OpenBlock {
   line: number;
 }
 
-type BlockName = Platform | Surface | typeof THREAD | typeof CONVERSATION | ConditionName;
-
-type ConditionName = GuideFileCondition | typeof HAS_GUIDE;
+type BlockName = Platform | Surface | typeof THREAD | typeof CONVERSATION;
 
 // Renders `templates/guide/<name>`: the blocks first, then the placeholders — the command forms,
 // the guide command of the render, and every key of `values`.
@@ -72,7 +61,7 @@ function guidePlaceholder(active: ActiveBlocks, forms: CommandForms): Record<str
 
 // A block is `{{#<name>}}` … `{{/<name>}}`, each marker alone on its line, and names a fact. A
 // platform block sits at the top level. A surface block and `thread` never sit inside a
-// `codingAgent` block; a condition block always does, at any depth; `conversation` sits anywhere.
+// `codingAgent` block; `conversation` sits anywhere.
 // A line is kept when every block around it holds. The runs of empty lines that removed blocks
 // leave collapse to one.
 export function renderBlocks(text: string, active: ActiveBlocks, templateName: string): string {
@@ -99,8 +88,7 @@ export function renderBlocks(text: string, active: ActiveBlocks, templateName: s
 function isActive(name: BlockName, active: ActiveBlocks): boolean {
   if (name === THREAD) return active.surface === "slack" || active.surface === "discord";
   if (name === CONVERSATION) return active.surface === "app" || active.platform === "codingAgent";
-  if (name === HAS_GUIDE) return active.guideFile === "developers" || active.guideFile === "readme";
-  return name === active.platform || name === active.surface || name === active.guideFile;
+  return name === active.platform || name === active.surface;
 }
 
 function openBlock(
@@ -125,12 +113,6 @@ function openBlock(
     return { name, line };
   }
   if (name === CONVERSATION) return { name, line };
-  if (isCondition(name)) {
-    if (!insideCodingAgent) {
-      throw blockError(templateName, line, `condition block "${name}" outside a codingAgent block`);
-    }
-    return { name, line };
-  }
   throw blockError(templateName, line, `unknown block "${name}"`);
 }
 
@@ -143,13 +125,7 @@ function closeBlock(name: string, line: number, open: OpenBlock[], templateName:
 }
 
 function isBlockName(name: string): name is BlockName {
-  return (
-    isPlatform(name) ||
-    isSurface(name) ||
-    name === THREAD ||
-    name === CONVERSATION ||
-    isCondition(name)
-  );
+  return isPlatform(name) || isSurface(name) || name === THREAD || name === CONVERSATION;
 }
 
 function isPlatform(name: string): name is Platform {
@@ -158,10 +134,6 @@ function isPlatform(name: string): name is Platform {
 
 export function isSurface(name: string): name is Surface {
   return (SURFACES as readonly string[]).includes(name);
-}
-
-function isCondition(name: string): name is ConditionName {
-  return name === HAS_GUIDE || (GUIDE_FILE_CONDITIONS as readonly string[]).includes(name);
 }
 
 function blockError(templateName: string, line: number, detail: string): Error {

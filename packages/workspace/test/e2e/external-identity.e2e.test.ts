@@ -4,8 +4,19 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { resolveWorkspaceStorage } from "../../src/storage.js";
 import type { WorkspaceEntry } from "../../src/workspaces.js";
-import { createFixtureRepo, type FixtureRepo, readWorkspaces, runCli, runDev } from "./fixture.js";
+import {
+  createFixtureRepo,
+  type FixtureRepo,
+  type FixtureOptions,
+  fixtureRegistryDir,
+  installResourceRecipe,
+  resourceEvents,
+  readWorkspaces,
+  runCli,
+  runDev,
+} from "./fixture.js";
 
 const TEST_TIMEOUT_MS = 60_000;
 const fixtures: ExternalFixture[] = [];
@@ -23,7 +34,7 @@ afterEach(async () => {
   for (const fixture of fixtures.splice(0)) {
     // Join detached finalizers even when an assertion failed before the scenario's explicit wait.
     try {
-      const registry = join(fixture.repo, ".wt", "workspace-registry", "workspaces.json");
+      const registry = join(fixtureRegistryDir(fixture.repo), "workspaces.json");
       if (existsSync(registry)) {
         for (const entry of Object.values(readWorkspaces(fixture.repo).workspaces)) {
           const waited = runCli(fixture.repo, ["wait", entry.worktree]);
@@ -56,6 +67,113 @@ afterEach(async () => {
 
 describe("externally created same-basename worktrees", () => {
   it(
+    "uses independent companion runtimes for detached finalization, cross-target wait and status",
+    async () => {
+      const fx = externalFixture({ companionRuntime: true, companionRecipe: true });
+      const companion = join(fx.root, "companion");
+      const file = join(companion, "alignfirst.json");
+      const manifest = JSON.parse(readFileSync(file, "utf8"));
+      manifest.workspace.preSetup = [
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Manifest interpolation syntax.
+        { name: "companion helper", run: [process.execPath, "${{ configurationDir }}/helper.mjs"] },
+      ];
+      writeFileSync(file, JSON.stringify(manifest));
+      writeFileSync(
+        join(companion, "helper.mjs"),
+        `import { writeFileSync } from "node:fs"; const ctx = JSON.parse(process.env.ALIGNFIRST_WORKSPACE_CONTEXT); writeFileSync("helper-context.json", JSON.stringify({ cwd: process.cwd(), ctx }));`,
+      );
+      const barrier = join(fx.root, "finalizer.release");
+      barriers.push(barrier);
+      expect(runCli(fx.repo, ["setup", "--path", fx.first]).status).toBe(0);
+      const detached = runCli(fx.repo, ["setup", "--path", fx.second, "--detached"], {
+        E2E_FINALIZE_BARRIER: barrier,
+      });
+      expect(detached.status, detached.stderr).toBe(0);
+      await waitForFile(`${barrier}.entered`);
+      const owner = Number(readFileSync(`${barrier}.owner`, "utf8"));
+      expect(entryAt(fx, fx.second).entry.preparationOwner?.pid).toBe(owner);
+      const firstRuntime = resolveWorkspaceStorage(
+        { in: "companion", mainWorktree: fx.repo, companionDir: companion },
+        fx.first,
+      ).runtimeDir;
+      const secondRuntime = resolveWorkspaceStorage(
+        { in: "companion", mainWorktree: fx.repo, companionDir: companion },
+        fx.second,
+      ).runtimeDir;
+      expect(firstRuntime).not.toBe(secondRuntime);
+      expect(detached.stdout).toContain(join(secondRuntime, "logs/workspace-setup.log"));
+      const status = runCli(fx.repo, ["status", fx.second, "--json"]);
+      expect(JSON.parse(status.stdout).workspace).toMatchObject({
+        runtimeDir: secondRuntime,
+        runtimeState: "active",
+        preparation: "pending",
+      });
+      const refused = runCli(fx.repo, ["__finalize"], undefined, fx.second);
+      expect(refused.status).toBe(1);
+      expect(refused.stderr).toContain("ownership lost");
+      expect(entryAt(fx, fx.second).entry.preparationOwner?.pid).toBe(owner);
+      const helper = JSON.parse(readFileSync(join(fx.second, "helper-context.json"), "utf8"));
+      expect(helper).toMatchObject({
+        cwd: fx.second,
+        ctx: { configurationDir: companion, companionDir: companion, runtimeDir: secondRuntime },
+      });
+      writeFileSync(barrier, "release");
+      const waited = runCli(fx.repo, ["wait", fx.second, "--verbose"]);
+      expect(waited.status, waited.stderr).toBe(0);
+      expect(entryAt(fx, fx.second).entry.preparationOwner).toBeUndefined();
+      for (const target of [fx.first, fx.second])
+        expect(existsSync(join(target, ".local-wt"))).toBe(false);
+      for (const runtime of [firstRuntime, secondRuntime])
+        expect(readFileSync(join(runtime, "logs/workspace-setup.log"), "utf8")).toContain("READY:");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "tears down through the external target's current recipe and re-adopts without Git deletion",
+    () => {
+      const fixture = externalFixture();
+      const { repo, first, second } = fixture;
+      expect(runCli(repo, ["setup", "--full"], undefined, second).status).toBe(0);
+      const target = entryAt(fixture, second);
+      installResourceRecipe(repo, "main-version");
+      installResourceRecipe(second, "external-version");
+      mkdirSync(join(fixture.root, "resources"));
+      writeFileSync(join(fixture.root, "resources", target.name), "external resource");
+      writeFileSync(join(second, "workspace.local"), "hand-edit\nworktree=linked\n");
+      mkdirSync(join(second, "node_modules"));
+      writeFileSync(join(second, "node_modules", "retained"), "dependency");
+      const before = git(second, ["status", "--porcelain"]);
+      expect(runCli(repo, ["teardown", target.name, "--json"]).status).toBe(0);
+      expect(resourceEvents(repo)).toMatchObject([
+        {
+          action: "purge",
+          version: "external-version",
+          recipeVersion: "external-version",
+          cwd: second,
+          ctx: {
+            name: target.name,
+            currentWorktree: second,
+            branch: "external-two",
+            phase: "purge",
+          },
+        },
+      ]);
+      expect(existsSync(join(fixture.root, "resources", target.name))).toBe(false);
+      expect(git(second, ["status", "--porcelain"])).toBe(before);
+      expect(git(second, ["branch", "--show-current"]).trim()).toBe("external-two");
+      expect(readFileSync(join(second, "node_modules", "retained"), "utf8")).toBe("dependency");
+      expect(runCli(repo, ["setup"], undefined, first).status).toBe(0);
+      expect(runCli(repo, ["setup", "--full"], undefined, second).status).toBe(0);
+      expect(entryAt(fixture, second).name).toMatch(/^same-[a-f0-9]{8}$/);
+      expect(readFileSync(join(second, "workspace.local"), "utf8")).toBe(
+        "hand-edit\nworktree=linked\n",
+      );
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "adopts both paths, seeds and links across parents, and finalizes with registered identities",
     () => {
       const fixture = externalFixture();
@@ -84,8 +202,8 @@ describe("externally created same-basename worktrees", () => {
           "customized-main\nworktree=linked\n",
         );
         expect(realpathSync(join(worktree, ".shared"))).toBe(join(repo, ".shared"));
-        expect(realpathSync(join(worktree, ".wt", "workspace-registry"))).toBe(
-          join(repo, ".wt", "workspace-registry"),
+        expect(realpathSync(join(worktree, ".local-wt", "workspace-registry"))).toBe(
+          join(repo, ".local-wt", "workspace-registry"),
         );
       }
       const list = runCli(repo, ["list"]);
@@ -178,14 +296,16 @@ describe("externally created same-basename worktrees", () => {
       const name = entryAt(fixture, second).name;
       const wait = runCli(repo, ["wait", name]);
       expect(wait.status).toBe(1);
-      expect(wait.stderr).toContain("e2e boom");
+      expect(wait.stderr).toContain("finalize step-one");
       expect(entryAt(fixture, second).entry.status).toBe("failed");
-      expect(runCli(repo, ["status", name]).stdout).toContain("Failure: e2e boom");
+      expect(runCli(repo, ["status", name]).stdout).toContain("Failure: finalize step-one");
       expect(runCli(repo, ["status", "same"]).stdout).not.toContain("Failure:");
       const seedFailure = runCli(repo, ["setup"], { E2E_SEED_FAIL: "1" }, second);
       expect(seedFailure.status).toBe(1);
       expect(entryAt(fixture, second).entry.status).toBe("failed");
-      expect(entryAt(fixture, second).entry.failure?.message).toContain("missing.template");
+      expect(entryAt(fixture, second).entry.failure?.message).toContain(
+        "workspaceFilePatch.required.local",
+      );
       expect(runCli(repo, ["setup"], undefined, second).status).toBe(0);
       expect(entryAt(fixture, second).name).toBe(name);
       expect(entryAt(fixture, second).entry.failure).toBeUndefined();
@@ -203,10 +323,10 @@ describe("externally created same-basename worktrees", () => {
       const original = entryAt(fixture, first).entry;
       const failed = runCli(repo, ["setup", "--full"], { E2E_DEV_SETUP_FAIL: "1" }, second);
       expect(failed.status).toBe(1);
-      expect(failed.stderr).toContain("Workspace ready; dev setup failed: e2e dev boom");
+      expect(failed.stderr).toContain("Workspace ready; dev setup failed: devSetup infrastructure");
       const { name, entry } = entryAt(fixture, second);
       expect(entry.status).toBe("ready");
-      expect(entry.devSetupFailure?.message).toContain("e2e dev boom");
+      expect(entry.devSetupFailure?.message).toContain("devSetup infrastructure");
       expect(entry.devSetupAt).toBeUndefined();
       const originalPorts = Object.values(original.ports ?? {});
       const failedPorts = Object.values(entry.ports ?? {});
@@ -229,8 +349,12 @@ describe("externally created same-basename worktrees", () => {
   );
 });
 
-function externalFixture(): ExternalFixture {
-  const fixture = createFixtureRepo({ fallbackSeeding: true, sharedDirs: [".shared"] });
+function git(cwd: string, args: string[]): string {
+  return execFileSync("git", args, { cwd, encoding: "utf8" });
+}
+
+function externalFixture(options: FixtureOptions = {}): ExternalFixture {
+  const fixture = createFixtureRepo({ fallbackSeeding: true, sharedDirs: [".shared"], ...options });
   const first = join(fixture.root, "managed", "one", "same");
   const second = join(fixture.root, "external", "nested", "two", "same");
   mkdirSync(join(fixture.root, "managed", "one"), { recursive: true });

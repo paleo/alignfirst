@@ -1,84 +1,40 @@
 # @alignfirst/workspace
 
-Run multiple local dev environments side by side, one per git worktree, with isolated ports, databases, and config files. Built for branches worked in parallel, by humans or AI agents.
+The TypeScript kernel behind `alignfirst workspace` and `alignfirst dev`. It prepares isolated Git worktrees and optionally manages named ports, run files, project commands and dev services. Consumers use the AlignFirst CLI; they need no JavaScript wrapper, local kernel dependency or `package.json`.
 
-See the [product page](https://alignfirst.paroi.tech/workspaces) for a demonstration.
-
-## What is a workspace?
-
-A **workspace** is one isolated stream of work. It is close to [Conductor's](https://www.conductor.build/docs/concepts/workspaces-and-branches) sense of the word, with the dev-server setup made explicit. It bundles:
-
-- a **branch**;
-- a **git worktree** checked out to it;
-- an optional **dev-server** setup, brought by `dev setup` (explicit, or before every start):
-  - **ports**: one per declared name, allocated from the project's range at the first `dev setup`, then fixed;
-  - the **gitignored files** that carry them (`.env`, compose files, …), rewritten to those ports, so the dev servers run in isolation;
-  - the **infrastructure** (database, seed), provisioned once per workspace.
-
-Several workspaces run at once without colliding, so you can develop, test, or hand a branch to an agent in parallel.
-
-## Setup
-
-The `alignfirst-setup-guide` skill is a setup-time companion. Temporarily install the skill globally:
-
-```bash
-npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
-```
-
-Then, in your project, ask your agent:
-
-```md
-Use your *alignfirst-setup-guide* skill. Set up *workspaces* in this project.
-```
-
-The agent reads the skill, adapts the reference scripts to your stack, installs `@alignfirst/workspace` as a dev dependency, and wires the npm/pnpm/yarn/Bun scripts. After that, you can uninstall the skill, it won't be used by your project anymore.
-
-Setup writes one or two wrapper scripts on these entry points:
-
-- `runWorkspace(config)` — worktree lifecycle (setup / teardown / remove).
-- `runDevServer(config)` (optional) — ports, run files and infrastructure (`dev setup`), dev-server start (foreground or background) / stop / list.
-
-### CLI runtimes
-
-The same kernel and thin wrappers run on Node.js 22.11 or later or Bun. Bun 1.4.4 is the tested baseline; compatibility with every older release is not promised. For Bun consumers, set scripts such as `"workspace": "bun scripts/workspace.mjs"` and launch `bun --bun run workspace setup`. Direct `bun scripts/workspace.mjs` works too. Finalizers, configured dev-wrapper calls and bootstrap guidance retain the selected runtime.
-
-Verified scripts take precedence over lockfiles. npm scripts need `--` before forwarded arguments (`npm run workspace -- setup`); Bun scripts use `bun --bun run workspace setup`. The package has no published bin: it runs through your configured wrappers. Installation/build callbacks, Git, Docker and application servers retain their own prerequisites and commands.
-
-### Migration from the old `slots.json` registry
-
-See the [CHANGELOG.md](https://github.com/paleo/alignfirst/blob/main/packages/workspace/CHANGELOG.md#0300).
-
-## Workflow
+## Use
 
 ```sh
-npm run workspace -- setup -c feat/42   # new branch + worktree, installed and built
-npm run workspace -- setup --full       # set up the current worktree, plus the dev setup
-npm run workspace -- list               # every registered workspace
-npm run dev -- setup                    # ports, run files, infrastructure; also run before every start
-npm run dev                             # foreground: stream logs, CTRL+C stops; attaches if already running
-npm run dev -- up                       # start in the background (no-op if already running here)
-npm run dev -- up --restart             # stop the dev-server in this worktree if running, then start fresh
-npm run dev -- up --evict               # if maxConcurrentDevServers is reached, evict the oldest dev-server and start
-npm run dev -- restart                  # stop the dev-server in this worktree if running, then start in the background
-npm run dev -- status                   # report whether this worktree's dev-server is UP or DOWN
-npm run dev -- list                     # active dev-servers across all worktrees
-npm run dev -- down                     # stop processes and callbacks (may stop containers)
-npm run workspace -- teardown           # purge infrastructure; keep files and Git state
-npm run workspace -- remove ../my-wt    # cleanup + Git deletion (exact path or registered name)
-npm run workspace -- prune              # heal workspaces whose worktree was deleted out-of-band
-npm run workspace -- --guide            # full operating guide (workspace + dev-server)
+npx -y alignfirst workspace --guide
+npx -y alignfirst workspace setup -c feat/42 --from main
+npx -y alignfirst workspace list --json
+npx -y alignfirst dev setup
+npx -y alignfirst dev
+npx -y alignfirst dev down
+npx -y alignfirst workspace teardown
+npx -y alignfirst workspace remove ../project-feat-42
 ```
 
-`--guide` prints the complete procedures in your package-manager's syntax, adapted to your config — a project without a dev server gets a guide without the dev-server section. Point agents at it instead of maintaining a separate doc.
+For explicit Bun execution use `bunx --bun alignfirst`. Ordinary `bunx` may honor the Node bin shebang. The kernel runtime does not change project command toolchains. Python monorepos, Rust and Node projects use the same manifest and script ABI, including per-command cwd/env.
 
-### Externally created worktrees
+## Baseline and manifest
 
-Run `npm install && npm run workspace -- setup` inside a worktree created by another tool. Use `setup --full` only with a configured dev wrapper. Before the external tool deletes it, run `npm run workspace -- teardown`. Cleanup preserves files, dependencies, shared links and Git state while purging configured infrastructure, including volumes where configured.
+Before setup, prepare usable effective plans, untracked by the product repository, and selected runtime storage. Project-local runtime requires ignored/untracked `.local-wt/`; companion runtime creates no checkout directory or runtime links. Project-local plans must exist and be ignored; companion plans resolve directly. Linked worktrees share main's effective plans and usable untracked `.local` when present. Tracked `.local` remains branch-local. Setup never provisions missing plans or changes companion selection.
 
-Names in `list` are registered keys, with collision suffixes for duplicate basenames; exact paths select the original locations. All participating worktrees need the upgraded package, and Compose wrappers must explicitly select projects from those names. Independent clones retain independent registries. Existing ordinary names stay compatible.
+Without a manifest, readiness is synchronous and protocol-ready. No install/build, application seeding, ports or services are implied. `--full` and dev startup require declared services.
 
-The rendered `--guide` covers hook bootstrap, seed-before-install fallback and cleanup safeguards.
+One selected `alignfirst.json` or `.jsonc` holds `schemaVersion: 1`, optional URI-valued `$schema`, nested `conventions`, `plans`, optional `developerInstructions`, `workspace` and `devServer`. Project-selected recipes are branch-local; companions may supply the complete document. Sections never merge across sources. JSON is strict; JSONC allows comments/trailing commas. Ambiguity, unknown properties and unsupported schemas fail without fallback. The sole project range is `devServer.ports`.
 
-## API Reference
+Commands/scripts own stack-specific preparation, pure idempotent transformations, summaries and cleanup. `ALIGNFIRST_WORKSPACE_CONTEXT` supplies phase-limited JSON while stdin remains available for transformations. Every phase includes absolute `runtimeDir`, with optional `configurationDir` and `companionDir`. Spawn services use log-regex readiness and may opt into `error: { preset: "node" }` startup heuristics; a custom log expression combines with the preset using OR. Command services own their readiness. The per-repository environment cap accepts a number or `{ env, default }`; zero/omission means unlimited. Only real startup resolves invocation overrides; no dotenv is loaded. Managed environments require a spawn process. See the [setup reference](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/workspace-setup.md) for the complete manifest, interpolation restrictions, Python examples and ABI.
 
-The documentation on `runWorkspace` and `runDevServer` (ports, `gitignoredFiles`, `runFiles`, `finalizeWorkspace`, `setup`, dev-server descriptors, and more), along with the design rationale, lives in the skill's [workspace-setup.md](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/workspace-setup.md) reference.
+## Ownership and recovery
+
+External tools run setup inside their checkout, then teardown before their own deletion. `dev down` stops; teardown also purges and releases identity/ports while retaining files and Git state. Remove adds protected Git deletion and preserves branches, then deletes only verified target runtime. Listing retains orphan identities; explicit prune cleans resources and runtime, including runtime-only orphans after teardown and external Git deletion. Companion mode uses one direct shared registry and separate path-derived runtime directories. Placement changes require cleanup under the old selection; there is no placement-history recovery.
+
+Existing targets use their current recipe. Missing manifest-backed targets require main's purge recipe, selecting resources by recorded name/labels or durable sidecars. Failed stop/purge retains retry state after PIDs exit and prevents replacement startup. Force never bypasses protected paths or failed cleanup.
+
+Workspace storage is version 4 with storage ownership, required merged-family recipe provenance and external runtime owners; dev/startup storage remains version 1. Old/unknown state is rejected before mutation. Existing wrappers, settings or slot registries require [the clean-break upgrade runbook](https://github.com/paleo/alignfirst/blob/main/docs/upgrading-multi-stack-workspaces.md), including all-worktree resource accounting. Never delete registry files instead of cleaning resources.
+
+The complete editor schema ships with AlignFirst. Future breaking majors use sequential in-memory conversion retained through the CLI major, without rewriting committed files. This initial release supplies no converter for retired wrappers/settings.
+
+For kernel internals and accepted limitations, see [Workspace Architecture](https://github.com/paleo/alignfirst/blob/main/docs/workspace-architecture.md).

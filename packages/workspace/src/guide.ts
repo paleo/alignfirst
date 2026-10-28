@@ -1,9 +1,8 @@
 import { readFileSync } from "node:fs";
-import { type PackageManagerCommands, packageManagerCommands } from "./package-manager.js";
+import type { WorkspaceCommands } from "./invocation.js";
 import { REGISTRY_SUBDIR } from "./workspaces.js";
 
-// One combined operating guide for the `workspace` and `dev` scripts, printed by `workspace
-// --guide` (only the `workspace` script knows the full config — `sharedDirs` included). The prose
+// Combined guide for the manifest-backed workspace/dev commands. The prose
 // lives in `templates/guide.md` (easy to edit); the command tables stay here so we can align their
 // `#` comments vertically whatever the package-manager prefix length. Tags in the template:
 //   {{COMMANDS:<name>}} — an aligned command block (see commandBlocks)
@@ -15,11 +14,11 @@ import { REGISTRY_SUBDIR } from "./workspaces.js";
 //     reverse). Markers own their line.
 
 export interface GuideLayout {
-  /** The per-worktree runtime dir, relative to the worktree root (config `runtimeDir`, e.g. `.local-wt`). */
+  /** Selected absolute runtime directory, or the local relative default. */
   runtimeDir: string;
   /** The shared (symlinked-from-main) dir names (config `sharedDirs`). */
   sharedDirs: string[];
-  /** `true` when the config declares `devServerScript`. */
+  /** Whether the manifest declares managed dev services. */
   hasDevServer: boolean;
 }
 
@@ -47,10 +46,7 @@ function renderSnippet(lines: (CommandRow | string)[]): string {
     .join("\n");
 }
 
-function commandBlocks(
-  pm: PackageManagerCommands,
-  layout: GuideLayout,
-): Record<string, CommandRow[]> {
+function commandBlocks(pm: WorkspaceCommands, layout: GuideLayout): Record<string, CommandRow[]> {
   const ws = pm.workspace.withArgs;
   const dev = pm.dev.withArgs;
   return {
@@ -70,7 +66,11 @@ function commandBlocks(
       { command: `${ws} setup my-branch`, comment: "new worktree on an existing branch" },
       {
         command: `${ws} setup`,
-        comment: "set up the current worktree (idempotent; bootstrap + retry path)",
+        comment: "adopt the current root, including from nested directories",
+      },
+      {
+        command: `${ws} setup --path ../external-worktree`,
+        comment: "adopt an exact externally created root (preserve branch and index)",
       },
       ...(layout.hasDevServer
         ? [
@@ -90,7 +90,7 @@ function commandBlocks(
     inspect: [
       {
         command: `${ws} list`,
-        comment: "all registered workspaces (name, status, branch, path, created)",
+        comment: "Git worktrees plus registrations, including unprepared trees and orphans",
       },
       {
         command: `${ws} status`,
@@ -105,13 +105,13 @@ function commandBlocks(
     ],
     hooks: [
       {
-        command: `${pm.install} && ${ws} setup`,
-        comment: "post-creation: install, then adopt the current worktree",
+        command: `${ws} setup`,
+        comment: "post-creation: adopt and prepare the current worktree",
       },
       ...(layout.hasDevServer
         ? [
             {
-              command: `${pm.install} && ${ws} setup --full`,
+              command: `${ws} setup --full`,
               comment: "also provision dev infrastructure",
             },
           ]
@@ -140,8 +140,8 @@ function commandBlocks(
       {
         command: `${ws} prune`,
         comment: layout.hasDevServer
-          ? "stop orphans' dev-servers, drop registry entries, run `git worktree prune`"
-          : "drop orphans' registry entries, then run `git worktree prune`",
+          ? "stop/purge orphan resources, dispose owned runtime, prune Git metadata"
+          : "purge orphan resources, dispose owned runtime, prune Git metadata",
       },
     ],
     dev: [
@@ -179,7 +179,7 @@ function commandBlocks(
   };
 }
 
-function driveDevSnippet(pm: PackageManagerCommands): string {
+function driveDevSnippet(pm: WorkspaceCommands): string {
   const dev = pm.dev.withArgs;
   return renderSnippet([
     { command: "git worktree list", comment: "1. find the worktree directory" },
@@ -191,13 +191,13 @@ function driveDevSnippet(pm: PackageManagerCommands): string {
 
 function renderSharedLayout(sharedDirs: string[]): string {
   if (sharedDirs.length === 0) {
-    return "- No dirs are shared across worktrees.";
+    return "- Effective plans are shared; usable untracked `.local/` is shared when present.";
   }
   const names = sharedDirs.map((dir) => `\`${dir}/\``).join(", ");
-  return `- Shared across worktrees, symlinked from the main worktree: ${names}.`;
+  return `- Effective plans and optional untracked \`.local/\` are shared. Additional shared directories: ${names}.`;
 }
 
-export function renderGuide(pm: PackageManagerCommands, layout: GuideLayout): string {
+export function renderGuide(pm: WorkspaceCommands, layout: GuideLayout): string {
   const template = readFileSync(new URL("../templates/guide.md", import.meta.url), "utf-8");
   let out = applySection(template, "DEV", layout.hasDevServer);
   for (const [name, rows] of Object.entries(commandBlocks(pm, layout))) {
@@ -208,7 +208,6 @@ export function renderGuide(pm: PackageManagerCommands, layout: GuideLayout): st
     .replaceAll("{{DEV_BASE}}", () => pm.dev.base)
     .replaceAll("{{WS}}", () => pm.workspace.withArgs)
     .replaceAll("{{DEV}}", () => pm.dev.withArgs)
-    .replaceAll("{{RUNTIME}}", () => pm.runtime)
     .replaceAll("{{RUNTIME_DIR}}", () => layout.runtimeDir)
     .replaceAll("{{REGISTRY_SUBDIR}}", () => REGISTRY_SUBDIR)
     .replaceAll("{{LAYOUT:shared}}", () => renderSharedLayout(layout.sharedDirs))
@@ -224,11 +223,4 @@ function applySection(text: string, name: string, present: boolean): string {
   return text.replace(block, (_, sigil: string, body: string) =>
     (sigil === "#") === present ? body : "",
   );
-}
-
-export function printGuide(
-  layout: GuideLayout,
-  commands: PackageManagerCommands = packageManagerCommands(),
-): void {
-  console.log(renderGuide(commands, layout));
 }

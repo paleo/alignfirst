@@ -15,6 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readPackedFilename } from "./npm-pack.mjs";
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const output = process.env.CLI_RUNTIME_OUTPUT ?? mkdtempSync(join(tmpdir(), "side20-runtimes-"));
@@ -22,7 +23,7 @@ const consumer = join(output, "consumer");
 const tools = join(output, "tools");
 const bunSource = process.env.BUN_BIN;
 const npm = join(dirname(process.execPath), "npm");
-const packages = ["docmap", "alignfirst", "aligndev", "workspace", "openclaw-test"];
+const packages = ["docmap", "workspace", "alignfirst", "aligndev", "openclaw-test"];
 let ownsOutput = false;
 
 try {
@@ -41,6 +42,12 @@ try {
       "consumer-runtime-child",
       "aligndev-owned-worktree",
       "native-project",
+      "matrix node workspace",
+      "matrix node linked with spaces",
+      "matrix bun workspace",
+      "matrix bun linked with spaces",
+      "isolated bun workspace",
+      "isolated bun linked with spaces",
     ]) {
       rmSync(join(output, name), { recursive: true, force: true });
     }
@@ -60,6 +67,7 @@ function main() {
   copyFileSync(realpathSync(bunSource), join(tools, "bun"));
   symlinkSync("bun", join(tools, "bunx"));
   const env = cleanEnvironment();
+  run("bwrap-prerequisite", "bwrap", ["--ro-bind", "/", "/", "--", "/bin/true"], env);
   assert.equal(run("bun-version", join(tools, "bun"), ["--version"], env).trim(), "1.4.4");
   buildAndInstall(env);
   prepareFixtures();
@@ -143,8 +151,10 @@ function buildAndInstall(env) {
       env,
       join(repository, "packages", name),
     );
-    const record = JSON.parse(packed)[0];
-    dependencies[record.name] = `file:${join(output, record.filename)}`;
+    const manifest = JSON.parse(
+      readFileSync(join(repository, "packages", name, "package.json"), "utf8"),
+    );
+    dependencies[manifest.name] = `file:${join(output, readPackedFilename(JSON.parse(packed)))}`;
   }
   writeFileSync(
     join(consumer, "package.json"),
@@ -162,8 +172,8 @@ function buildAndInstall(env) {
           "af$&": "alignfirst",
           "ad$&": "aligndev",
           "dm$&": "docmap",
-          workspace: "bun workspace.mjs",
-          dev: "bun dev.mjs",
+          workspace: "alignfirst workspace",
+          dev: "alignfirst dev",
         },
       },
       null,
@@ -183,6 +193,10 @@ function buildAndInstall(env) {
     const manifest = JSON.parse(readFileSync(join(repository, "packages", name, "package.json")));
     const installed = realpathSync(join(consumer, "node_modules", manifest.name));
     assert.ok(installed.startsWith(`${consumer}/`), `${manifest.name} escaped packed install`);
+    assert.equal(
+      JSON.parse(readFileSync(join(installed, "package.json"), "utf8")).version,
+      manifest.version,
+    );
   }
 }
 

@@ -53,7 +53,7 @@ describe("plans commands", () => {
   it("sets up the plans link with the configured folder", async () => {
     const fixture = makeFixture();
     writeFileSync(
-      join(fixture.product, ".alignfirst.json"),
+      join(fixture.product, "alignfirst.json"),
       JSON.stringify({ schemaVersion: 1, plans: { repositoryFolder: "product-plans" } }),
     );
     const result = await runMain(["plans", "setup", fixture.clone], { cwd: fixture.product });
@@ -68,7 +68,7 @@ describe("plans commands", () => {
   it("accepts --folder when it matches plans.repositoryFolder", async () => {
     const fixture = makeFixture();
     writeFileSync(
-      join(fixture.product, ".alignfirst.json"),
+      join(fixture.product, "alignfirst.json"),
       JSON.stringify({ schemaVersion: 1, plans: { repositoryFolder: "product-plans" } }),
     );
     expect(
@@ -298,7 +298,7 @@ describe("plans commands", () => {
   it("rejects conflicting, absent and missing-clone setup inputs", async () => {
     const fixture = makeFixture();
     writeFileSync(
-      join(fixture.product, ".alignfirst.json"),
+      join(fixture.product, "alignfirst.json"),
       JSON.stringify({ schemaVersion: 1, plans: { repositoryFolder: "configured" } }),
     );
     expect(
@@ -308,7 +308,7 @@ describe("plans commands", () => {
         })
       ).stderr,
     ).toContain('--folder "argument" differs from plans.repositoryFolder "configured"');
-    rmSync(join(fixture.product, ".alignfirst.json"));
+    rmSync(join(fixture.product, "alignfirst.json"));
     expect(
       (await runMain(["plans", "setup", fixture.clone], { cwd: fixture.product })).stderr,
     ).toContain("Pass --folder");
@@ -415,7 +415,7 @@ describe("plans commands", () => {
   it("uses plans.autoArchive and honors --no-auto-archive", async () => {
     const fixture = makeFixture();
     writeFileSync(
-      join(fixture.product, ".alignfirst.json"),
+      join(fixture.product, "alignfirst.json"),
       JSON.stringify({
         schemaVersion: 1,
         plans: { repositoryFolder: "product-plans", autoArchive: true },
@@ -827,8 +827,8 @@ describe("linked-worktree plans parity", () => {
         mode: "local",
         plans: {
           in: "project",
-          path: join(cwd, ".plans"),
-          target: realpathSync(join(cwd, ".plans")),
+          path: join(fixture.product, ".plans"),
+          target: realpathSync(join(fixture.product, ".plans")),
         },
         mainWorktree: null,
       });

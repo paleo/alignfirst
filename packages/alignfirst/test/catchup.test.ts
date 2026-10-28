@@ -165,8 +165,8 @@ describe("ticket --catchup", () => {
     git(cwd, "init", "--quiet");
     git(cwd, "checkout", "-q", "-b", "78/catchup");
     writeFileSync(
-      join(cwd, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, ticketIdPattern: "^\\d+$" }),
+      join(cwd, "alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, conventions: { ticketIdPattern: "^\\d+$" } }),
     );
     const archive = join(cwd, ".plans", "_archives", "78");
     mkdirSync(archive, { recursive: true });

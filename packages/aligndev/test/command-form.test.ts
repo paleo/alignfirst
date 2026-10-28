@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { main } from "../src/cli.js";
 import { resolveCommandForms } from "../src/command-form.js";
 import { renderCodeGuide } from "../src/guide/code-guide.js";
+import { renderGuideTemplate } from "../src/guide/render-template.js";
 import { ALIGNFIRST_BIN, makeSink, writeConfig } from "./helpers.js";
 
 const NPX_ENV = {
@@ -63,6 +64,13 @@ describe("command forms", () => {
     const row = guide.split("\n").find((line) => line.startsWith('{"action":"start"'));
     expect(JSON.parse(row ?? "").command).toContain(`${self} code new`);
     expect(guide).toContain(`${forms.alignfirst} guide <protocol>`);
+    const working = renderGuideTemplate(
+      "playbook/working-session.md",
+      { platform: "codingAgent" },
+      forms,
+    );
+    expect(working).toContain(`\`${forms.alignfirst} developer-instructions\``);
+    expect(working).toContain(`\`${forms.alignfirst} config --json\``);
   });
 
   it.each(["npm", "bun", "yarn"] as const)(

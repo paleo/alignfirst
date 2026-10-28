@@ -6,19 +6,24 @@ import { registerCompanion, unregisterCompanion } from "../project-layout.js";
 
 const HELP_OPTION = { help: { type: "boolean", short: "h", default: false } } as const;
 
-export function runCompanion(ctx: CommandContext, args: string[]): number {
+export async function runCompanion(ctx: CommandContext, args: string[]): Promise<number> {
   const [command, ...rest] = args;
-  switch (command) {
-    case "register":
-      return runRegister(ctx, rest);
-    case "unregister":
-      return runUnregister(ctx, rest);
-    case "--help":
-    case "-h":
-      ctx.stdout.write(companionUsage(ctx));
-      return 0;
-    default:
-      throw new CliError(`Unknown or missing companion command.\n\n${companionUsage(ctx)}`);
+  try {
+    switch (command) {
+      case "register":
+        return await runRegister(ctx, rest);
+      case "unregister":
+        return await runUnregister(ctx, rest);
+      case "--help":
+      case "-h":
+        ctx.stdout.write(companionUsage(ctx));
+        return 0;
+      default:
+        throw new CliError(`Unknown or missing companion command.\n\n${companionUsage(ctx)}`);
+    }
+  } catch (error) {
+    if (error instanceof CliError) throw error;
+    throw new CliError(error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -29,7 +34,7 @@ function companionUsage(ctx: CommandContext): string {
 `;
 }
 
-function runRegister(ctx: CommandContext, args: string[]): number {
+async function runRegister(ctx: CommandContext, args: string[]): Promise<number> {
   const usage = `Usage: ${ctx.form} companion register [--dir <path>] [--create-dir]
 
 Registers the current project in ~/.alignfirst/companions/registry.json as { "dir": <path> },
@@ -57,7 +62,7 @@ Options:
     } as const),
   );
   if (printedHelp(ctx, values.help, usage)) return 0;
-  const registration = registerCompanion(ctx.cwd, ctx.home, {
+  const registration = await registerCompanion(ctx.cwd, ctx.home, {
     dir: values.dir,
     createDir: values["create-dir"],
   });
@@ -72,7 +77,7 @@ Options:
   return 0;
 }
 
-function runUnregister(ctx: CommandContext, args: string[]): number {
+async function runUnregister(ctx: CommandContext, args: string[]): Promise<number> {
   const usage = `Usage: ${ctx.form} companion unregister [--remove-dir [--force]]
 
 Removes the companion fields from ~/.alignfirst/companions/registry.json, preserving any
@@ -98,7 +103,7 @@ Options:
   if (printedHelp(ctx, values.help, usage)) return 0;
   const { "remove-dir": removeDir, force } = values;
   if (force && !removeDir) throw new CliError(`--force requires --remove-dir.\n\n${usage}`);
-  const removal = unregisterCompanion(ctx.cwd, ctx.home, { removeDir, force });
+  const removal = await unregisterCompanion(ctx.cwd, ctx.home, { removeDir, force });
   ctx.stdout.write(`Unregistered ${removal.key} from ${removal.registry}.\n`);
   if (removal.aligndev !== null)
     ctx.stdout.write(
@@ -108,6 +113,10 @@ Options:
   else if (removal.empty !== undefined)
     ctx.stdout.write(
       `Orphaned companion directory: ${removal.dir}${removal.empty ? " (empty)" : ""}\n`,
+    );
+  for (const path of removal.retainedRuntimePaths)
+    ctx.stdout.write(
+      `Retained runtime: ${path}. Automatic discovery is being removed; preserve this path for manual cleanup.\n`,
     );
   if (removal.keptOutsideRoot)
     ctx.stdout.write("Kept: it is outside ~/.alignfirst/companions. Remove it by hand.\n");

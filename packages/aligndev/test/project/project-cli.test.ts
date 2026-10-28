@@ -253,7 +253,7 @@ describe("project inventory doctor", () => {
     ]);
   });
 
-  it("fails when a project's AlignFirst CLI range is unsatisfied", async () => {
+  it("rejects the retired project CLI range instead of silently ignoring it", async () => {
     const fixture = makeFixture({});
     const project = makeRepository(fixture.root, "project", { cli: ">=99.0.0" });
 
@@ -261,9 +261,8 @@ describe("project inventory doctor", () => {
 
     expect(result.code).toBe(1);
     expect(result.stdout).toContain(`[error] Project inventory: ${JSON.stringify(project)}:`);
-    expect(result.stdout).toMatch(
-      /AlignFirst CLI \d+\.\d+\.\d+(?:[-+]\S+)? does not satisfy required range >=99\.0\.0/u,
-    );
+    expect(result.stdout).toContain("/cli");
+    expect(result.stdout).toContain("update alignfirst");
   });
 
   it("fails for invalid configuration and incomplete discovery", async () => {
@@ -272,7 +271,7 @@ describe("project inventory doctor", () => {
     mkdirSync(nongit);
     writeProjectConfig(nongit, {});
     const invalid = makeRepository(fixture.root, "invalid");
-    writeFileSync(join(invalid, ".alignfirst.json"), "{}\n");
+    writeFileSync(join(invalid, "alignfirst.json"), "{}\n");
 
     const result = await runProjects(fixture, ["doctor"]);
 
@@ -379,7 +378,7 @@ describe("project discovery", () => {
     mkdirSync(nongit);
     writeProjectConfig(nongit, {});
     const invalid = makeRepository(fixture.root, "invalid");
-    writeFileSync(join(invalid, ".alignfirst.json"), "{}\n");
+    writeFileSync(join(invalid, "alignfirst.json"), "{}\n");
     makeProjectsDirectory(fixture.root, "nested-outside", {
       portRanges: [range(9000, 9099)],
     });
@@ -393,7 +392,7 @@ describe("project discovery", () => {
     expect(messages).toContain("not a git main worktree");
     expect(
       messages.some(
-        (message: string) => message.startsWith("Invalid ") && message.includes(".alignfirst.json"),
+        (message: string) => message.startsWith("Invalid ") && message.includes("alignfirst.json"),
       ),
     ).toBe(true);
     expect(report.projects.some((project: { name: string }) => project.name === "invalid")).toBe(
@@ -462,7 +461,7 @@ describe("project discovery", () => {
       {
         path: old,
         message: expect.stringContaining(
-          `The alignfirst CLI used in ${old} is too old: aligndev requires the profile-aware alignfirst config --json contract (top-level "aligndev"). Upgrade alignfirst.`,
+          `The alignfirst CLI used in ${old} is too old: aligndev requires the workspace-aware alignfirst config --json contract (merged configuration, developerInstructions, workspaceRuntime and selectionOrigins). Upgrade alignfirst.`,
         ),
       },
     ]);
@@ -572,14 +571,22 @@ describe("project classification and companions", () => {
     mkdirSync(companionsRoot, { recursive: true });
     writeRegistry(fixture.home, {
       projects: {
-        [project]: { dir: "app", items: { ".plans": "companion", "DEVELOPERS.md": "companion" } },
+        [project]: {
+          dir: "app",
+          items: { ".plans": "companion", developerInstructions: "companion" },
+        },
       },
     });
     const companion = join(realpathSync(companionsRoot), "app");
     mkdirSync(join(companion, ".plans"), { recursive: true });
 
     const list = JSON.parse((await runProjects(fixture, ["list", "--json"])).stdout);
-    expect(list.projects[0].companion).toEqual({ dir: companion, exists: true });
+    expect(list.projects[0].companion).toMatchObject({
+      dir: companion,
+      exists: true,
+      defaultLocation: "auto",
+      items: { developerInstructions: "companion" },
+    });
     expect(list.projects[0].locations[".plans"]).toEqual({
       path: join(companion, ".plans"),
       in: "companion",
@@ -588,20 +595,46 @@ describe("project classification and companions", () => {
 
     const status = JSON.parse((await runProjects(fixture, ["status", "app", "--json"])).stdout);
     expect(status.configSource).toBeNull();
-    expect(status.companion).toEqual({ dir: companion, exists: true });
-    expect(status.locations["DEVELOPERS.md"]).toEqual({
-      path: join(companion, "DEVELOPERS.md"),
-      in: "companion",
-      exists: false,
-    });
+    expect(status.companion).toEqual(list.projects[0].companion);
+    expect(status.locations.developerInstructions).toBeNull();
 
     const text = (await runProjects(fixture, ["status", "app"])).stdout;
     expect(text).toContain("  Config source: (none)\n");
     expect(text).toContain(`  Companion: ${JSON.stringify(companion)}\n`);
-    expect(text).toContain(
-      `  DEVELOPERS.md: ${JSON.stringify(join(companion, "DEVELOPERS.md"))} (missing)\n`,
-    );
+    expect(text).toContain("  Developer instructions: (not configured)\n");
     expect(text).toContain(`  Work files: ${JSON.stringify(join(companion, ".plans"))}\n`);
+  });
+
+  it("uses a selected companion range for inventory and free-port lookup without merging project settings", async () => {
+    const fixture = makeFixture({ portRanges: [range(28100, 28199)] });
+    const project = makeRepository(fixture.root, "app", { portRange: range(28100, 28109) });
+    const companion = join(fixture.home, ".alignfirst/companions/app");
+    mkdirSync(companion, { recursive: true });
+    writeProjectConfig(companion, {
+      portRange: range(28120, 28129),
+      developerInstructions: "notes/dev.md",
+    });
+    writeRegistry(fixture.home, {
+      projects: {
+        [project]: {
+          dir: "app",
+          items: { alignfirst: "companion", developerInstructions: "companion" },
+        },
+      },
+    });
+    const listed = await runProjects(fixture, ["list", "--json"]);
+    expect(listed.code, listed.stderr).toBe(0);
+    const report = JSON.parse(listed.stdout);
+    expect(report.projects[0].portRange).toEqual(range(28120, 28129));
+    expect(report.projects[0].locations.developerInstructions).toEqual({
+      path: join(companion, "notes/dev.md"),
+      in: "companion",
+      exists: false,
+    });
+    expect(report.issues).toEqual([]);
+    const free = await runProjects(fixture, ["free-ports", "--size", "20", "--json"]);
+    expect(free.code, free.stderr).toBe(0);
+    expect(JSON.parse(free.stdout)).toEqual(range(28100, 28119));
   });
 
   it("reports two projects sharing a companion directory on both", async () => {
@@ -654,8 +687,8 @@ describe("project status", () => {
       companion: null,
       aligndev: null,
       locations: {
-        ".alignfirst.json": {
-          path: join(project, ".alignfirst.json"),
+        alignfirst: {
+          path: join(project, "alignfirst.json"),
           in: "project",
           exists: true,
         },
@@ -664,7 +697,12 @@ describe("project status", () => {
           in: "project",
           exists: false,
         },
-        "DEVELOPERS.md": { path: join(project, "DEVELOPERS.md"), in: "project", exists: false },
+        developerInstructions: {
+          path: join(project, "DEVELOPERS.md"),
+          in: "project",
+          exists: false,
+        },
+        workspaceRuntime: { path: join(project, ".local-wt"), in: "project", exists: false },
         docs: { path: join(project, "docs"), in: "project", exists: false },
         ".plans": { path: join(project, ".plans"), in: "project", exists: false },
         _aligndev: { path: join(project, ".plans"), in: "project", exists: false },
@@ -683,7 +721,7 @@ describe("project status", () => {
     expect(text.stdout).toContain('  Ticket id pattern: "^P-\\\\d+$"');
     expect(text.stdout).toContain("  Config source: project\n  Companion: (none)\n");
     expect(text.stdout).toContain(
-      `  DEVELOPERS.md: ${JSON.stringify(join(project, "DEVELOPERS.md"))} (missing)\n`,
+      `  Developer instructions: ${JSON.stringify(join(project, "DEVELOPERS.md"))} (missing)\n`,
     );
     expect(text.stdout).toContain(
       `  Work files: ${JSON.stringify(join(project, ".plans"))} (missing)\n`,

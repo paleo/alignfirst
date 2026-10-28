@@ -1,12 +1,13 @@
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { ConfigError } from "./errors.js";
-import { devCmd, packageManagerCommands, wsCmd } from "./package-manager.js";
+import { defaultCommands, devCmd, type WorkspaceCommands, wsCmd } from "./invocation.js";
 
 export type WorkspaceCommand =
   | {
       kind: "setup";
       branch?: string;
+      path?: string;
       newBranch: boolean;
       from?: string;
       force: boolean;
@@ -22,8 +23,7 @@ export type WorkspaceCommand =
   | { kind: "prune" }
   | { kind: "status"; selector: WorkspaceSelector }
   | { kind: "wait"; selector: WorkspaceSelector }
-  | { kind: "migrate" }
-  | { kind: "finalize"; force: boolean; full: boolean }
+  | { kind: "finalize"; force: boolean; full: boolean; preparationToken?: string }
   | { kind: "guide" }
   | { kind: "help" }
   | { kind: "version" };
@@ -35,11 +35,27 @@ export interface WorkspaceSelector {
 }
 
 export interface ParsedWorkspaceArgs {
+  json?: boolean;
   command: WorkspaceCommand;
   verbose: boolean;
 }
 
-export function parseWorkspaceArgs(argv: string[] = process.argv.slice(2)): ParsedWorkspaceArgs {
+export function parseWorkspaceArgs(argv: string[]): ParsedWorkspaceArgs {
+  const json = argv.includes("--json");
+  const parsed = parseWorkspaceTokens(argv.filter((token) => token !== "--json"));
+  if (!json) return parsed;
+  if (
+    !["setup", "list", "status", "wait", "teardown", "remove", "prune"].includes(
+      parsed.command.kind,
+    )
+  )
+    throw new ConfigError("--json is not supported for this operation.");
+  if (parsed.command.kind === "setup" && parsed.command.enter)
+    throw new ConfigError("--enter cannot be combined with --json.");
+  return { ...parsed, json: true };
+}
+
+function parseWorkspaceTokens(argv: string[]): ParsedWorkspaceArgs {
   const [subcommand, ...tokens] = argv;
   if (subcommand === "--help" || subcommand === "-h") {
     return { command: { kind: "help" }, verbose: false };
@@ -75,8 +91,6 @@ function parseSubcommand(subcommand: string, tokens: string[]): ParsedWorkspaceA
       return parseStatus(tokens);
     case "wait":
       return parseWait(tokens);
-    case "migrate-registry-0.30":
-      return parseMigrate(tokens);
     case "__finalize":
       return parseFinalize(tokens);
     default:
@@ -90,6 +104,7 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
     options: {
       "new-branch": { type: "boolean", short: "c" },
       from: { type: "string" },
+      path: { type: "string" },
       force: { type: "boolean" },
       enter: { type: "boolean" },
       dedupe: { type: "boolean" },
@@ -120,6 +135,7 @@ function parseSetup(tokens: string[]): ParsedWorkspaceArgs {
     command: {
       kind: "setup",
       branch,
+      ...(values.path === undefined ? {} : { path: values.path }),
       newBranch,
       from: values.from,
       force: values.force ?? false,
@@ -217,28 +233,27 @@ function parseWait(tokens: string[]): ParsedWorkspaceArgs {
   };
 }
 
-function parseMigrate(tokens: string[]): ParsedWorkspaceArgs {
-  const { values, positionals } = parseArgs({
-    args: tokens,
-    options: { verbose: { type: "boolean" } },
-    allowPositionals: true,
-    strict: true,
-  });
-  rejectPositionals(positionals, "migrate-registry-0.30");
-  return { command: { kind: "migrate" }, verbose: values.verbose ?? false };
-}
-
 function parseFinalize(tokens: string[]): ParsedWorkspaceArgs {
   const { values, positionals } = parseArgs({
     args: tokens,
-    options: { force: { type: "boolean" }, full: { type: "boolean" } },
+    options: {
+      "preparation-token": { type: "string" },
+      force: { type: "boolean" },
+      full: { type: "boolean" },
+      verbose: { type: "boolean" },
+    },
     allowPositionals: true,
     strict: true,
   });
   rejectPositionals(positionals, "__finalize");
   return {
-    command: { kind: "finalize", force: values.force ?? false, full: values.full ?? false },
-    verbose: false,
+    command: {
+      kind: "finalize",
+      force: values.force ?? false,
+      full: values.full ?? false,
+      preparationToken: values["preparation-token"],
+    },
+    verbose: values.verbose ?? false,
   };
 }
 
@@ -255,19 +270,18 @@ function rejectPositionals(positionals: string[], command: string): void {
   }
 }
 
-export function printWorkspaceHelp(): void {
-  console.log(renderWorkspaceHelp());
-}
-
-export function renderWorkspaceHelp(): string {
+export function renderWorkspaceHelp(commands: WorkspaceCommands = defaultCommands): string {
   return [
-    `Usage: ${packageManagerCommands().workspace.withArgs} <command> [options]`,
+    `Usage: ${commands.workspace.withArgs} <command> [options]`,
     "",
     "Manage workspaces: a git worktree plus its own dev setup (config files, and optionally",
     "ports, database, dev server).",
     "",
     "Commands:",
-    "  setup [-c|--new-branch] [<branch>] [--dedupe] [--from <ref>] [--force] [-d|--detached] [--enter] [--full]",
+    "  setup [-c|--new-branch] [<branch>] [--path <path>] [--dedupe] [--from <ref>] [--force] [-d|--detached] [--enter] [--full]",
+    "      --path selects a new destination with a branch, or an exact existing root without one.",
+    "      Requires usable effective plans and ignored, untracked .local-wt runtime storage.",
+    "      Without a manifest, preparation is synchronous and protocol-ready only.",
     "      Set up the workspace. With <branch>, create a sibling worktree for it",
     "      (add -c to create the branch first). Without, set up the current worktree",
     "      (idempotent; bootstrap and retry path).",
@@ -289,7 +303,7 @@ export function renderWorkspaceHelp(): string {
     "      Keep worktree files and Git registration. Select by path or registered name;",
     "      the current worktree when omitted. Supports main and linked worktrees.",
     "  list",
-    "      List all registered workspaces (name, status, branch, path, created).",
+    "      List Git worktrees and registered workspaces, including unprepared trees and orphans.",
     "  prune",
     "      Heal orphaned workspaces (worktree deleted out-of-band): stop their dev-servers",
     "      and drop their registry entries, then run `git worktree prune`.",
@@ -298,37 +312,43 @@ export function renderWorkspaceHelp(): string {
     "      Selected by path or registered name; the current worktree when omitted.",
     "  wait [<dir>]",
     "      Block until setup reaches READY (exit 0) or FAILED (exit 1).",
-    "  migrate-registry-0.30",
-    "      Convert an old registry (slots.json) to workspaces.json, in place.",
-    "      Run it once from the main worktree after upgrading the package.",
     "",
     "Global options:",
     "      --verbose       Show intermediate output.",
+    "      --json          One result document (setup/list/status/wait/teardown/remove/prune).",
+
     "      --guide         Print the full workspace + dev-server operating guide.",
     "  -h, --help          Show this help message.",
     "  -v, --version       Print the workspace version.",
   ].join("\n");
 }
 
-export function printWorkspaceVersion(): void {
+export function workspaceVersion(): string {
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as {
     version?: string;
   };
   if (!pkg.version) throw new ConfigError("workspace: package.json is missing 'version'");
-  console.log(pkg.version);
+  return pkg.version;
 }
 
 export type DevCommand =
   | { kind: "foreground"; evict: boolean; restart: boolean }
   | { kind: "up"; evict: boolean; restart: boolean }
   | { kind: "restart"; evict: boolean }
-  | { kind: "down"; all: boolean }
+  | { kind: "down"; all: boolean; retainCleanup?: boolean }
   | { kind: "list" }
   | { kind: "status" }
-  | { kind: "setup"; force: boolean; resetPorts: boolean; fromFinalize: boolean }
+  | {
+      kind: "setup";
+      force: boolean;
+      resetPorts: boolean;
+      fromFinalize: boolean;
+      preparationToken?: string;
+      verbose?: boolean;
+    }
   | { kind: "help" };
 
-export function parseDevArgs(argv: string[] = process.argv.slice(2)): DevCommand {
+export function parseDevArgs(argv: string[]): DevCommand {
   const [first] = argv;
   if (first === "--help" || first === "-h") return { kind: "help" };
   try {
@@ -397,12 +417,18 @@ function parseRestart(tokens: string[]): DevCommand {
 function parseDown(tokens: string[]): DevCommand {
   const { values, positionals } = parseArgs({
     args: tokens,
-    options: { all: { type: "boolean" } },
+    options: { all: { type: "boolean" }, "retain-cleanup": { type: "boolean" } },
     allowPositionals: true,
     strict: true,
   });
   rejectDevPositionals(positionals, "dev down");
-  return { kind: "down", all: values.all ?? false };
+  if (values.all === true && values["retain-cleanup"] === true)
+    throw new ConfigError("Internal --retain-cleanup requires child-local dev down.");
+  return {
+    kind: "down",
+    all: values.all ?? false,
+    ...(values["retain-cleanup"] === true ? { retainCleanup: true } : {}),
+  };
 }
 
 function parseDevList(tokens: string[]): DevCommand {
@@ -435,6 +461,8 @@ function parseDevSetup(tokens: string[]): DevCommand {
       force: { type: "boolean" },
       "reset-ports": { type: "boolean" },
       "from-finalize": { type: "boolean" },
+      "preparation-token": { type: "string" },
+      verbose: { type: "boolean" },
     },
     allowPositionals: true,
     strict: true,
@@ -445,6 +473,8 @@ function parseDevSetup(tokens: string[]): DevCommand {
     force: values.force ?? false,
     resetPorts: values["reset-ports"] ?? false,
     fromFinalize: values["from-finalize"] ?? false,
+    preparationToken: values["preparation-token"],
+    verbose: values.verbose,
   };
 }
 
@@ -454,25 +484,21 @@ function rejectDevPositionals(positionals: string[], command: string): void {
   }
 }
 
-export function printDevHelp(): void {
-  console.log(renderDevHelp());
-}
-
-export function renderDevHelp(): string {
+export function renderDevHelp(commands: WorkspaceCommands = defaultCommands): string {
   return [
-    `Usage: ${packageManagerCommands().dev.withArgs} [command] [options]`,
+    `Usage: ${commands.dev.withArgs} [command] [options]`,
     "",
     "Start, stop, or list dev-server processes for worktree-based environments.",
     "",
     "Commands:",
-    `  ${packageManagerCommands().dev.base}               Start in the foreground, streaming logs from startup; CTRL+C stops it.`,
+    `  ${commands.dev.base}               Start in the foreground, streaming logs from startup; CTRL+C stops it.`,
     "                    If one is already running here, attach to its logs instead.",
     "  dev up            Start in the background and return once ready.",
     "  dev restart       Stop this worktree's dev-server if running, then start in the background.",
     "  dev down [--all]  Stop this worktree's dev-server, or every dev-server with --all.",
     "  dev list          List active dev-servers across all worktrees.",
     "  dev status        Report whether this worktree's dev-server is UP or DOWN.",
-    "  dev setup [--force] [--reset-ports]",
+    "  dev setup [--force] [--reset-ports] [--verbose]",
     "                    Allocate this workspace's ports, write its run files, and provision its",
     "                    infrastructure once. Also runs before every start.",
     "  dev --help        Show this help message (alias: -h).",
@@ -484,7 +510,8 @@ export function renderDevHelp(): string {
     "Options (dev setup):",
     "  --force        Provision the infrastructure again (the setup hook must be idempotent).",
     "  --reset-ports  Allocate this workspace's ports again. Refused while its dev-server runs.",
+    "  --verbose      Enable verbose project setup output.",
   ]
-    .map((line) => line.replace(/^ {2}dev(?=\s)/, `  ${packageManagerCommands().dev.withArgs}`))
+    .map((line) => line.replace(/^ {2}dev(?=\s)/, `  ${commands.dev.withArgs}`))
     .join("\n");
 }

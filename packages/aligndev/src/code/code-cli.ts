@@ -58,7 +58,7 @@ const SESSION_OPTIONS = {
 
 // Items the agent would not find in the repository: a new session gets `alignfirst context`.
 const CONTEXT_COMPANION_ITEMS: readonly ItemName[] = [
-  ".alignfirst.json",
+  "alignfirst",
   ".alignfirst-instructions",
   "docs",
   ".plans",

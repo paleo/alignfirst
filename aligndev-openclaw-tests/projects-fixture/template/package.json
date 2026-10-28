@@ -7,17 +7,13 @@
     "node": ">=22"
   },
   "scripts": {
-    "docmap": "docmap",
-    "workspace": "node scripts/workspace/workspace.mjs",
-    "dev": "node scripts/workspace/dev-server.mjs",
+    "docmap": "alignfirst docmap",
+    "workspace": "alignfirst workspace",
+    "dev": "alignfirst dev",
     "test": "node --test",
     "lint": "for f in *.mjs; do node --check \"$f\" || exit 1; done"
   },
   "dependencies": {
     "express": "5.3.0"
-  },
-  "devDependencies": {
-    "@alignfirst/docmap": "~0.11.2",
-    "@alignfirst/workspace": "~0.39.0"
   }
 }

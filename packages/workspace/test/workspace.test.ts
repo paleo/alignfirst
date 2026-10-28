@@ -120,9 +120,25 @@ describe("resolveFileSource", () => {
 describe("matchWorktreeByDir", () => {
   const registry: WorkspacesRegistry = {
     workspaces: {
-      repo: { worktree: "/home/me/repo", createdAt: "", status: "ready", main: true },
-      "repo-feat-a": { worktree: "/home/me/repo-feat-a", createdAt: "", status: "ready" },
-      "repo-feat-b": { worktree: "/home/me/repo-feat-b", createdAt: "", status: "ready" },
+      repo: {
+        worktree: "/home/me/repo",
+        createdAt: "",
+        status: "ready",
+        main: true,
+        recipe: { kind: "defaults" },
+      },
+      "repo-feat-a": {
+        worktree: "/home/me/repo-feat-a",
+        createdAt: "",
+        status: "ready",
+        recipe: { kind: "defaults" },
+      },
+      "repo-feat-b": {
+        worktree: "/home/me/repo-feat-b",
+        createdAt: "",
+        status: "ready",
+        recipe: { kind: "defaults" },
+      },
     },
   };
 
@@ -143,8 +159,13 @@ describe("matchWorktreeByDir", () => {
   it("prefers an exact path over an exact registered name", () => {
     const colliding: WorkspacesRegistry = {
       workspaces: {
-        wt: { worktree: "/first/wt", createdAt: "", status: "ready" },
-        "wt-deadbeef": { worktree: "/second/wt", createdAt: "", status: "ready" },
+        wt: { worktree: "/first/wt", createdAt: "", status: "ready", recipe: { kind: "defaults" } },
+        "wt-deadbeef": {
+          worktree: "/second/wt",
+          createdAt: "",
+          status: "ready",
+          recipe: { kind: "defaults" },
+        },
       },
     };
     expect(matchWorktreeByDir("wt", colliding, "/second")).toBe("wt-deadbeef");

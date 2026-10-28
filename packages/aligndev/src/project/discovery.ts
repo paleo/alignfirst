@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 
 import { isNodeError } from "../errors.js";
@@ -13,7 +13,7 @@ import {
   readMarker,
 } from "./markers.js";
 
-const PROJECT_CONFIG_FILENAME = ".alignfirst.json";
+const CONFIG_FILENAMES = ["alignfirst.json", "alignfirst.jsonc"];
 
 export interface ProjectInventory {
   root: string;
@@ -164,7 +164,11 @@ function classifyCandidate(
   ctx: InventoryContext,
 ): DiscoveredProject[] {
   if (mainWorktreeGitDirectory(candidate.path) === undefined) {
-    if (existsSync(join(candidate.path, PROJECT_CONFIG_FILENAME))) {
+    if (
+      CONFIG_FILENAMES.some(
+        (name) => lstatSync(join(candidate.path, name), { throwIfNoEntry: false }) !== undefined,
+      )
+    ) {
       state.issues.push({ path: candidate.path, message: "not a git main worktree" });
     } else {
       addOther(state.directories, candidate.directory, candidate.name);
@@ -181,21 +185,13 @@ function classifyCandidate(
     path: candidate.path,
     directory: candidate.directory,
     description,
-    ...(description.config?.portRange === undefined
+    ...(description.workspace.portRange === null
       ? {}
-      : { portRange: description.config.portRange }),
+      : { portRange: description.workspace.portRange }),
     workspaces: [],
   };
   const enclosingRange = findEnclosingRange(candidate.enclosingRanges, project.portRange);
   if (enclosingRange?.code !== undefined) project.portRangeCode = enclosingRange.code;
-  if (description.cli !== null && !description.cli.satisfied) {
-    state.issues.push({
-      path: candidate.path,
-      message:
-        `AlignFirst CLI ${description.cli.installed} does not satisfy required range ` +
-        description.cli.range,
-    });
-  }
   reportOutsideRange(project.path, project.portRange, candidate.enclosingRanges, state.issues);
   return [project];
 }

@@ -214,7 +214,7 @@ function resolveTicketId(
   positional: string | undefined,
   flags: TicketFlags,
 ): TicketResolution {
-  const pattern = ctx.projectConfig?.config.ticketIdPattern;
+  const pattern = ctx.projectConfig?.config.conventions?.ticketIdPattern;
   if (positional !== undefined) {
     validateTicketId(positional);
     return { id: positional };
@@ -224,7 +224,7 @@ function resolveTicketId(
     assertPlansGate(ctx.cwd, plans, ctx.form, ctx.home);
     return { id: flags["dry-run"] ? peekSideTicket(plans.path) : reserveSideTicket(plans.path) };
   }
-  const template = ctx.projectConfig?.config.git?.branchNameTemplate;
+  const template = ctx.projectConfig?.config.conventions?.git?.branchNameTemplate;
   const detection = detectTicketFromBranch(ctx.cwd, pattern, template);
   if (detection.kind === "detected") {
     validateTicketId(detection.id);

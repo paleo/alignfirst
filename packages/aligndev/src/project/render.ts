@@ -107,7 +107,7 @@ export function renderProjectStatus(details: ProjectDetails): string {
     `  Config source: ${details.configSource ?? "(none)"}`,
     `  Companion: ${renderCompanion(details.companion)}`,
     `  AlignDev profile: ${renderNullableValue(details.aligndev?.profile ?? null)}`,
-    `  DEVELOPERS.md: ${renderLocation(details.locations["DEVELOPERS.md"])}`,
+    `  Developer instructions: ${renderLocation(details.locations.developerInstructions)}`,
     `  Work files: ${renderLocation(details.locations[".plans"])}`,
     `  Work-files folder: ${renderNullableValue(details.plansFolder)}`,
     `  Ticket id pattern: ${renderNullableValue(details.ticketIdPattern)}`,
@@ -130,7 +130,8 @@ function renderCompanion(companion: CompanionReport | null): string {
   return renderPath(companion.dir, companion.exists);
 }
 
-function renderLocation(location: ItemLocation): string {
+function renderLocation(location: ItemLocation | null): string {
+  if (location === null) return "(not configured)";
   return renderPath(location.path, location.exists);
 }
 

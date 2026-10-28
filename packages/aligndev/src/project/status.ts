@@ -2,15 +2,14 @@ import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { basename } from "node:path";
 
-import { readWorktrees } from "../worktree/git.js";
+import { readWorktrees } from "@alignfirst/workspace/git";
 import type { DiscoveredProject, ProjectInventory } from "./discovery.js";
 import { errorMessage, isNodeError } from "../errors.js";
 import type {
   AligndevProjectSettings,
   CompanionReport,
   ConfigSource,
-  ItemLocation,
-  ItemName,
+  ProjectLocations,
 } from "./layout.js";
 import type { PortRange } from "./markers.js";
 
@@ -28,7 +27,7 @@ export interface ProjectDetails {
   configSource: ConfigSource | null;
   companion: CompanionReport | null;
   aligndev: AligndevProjectSettings | null;
-  locations: Record<ItemName, ItemLocation>;
+  locations: ProjectLocations;
   workspaces: string[];
   worktrees: ProjectWorktree[];
 }
@@ -69,7 +68,7 @@ function buildProjectDetails(project: DiscoveredProject): ProjectDetails {
     portRange: project.portRange ?? null,
     portRangeCode: project.portRangeCode ?? null,
     plansFolder: project.description.config?.plans?.repositoryFolder ?? null,
-    ticketIdPattern: project.description.config?.ticketIdPattern ?? null,
+    ticketIdPattern: project.description.config?.conventions?.ticketIdPattern ?? null,
     configSource: project.description.source,
     companion: project.description.companion,
     aligndev: project.description.aligndev,

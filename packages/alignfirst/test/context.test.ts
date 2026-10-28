@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -140,6 +140,142 @@ describe("context command", () => {
       },
     });
     expect(result.stdout).toContain("run `npx -y alignfirst guide <protocol>` and follow it");
+  });
+});
+
+describe("developer-instructions command", () => {
+  it("shares conventions without discovering filenames or printing agent context and guides", async () => {
+    const cwd = temp();
+    mkdirSync(join(cwd, "docs"));
+    mkdirSync(join(cwd, ".plans"));
+    mkdirSync(join(cwd, ".alignfirst-instructions"));
+    writeFileSync(join(cwd, "DEVELOPERS.md"), "Ignored developer file\n");
+    writeFileSync(join(cwd, "README.md"), "Ignored readme\n");
+    writeFileSync(join(cwd, ".alignfirst-instructions", "context.md"), "Agent-only context\n");
+    writeFileSync(
+      join(cwd, "alignfirst.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        conventions: {
+          ticketIdPattern: "^TASK-[0-9]+$",
+          git: {
+            branchNameTemplate: "{TICKET_ID}/{slug}",
+            commit: { style: "conventionalCommit", ticketReference: "bracketed" },
+          },
+        },
+      }),
+    );
+    const result = await runMain(["developer-instructions"], { cwd });
+    const context = await runMain(["context"], { cwd });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(result.stdout).toBe(context.stdout.split("\n# Project Instructions")[0]);
+    expect(result.stdout).toContain("Ticket IDs: `^TASK-[0-9]+$`");
+    expect(result.stdout).toContain("Branch names: `{TICKET_ID}/{slug}`");
+    expect(result.stdout).toContain("`type: [TICKET_ID] summary`");
+    expect(result.stdout).toContain("Work files: use `.plans`");
+    expect(result.stdout).not.toMatch(
+      /Ignored|Agent-only|Docmap|Protocols|# Developer Instructions/,
+    );
+  });
+
+  it("preserves custom content and reports its absolute source", async () => {
+    const cwd = temp();
+    const path = join(cwd, "handbook", "workflow.md");
+    mkdirSync(join(cwd, "handbook"));
+    writeFileSync(
+      join(cwd, "alignfirst.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        developerInstructions: "handbook/workflow.md",
+      }),
+    );
+    const content = "\n# Workflow\r\n\nSee [setup](./setup.md). {{LITERAL}} $HOME\n  ";
+    writeFileSync(path, content);
+    const result = await runMain(["developer-instructions"], { cwd });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(result.stdout).toContain(`Source: ${path}\n\n${content}`);
+    expect(result.stdout.endsWith(content)).toBe(true);
+  });
+
+  it.each(["missing", "directory"])(
+    "fails before output for a configured %s file",
+    async (kind) => {
+      const cwd = temp();
+      const path = join(cwd, "guide.md");
+      writeFileSync(
+        join(cwd, "alignfirst.json"),
+        JSON.stringify({
+          schemaVersion: 1,
+          developerInstructions: "guide.md",
+        }),
+      );
+      if (kind === "directory") mkdirSync(path);
+      const result = await runMain(["developer-instructions"], { cwd });
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain(`Cannot read ${path}:`);
+      if (kind === "missing") expect(existsSync(path)).toBe(false);
+    },
+  );
+
+  it("uses linked-branch instructions and configuration from nested cwd, not main", async () => {
+    const root = temp();
+    configureGit(root);
+    const main = join(root, "main");
+    initRepository(main);
+    writeFileSync(
+      join(main, "alignfirst.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        developerInstructions: "main.md",
+      }),
+    );
+    writeFileSync(join(main, "main.md"), "Main instructions\n");
+    git(main, "add", ".");
+    git(main, "commit", "--quiet", "-m", "instructions");
+    const linked = join(root, "linked");
+    git(main, "worktree", "add", "--quiet", "-b", "task", linked);
+    writeFileSync(
+      join(linked, "alignfirst.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        developerInstructions: "branch.md",
+      }),
+    );
+    writeFileSync(join(linked, "branch.md"), "Branch instructions\n");
+    const nested = join(linked, "src", "nested");
+    mkdirSync(nested, { recursive: true });
+    const result = await runMain(["developer-instructions"], { cwd: nested });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(result.stdout).toContain(`Source: ${join(linked, "branch.md")}\n\nBranch instructions`);
+    expect(result.stdout).not.toContain("Main instructions");
+    expect((await runMain(["developer-instructions"], { cwd: main })).stdout).toContain(
+      "Main instructions",
+    );
+  });
+
+  it("uses the logical companion override independently of the selected configuration", async () => {
+    const { root, home, project, companion } = makeCompanionProject({
+      alignfirst: "project",
+      developerInstructions: "companion",
+    });
+    dirs.push(root);
+    mkdirSync(companion, { recursive: true });
+    writeFileSync(
+      join(project, "alignfirst.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        developerInstructions: "workflow.md",
+      }),
+    );
+    writeFileSync(join(project, "workflow.md"), "Wrong project guide\n");
+    writeFileSync(join(companion, "workflow.md"), "Selected companion guide\n");
+    const result = await runMain(["developer-instructions"], { cwd: project, home });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(result.stdout).toContain(
+      `Source: ${join(companion, "workflow.md")}\n\nSelected companion guide`,
+    );
+    expect(result.stdout).not.toContain("Wrong project guide");
   });
 });
 

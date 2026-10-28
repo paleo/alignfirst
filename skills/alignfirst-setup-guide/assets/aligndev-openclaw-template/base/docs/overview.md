@@ -65,7 +65,7 @@ The dev-server range `{{PORT_RANGE_FIRST}}–{{PORT_RANGE_LAST}}` is closed.
 
 ## Projects
 
-`aligndev project` discovers projects from `.alignfirst.json`; this repository keeps no project list.
+`aligndev project` discovers Git projects and reads `alignfirst.json`/`alignfirst.jsonc` plus branch-local workspace metadata; this repository keeps no project list.
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project list'

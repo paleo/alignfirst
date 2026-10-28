@@ -165,8 +165,8 @@ function buildGuidePlaceholders(
   ctx: CommandContext,
   protocol: GuideOptions["protocol"],
 ): GuidePlaceholders {
-  const pattern = ctx.projectConfig?.config.ticketIdPattern;
-  const template = ctx.projectConfig?.config.git?.branchNameTemplate;
+  const pattern = ctx.projectConfig?.config.conventions?.ticketIdPattern;
+  const template = ctx.projectConfig?.config.conventions?.git?.branchNameTemplate;
   const detection = detectTicketFromBranch(ctx.cwd, pattern, template);
   return {
     ticketCommand: detection.kind === "detected" ? "{{CMD}} ticket" : "{{CMD}} ticket <id>",
@@ -199,7 +199,7 @@ function renderPlansState(ctx: CommandContext): string {
 }
 
 function renderCommitRule(ctx: CommandContext): string {
-  const commit = ctx.projectConfig?.config.git?.commit;
+  const commit = ctx.projectConfig?.config.conventions?.git?.commit;
   if (commit === undefined)
     return "(follow the convention you are aware of, or default to `<type>: [TICKET_ID] very short description`)";
   const { subject, side } = commitSubject(commit);

@@ -5,10 +5,7 @@
   "engines": { "node": ">=24.16.0" },
   "scripts": {
     "docmap": "npx -y alignfirst docmap",
-    "workspace": "node scripts/workspace/workspace.mjs",
-    "validate": "npx -y alignfirst docmap --check && node --check scripts/workspace/workspace.mjs"
-  },
-  "devDependencies": {
-    "@alignfirst/workspace": "~0.39.0"
+    "workspace": "npx -y alignfirst workspace",
+    "validate": "npx -y alignfirst config --json && npx -y alignfirst docmap --check"
   }
 }

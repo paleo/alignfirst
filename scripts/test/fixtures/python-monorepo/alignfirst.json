@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "workspace": {
+    "finalize": [
+      { "name": "stdlib virtual environment", "run": ["python3", "workspace.py", "finalize"] }
+    ],
+    "summary": { "command": { "run": ["python3", "workspace.py", "summary"] } }
+  },
+  "devServer": {
+    "ports": { "first": 48100, "last": 48199, "declare": ["api"] },
+    "runFiles": [
+      {
+        "path": ".local-wt/application.json",
+        "source": {
+          "kind": "content",
+          "content": { "command": { "run": ["python3", "workspace.py", "content"] } }
+        },
+        "patch": { "command": { "run": ["python3", "workspace.py", "patch"] } }
+      }
+    ],
+    "servers": [
+      {
+        "kind": "spawn",
+        "name": "api",
+        "port": "api",
+        "exec": {
+          "run": ["${{ currentWorktree }}/.venv/bin/python", "app.py"],
+          "cwd": "packages/api",
+          "env": { "APP_ROLE": "api", "PYTHONPATH": "${{ currentWorktree }}" }
+        },
+        "ready": { "log": "API_READY" }
+      },
+      {
+        "kind": "spawn",
+        "name": "worker",
+        "exec": {
+          "run": ["${{ currentWorktree }}/.venv/bin/python", "app.py"],
+          "cwd": "packages/worker",
+          "env": { "APP_ROLE": "worker", "PYTHONPATH": "${{ currentWorktree }}" }
+        },
+        "ready": { "log": "WORKER_READY" }
+      }
+    ],
+    "summary": { "command": { "run": ["python3", "workspace.py", "summary"] } }
+  }
+}

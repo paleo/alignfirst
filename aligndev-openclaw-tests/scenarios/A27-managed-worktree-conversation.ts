@@ -82,23 +82,26 @@ async function waitForTicketBranch(
   throw new Error(`managed worktree is on "${branch}", expected ${TICKET_ID}/<desc>`);
 }
 
-/** `workspace list` shows the adopted worktree, `ready`. Runs from the main worktree (pnpm pin). */
+/** Inventory proves adoption without depending on text-table formatting or checkout naming. */
 async function assertWorkspaceRegistered(
   ctx: ScenarioContext,
   worktreePath: string,
 ): Promise<void> {
-  const result = await ctx.execInGateway(["pnpm", "workspace", "list"], {
+  const result = await ctx.execInGateway(["alignfirst", "workspace", "list", "--json"], {
     cwd: NIMBUS_PROJECT_PATH,
     timeoutMs: 60_000,
   });
   if (result.exitCode !== 0) {
-    throw new Error(`pnpm workspace list failed (exit ${result.exitCode}): ${result.stderr}`);
+    throw new Error(`alignfirst workspace list failed (exit ${result.exitCode}): ${result.stderr}`);
   }
-  const row = result.stdout.split("\n").find((line) => line.includes(worktreePath));
+  const row = JSON.parse(result.stdout).workspaces.find(
+    (entry: { path: string }) => entry.path === worktreePath,
+  );
   if (row === undefined) {
     throw new Error(`workspace list does not show ${worktreePath}:\n${result.stdout}`);
   }
-  ctx.assertRegex(row, /\bready\b/, "workspace list: the managed worktree is registered, ready");
+  ctx.assertEqual(row.preparation, "ready", "managed worktree is prepared");
+  ctx.assertEqual(row.recipe, "manifest", "managed worktree uses its selected recipe");
 }
 
 /** The request withholds coding: no protocol run, neither launched nor received by the mock. */

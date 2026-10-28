@@ -1,11 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { WorkspaceError } from "../src/errors.js";
+import { headCommit } from "../src/git.js";
 import { createBranch, useExistingBranch, type WorktreeContext } from "../src/worktree.js";
 
 // These exercise `worktree.ts` against a real git repo. The functions read the process cwd, so we
@@ -97,6 +98,19 @@ describe("createBranch start point", () => {
 });
 
 describe("worktree error paths", () => {
+  it("distinguishes an unborn HEAD from a broken or non-commit branch", () => {
+    const source = { cwd: repo, env: process.env };
+    const head = gitOutput(["rev-parse", "HEAD"]);
+    expect(headCommit(source)).toBe(head);
+    git(["update-ref", "-d", "refs/heads/main"]);
+    expect(headCommit(source)).toBeUndefined();
+    writeFileSync(join(repo, ".git/refs/heads/main"), `${"1".repeat(40)}\n`);
+    expect(() => headCommit(source)).toThrow();
+    const tree = gitOutput(["rev-parse", `${head}^{tree}`]);
+    writeFileSync(join(repo, ".git/refs/heads/main"), `${tree}\n`);
+    expect(() => headCommit(source)).toThrow(/HEAD/);
+  });
+
   it("throws when --from does not resolve", () => {
     expect(() => createBranch("feat", ctx, run, { from: "does-not-exist" })).toThrow(
       WorkspaceError,

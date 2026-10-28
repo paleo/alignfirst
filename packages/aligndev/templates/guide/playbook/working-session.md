@@ -82,16 +82,8 @@ Any other key is a work conversation. Run `git rev-parse --path-format=absolute 
 
 - PROJECT_PATH is the main worktree of the session's working directory: the parent of `git rev-parse --path-format=absolute --git-common-dir`. PROJECT is its directory name.
 - The workplace is the session's worktree (`git rev-parse --show-toplevel`) and its branch (`git branch --show-current`).
-- Run `{{ALIGNFIRST}} config --json` from PROJECT_PATH. The default branch is `config.git.defaultBranch` in the report, else the default branch identified by the project's instructions or configured remote. Ask when it is unclear. The report also names the project's companion directory, where its AlignFirst files may live.
+- Run `{{ALIGNFIRST}} config --json` and `{{ALIGNFIRST}} developer-instructions` from the workplace. Retain the nullable `locations.developerInstructions` from the report to identify the configured source. The default branch is `config.conventions.git.defaultBranch` in the report, else the default branch identified by the project's instructions or configured remote. Ask when it is unclear. The report also names the project's companion directory, where its AlignFirst files may live.
 {{/conversation}}
-{{#codingAgent}}
-{{#developers}}
-- Retain `locations["DEVELOPERS.md"].path` from the report as DEVELOPERS_PATH.
-{{/developers}}
-{{#readme}}
-- Retain `README.md` at the root of PROJECT_PATH as DEVELOPERS_PATH: the project has no `DEVELOPERS.md`, and its README is your guide.
-{{/readme}}
-{{/codingAgent}}
 {{#conversation}}
 
 These values hold for the whole session. Only `{{GUIDE}} project-workspace-setup` moves the workplace.
@@ -182,7 +174,7 @@ Resolve what the request leaves open:
 - Consultations require only PROJECT and PROJECT_PATH to start. Follow `{{GUIDE}} consultation` before ticket preflight, request capture, or workspace setup. A supplied ticket is context; the runbook decides whether to record the discussion.
 
 {{#openclaw}}
-Once a single-project request's PROJECT_PATH is known, run `{{ALIGNDEV}} project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH. The report also names the project's companion directory, where its AlignFirst files may live.
+Once a single-project request's PROJECT_PATH is known, run `{{ALIGNDEV}} project status <PROJECT_PATH>`. The report names its companion directory and nullable `locations.developerInstructions`. Run `{{ALIGNFIRST}} developer-instructions` from the selected workplace, or deliberately from PROJECT_PATH when no workplace is selected.
 {{/openclaw}}
 
 For changes, protocol requests, and ticket status requests, complete `{{GUIDE}} work-files-setup` as soon as PROJECT_PATH is known, before known-ticket `sync`/`ticket`, side-ticket reservation, or request capture.
@@ -222,15 +214,7 @@ Skip this step for consultations and operational work.
 
 For new single-project work where the user explicitly says there is no ticket or asks for a side ticket, complete `{{GUIDE}} work-files-setup` from PROJECT_PATH, then:
 
-{{#openclaw}}
-1. Read DEVELOPERS_PATH and run `{{ALIGNFIRST}} context` from PROJECT_PATH.
-{{/openclaw}}
-{{#codingAgent}}
-1. Run `{{ALIGNFIRST}} context` from PROJECT_PATH.
-{{#hasGuide}}
-   Read DEVELOPERS_PATH.
-{{/hasGuide}}
-{{/codingAgent}}
+1. Run `{{ALIGNFIRST}} developer-instructions` from the selected workplace, or deliberately from PROJECT_PATH when no workplace is selected. It prints project conventions and any explicitly configured content.
 2. Run `{{ALIGNFIRST}} sync`, so identifier selection sees the current shared task set.
 {{#openclaw}}
 3. Run `{{ALIGNFIRST}} ticket --side` from PROJECT_PATH (`exec`). It creates the ticket directory and prints it as TICKET_DIR; TICKET_ID is the `side-N` it reports.
@@ -368,7 +352,7 @@ Workspace cleanup follows "Cleanup requests". Delegate base-branch refresh and o
 
 Lean toward delegating; the less you touch the project directly, the better.
 
-Delegate to the agent: the project's workspace setup, writing code (`alignfirst` protocols), commits, pushes, opening MR/PRs. You run `{{ALIGNDEV}} worktree list/add/setup/remove` and `{{GUIDE}} work-files-setup` yourself; neither needs a coding launch.
+Delegate to the agent: writing code (`alignfirst` protocols), project-specific installation/build/test work, commits, pushes, opening MR/PRs. You run `{{ALIGNFIRST}} workspace` preparation and cleanup and `{{GUIDE}} work-files-setup` yourself; neither needs a coding launch.
 
 Delegate reasoning too, whether for the user or your own next step. Ask the agent for ideas, design advice, opinions, or approaches, and build on its answer.
 
@@ -417,17 +401,7 @@ After writing or editing any file under `.plans/` yourself, run `{{ALIGNFIRST}} 
 A project has up to three entry points:
 
 - `README.md` — presentation, getting-started procedure…
-{{#openclaw}}
-- `DEVELOPERS.md` — the agent's user, human or AI: you. Read it at DEVELOPERS_PATH.
-{{/openclaw}}
-{{#codingAgent}}
-{{#developers}}
-- `DEVELOPERS.md` — the agent's user, human or AI: you. Read it at DEVELOPERS_PATH.
-{{/developers}}
-{{#readme}}
-- `DEVELOPERS.md` — the agent's user, human or AI: you. This project has none, so `README.md` is also your guide, read at DEVELOPERS_PATH.
-{{/readme}}
-{{/codingAgent}}
+- The explicitly configured developer instructions — the agent's user, human or AI: you. Run `{{ALIGNFIRST}} developer-instructions` from the selected worktree. It reports the absolute source path for interpreting relative links. Without a configured reference, it prints conventions only; there is no filename fallback.
 - `AGENTS.md` — the agent. When the project's instructions come from its companion, the companion's `.alignfirst-instructions/context.md` replaces it for the agent, and `{{ALIGNFIRST}} context` prints it.
 
 The rest of the documentation (`docs/`, …) addresses everybody.
@@ -451,7 +425,7 @@ Running the dev-server from the main worktree is fine.
 
 ### Linked worktrees and other branches
 
-`{{GUIDE}} project-workspace-setup` selects and prepares the workplace: through the project's documented workspace tooling, including non-Node implementations, when it has one; through `{{ALIGNDEV}} worktree list/add/setup/remove` otherwise. Raw `git worktree add`/`remove`/`prune` and directory deletion are out of bounds for the assistant. External tools may own Git creation and deletion; prepare their selected existing worktree through the applicable tooling rather than creating another branch. Lightweight setup is idempotent, so repair reported conflicts and retry after partial preparation. It covers Git and work files only; repository preparation and shutdown remain separate, with no lightweight teardown command or pre-deletion hook.
+`{{GUIDE}} project-workspace-setup` selects and prepares the workplace through `{{ALIGNFIRST}} workspace` with the branch-local manifest or defaults. Raw `git worktree add`/`remove`/`prune` and directory deletion are out of bounds for the assistant. External tools may own Git creation and deletion; adopt their selected existing worktree rather than creating another branch, then run `{{ALIGNFIRST}} workspace teardown` before their deletion. Repair reported conflicts and retry partial setup. Default readiness is protocol-ready; it does not install, build or start the application.
 
 ### Updating a branch with the base branch
 
@@ -490,7 +464,7 @@ A request for a ticket's progress goes through `{{GUIDE}} project-workspace-setu
 
 ### Dev-server while working
 
-Before non-trivial code changes, like executing a plan, always stop the dev-server. Otherwise it will consume resources and might even interfere with the work.
+Before non-trivial code changes, like executing a plan, stop declared services with `{{ALIGNFIRST}} dev down`. They consume resources and might interfere with the work. Start them with `{{ALIGNFIRST}} dev` only when needed; default workspaces have no services.
 
 ### Tests, lint, build
 
@@ -546,26 +520,18 @@ When the user brings up acceptance testing, first be sure who runs it — ask wh
 
 ### Project rules and docs
 
-{{#openclaw}}
-A project whose `.alignfirst-instructions` or `DEVELOPERS.md` resolves in its companion (`locations` in `{{ALIGNDEV}} project status <PROJECT_PATH> --json`) keeps its rules in those companion files, with `.alignfirst-instructions/context.md` in place of `AGENTS.md`. The agent edits them in place. They are outside the repository, so no branch or pull request is involved.
-{{/openclaw}}
-{{#codingAgent}}
-A project whose `.alignfirst-instructions` or `DEVELOPERS.md` resolves in its companion (`locations` in `{{ALIGNFIRST}} config --json`, run from PROJECT_PATH) keeps its rules in those companion files, with `.alignfirst-instructions/context.md` in place of `AGENTS.md`. The agent edits them in place. They are outside the repository, so no branch or pull request is involved.
-{{/codingAgent}}
+Run `{{ALIGNFIRST}} config --json` from the selected worktree before editing instructions. Use the nullable `locations.developerInstructions` to identify the configured file; its path and existence are explicit. Use `locations[".alignfirst-instructions"]` for coding-agent companion context, with `.alignfirst-instructions/context.md` in place of `AGENTS.md`. The agent edits selected companion files in place. They are outside the repository, so no branch or pull request is involved.
 
 Two triggers, both edited through the agent:
 
-{{#openclaw}}
-- You learn something non-obvious about how to work in a project — a command, a quirk, a convention not yet written down. Propose capturing it in DEVELOPERS_PATH, ask for confirmation, then have the agent make the edit.
-{{/openclaw}}
-{{#codingAgent}}
-- You learn something non-obvious about how to work in a project — a command, a quirk, a convention not yet written down. Propose capturing it in the project's `DEVELOPERS.md`, created at the repository root when the project has none, ask for confirmation, then have the agent make the edit.
-{{/codingAgent}}
+- You learn something non-obvious about how to work in a project — a command, a quirk, a convention not yet written down. Propose capturing it in the resolved configured developer-instructions file, ask for confirmation, then have the agent make the edit. With no reference, propose a suitable file and an explicit `developerInstructions` entry in the selected configuration, respecting its logical item placement; obtain approval before creating either.
+- The user asks to retain a rule for the project. No confirmation needed for the requested rule: retain it in the resolved developer-instructions file and, when relevant to coding, the coding-agent instructions. With no configured reference, obtain approval for a suitable file and explicit `developerInstructions` setting before writing. Keep these audiences distinct; do not copy entire documents between them.
+
 {{#thread}}
-- The user asks to retain a rule for the project. No confirmation needed: the rule goes into both `AGENTS.md` and `DEVELOPERS.md`. When the thread has an active ticket and the rule is simple, add it on the current branch, so the ticket's PR carries it. When the rule is complex or the thread has no ticket, reserve a side ticket (Step 5), set up a workspace on a new branch for the rule, and create a pull request.
+When the thread has an active ticket and the rule is simple, add it on the current branch, so the ticket's PR carries it. When the rule is complex or the thread has no ticket, reserve a side ticket (Step 5), set up a workspace on a new branch for the rule, and create a pull request.
 {{/thread}}
 {{#conversation}}
-- The user asks to retain a rule for the project. No confirmation needed: the rule goes into both `AGENTS.md` and `DEVELOPERS.md`. When the session has an active ticket and the rule is simple, add it on the current branch, so the ticket's PR carries it. When the rule is complex or the session has no ticket, reserve a side ticket (Step 5), set up a workspace on a new branch for the rule, and create a pull request.
+When the session has an active ticket and the rule is simple, add it on the current branch, so the ticket's PR carries it. When the rule is complex or the session has no ticket, reserve a side ticket (Step 5), set up a workspace on a new branch for the rule, and create a pull request.
 {{/conversation}}
 
 {{#openclaw}}
@@ -641,7 +607,7 @@ Whenever you observe that a PR/MR is merged:
 3. Report the removed workspace and refreshed branch. When unsuitable plans block the refresh delegation, the removal still happens; report the blocked refresh.
 {{#app}}
 
-This conversation's own worktree, once `{{GUIDE}} project-workspace-setup` adopted and registered it, is a linked workspace like any other: remove it too. The report then says that this conversation is finished and can be archived.
+For this conversation's externally owned worktree, run `{{ALIGNFIRST}} workspace teardown` and report that it is ready for its owner to archive and delete. Adoption does not transfer deletion ownership.
 {{/app}}
 
 ### Protected directories
@@ -657,7 +623,7 @@ When the user asks to tear down one named project workspace (or worktree) from i
 When the user asks to tear down one named project workspace (or worktree):
 {{/conversation}}
 
-1. Resolve the exact linked-worktree path through the selected tooling; ask the user when it is ambiguous. With workspace tooling, have the agent run its removal procedure, which also tears down the dev environment. When an external tool owns deletion, follow its lifecycle and arrange project-specific shutdown separately. Otherwise, without workspace tooling, stop whatever the project runs there, then run `{{ALIGNDEV}} worktree remove <exact-path>` from PROJECT_PATH yourself: it refuses a dirty or locked worktree, and you never force it. This direct removal needs no coding launch or work-files preparation, even when plans are unsuitable.
+1. Resolve the exact linked-worktree path through `{{ALIGNFIRST}} workspace list --json`; ask the user when it is ambiguous. Run `{{ALIGNFIRST}} workspace remove <exact-path>` from PROJECT_PATH yourself. It stops services, purges resources and protects dirty, locked, main, nested and shared-target paths; never force it. When an external tool owns deletion, run `{{ALIGNFIRST}} workspace teardown <exact-path>` instead, then let that owner delete it. Neither operation needs a coding launch or work-files preparation, even when plans are unsuitable. Stop on failure and retain state for retry.
 2. Confirm what was removed.
 {{#thread}}
 3. Reset the thread session.
@@ -673,7 +639,7 @@ When the user asks to clean the workspaces, for each affected PROJECT_PATH:
 When the user asks to clean the workspaces, from PROJECT_PATH:
 {{/codingAgent}}
 
-1. List the worktrees through the selected tooling: the project's workspace list, or `{{ALIGNDEV}} worktree list --json`.
+1. List the worktrees through `{{ALIGNFIRST}} workspace list --json`.
 2. For each linked workspace, find its branch's PR/MR through the configured code-hosting tool. Remove the workspace as in "Cleanup requests", only when that PR/MR is merged. Leave the others intact: in-place work, no PR/MR, or an unmerged PR/MR. Stop on the first failed removal.
 3. When a workspace was removed, delegate the merge target's refresh as after a merge above, installing from the committed lockfile without rewriting it (`npm ci` with npm).
 4. Report every decision, any blocked refresh, and the final base-branch state.
@@ -698,4 +664,4 @@ Creating a project, onboarding a repository to clone, or physically removing a p
 ### Forbidden
 
 - Never force push. Never rebase, reset, or amend a commit that exists on the remote.
-- Create and remove worktrees only through the project's workspace tooling or `{{ALIGNDEV}} worktree`.
+- Create, adopt and clean workspaces through `{{ALIGNFIRST}} workspace`; preserve external deletion ownership.

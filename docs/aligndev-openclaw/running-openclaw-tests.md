@@ -103,19 +103,19 @@ Use only Terra (`openai/gpt-5.6-terra`) for conversation-model tests. The judge 
 
 ## Fixtures
 
-Each scenario starts fresh: [`scripts/reset-fixture.mjs`](../../aligndev-openclaw-tests/scripts/reset-fixture.mjs) (run via `ctx.execInGateway(...)`) materializes three Git repositories on `main`, copied from the committed [`projects-fixture/template/`](../../aligndev-openclaw-tests/projects-fixture/template/). `nimbus` and `lumen` live under `/home/assistant/projects`; `orion` lives under `/home/assistant/projects/external-projects`. Each project has `.alignfirst.json`, a project-specific package name, `README.md` and `DEVELOPERS.md` headings, its own 20-port block (6500, 6520, and 6540), and an untracked `.plans/` directory.
+Each scenario starts fresh: [`scripts/reset-fixture.mjs`](../../aligndev-openclaw-tests/scripts/reset-fixture.mjs) (run via `ctx.execInGateway(...)`) materializes three Git repositories on `main`, copied from the committed [`projects-fixture/template/`](../../aligndev-openclaw-tests/projects-fixture/template/). `nimbus` and `lumen` live under `/home/assistant/projects`; `orion` lives under `/home/assistant/projects/external-projects`. Each project has one merged `alignfirst.json` with nested conventions, an explicit `developerInstructions` reference and the workspace/dev recipe, a project-specific package name, `README.md` and `DEVELOPERS.md` headings, its own 20-port block (6500, 6520, and 6540), and an untracked `.plans/` directory.
 
-Workspace setup is portless. The dev-server wrapper allocates `frontend` and generates `local.env` on `dev` or `dev setup`; reset does not seed that file. `REMOTE_DEV_DOMAIN` takes precedence over `REMOTE_DEV_HOST`, then localhost. Both environment inputs participate in run-file invalidation. Registries live in `.local-wt/workspace-registry`.
+Workspace setup is portless. The checkout CLI allocates `frontend` and generates `local.env` on `dev` or `dev setup`; reset does not seed that file. `REMOTE_DEV_DOMAIN` takes precedence over `REMOTE_DEV_HOST`, then localhost. Both environment inputs participate in run-file invalidation. The default fixture uses project-local `.local-wt/workspace-registry`. The config report supplies absolute `registryDir`/`runtimeDir`; companion placement instead uses one direct shared external registry and separate path-derived runtimes, without checkout runtime links. Scripts use `ALIGNFIRST_WORKSPACE_CONTEXT`; reset personalizes the copied merged document without overwriting its recipe.
 
 The root and its nested `external-projects` and `lifecycle-projects` directories carry `.alignfirst-projects.json` markers with descriptions and a default `portRanges` entry. The lifecycle directory resets empty; the creation scenario uses it for `nova`. Removal scenarios seed a real linked `nimbus` workspace and a sibling additional directory after reset.
 
-An OpenClaw managed worktree, created by a `webchat` conversation with `worktree`, lives in the gateway's state directory (`/home/assistant/.openclaw/worktrees/<fingerprint>/<name>`), outside the shared volume. Read it through `ctx.execInGateway`, for example `["git", "-C", path, "branch", "--show-current"]`. Run `pnpm workspace …` with the main worktree as `cwd`: from elsewhere, Corepack's pnpm rejects the project's pinned version.
+An OpenClaw managed worktree, created by a `webchat` conversation with `worktree`, lives in the gateway's state directory (`/home/assistant/.openclaw/worktrees/<fingerprint>/<name>`), outside the shared volume. Read it through `ctx.execInGateway`, for example `["git", "-C", path, "branch", "--show-current"]`. Run `alignfirst workspace …` in the selected worktree. Fixture package-manager commands remain application commands; they do not import a published workspace kernel.
 
 `aligndev project` runs for real against the fixture tree and calls `alignfirst config --json` in each child. Scenarios assert on the agent's exec calls and on the filesystem.
 
-A24 and A25 opt into [`scripts/lightweight-fixture.ts`](../../aligndev-openclaw-tests/scripts/lightweight-fixture.ts) after reset. It transforms only `nimbus` into a dependency-free ESM library with a real local origin and `npm test`. It removes the project workspace/dev scripts and provides missing or tracked plans, respectively. The tracked case keeps a recognizable `old-history.md`. Existing full-workspace fixtures and assertions remain unchanged. Offline tests also exercise shared untracked plans and an already prepared companion, including profile/other-item preservation and removal that retains shared targets.
+A24 and A25 opt into [`scripts/lightweight-fixture.ts`](../../aligndev-openclaw-tests/scripts/lightweight-fixture.ts) after reset. It transforms only `nimbus` into a dependency-free ESM library with a real local origin and `npm test`. It removes only the merged configuration's `workspace`/`devServer` sections and application tooling, retaining conventions, plans settings and explicit instructions, then provides missing or tracked plans, respectively. The tracked case keeps a recognizable `old-history.md`. Existing full-workspace fixtures and assertions remain unchanged. Offline tests also exercise shared untracked plans and an already prepared companion, including profile/other-item preservation and removal that retains shared targets.
 
-The lightweight flow discovers worktrees through Git-backed `aligndev worktree list`, not directory naming. The assistant creates the worktree before coding delegation. Its `onPrompt` mock checks the request and branch, writes a small label change, runs the actual test and reports that result without server claims. Companion inspection runs in the gateway; those paths are not runner-local mounts.
+The default-mode flow discovers worktrees through `alignfirst workspace list --json`, not directory naming. It removes the recipe sections, keeps the remaining configuration and ignored local runtime storage, and reports protocol-ready preparation. The assistant creates the worktree before coding delegation. Its `onPrompt` mock checks the request and branch, writes a small label change, runs the actual test and reports that result without server claims. Companion inspection runs in the gateway; those paths are not runner-local mounts.
 
 ## Scenarios
 
@@ -250,19 +250,25 @@ A09 read the `.running.md` path that `aligndev code` prints, but a run that has 
 
 Pi and Claude children, the other scenarios and repeated iterations were not run. Offline suites, typechecks, lint, the integration suites and the deployment-template tests passed.
 
+## Multi-stack conversion acceptance boundary
+
+Expected impact is limited to lifecycle commands, protocol-ready defaults, approval ordering and target-owned cleanup. Offline fixture/template checks establish these structural seams without a model. Conversation-model and live deployment behavior remain separately unverified. Any later authorized validation should select a few relevant cases such as A02 configured preparation, A24/A25 consent/defaults or A27 adoption, one iteration on the affected surface, with Terra and Haiku/OpenRouter. Investigate failures before expanding; do not run a full matrix by default.
+
+Existing consumers with retired settings/wrappers/state first follow [the clean-break upgrade runbook](../upgrading-multi-stack-workspaces.md). Reset stops all owned services, purges registered identities and explicitly prunes runtime-only orphans before deleting fixture directories. Failed cleanup retains directories/state and stops reset. It does not clear companion registrations to hide external runtime. Down/teardown retain runtime/logs; later external Git deletion requires explicit prune for retained runtime disposal. Git projects are detected independently of package.json.
+
 ## Offline helper checks
 
 From the repository root, using Node 26:
 
 ```sh
-fnm exec --using=.nvmrc npm run build --workspace @alignfirst/docmap --workspace alignfirst --workspace aligndev
+fnm exec --using=.nvmrc npm run build
 fnm exec --using=.nvmrc npm test --prefix aligndev-openclaw-tests
 fnm exec --using=.nvmrc npm run typecheck --prefix aligndev-openclaw-tests
 fnm exec --using=.nvmrc npm test --workspace aligndev -- test/code/pi-agent.test.ts
 sh -n aligndev-openclaw-tests/scripts/gateway-entrypoint.sh
 ```
 
-The Node built-in suite checks profile generation, native-agent bypass detection, all three new/resume mock streams against the built adapters, Pi fault queues and current-response context accounting. Its disposable fixture integration runs frozen pnpm installs and the actual workspace/dev lifecycle, including linked worktrees, project port isolation, URL input changes and server cleanup. Native state and writer destinations use temporary directories; unexpected service/provider/CLI operations fail. No scenario runner is imported. Lightweight fixture checks additionally run real AlignFirst/AlignDev worktree commands for shared, missing and tracked plans, discovery/reuse, branch consultation and no-branch status policies, and cleanup. Request-capture negative controls reject omitted requirements while tolerating markup and verb inflections. Parser-only stream permutations remain in AlignDev's Pi adapter tests. A09 source includes profile/session metadata, exact native argv, catchup and failure assertions.
+The Node built-in suite checks profile generation, native-agent bypass detection, all three new/resume mock streams against the built adapters, Pi fault queues and current-response context accounting. Its disposable fixture integration runs frozen pnpm installs and the actual workspace/dev lifecycle, including linked worktrees, project port isolation, URL input changes and server cleanup. Native state and writer destinations use temporary directories; unexpected service/provider/CLI operations fail. No scenario runner is imported. Default-mode fixture checks additionally run real checkout AlignFirst workspace commands for shared, missing and tracked plans, discovery/reuse, branch consultation and no-branch status policies, and cleanup. Request-capture negative controls reject omitted requirements while tolerating markup and verb inflections. Parser-only stream permutations remain in AlignDev's Pi adapter tests. A09 source includes profile/session metadata, exact native argv, catchup and failure assertions.
 
 The standalone suite also loads each surface's public factory from the installed vendor package. It verifies shared-host Zod resolution, nested host/local schema composition, invalid-settings rejection and concrete JSON Schema generation. Root source-path tests and CLI/Pi release smoke do not cover this packed OpenClaw boundary.
 
@@ -274,7 +280,7 @@ This harness vendors the **local** sources of the four generic `@alignfirst/open
 
 The dependencies are `file:vendor/<pkg>.tgz`; [`scripts/vendor-packages.mjs`](../../aligndev-openclaw-tests/scripts/vendor-packages.mjs) builds each package and `npm pack`s it into `vendor/` (gitignored). The Docker build context is `aligndev-openclaw-tests/`, so the tarballs must live in `aligndev-openclaw-tests/vendor/`.
 
-`npm run env:build` chains `vendor` → `npm install` (refreshing `package-lock.json`) → `openclaw-test env build`, so a source edit in any vendored package is picked up on the next build. Run `npm run vendor` before a standalone `npm install`; the tarballs must exist for resolution.
+`npm run env:build` chains `vendor` → `npm install` (refreshing `package-lock.json`) → `openclaw-test env build`, so a source edit in any vendored package is picked up on the next build. Run `npm run vendor` before a standalone `npm install`; the tarballs must exist for resolution. For offline helper checks only, run these two steps without `env:build`, Docker or credential access. Use cached packages with `npm install --offline` when available. Gateway acceptance uses this checkout's built CLI and test-owned skill links into its setup-guide assets, never a GitHub-fetched guide or published older workspace dependency.
 
 The plugin is explicitly allowlisted, loaded from its installed package path, and exposes optional tool `thread_handoff`. Slack uses `replyToMode: "off"`; Discord remains non-automatic. Both surface IDs map to their native receipt contract in `plugins.entries.alignfirst-service.config.channelSurfaces`.
 

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "plans": {
+    // TEAM_PLANS_SECTION
+    "repositoryFolder": "{{ADMIN_REPOSITORY_NAME}}",
+    // TEAM_PLANS_SECTION
+    "autoArchive": true
+  },
+  "developerInstructions": "DEVELOPERS.md",
+  "conventions": {
+    "ticketIdPattern": "^\\d+$",
+    "git": {
+      "defaultBranch": "main",
+      "commit": { "style": "conventionalCommit" },
+      "agentCoauthoring": false
+    }
+  },
+  "workspace": {
+    "summary": "Workspace ${{ name }} \u2014 ${{ status }}\nBranch: ${{ branch }}\nPath: ${{ currentWorktree }}"
+  }
+}

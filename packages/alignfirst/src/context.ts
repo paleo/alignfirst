@@ -1,5 +1,6 @@
 import type { Invocation, InvocationCommand } from "@alignfirst/docmap/invocation";
-import type { ResolvedProjectConfig } from "./project-config.js";
+import type { WorkspaceCommands } from "@alignfirst/workspace";
+import type { ResolvedProjectConfig } from "./project-config-types.js";
 import type { ProjectLayout } from "./project-layout.js";
 
 export interface Output {
@@ -12,6 +13,8 @@ export interface Streams {
 }
 
 export interface CommandContext extends Streams {
+  workspaceInvocation?: { executable: string; entryPoint: string };
+  workspaceCommands?: WorkspaceCommands;
   cwd: string;
   env: NodeJS.ProcessEnv;
   home: string;

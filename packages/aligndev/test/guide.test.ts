@@ -10,7 +10,6 @@ import { resolveCommandForms } from "../src/command-form.js";
 import { renderCodeGuide } from "../src/guide/code-guide.js";
 import {
   type ActiveBlocks,
-  type GuideFileCondition,
   renderBlocks,
   SURFACES,
   type Surface,
@@ -462,12 +461,12 @@ describe("aligndev guide playbook", () => {
     }
   });
 
-  it("reads DEVELOPERS.md at the path aligndev project status reports", async () => {
+  it("uses the explicit developer-instructions command on every active assistant route", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, OPENCLAW_CONFIG);
     for (const topic of PLAYBOOK_TOPICS.thread) {
       const result = await runGuide(fixture, ["--channel", "slack", topic]);
-      expect(result.stdout, topic).not.toContain("{PROJECT_PATH}/DEVELOPERS.md");
+      expect(result.stdout, topic).not.toContain("DEVELOPERS_PATH");
       expect(result.stdout, topic).not.toContain("preserving the leading dot");
     }
     for (const topic of [
@@ -477,26 +476,27 @@ describe("aligndev guide playbook", () => {
       "project-lifecycle",
     ]) {
       const result = await runGuide(fixture, ["--channel", "slack", topic]);
-      expect(result.stdout, topic).toContain(
-        "`aligndev project status <PROJECT_PATH>` and retain its `DEVELOPERS.md` path as DEVELOPERS_PATH",
-      );
+      expect(result.stdout, topic).toContain("`alignfirst developer-instructions`");
     }
     const session = await runGuide(fixture, ["--channel", "slack", "working-session"]);
     expect(session.stdout).toContain("Write `{TICKET_DIR}A1-request.md`");
   });
 
-  it("uses lightweight worktrees and optional full workspace onboarding", async () => {
+  it("uses unified workspace preparation and optional manifests", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, OPENCLAW_CONFIG);
     for (const topic of ["project-workspace-setup", "working-session", "project-lifecycle"]) {
       const result = await runGuide(fixture, ["--channel", "slack", topic]);
       expect(result.stdout, topic).not.toContain("main-worktree mode");
       expect(result.stdout, topic).not.toContain("git switch -c {TICKET_ID}/{1-3-words}");
-      expect(result.stdout, topic).toContain("aligndev worktree");
+      expect(result.stdout, topic).toContain("alignfirst workspace");
+      expect(result.stdout, topic).not.toContain("aligndev worktree");
     }
     const lifecycle = (await runGuide(fixture, ["--channel", "slack", "project-lifecycle"])).stdout;
-    expect(lifecycle).toContain("The workspace system is optional");
-    expect(lifecycle).toContain("The project is prepared when DEVELOPERS_PATH exists");
+    expect(lifecycle).toContain("The workspace manifest is optional");
+    expect(lifecycle).toContain(
+      "The project is prepared when the explicitly configured `locations.developerInstructions` exists",
+    );
     expect(lifecycle).toContain("Wait for explicit confirmation of those exact paths");
     expect(lifecycle).toContain("Stop immediately if any removal fails");
     expect(lifecycle).toContain("No coding launch or plans preparation is needed");
@@ -861,11 +861,9 @@ describe("app conversations", () => {
       expect(step2.indexOf("A status request never creates a branch")).toBeLessThan(
         step2.indexOf("`git switch -c {TICKET_ID}/{1-3-words} origin/<default>`"),
       );
-      expect(step2).toContain(
-        "`workspace setup` without a branch for the AlignFirst workspace system",
-      );
-      expect(step2).toContain("run `aligndev worktree setup --json` in that worktree");
-      expect(step2).toContain("Neither runs on the main worktree.");
+      expect(step2).toContain("run `alignfirst workspace setup --json` in the selected worktree");
+      expect(step2).toContain("adopts its exact path and branch");
+      expect(step2).toContain("in the foreground");
       const ownership = "so OpenClaw retains it and never removes it";
       if (app) expect(step2).toContain(ownership);
       else expect(step2).not.toContain(ownership);
@@ -878,7 +876,7 @@ describe("app conversations", () => {
   );
 });
 
-describe("work-files and lightweight worktree runbooks", () => {
+describe("work-files and unified workspace runbooks", () => {
   it.each(PLATFORMS)("keeps coding discussions out of consultation for %s", async (platform) => {
     const fixture = makeFixture();
     writeConfig(fixture.home, {
@@ -903,21 +901,17 @@ describe("work-files and lightweight worktree runbooks", () => {
   });
 
   it.each(
-    PLATFORMS.flatMap((platform) =>
-      (["developers", "readme", "noGuide"] as const).flatMap((variant) =>
-        [false, true].map((viaNpx) => [platform, variant, viaNpx] as const),
-      ),
-    ),
+    PLATFORMS.flatMap((platform) => [false, true].map((viaNpx) => [platform, viaNpx] as const)),
   )(
-    "preserves preparation and tooling rules for %s/%s (npx=%s)",
-    async (platform, variant, viaNpx) => {
+    "preserves preparation and tooling rules across selected worktrees for %s (npx=%s)",
+    async (platform, viaNpx) => {
       const fixture = makeFixture();
       writeConfig(fixture.home, {
         platform,
         ...(platform === "openclaw" ? { projectsRoot: fixture.root } : {}),
         code: { agent: "claude" },
       });
-      const cwd = makeGuideVariants(fixture)[variant];
+      const cwd = makeRepository(fixture.root, "project");
       const env = viaNpx ? NPX_ENV : {};
       const forms = resolveCommandForms(env);
       const guide = `${forms.aligndev} guide${platform === "openclaw" ? " --channel slack" : ""}`;
@@ -973,6 +967,11 @@ describe("work-files and lightweight worktree runbooks", () => {
         preparation.indexOf(`${forms.alignfirst} companion register`),
       );
       const working = guides["working-session"];
+      expect(working).toContain("nullable `locations.developerInstructions`");
+      expect(working).toContain("in the resolved configured developer-instructions file");
+      expect(working).toContain("obtain approval before creating either");
+      expect(working).toContain("do not copy entire documents between them");
+      expect(working).not.toContain("created at the repository root");
       const preflight = working.slice(working.indexOf("### Step 3"), working.indexOf("### Step 4"));
       const preparationGate = preflight.indexOf(`${guide} work-files-setup`);
       expect(preparationGate).toBeGreaterThan(0);
@@ -1005,15 +1004,15 @@ describe("work-files and lightweight worktree runbooks", () => {
       );
       for (const text of [
         "You run",
-        `${forms.aligndev} worktree list/add/setup/remove`,
+        `${forms.alignfirst} workspace`,
         "External tools may own Git creation and deletion",
         "rather than creating another branch",
-        "repair reported conflicts and retry after partial preparation",
-        "repository preparation and shutdown remain separate",
-        "no lightweight teardown command or pre-deletion hook",
-        "When an external tool owns deletion, follow its lifecycle",
+        "Repair reported conflicts and retry partial setup",
+        "Default readiness is protocol-ready",
+        `${forms.alignfirst} workspace teardown`,
+        "When an external tool owns deletion",
         "A branch worked on in place stays checked out",
-        "needs no coding launch or work-files preparation",
+        "needs a coding launch or work-files preparation",
         "only when that PR/MR is merged",
         "Leave the others intact: in-place work, no PR/MR, or an unmerged PR/MR",
         "Stop on the first failed removal",
@@ -1031,22 +1030,18 @@ describe("work-files and lightweight worktree runbooks", () => {
         `\`${forms.alignfirst} plans check\` verifies it, and \`${guide} work-files-setup\` prepares it.`,
       );
       for (const text of [
-        "whatever the implementation",
-        `${forms.aligndev} worktree list --json`,
-        `${forms.aligndev} worktree add <path> <existing-branch> --json`,
-        `${forms.aligndev} worktree add <path> -b <new-branch> <explicit-base-ref> --json`,
-        `${forms.aligndev} worktree setup <exact-worktree-root> --json`,
-        "Registration alone does not prove readiness",
-        "including for externally created worktrees",
-        "without creating or switching branches",
-        "current root even from nested cwd",
-        "exact registered root of the same repository",
+        "configured and manifest-free projects",
+        `${forms.alignfirst} workspace list --json`,
+        `${forms.alignfirst} workspace setup <existing-branch> --json`,
+        `${forms.alignfirst} workspace setup -c <new-branch> --from <explicit-base-ref> --json`,
+        `${forms.alignfirst} workspace setup --path <exact-worktree-root> --json`,
+        "preserves the selected path and branch",
+        "current root, including from nested cwd",
         "Conflicts remain untouched",
-        "retry the idempotent setup to complete partial preparation",
-        "follow the project's documented readiness/setup procedure when it has tooling",
-        "An external tool owning Git creation and deletion is a separate case",
-        `run \`${forms.aligndev} worktree add\` yourself`,
-        "absolute sibling path",
+        "retry setup",
+        "external owner retains Git creation and deletion",
+        "Run preparation yourself before coding delegation",
+        "--path <absolute-path>",
         "a dangling symlink included",
         "reuse the path it reports for an occupied branch",
         "for a status request, end the turn",
@@ -1059,8 +1054,9 @@ describe("work-files and lightweight worktree runbooks", () => {
         "If Step 4 was skipped, select and fetch the base ref as described there",
         "a tracked `.local` that stays branch-local",
         "before any `git` inspection or prose",
-        "`ready` covers the worktree and work files only",
-        "documented install/build/test preparation separately",
+        "describe `ready` as protocol-ready",
+        "Do not claim dependencies are installed",
+        "install/build/test work separately",
         "matches the explicit user choice",
         "rather than choosing another ticket branch",
       ])
@@ -1076,7 +1072,7 @@ describe("work-files and lightweight worktree runbooks", () => {
         expect(setup).toContain("**Any other branch**");
       }
       const consultation = guides.consultation;
-      expect(consultation).toContain(`${forms.aligndev} worktree list --json`);
+      expect(consultation).toContain(`${forms.alignfirst} workspace list --json`);
       expect(consultation).toContain("Do not create a worktree merely to answer a question");
       const delegate = consultation.slice(
         consultation.indexOf("## Step 3"),
@@ -1144,27 +1140,19 @@ describe("codingAgent guides", () => {
     "starter",
   ];
 
-  const GUIDE_VARIANTS: GuideFileCondition[] = ["developers", "readme", "noGuide"];
-
-  it.each(
-    CHILDREN.flatMap((agent) =>
-      GUIDE_VARIANTS.flatMap((variant) =>
-        [false, true].map((viaNpx) => [agent, variant, viaNpx] as const),
-      ),
-    ),
-  )(
-    "renders every %s guide for %s (npx=%s) with no OpenClaw tool, sentinel or topic",
-    async (agent, variant, viaNpx) => {
+  it.each(CHILDREN.flatMap((agent) => [false, true].map((viaNpx) => [agent, viaNpx] as const)))(
+    "renders every %s guide (npx=%s) with no OpenClaw tool, sentinel or topic",
+    async (agent, viaNpx) => {
       const fixture = makeFixture();
       writeConfig(fixture.home, { platform: "codingAgent", code: { agent } });
-      const cwd = makeGuideVariants(fixture)[variant];
+      const cwd = makeRepository(fixture.root, "project");
       for (const topic of TOPICS) {
         const result = await runGuide(fixture, topic === "playbook" ? [] : [topic], {
           cwd,
           env: viaNpx ? NPX_ENV : {},
         });
         expect(result.code, `${topic}: ${result.stderr}`).toBe(0);
-        expect(result.stdout, `${agent} ${variant} ${topic}`).not.toContain("{{");
+        expect(result.stdout, `${agent} ${topic}`).not.toContain("{{");
         for (const term of OPENCLAW_TERMS) {
           expect(result.stdout, `${topic} mentions ${term}`).not.toContain(term);
         }
@@ -1172,60 +1160,38 @@ describe("codingAgent guides", () => {
     },
   );
 
-  it("renders every topic for the project's guide file", async () => {
+  it("renders a uniform playbook without reading project reports or discovering filenames", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, CODING_AGENT_CONFIG);
-    for (const [variant, cwd] of Object.entries(makeGuideVariants(fixture))) {
-      for (const topic of TOPICS) {
-        const result = await runGuide(fixture, topic === "playbook" ? [] : [topic], { cwd });
-        const label = `${variant} ${topic}`;
-        expect(result.code, `${label}: ${result.stderr}`).toBe(0);
-        expect(result.stdout, label).not.toContain("{{");
-        expect(result.stdout, label).not.toContain("main-worktree mode");
-        if (variant === "noGuide") expect(result.stdout, label).not.toContain("DEVELOPERS_PATH");
+    const main = makeRepository(fixture.root, "project", {
+      developerInstructions: "handbook.md",
+    });
+    writeFileSync(join(main, "handbook.md"), "Main guide\n");
+    const linked = join(fixture.root, "linked");
+    addWorktree(main, linked, "feature");
+    const nested = join(linked, "src", "nested");
+    mkdirSync(nested, { recursive: true });
+    for (const cwd of [main, nested, fixture.root]) {
+      for (const topic of TOPICS.filter((name) => name !== "code")) {
+        const result = await runGuide(fixture, topic === "playbook" ? [] : [topic], {
+          cwd,
+          alignfirstCommand: ["/nonexistent/alignfirst"],
+        });
+        expect(result.code, `${topic}: ${result.stderr}`).toBe(0);
+        expect(result.stdout).not.toMatch(/DEVELOPERS_PATH|{{|Main guide/);
+        if (["working-session", "consultation", "project-workspace-setup"].includes(topic)) {
+          expect(result.stdout).toContain("`alignfirst developer-instructions`");
+          expect(result.stdout).toContain("selected work");
+          expect(result.stdout).toContain("locations.developerInstructions");
+        }
       }
     }
   });
 
-  it("retains DEVELOPERS_PATH in working-session Step 1 from the project's guide file", async () => {
+  it("keeps guide code's actual-cwd report selection independent of playbook rendering", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, CODING_AGENT_CONFIG);
-    const variants = makeGuideVariants(fixture);
-    const step1 = async (variant: GuideFileCondition) => {
-      const { stdout } = await runGuide(fixture, ["working-session"], { cwd: variants[variant] });
-      return stdout.slice(stdout.indexOf("### Step 1"), stdout.indexOf("### Step 2"));
-    };
-    expect(await step1("developers")).toContain(
-      'Retain `locations["DEVELOPERS.md"].path` from the report as DEVELOPERS_PATH.',
-    );
-    expect(await step1("readme")).toContain(
-      "Retain `README.md` at the root of PROJECT_PATH as DEVELOPERS_PATH",
-    );
-    const noGuide = await step1("noGuide");
-    expect(noGuide).toContain("`git rev-parse --path-format=absolute --git-common-dir`");
-    expect(noGuide).toContain("`alignfirst config --json`");
-  });
-
-  it("resolves the guide file from the main worktree", async () => {
-    const fixture = makeFixture();
-    writeConfig(fixture.home, CODING_AGENT_CONFIG);
-    const main = makeGuideVariants(fixture).developers;
-    const subdirectory = join(main, "packages", "foo");
-    mkdirSync(subdirectory, { recursive: true });
-    const worktree = join(fixture.root, "linked");
-    addWorktree(main, worktree, "feature");
-    for (const cwd of [subdirectory, worktree]) {
-      const { stdout } = await runGuide(fixture, ["working-session"], { cwd });
-      expect(stdout, cwd).toContain(
-        'Retain `locations["DEVELOPERS.md"].path` from the report as DEVELOPERS_PATH.',
-      );
-    }
-  });
-
-  it("fails with the alignfirst report error", async () => {
-    const fixture = makeFixture();
-    writeConfig(fixture.home, CODING_AGENT_CONFIG);
-    const result = await runGuide(fixture, ["working-session"], {
+    const result = await runGuide(fixture, ["code"], {
       cwd: makeRepository(fixture.root, "project"),
       alignfirstCommand: [
         "node",
@@ -1345,42 +1311,15 @@ describe("renderBlocks", () => {
     );
   });
 
-  it("keeps a condition block inside codingAgent for its guide file only", () => {
-    const text = [
-      "{{#codingAgent}}",
-      "Coding agent.",
-      "{{#developers}}",
-      "Developers.",
-      "{{/developers}}",
-      "{{#readme}}",
-      "Readme.",
-      "{{/readme}}",
-      "After.",
-      "{{/codingAgent}}",
-      "Shared.",
-    ].join("\n");
-    const render = (guideFile: GuideFileCondition) =>
-      renderBlocks(text, { platform: "codingAgent", guideFile }, "t.md");
-    expect(render("developers")).toBe("Coding agent.\nDevelopers.\nAfter.\nShared.");
-    expect(render("readme")).toBe("Coding agent.\nReadme.\nAfter.\nShared.");
-    expect(render("noGuide")).toBe("Coding agent.\nAfter.\nShared.");
-    expect(renderBlocks(text, { platform: "openclaw" }, "t.md")).toBe("Shared.");
-  });
-
-  it("keeps a hasGuide block for both guide files", () => {
-    const text = [
-      "{{#codingAgent}}",
-      "{{#hasGuide}}",
-      "Guide.",
-      "{{/hasGuide}}",
-      "{{/codingAgent}}",
-    ];
-    const render = (guideFile: GuideFileCondition) =>
-      renderBlocks(text.join("\n"), { platform: "codingAgent", guideFile }, "t.md");
-    expect(render("developers")).toBe("Guide.");
-    expect(render("readme")).toBe("Guide.");
-    expect(render("noGuide")).toBe("");
-  });
+  it.each(["developers", "readme", "noGuide", "hasGuide"])(
+    "rejects the retired %s condition rather than retaining dead syntax",
+    (name) => {
+      const text = `{{#codingAgent}}\n{{#${name}}}\nGuide.\n{{/${name}}}\n{{/codingAgent}}`;
+      expect(() => renderBlocks(text, { platform: "codingAgent" }, "t.md")).toThrow(
+        `unknown block "${name}"`,
+      );
+    },
+  );
 
   it("selects the blocks of each context", () => {
     const text = [
@@ -1404,9 +1343,7 @@ describe("renderBlocks", () => {
       "{{/conversation}}",
       "{{#codingAgent}}",
       "{{#conversation}}",
-      "{{#hasGuide}}",
-      "Guide.",
-      "{{/hasGuide}}",
+      "Assistant.",
       "{{/conversation}}",
       "{{/codingAgent}}",
     ].join("\n");
@@ -1428,19 +1365,7 @@ describe("renderBlocks", () => {
     ]);
     // The dispatcher renders without a surface: neither thread nor conversation holds.
     expect(render({ platform: "openclaw" })).toEqual(["OpenClaw."]);
-    expect(render({ platform: "codingAgent", guideFile: "readme" })).toEqual([
-      "Conversation.",
-      "Guide.",
-    ]);
-  });
-
-  it("accepts a condition block nested in a condition block inside codingAgent", () => {
-    const text =
-      "{{#codingAgent}}\n{{#hasGuide}}\n{{#readme}}\nx\n{{/readme}}\n{{/hasGuide}}\n{{/codingAgent}}";
-    expect(renderBlocks(text, { platform: "codingAgent", guideFile: "readme" }, "t.md")).toBe("x");
-    expect(renderBlocks(text, { platform: "codingAgent", guideFile: "developers" }, "t.md")).toBe(
-      "",
-    );
+    expect(render({ platform: "codingAgent" })).toEqual(["Conversation.", "Assistant."]);
   });
 
   it("collapses the empty-line runs a removed block leaves", () => {
@@ -1457,29 +1382,14 @@ describe("renderBlocks", () => {
       'line 2: platform block "codingAgent" inside "openclaw"',
     ],
     [
-      "a condition block outside any block",
-      "{{#readme}}\nx\n{{/readme}}",
-      'line 1: condition block "readme" outside a codingAgent block',
-    ],
-    [
-      "a condition block inside openclaw",
-      "{{#openclaw}}\n{{#developers}}\nx\n{{/developers}}\n{{/openclaw}}",
-      'line 2: condition block "developers" outside a codingAgent block',
-    ],
-    [
-      "a condition block inside a surface block",
-      "{{#slack}}\n{{#readme}}\nx\n{{/readme}}\n{{/slack}}",
-      'line 2: condition block "readme" outside a codingAgent block',
-    ],
-    [
       "a surface block inside codingAgent",
       "{{#codingAgent}}\n{{#slack}}\nx\n{{/slack}}\n{{/codingAgent}}",
       'line 2: surface block "slack" inside a codingAgent block',
     ],
     [
-      "a thread block inside a condition block",
-      "{{#codingAgent}}\n{{#readme}}\n{{#thread}}\nx\n{{/thread}}\n{{/readme}}\n{{/codingAgent}}",
-      'line 3: block "thread" inside a codingAgent block',
+      "a thread block inside codingAgent",
+      "{{#codingAgent}}\n{{#thread}}\nx\n{{/thread}}\n{{/codingAgent}}",
+      'line 2: block "thread" inside a codingAgent block',
     ],
     [
       "a platform block inside a surface block",
@@ -1545,7 +1455,9 @@ describe("aligndev guide project", () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toMatch(/^# Projects guide\n/);
     expect(result.stdout).toContain("aligndev guide project [--root <path>]");
-    expect(result.stdout).toContain("setup guide writes the returned block as `portRange`");
+    expect(result.stdout).toContain(
+      "setup guide writes the returned block in the selected merged configuration's `devServer.ports`",
+    );
     expect(result.stdout).toContain("`~/.alignfirst/companions/registry.json`");
     expect(result.stdout).not.toContain("## Directory");
     expect(result.stdout).not.toContain("{{");
@@ -1628,18 +1540,6 @@ describe("aligndev guide project", () => {
 
 function runGuide(fixture: Fixture, args: string[], overrides?: RunOverrides): Promise<RunResult> {
   return runAligndev(fixture, ["guide", ...args], overrides);
-}
-
-// A working directory per guide file: a repository with `DEVELOPERS.md`, one with `README.md` only,
-// and the projects directory, outside git.
-function makeGuideVariants(fixture: Fixture): Record<GuideFileCondition, string> {
-  const developers = makeRepository(fixture.root, "with-developers");
-  writeFileSync(join(developers, "DEVELOPERS.md"), "# Developers\n");
-  return {
-    developers,
-    readme: makeRepository(fixture.root, "readme-only"),
-    noGuide: fixture.root,
-  };
 }
 
 // The arguments that print a template on a surface: the dispatcher takes no channel, the playbook

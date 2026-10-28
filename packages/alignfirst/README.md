@@ -88,7 +88,7 @@ The guide installs the selected components and configures the repository. You ca
    - Commits: `type: [TICKET_ID] summary`.
    ```
 
-   `.alignfirst.json` is optional ([schema](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/alignfirst-skills-setup.md#with-alignfirstjson)). With it, `alignfirst context` prints the conventions, so omit the `### Conventions` sub-section.
+   `alignfirst.json` or `alignfirst.jsonc` is optional ([schema](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/alignfirst-skills-setup.md#with-alignfirstjson)). With it, `alignfirst context` prints the conventions, so omit the `### Conventions` sub-section.
 
 ## CLI commands
 
@@ -102,13 +102,26 @@ The guide installs the selected components and configures the repository. You ca
 - `companion register` — Register the current project in the companion registry. `--dir` sets its companion directory; `--create-dir` also creates it.
 - `companion unregister` — Remove the current project from the companion registry. `--remove-dir` also removes its companion directory.
 - `config` — Report the effective project configuration, the companion directory and the location of each AlignFirst file.
+- `developer-instructions` — Print conventions, then explicitly configured developer guidance.
 - `doctor` — Diagnose an AlignFirst setup.
+- `workspace` — Create/adopt, list, inspect, wait for, teardown, remove or prune workspaces. `workspace --guide` describes effective capabilities.
+- `dev` — Prepare declared ports/run files/infrastructure and start, stop or inspect managed services.
 
 Run `alignfirst --help` for command usage or `alignfirst guide` to choose a protocol. `alignfirst guide <protocol>` prints the selected protocol followed by the ticket directory and work file rules. Add `--protocol-only` when those rules are already in context.
 
+## Multi-stack workspaces and configuration
+
+Use `npx -y alignfirst workspace` or `bunx --bun alignfirst workspace` for Node, Python and other stacks. No project wrapper or local dependency is needed. Prepare usable effective plans and selected runtime storage before setup. Local runtime requires ignored/untracked `.local-wt/`; companion runtime creates no checkout runtime directories or links. Without a manifest, readiness is protocol-ready; no install/build, ports or services are implied.
+
+One selected `alignfirst.json`/`.jsonc` holds `schemaVersion: 1`, optional URI-valued `$schema`, nested `conventions`, `plans`, optional `developerInstructions`, `workspace` and `devServer`. JSON is strict; JSONC permits comments/trailing commas. Ambiguity, unknown properties and unsupported schemas fail without fallback. One complete editor schema ships with AlignFirst; future breaking majors require retained in-memory converters through the CLI major. Reads never rewrite committed configuration.
+
+`config --json` returns the full authored document, logical locations, selection origins and workspace metadata including absolute `registryDir`/`runtimeDir`. It evaluates neither scripts nor environment bindings. Keep credentials in environment variables or ignored files; authored literals may appear in reports/logs. Companion selection chooses the entire configuration without section merging. Port ranges belong only in `devServer.ports`. `alignfirst developer-instructions` prints conventions followed by explicitly referenced content and its source path; without a reference it prints conventions only, with no filename fallback.
+
+External owners adopt through setup and run teardown before their own deletion. Failed cleanup retains identity for retry. See [workspace setup](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/workspace-setup.md) and [the clean-break upgrade runbook](https://github.com/paleo/alignfirst/blob/main/docs/upgrading-multi-stack-workspaces.md) before converting old wrappers/settings/state.
+
 ## Companion directories
 
-A companion directory holds a project's AlignFirst files (`.alignfirst.json`, `.plans`, `docs`, project instructions) outside its repository, so the repository stays untouched. Each project has its own, declared in `~/.alignfirst/companions/registry.json`.
+A companion directory holds a project's AlignFirst files (`alignfirst.json`/`.jsonc`, `.plans`, `docs`, project instructions) outside its repository. Protocols and Docmap can leave repository files untouched; runtime can also live externally. `defaultLocation` supplies per-registration placement below explicit item settings. Logical `developerInstructions` selects the reference root; `workspaceRuntime` uses companion storage only when effectively companion, while project/auto stays local. Ordinary auto selects existing companion files, then project files, then the companion destination. Commands, generated application files and shared directories may still write project files. Each project has its own, declared in `~/.alignfirst/companions/registry.json`.
 
 Ensure the alignfirst-setup-guide skill is installed, then ask your agent:
 
@@ -126,7 +139,7 @@ The same registry can select a named AlignDev profile without a companion:
 }
 ```
 
-Edit this selection by hand. A profile-only entry leaves project files in place, including in linked worktrees. `config --json` reports `aligndev` independently of `companion`; `config` and `doctor` show the selection. Named-profile resolution belongs to AlignDev's forthcoming settings contract.
+Edit this selection by hand. A profile-only entry leaves project files in place, including in linked worktrees. `config --json` reports `aligndev` independently of `companion`; `config` and `doctor` show the selection. Named-profile resolution belongs to AlignDev's settings contract.
 
 `companion register` preserves a selection when adding a directory. `companion unregister` removes companion fields and preserves the selection; remove the remaining profile-only entry through a separate registry edit.
 

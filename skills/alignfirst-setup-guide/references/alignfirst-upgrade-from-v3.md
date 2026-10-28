@@ -56,20 +56,21 @@ npm pkg delete scripts.plans:setup scripts.plans:sync
 Detect the ticket pattern from the repository's branch and ticket conventions. Issue-number tickets
 use `^\d+$`; Jira-like keys use `^[A-Z]+-\d+$`; omit the field when there is no convention.
 
-Write `.alignfirst.json` by hand. Preserve the recovered work-files folder. Set
+Write `alignfirst.json` (strict JSON) or `alignfirst.jsonc` by hand. Preserve the recovered work-files folder. Set
 `plans.autoArchive: true`, including in local mode; the user can remove it to opt out:
 
 ```json
 {
   "schemaVersion": 1,
-  "ticketIdPattern": "<regex>",
-  "plans": { "repositoryFolder": "<recovered-folder>", "autoArchive": true },
-  "git": { "defaultBranch": "<detected-default-branch>" }
+  "conventions": {
+    "ticketIdPattern": "<regex>",
+    "git": { "defaultBranch": "<detected-default-branch>" }
+  },
+  "plans": { "repositoryFolder": "<recovered-folder>", "autoArchive": true }
 }
 ```
 
-Add `portRange` when the dev-server config declares a `ports` range. Update the README guidance and
-install the stubs.
+Keep ranges only in the selected merged configuration's `devServer.ports`. Existing wrappers/registries require [the multi-stack runbook](upgrading-multi-stack-workspaces.md) before conversion. Update README guidance and install the requested stubs.
 
 ## Replace Every Legacy Command
 
@@ -95,19 +96,7 @@ Replace the AlignFirst section in `AGENTS.md` or `CLAUDE.md` with the bootstrap 
 `alignfirst-skills-setup.md`. The section also replaces the `npm run docmap` instruction when the project
 adopts docmap through the CLI.
 
-In `workspace.mjs`, replace the main-worktree plans check with:
-
-```js
-preSetup: ({ isMainWorktree, currentWorktree }) => {
-  if (!isMainWorktree) return;
-  execFileSync("npx", ["alignfirst", "plans", "check"], {
-    cwd: currentWorktree,
-    stdio: "inherit",
-  });
-},
-```
-
-Keep a distinct `preSetup` guard for remote-development requirements when the project has one.
+Current `alignfirst workspace setup` validates effective plans and selected runtime storage (ignored/untracked when project-local) before creation. Prepare these prerequisites separately; no wrapper check is needed. Move any project-specific remote-development guard into a manifest command during the coordinated cutover.
 
 ## Update the Skills
 

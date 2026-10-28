@@ -16,6 +16,7 @@ export interface SetupContextBase {
   mainWorktree: string;
   /** `true` when operating on the main worktree. */
   isMainWorktree: boolean;
+  signal?: AbortSignal;
 }
 
 /** Context passed to functional content sources and {@link GitignoredFileEntry.patch}. */
@@ -33,7 +34,8 @@ export interface GitignoredFileEntry {
    * the result differs. It must leave the lines it does not know untouched; `setup` refuses (throws)
    * a patch that is not idempotent.
    */
-  patch?: (content: string, ctx: PatchContext) => string;
+  patch?: (content: string, ctx: PatchContext) => string | Promise<string>;
+  validateDestination?: (ctx: PatchContext) => void;
   /**
    * When `true`, a missing source file logs a warning and skips the entry instead of aborting.
    * Applies to the selected path for `mainWorktree` and `committed` sources; ignored for `content`.
@@ -77,7 +79,8 @@ export interface RunFileEntry {
   /** Where a missing file's initial content comes from. */
   source: GitignoredFileSource<RunFileContext>;
   /** Omit to copy verbatim. Same contract as `GitignoredFileEntry.patch`. */
-  patch?: (content: string, ctx: RunFileContext) => string;
+  patch?: (content: string, ctx: RunFileContext) => string | Promise<string>;
+  validateDestination?: (ctx: RunFileContext) => void;
   /** Same contract as `GitignoredFileEntry.optional`. */
   optional?: boolean;
 }
@@ -91,7 +94,8 @@ export interface RunFileContext extends SetupContextBase {
 export interface SeededFile<C extends SetupContextBase> {
   path: string;
   source: GitignoredFileSource<C>;
-  patch?: (content: string, ctx: C) => string;
+  patch?: (content: string, ctx: C) => string | Promise<string>;
+  validateDestination?: (ctx: C) => void;
   optional?: boolean;
 }
 
@@ -103,6 +107,7 @@ export interface SeedLog {
 }
 
 export interface SeedFilesInput<C extends SetupContextBase> {
+  registryDir?: string;
   entries: Iterable<SeededFile<C>> | AsyncIterable<SeededFile<C>>;
   ctx: C;
   /** What happens to an existing file. */
@@ -121,14 +126,18 @@ export async function seedFiles<C extends SetupContextBase>(
   const updated: string[] = [];
   try {
     for await (const entry of input.entries) {
+      ctx.signal?.throwIfAborted();
       const { patch } = entry;
       const outcome = await copyAndPatchFile({
         currentWorktree: ctx.currentWorktree,
+        registryDir: input.registryDir,
         relPath: entry.path,
         resolveSource: () => resolveFileSource(entry, ctx),
         patch: patch ? (content: string) => patch(content, ctx) : undefined,
         existing: input.existing,
         optional: entry.optional ?? false,
+        signal: ctx.signal,
+        validateDestination: () => entry.validateDestination?.(ctx),
       });
       if (outcome.kind === "updated") updated.push(entry.path);
       else log.verbose(outcomeLine(entry.path, outcome));

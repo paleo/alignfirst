@@ -19,17 +19,19 @@ describe("conventions command", () => {
     mkdirSync(join(cwd, ".local-wt"));
     writeFileSync(join(cwd, ".gitignore"), ".plans\n.local\n.local-wt\n");
     writeFileSync(
-      join(cwd, ".alignfirst.json"),
+      join(cwd, "alignfirst.json"),
       JSON.stringify({
         schemaVersion: 1,
-        ticketIdPattern: "^\\d+$",
-        plans: { autoArchive: true },
-        git: {
-          defaultBranch: "main",
-          branchNameTemplate: "{TICKET_ID}/{slug-1-3-words}",
-          commit: { style: "conventionalCommit", ticketReference: "bracketedHash" },
-          agentCoauthoring: false,
+        conventions: {
+          ticketIdPattern: "^\\d+$",
+          git: {
+            defaultBranch: "main",
+            branchNameTemplate: "{TICKET_ID}/{slug-1-3-words}",
+            commit: { style: "conventionalCommit", ticketReference: "bracketedHash" },
+            agentCoauthoring: false,
+          },
         },
+        plans: { autoArchive: true },
       }),
     );
     const result = await runMain(["conventions"], { cwd });
@@ -58,8 +60,8 @@ describe("conventions command", () => {
   it("renders the agent attribution rule without a configured commit format", async () => {
     const cwd = makeProject();
     writeFileSync(
-      join(cwd, ".alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, git: { agentCoauthoring: false } }),
+      join(cwd, "alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, conventions: { git: { agentCoauthoring: false } } }),
     );
 
     expect((await runMain(["conventions"], { cwd })).stdout).toContain(

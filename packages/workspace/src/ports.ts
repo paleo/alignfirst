@@ -1,7 +1,7 @@
 import { createServer } from "node:net";
 
 import { ConfigError, WorkspaceError } from "./errors.js";
-import { devCmd, wsCmd } from "./package-manager.js";
+import { devCmd, wsCmd } from "./invocation.js";
 
 /** The Fetch Standard's bad ports: browsers refuse to load them. Never allocated. */
 export const BAD_PORTS: ReadonlySet<number> = new Set([
@@ -22,7 +22,6 @@ const UPGRADE_POINTER =
 
 /** The project's port range and the ports declared in it. */
 export interface DevPortsConfig {
-  /** Must equal `portRange` in `.alignfirst.json`, when that file declares one. */
   first: number;
   last: number;
   /** Ports never allocated: single ports or inclusive ranges, inside `first`–`last`. */
@@ -88,6 +87,8 @@ export function resolveDevPortsConfig(config: DevPortsConfig): ResolvedDevPorts 
       ),
     ),
   };
+  Object.setPrototypeOf(resolved.ranges, null);
+  Object.setPrototypeOf(resolved.mainWorktree, null);
   checkRanges(resolved);
   checkPins(resolved);
   return resolved;
@@ -251,7 +252,7 @@ function checkPins(resolved: ResolvedDevPorts): void {
 function disallowedPinMessage(resolved: ResolvedDevPorts, name: string, port: number): string {
   const label = `Config error: ${entryLabel(name)}: \`mainWorktree\` (${port})`;
   if (isAllowed(resolved, port)) {
-    const range = resolved.ranges[name];
+    const range = Object.hasOwn(resolved.ranges, name) ? resolved.ranges[name] : undefined;
     if (range) return `${label} must be inside its range ${formatRange(range)}.`;
     const holder = rangeHolding(resolved, port);
     if (holder) {
@@ -276,7 +277,7 @@ function isAllowed(resolved: ResolvedDevPorts, port: number): boolean {
 /** Allowed in the project, and inside the name's range, or outside every range for a name without one. */
 function isAllowedFor(resolved: ResolvedDevPorts, name: string, port: number): boolean {
   if (!isAllowed(resolved, port)) return false;
-  const range = resolved.ranges[name];
+  const range = Object.hasOwn(resolved.ranges, name) ? resolved.ranges[name] : undefined;
   return range ? isInRange(range, port) : rangeHolding(resolved, port) === undefined;
 }
 
@@ -319,7 +320,7 @@ export async function reconcilePorts(input: ReconcileInput): Promise<Record<stri
     for (const [name, port] of Object.entries(config.mainWorktree)) assign(name, port);
   }
   for (const name of config.names) {
-    const port = input.stored[name];
+    const port = Object.hasOwn(input.stored, name) ? input.stored[name] : undefined;
     if (assigned.has(name) || port === undefined) continue;
     const reserved = pinned.has(port) || used.has(port) || (!isMainWorktree && others.has(port));
     if (isAllowedFor(config, name, port) && !reserved) assign(name, port);
@@ -328,7 +329,7 @@ export async function reconcilePorts(input: ReconcileInput): Promise<Record<stri
   const cursors = new Map<PortRange, number>();
   for (const name of config.names) {
     if (assigned.has(name)) continue;
-    const scope = config.ranges[name] ?? config;
+    const scope = Object.hasOwn(config.ranges, name) ? config.ranges[name] : config;
     let candidate = cursors.get(scope) ?? scope.first;
     for (; candidate <= scope.last; ++candidate) {
       if (!isAllowedFor(config, name, candidate)) continue;
@@ -340,7 +341,7 @@ export async function reconcilePorts(input: ReconcileInput): Promise<Record<stri
     cursors.set(scope, candidate);
     if (!assigned.has(name)) throw exhaustedRangeError(config, name);
   }
-  const ports: Record<string, number> = {};
+  const ports: Record<string, number> = Object.create(null);
   for (const name of config.names) {
     const port = assigned.get(name);
     if (port !== undefined) ports[name] = port;
@@ -349,7 +350,7 @@ export async function reconcilePorts(input: ReconcileInput): Promise<Record<stri
 }
 
 function exhaustedRangeError(config: ResolvedDevPorts, name: string): WorkspaceError {
-  const range = config.ranges[name];
+  const range = Object.hasOwn(config.ranges, name) ? config.ranges[name] : undefined;
   if (range) {
     return new WorkspaceError(
       `No port left in the range ${formatRange(range)} dedicated to "${name}": the other ports ` +

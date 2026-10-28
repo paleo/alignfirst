@@ -16,17 +16,23 @@ A **workspace** is a git worktree (with its branch) plus its own dev setup: syml
 {{/DEV}}
 ## Setting up a workspace
 
+Use `npx -y alignfirst workspace` on Node or `bunx --bun alignfirst workspace` on Bun. No project wrapper, package manifest or local JavaScript dependencies are required. The selected `alignfirst.json` or `.jsonc` supplies optional `workspace`/`devServer` recipes. Project selection is branch-local; companion selection shares the complete document without merging sections.
+
+Setup requires usable effective `.plans` and selected runtime storage before branch creation. Project runtime requires ignored, untracked `.local-wt/`; companion runtime creates no checkout directory or registry link. Prepare local/shared work files or select a companion separately. Setup never provisions plans, registers a companion or edits tracked ignore rules.
+
+Without a manifest, setup shares effective plans and usable untracked `.local` when present, then completes synchronously. This means protocol-ready; dependencies and applications are not prepared. Additional `sharedDirs` do not replace these defaults. Tracked `.local` stays branch-local.
+
 ```sh
 {{COMMANDS:setup}}
 ```
 
 With `-c`, the new branch starts at the current worktree's HEAD (like `git switch -c`); `--from <ref>` accepts any commit-ish as the base. New branches have no upstream; set one when you first push. When the branch name is already taken, `setup -c` errors; add `--dedupe` to append `-2`, `-3`… instead.
 
-With a branch argument, `setup` creates a worktree. Without one, it adopts the current Git worktree, including externally created worktrees under any parent directory. It preserves the path and branch, links shared directories, seeds config files, then runs the project's finalize step: install dependencies and build.
+With a branch argument, `setup` creates a worktree. Without one, it adopts the current Git worktree, including externally created worktrees under any parent directory. It preserves the path, branch and index, links shared directories, seeds declared config files, then runs any declared finalize steps. `--path <path>` selects an exact existing root without a branch, or a new disjoint destination with one. An explicit destination is never suffixed.
 
-It streams to the setup log and **blocks until the log ends with `READY:` or `FAILED:`**, showing a progress ticker (`--verbose` follows the full log instead). Pass `-d`/`--detached` to return as soon as the worktree exists and continue the setup in the background; join it later with `wait`.
+Declared finalize steps stream to the setup log. Setup blocks until preparation reaches `ready` or `failed`, showing a progress ticker (`--verbose` follows the full log instead). Pass `-d`/`--detached` to return as soon as the worktree exists and continue the setup in the background; join it later with `wait`.
 
-**Main worktree:** from a fresh clone, run `setup` once on the main worktree before creating linked worktrees.
+Main work-files and runtime protection must be ready before creating linked worktrees. Main-worktree setup itself is optional.
 
 {{#DEV}}
 `setup --full` also runs the dev setup once the workspace is ready: ports, run files and infrastructure. A dev failure leaves the workspace ready and makes the command exit 1; `{{DEV}} setup` retries it.
@@ -40,7 +46,7 @@ Configure these generic hooks in the tool that creates and deletes your worktree
 {{COMMANDS:hooks}}
 ```
 
-Installation-first works when dependencies do not need seeded files. It uses the new branch's own wrapper. Blocking setup is the hook default; detached setup is an explicit alternative that must be joined with `wait` before cleanup.
+The installed CLI loads the target worktree's manifest. Blocking setup is the hook default; detached setup must be joined with `wait` before cleanup.
 
 ### Recovery from a failed setup
 
@@ -50,15 +56,7 @@ If setup fails (check the setup log), do **not** delete the worktree. From insid
 {{COMMANDS:recovery}}
 ```
 
-When seeding must precede installation, or local dependencies are missing after a failure, stay inside the target worktree and discover the main wrapper through Git:
-
-```sh
-common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
-main_worktree=$(dirname "$common_dir")
-{{RUNTIME}} "$main_worktree/<path-to>/workspace.mjs" setup
-```
-
-Replace `<path-to>` with this project's wrapper location and apply its runtime selection. The main wrapper needs usable installed dependencies/build output. This fallback runs the **main worktree's recipe** against the target, rather than the new branch's recipe.
+Run the installed CLI from the target worktree even when project dependencies are missing. Internal finalization and dev-setup children retain that CLI installation and runtime, and load the target's recipe.
 
 ## Inspecting workspaces
 
@@ -68,7 +66,9 @@ Replace `<path-to>` with this project's wrapper location and apply its runtime s
 
 Names in `list` are opaque **registered names**, usually directory basenames and suffixed when another path already owns that name. Paths select exactly; there is no basename-search fallback. A registered name also selects an orphan whose directory is gone. Independent clones have independent registries.
 
-All participating duplicate-basename worktrees need the upgraded package. Consumer Compose wrappers must explicitly select the registered project before relying on this isolation. Ordinary names and default resource names stay compatible; there is no automatic bulk upgrade or teardown.
+Listing combines Git worktrees, resource registrations and external runtime owners. Runtime-only rows have no registered name or recipe. Unprepared trees have no registered name. Detached, locked, missing/prunable trees and registered orphans remain visible; listing never adopts or deletes them.
+
+`setup`, `list`, `status`, `wait`, `teardown`, `remove` and `prune` accept `--json`. stdout contains one result document; progress and diagnostics use stderr. Failures exit nonzero without a success document. `--enter` and `--json` cannot be combined.
 
 ## Cleaning up without deletion
 
@@ -102,13 +102,13 @@ Tears down infrastructure, drops the registry entry, and removes the worktree. T
 {{/DEV}}
 Removal refuses on uncommitted changes. Pass `--force` to discard them. When removing the current worktree, the script prints the main worktree path; `cd` there afterward.
 
-`remove`, `teardown` and `status` default to the current Git worktree, including from nested directories. Select another by exact path or registered name from `list`. Removal adds Git worktree deletion to cleanup; teardown leaves deletion to you or your external tool.
+`remove`, `teardown` and `status` default to the current Git worktree, including from nested directories. Select another by exact path or registered name from `list`. Removal adds Git worktree deletion to cleanup, then deletes only the verified target runtime. Teardown retains runtime files/logs and leaves Git deletion to you or your external tool. External deletion can leave clean runtime-only state for explicit prune. Failed disposal retains retry identity.
 
 **NEVER** delete a branch unless the user explicitly requests it.
 
 ### Healing orphaned workspaces
 
-A workspace is **orphaned** when its worktree dir was deleted out-of-band (manual `rm -rf`, bare `git worktree remove`). `list` auto-drops the safe ones (no live dev-server and no failed state). Explicit `prune` also recovers abandoned pending setup whose worktree is gone:
+A workspace is **orphaned** when its worktree dir was deleted out-of-band (manual `rm -rf`, bare `git worktree remove`). `list` retains its registered cleanup identity. Explicit `prune` cleans resources and verified runtime, including runtime-only orphans left after teardown and external deletion. Live preparation/finalizer or startup ownership blocks cleanup even when the checkout is gone:
 
 ```sh
 {{COMMANDS:prune}}
@@ -129,7 +129,7 @@ When you only want a bare worktree (no symlinks, no config files, no finalize st
 
 A workspace's ports are allocated at its first dev start, stay fixed, and are listed by `{{WS}} list` / `status`.
 
-**Concurrent cap.** `dev` / `dev up` cap simultaneously running dev-servers. At the cap, the start errors with a table of active servers and exits non-zero. Make room via `down` in another worktree, `down --all`, or `up --evict` (stops the oldest live one and starts).
+**Concurrent cap.** `dev` / `dev up` count live dev environments within this repository, not individual processes. `maxConcurrentDevServers` accepts a number or `{ env, default }`; omission/zero means unlimited. Unset overrides use the default; defined values must be nonnegative safe decimal integers. Invalid values fail before startup effects. Inspection and cleanup do not resolve overrides; no dotenv is loaded. At the cap, the start errors with a table of active servers and exits non-zero. Make room via `down` in another worktree, `down --all`, or `up --evict` (stops the oldest live one and starts).
 
 **Two-tier shutdown.** `down` (and a foreground CTRL+C) stops dev processes and configured callbacks, which may stop containers. Destructive infrastructure purge belongs to `workspace teardown`, `remove` and `prune`.
 
@@ -149,5 +149,7 @@ A workspace's ports are allocated at its first dev start, stay fixed, and are li
 {{^DEV}}
   - `logs/` — setup logs.
 {{/DEV}}
-  - `{{REGISTRY_SUBDIR}}/` — the registry. Symlinked to the main worktree in linked worktrees.
+- `{{REGISTRY_SUBDIR}}/` is shared registry storage. Project mode uses main's `.local-wt/{{REGISTRY_SUBDIR}}`, linked from local linked-worktree runtime. Companion mode addresses `<companion>/.local-wt/{{REGISTRY_SUBDIR}}` directly, with separate path-derived runtimes below `<companion>/.local-wt/worktrees/`. `alignfirst config --json` reports absolute `registryDir` and `runtimeDir`.
+- Scripts read `ALIGNFIRST_WORKSPACE_CONTEXT.runtimeDir` for owned sidecars. Optional `configurationDir` locates configuration-owned helpers; it does not change command cwd.
+- Before changing placement/source, clean under the old selection. There is no placement-history registry or automatic recovery of manually hidden storage.
 {{LAYOUT:shared}}

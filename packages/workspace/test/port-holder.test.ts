@@ -20,7 +20,7 @@ function spawnServer(name: string, port?: number): ResolvedSpawnServer {
   const server: ResolvedSpawnServer = {
     kind: "spawn",
     name,
-    exec: { command: "noop", args: [] },
+    exec: { command: "noop", args: [], cwd: "/unused", env: {} },
     detectReady: () => true,
   };
   if (port !== undefined) server.port = port;

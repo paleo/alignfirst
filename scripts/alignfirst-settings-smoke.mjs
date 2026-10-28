@@ -80,7 +80,7 @@ function createFixture(root, cases) {
     project,
     companion,
     env,
-    config: join(project, ".alignfirst.json"),
+    config: join(project, "alignfirst.json"),
     registry: join(home, ".alignfirst/companions/registry.json"),
     cases,
   };
@@ -89,29 +89,21 @@ function createFixture(root, cases) {
 function checkUnknownSettings(f) {
   const config = {
     schemaVersion: 1,
-    extra: { nested: secret },
-    ticketPattern: secret,
-    project: secret,
-    plans: { repositoryFolder: "work", autoArchive: true, extra: secret },
-    portRange: { first: 8100, last: 8199, extra: secret },
-    git: {
-      defaultBranch: "main",
-      extra: secret,
-      commit: { style: "conventionalCommit", extra: secret },
-    },
-    "unknown\n\u001b\u202e\u2028": secret,
-    ["__proto__"]: { secret },
+    plans: { repositoryFolder: "work", autoArchive: true },
+    conventions: { git: { defaultBranch: "main", commit: { style: "conventionalCommit" } } },
   };
   writeJson(f.config, config);
   writeJson(f.registry, {
     extra: secret,
+    "unknown\n\u001b\u202e\u2028": secret,
+    ["__proto__"]: { secret },
     root: secret,
     paths: { [secret]: { docs: true } },
     projects: {
       "~/project": {
         dir: "app",
         extra: secret,
-        items: { ".alignfirst.json": "project", docs: "project", extra: secret },
+        items: { alignfirst: "project", docs: "project", extra: secret },
         aligndev: { profile: "work", extra: secret },
       },
       [`~/${secret}`]: { aligndev: { profile: "other", extra: secret } },
@@ -122,23 +114,17 @@ function checkUnknownSettings(f) {
   assert.deepEqual(report.config, {
     schemaVersion: 1,
     plans: { repositoryFolder: "work", autoArchive: true },
-    portRange: { first: 8100, last: 8199 },
-    git: { defaultBranch: "main", commit: { style: "conventionalCommit" } },
+    conventions: { git: { defaultBranch: "main", commit: { style: "conventionalCommit" } } },
   });
   assert.deepEqual(report.aligndev, { profile: "work" });
   assert.equal(report.companion.items.docs, "project");
   assert.equal(Object.hasOwn(report.companion.items, "extra"), false);
   for (const field of [
-    "plans.extra",
-    "portRange.extra",
-    "git.extra",
-    "git.commit.extra",
     "projects[<entry>].extra",
     "projects[<entry>].items.extra",
     "projects[<entry>].aligndev.extra",
   ])
     assert.ok(result.stderr.includes(`setting ${field}.`), field);
-  assert.match(result.stderr, /Use ticketIdPattern/);
   assert.match(result.stderr, /convert paths manually/);
   assert.match(result.stderr, /Use a symlink/);
   assert.ok(result.stderr.includes("\\n\\u001b\\u202e\\u2028"));
@@ -147,46 +133,87 @@ function checkUnknownSettings(f) {
   assert.equal(result.stderr.includes("~/project"), false);
 
   rmSync(f.config);
-  writeJson(join(f.companion, ".alignfirst.json"), config);
+  writeJson(join(f.companion, "alignfirst.jsonc"), config);
   writeJson(f.registry, { projects: { "~/project": { dir: "app" } } });
-  const companion = run(f, "companion-config-unknown", 0);
+  const companion = run(f, "companion-config-family", 0);
   assert.equal(JSON.parse(companion.stdout).source, "companion");
-  assert.match(companion.stderr, /ignoring unknown \.alignfirst\.json setting plans.extra/);
-  rmSync(join(f.companion, ".alignfirst.json"));
+  assert.equal(companion.stderr, "");
+  writeJson(join(f.companion, "alignfirst.jsonc"), { ...config, extra: secret });
+  assert.match(
+    run(f, "companion-config-rejects-unknown", 1).stderr,
+    /unknown property|additional properties/i,
+  );
+  rmSync(join(f.companion, "alignfirst.jsonc"));
 
-  writeJson(f.config, { schemaVersion: 1, plans: { folder: "work" } });
-  const alias = run(f, "supported-deprecated-alias", 0);
-  assert.deepEqual(JSON.parse(alias.stdout).config.plans, { repositoryFolder: "work" });
-  assert.match(alias.stderr, /plans.folder is deprecated/);
+  for (const [name, value] of [
+    ["root", { extra: secret }],
+    ["plans", { plans: { folder: "work" } }],
+    ["git", { conventions: { git: { extra: secret } } }],
+    [
+      "commit",
+      { conventions: { git: { commit: { style: "conventionalCommit", extra: secret } } } },
+    ],
+  ]) {
+    writeJson(f.config, { schemaVersion: 1, ...value });
+    assert.match(
+      run(f, `project-rejects-unknown-${name}`, 1).stderr,
+      /unknown property|additional properties/i,
+    );
+  }
+  writeJson(f.config, { schemaVersion: 1 });
+  const workspace = f.config;
+  for (const [name, value] of [
+    ["root", { extra: secret }],
+    ["workspace", { workspace: { extra: secret } }],
+    ["command", { workspace: { finalize: [{ name: "step", run: ["true"], extra: secret }] } }],
+  ]) {
+    writeJson(workspace, { schemaVersion: 1, ...value });
+    assert.match(
+      run(f, `workspace-rejects-unknown-${name}`, 1).stderr,
+      /unknown property|additional properties/i,
+    );
+  }
+  rmSync(workspace);
 }
 
 function checkKnownFailures(f) {
   writeJson(f.registry, { projects: {} });
   for (const [name, known, expected] of [
-    ["schema", { schemaVersion: 2 }, /schemaVersion must be 1/],
-    ["cli", { cli: secret }, /cli is not a supported version range/],
-    ["pattern", { ticketIdPattern: `[${secret}` }, /not a valid regular expression/],
-    ["pattern-anchors", { ticketIdPattern: "^ABC$|^XYZ$" }, /one anchored expression/],
-    ["plans-structure", { plans: [] }, /plans must be an object/],
-    ["archive", { plans: { autoArchive: secret } }, /autoArchive must be a boolean/],
-    ["port", { portRange: { first: 0, last: 100 } }, /first must be an integer/],
-    ["port-order", { portRange: { first: 10, last: 1 } }, /first must not exceed/],
-    ["git", { git: null }, /git must be an object/],
-    ["commit", { git: { commit: { style: secret } } }, /style must be/],
-    ["required-commit", { git: { commit: { extra: secret } } }, /style must be/],
+    ["schema", { schemaVersion: 2 }, /schemaVersion.*constant/],
+    ["cli", { cli: secret }, /unknown property|additional properties/i],
+    [
+      "pattern",
+      { conventions: { ticketIdPattern: `[${secret}` } },
+      /not a valid regular expression/,
+    ],
+    [
+      "pattern-anchors",
+      { conventions: { ticketIdPattern: "^ABC$|^XYZ$" } },
+      /one anchored expression/,
+    ],
+    ["plans-structure", { plans: [] }, /plans.*(object|invalid)/],
+    ["archive", { plans: { autoArchive: secret } }, /autoArchive.*boolean/],
+    ["port", { portRange: { first: 0, last: 100 } }, /unknown property|additional properties/i],
+    ["git", { conventions: { git: null } }, /git.*object/],
+    ["commit", { conventions: { git: { commit: { style: secret } } } }, /style.*constant/],
+    [
+      "required-commit",
+      { conventions: { git: { commit: {} } } },
+      /style.*required|required.*style/,
+    ],
   ]) {
-    writeJson(f.config, { schemaVersion: 1, extra: secret, ...known });
+    writeJson(f.config, { schemaVersion: 1, ...known });
     assert.match(run(f, `invalid-config-${name}`, 1).stderr, expected);
   }
   for (const [name, value, expected] of [
-    ["root", [], /must be an object/],
-    ["required-schema", { extra: secret }, /schemaVersion must be 1/],
+    ["root", [], /must be object/],
+    ["required-schema", {}, /schemaVersion.*required|required.*schemaVersion/],
   ]) {
     writeJson(f.config, value);
     assert.match(run(f, `invalid-config-${name}`, 1).stderr, expected);
   }
   writeFileSync(f.config, `{"extra":"${secret}", BROKEN}`);
-  assert.match(run(f, "invalid-config-json", 1).stderr, /must contain valid JSON/);
+  assert.match(run(f, "invalid-config-json", 1).stderr, /valid JSON|Invalid JSON/);
   writeJson(f.config, { schemaVersion: 1 });
 
   for (const [name, entry, expected] of [

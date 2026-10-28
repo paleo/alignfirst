@@ -1,11 +1,10 @@
-import { type LaunchEvidence, resolveInvocation } from "@alignfirst/docmap/invocation";
+import type { LaunchEvidence } from "@alignfirst/docmap/invocation";
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { main } from "../src/cli.js";
 import { renderCommandForm } from "../src/command-form.js";
-import { checkCliRange } from "../src/version-guard.js";
 import { makeSink, makeTempDir } from "./helpers.js";
 
 describe("command form", () => {
@@ -68,21 +67,6 @@ describe("command form", () => {
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
-  });
-
-  it("retains the version constraint, Bun runtime and quoted arguments in recovery", () => {
-    const invocation = resolveInvocation(
-      { packageName: "alignfirst", binaryName: "alignfirst" },
-      { runtime: "bun", env: {}, cwd: "/tmp", executable: "/bun" },
-    );
-    expect(() =>
-      checkCliRange(
-        { schemaVersion: 1, cli: ">=9 <10" },
-        "0.1.0",
-        ["docmap", "--root", "a'b"],
-        invocation,
-      ),
-    ).toThrow("bunx --bun 'alignfirst@>=9 <10' docmap --root 'a'\\''b'");
   });
 
   it.each(["", "$&", "$'", "$`", "$$"])("renders every placeholder literally with %j", (token) => {
