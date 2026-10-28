@@ -13,7 +13,7 @@ In `alignfirst.json` (strict JSON) or `alignfirst.jsonc` (comments/trailing comm
 }
 ```
 
-The team repository contains one folder per project, with ticket directories and `_archives/`. `repositoryFolder` selects that folder. The deprecated `plans.folder` spelling is rejected. Existing `.alignfirst.json` users follow [the clean-break runbook](../../../docs/upgrading-multi-stack-workspaces.md).
+The team repository contains one folder per project, with ticket directories and `_archives/`. `repositoryFolder` selects that folder. The deprecated `plans.folder` spelling is rejected. Existing `.alignfirst.json` users follow [the clean-break runbook](upgrading-multi-stack-workspaces.md).
 
 ## Each machine
 

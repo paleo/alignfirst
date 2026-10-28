@@ -7,7 +7,7 @@ The sections after [Route the Upgrade](#route-the-upgrade) are one-time migratio
 
 Commands are Unix-style. Adapt them for another shell.
 
-For `.alignfirst.json`, workspace wrappers, old port slots or `aligndev worktree`, follow [Upgrading Multi-Stack Workspaces](../../../docs/upgrading-multi-stack-workspaces.md) before any procedure below. It supersedes the historical workspace conversions in this document and includes all-worktree resource accounting. Use `alignfirst.json`/`alignfirst.jsonc` for current project settings.
+For `.alignfirst.json`, workspace wrappers, old port slots or `aligndev worktree`, follow [Upgrading Multi-Stack Workspaces](upgrading-multi-stack-workspaces.md) before any procedure below. It supersedes the historical workspace conversions in this document and includes all-worktree resource accounting. Use `alignfirst.json`/`alignfirst.jsonc` for current project settings.
 
 ## Preflight
 

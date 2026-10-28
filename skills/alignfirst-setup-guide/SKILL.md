@@ -21,7 +21,7 @@ Install or upgrade only what the user requested. Do not add unrelated tools or p
 - **Work-files repository:** [plans-setup.md](references/plans-setup.md).
 - **Docmap:** [docmap-setup.md](references/docmap-setup.md). For docs adoption, follow its bootstrapping/migration references when relevant.
 - **Workspace, any stack:** [workspace-setup.md](references/workspace-setup.md). Node, Python, Rust and monorepos use the same `alignfirst workspace`/`alignfirst dev` CLI. No project wrapper or local kernel dependency is needed. Never recommend reimplementing the kernel for another language.
-- **Retired `.alignfirst.json`, workspace wrappers or old runtime registries:** [clean-break upgrade runbook](../../docs/upgrading-multi-stack-workspaces.md). Account for all resources and worktrees before conversion.
+- **Retired `.alignfirst.json`, workspace wrappers or old runtime registries:** [clean-break upgrade runbook](references/upgrading-multi-stack-workspaces.md). Account for all resources and worktrees before conversion.
 - **AlignDev:** ask whether it serves an OpenClaw assistant or a coding agent. OpenClaw uses [aligndev-openclaw.md](references/aligndev-openclaw.md); a coding-agent assistant uses [coding-agent-assistant.md](references/coding-agent-assistant.md).
 
 ## Tooling recommendation

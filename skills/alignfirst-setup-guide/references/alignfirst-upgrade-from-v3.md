@@ -70,7 +70,7 @@ Write `alignfirst.json` (strict JSON) or `alignfirst.jsonc` by hand. Preserve th
 }
 ```
 
-Keep ranges only in the selected merged configuration's `devServer.ports`. Existing wrappers/registries require [the multi-stack runbook](../../../docs/upgrading-multi-stack-workspaces.md) before conversion. Update README guidance and install the requested stubs.
+Keep ranges only in the selected merged configuration's `devServer.ports`. Existing wrappers/registries require [the multi-stack runbook](upgrading-multi-stack-workspaces.md) before conversion. Update README guidance and install the requested stubs.
 
 ## Replace Every Legacy Command
 

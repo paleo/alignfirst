@@ -132,7 +132,7 @@ Write `alignfirst.json` with the detected fields. Use `alignfirst.jsonc` for com
 }
 ```
 
-Keep `plans.autoArchive: true`, including in local mode; the user can remove it to opt out. Keep only applicable optional fields. Unknown properties are rejected. The selected document also holds optional `workspace`/`devServer`; port ranges belong only in `devServer.ports`. One required schema version covers all sections. Optional `$schema` is URI metadata and is never fetched. Future breaking formats require in-memory converters retained through the CLI major. Existing retired settings/wrappers follow [the upgrade runbook](../../../docs/upgrading-multi-stack-workspaces.md).
+Keep `plans.autoArchive: true`, including in local mode; the user can remove it to opt out. Keep only applicable optional fields. Unknown properties are rejected. The selected document also holds optional `workspace`/`devServer`; port ranges belong only in `devServer.ports`. One required schema version covers all sections. Optional `$schema` is URI metadata and is never fetched. Future breaking formats require in-memory converters retained through the CLI major. Existing retired settings/wrappers follow [the upgrade runbook](upgrading-multi-stack-workspaces.md).
 
 ### Local installation
 

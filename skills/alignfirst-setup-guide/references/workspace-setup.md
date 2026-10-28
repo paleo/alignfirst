@@ -2,7 +2,7 @@
 
 Use `npx -y alignfirst workspace` on Node or `bunx --bun alignfirst workspace` on Bun. Git is required. Project commands keep their own toolchain; Python, Rust and non-Node repositories need no `package.json`, JavaScript wrapper or local workspace dependency. Ordinary `bunx` may honor the bin's Node shebang; use `--bun` for explicit Bun execution.
 
-Workspace can be adopted independently of protocols, skills and Docmap. Existing installations with `.alignfirst.json`, wrappers or old registries first follow [the clean-break upgrade runbook](../../../docs/upgrading-multi-stack-workspaces.md). Do not run new commands against unaccounted old resource state.
+Workspace can be adopted independently of protocols, skills and Docmap. Existing installations with `.alignfirst.json`, wrappers or old registries first follow [the clean-break upgrade runbook](upgrading-multi-stack-workspaces.md). Do not run new commands against unaccounted old resource state.
 
 ## Implementation process
 
