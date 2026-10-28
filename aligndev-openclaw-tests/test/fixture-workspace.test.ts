@@ -167,7 +167,7 @@ test("fixture frozen install and real workspace/dev lifecycle", { timeout: 240_0
   }
 });
 
-test("reset stops Nova and linked lifecycle servers before deleting their registries", {
+test("reset recovers externally deleted running workspaces and retains failed cleanup evidence", {
   timeout: 240_000,
 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "side-27-fixture-reset-"));
@@ -182,6 +182,11 @@ test("reset stops Nova and linked lifecycle servers before deleting their regist
   mkdirSync(lifecycle, { recursive: true });
   try {
     prepareProject(nova, 6600, env);
+    // Missing manifest-backed checkouts require an explicit main purge recipe.
+    const manifestPath = join(nova, "alignfirst.json");
+    const cleanupConfig = JSON.parse(readFileSync(manifestPath, "utf8"));
+    cleanupConfig.workspace.purge = [{ name: "Purge", run: ["node", "-e", "process.exit(0)"] }];
+    writeFileSync(manifestPath, JSON.stringify(cleanupConfig));
     command(nova, pnpm, ["install", "--frozen-lockfile"], env);
     command(
       nova,
@@ -208,6 +213,9 @@ test("reset stops Nova and linked lifecycle servers before deleting their regist
       "External deletion retains clean runtime until explicit prune",
     );
     command(nova, process.execPath, [workspaceScript, "setup", "-c", "feature"], env);
+    const linkedRuntime = JSON.parse(
+      command(linked, process.execPath, [alignfirst, "config", "--json"], env),
+    ).workspace.runtimeDir;
     for (const repo of [nova, linked]) {
       const output = command(repo, process.execPath, [devScript, "up"], env);
       const pid = output.match(/\(PID (\d+)\)/)?.[1];
@@ -227,9 +235,11 @@ test("reset stops Nova and linked lifecycle servers before deleting their regist
       ALIGNDEV_FIXTURE_PROJECTS: primary,
       ALIGNDEV_FIXTURE_ORIGINS: join(root, "origins"),
     };
+    mkdirSync(resetEnv.ALIGNDEV_FIXTURE_ORIGINS);
+    const originEvidence = join(resetEnv.ALIGNDEV_FIXTURE_ORIGINS, "retain.txt");
+    writeFileSync(originEvidence, "Retain origins until cleanup succeeds.\n");
     // Cleanup must discover non-Node Git projects and retain state after a failed purge.
     rmSync(join(nova, "package.json"));
-    const manifestPath = join(nova, "alignfirst.json");
     const manifest = readFileSync(manifestPath, "utf8");
     const broken = JSON.parse(manifest);
     broken.workspace.purge = [{ name: "Refuse cleanup", run: ["node", "-e", "process.exit(7)"] }];
@@ -241,12 +251,30 @@ test("reset stops Nova and linked lifecycle servers before deleting their regist
       timeout: 60_000,
     });
     assert.equal(refused.status, 1, refused.stderr);
+    assert.match(refused.stderr, /Refuse cleanup: exited with code 7/);
     assert.match(refused.stderr, /state retained/);
     assert(existsSync(nova));
     assert(existsSync(linked));
     assert(existsSync(join(storage.registryDir, "workspaces.json")));
+    assert(existsSync(linkedRuntime));
+    assert.equal(readFileSync(originEvidence, "utf8"), "Retain origins until cleanup succeeds.\n");
     writeFileSync(manifestPath, manifest);
+
+    const restarted = command(linked, process.execPath, [devScript, "up"], env);
+    const restartedPid = restarted.match(/\(PID (\d+)\)/)?.[1];
+    assert.notEqual(restartedPid, undefined, restarted);
+    pids.push(Number(restartedPid));
+    assert.equal((await fetch(`http://127.0.0.1:${readPort(linked)}`)).status, 200);
+    rmSync(linked, { recursive: true });
+    assert.doesNotThrow(() => process.kill(Number(restartedPid), 0));
+    assert(existsSync(linkedRuntime));
+
     command(root, process.execPath, [reset], resetEnv);
+    assert.equal(
+      existsSync(linkedRuntime),
+      false,
+      "Reset disposes the deleted running checkout's runtime",
+    );
     assert.equal(existsSync(orphanRuntime), false, "Reset prunes external runtime-only orphans");
     assert.deepEqual(JSON.parse(readFileSync(companionRegistry, "utf8")), registrations);
 
@@ -273,7 +301,11 @@ test("reset stops Nova and linked lifecycle servers before deleting their regist
   } finally {
     for (const repo of [nova, linked]) {
       if (existsSync(join(repo, "node_modules"))) {
-        command(repo, process.execPath, [devScript, "down", "--all"], env);
+        spawnSync(process.execPath, [alignfirst, devScript, "down", "--all"], {
+          cwd: repo,
+          env,
+          timeout: 60_000,
+        });
       }
     }
     for (const pid of pids) killOwnedProcessGroup(pid);

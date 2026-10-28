@@ -45,10 +45,11 @@ const ORIGINS = process.env.ALIGNDEV_FIXTURE_ORIGINS ?? "/home/assistant/.fixtur
 const BASE_BRANCH = "main";
 
 async function main() {
-  // Stop while each project's scripts and teardown registry still exist.
+  // Recover missing targets before stopping survivors, while cleanup recipes still exist.
   const projects = gitProjects(PRIMARY);
   for (const dst of projects) {
     if (existsSync(dst)) {
+      await runWithTimeout("alignfirst", ["workspace", "prune"], 30_000, dst);
       await runWithTimeout("alignfirst", ["dev", "down", "--all"], 30_000, dst);
       const inventory = spawnSync("alignfirst", ["workspace", "list", "--json"], {
         cwd: dst,
