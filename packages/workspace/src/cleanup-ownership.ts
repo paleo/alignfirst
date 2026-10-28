@@ -13,11 +13,17 @@ import {
 
 /** Captured under the shared lock before stop or purge can affect this registration. */
 export interface CleanupOwnership {
+  /** Registered resource name, which must still identify this exact entry at settlement. */
   name: string;
+  /** Absolute target path; missing checkouts retain their cleanup identity. */
   worktree: string;
+  /** Registration timestamp captured to reject a later registration at the same path. */
   createdAt: string;
+  /** Recipe provenance captured before effects; cleanup cannot silently change its source. */
   recipe: WorkspaceRecipe;
+  /** This cleaner's PID/token, held across stop, purge and matching settlement. */
   owner: OwnershipClaim;
+  /** Companion runtime generation captured before effects; absent for project-local storage. */
   runtimeGeneration?: string;
 }
 
@@ -29,8 +35,16 @@ export function claimCleanupOwnership(
   const found = findWorkspaceByPath(registry, worktree);
   if (!found) throw new WorkspaceError(`Missing cleanup identity for ${worktree}.`);
   const { entry, name } = found;
-  if (entry.cleanupOwner && isProcessAlive(entry.cleanupOwner.pid))
-    throw new WorkspaceError(`Workspace cleanup already in progress for ${worktree}.`);
+  if (entry.cleanupOwner) {
+    if (isProcessAlive(entry.cleanupOwner.pid))
+      throw new WorkspaceError(`Workspace cleanup already in progress for ${worktree}.`);
+    throw new WorkspaceError(
+      `Abandoned cleanup for ${worktree} requires explicit recovery. ` +
+        "Quiesce callers sharing the selected runtime registry and all surviving cleanup " +
+        "subprocesses before clearing only this entry's cleanupOwner in workspaces.json. " +
+        "Preserve cleanupPending, resource identity, ports and runtime generation, then retry cleanup.",
+    );
+  }
   const owner = { pid: process.pid, token: randomUUID() };
   entry.cleanupPending = true;
   entry.cleanupOwner = owner;

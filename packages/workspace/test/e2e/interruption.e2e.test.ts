@@ -12,6 +12,7 @@ import {
   type FixtureRepo,
   type FixtureOptions,
   readWorkspaces,
+  writeWorkspaces,
   runCli,
   runDev,
 } from "./fixture.js";
@@ -109,6 +110,78 @@ describe("installed workspace CLI cancellation", () => {
     TIMEOUT_MS,
   );
 
+  it.each([false, true])(
+    "requires explicit recovery after a killed cleaner leaves purge alive, companion=%s",
+    async (companionRuntime) => {
+      const fx = fixture({ companionRuntime });
+      const linked = join(fx.root, "linked");
+      execFileSync("git", ["worktree", "add", "-b", "linked", linked], { cwd: fx.repo });
+      expect(runCli(fx.repo, ["setup", "--path", linked]).status).toBe(0);
+      expect(runDev(linked, ["setup"]).status).toBe(0);
+      installBarrier(fx, linked, "purge");
+      const resource = join(linked, "replacement-resource");
+      writeFileSync(resource, "original");
+      const script = join(linked, "scripts/interrupt.mjs");
+      writeFileSync(
+        script,
+        `${readFileSync(script, "utf8")}\nrmSync(${JSON.stringify(resource)}, { force: true });\n`,
+      );
+      writeFileSync(join(fx.root, "home/release"), "release");
+      const running = startCli(fx, fx.repo, ["workspace", "teardown", linked]);
+      const pids = await waitForOwnedCommand(fx);
+      const captured = readWorkspaces(fx.repo);
+      const name = Object.keys(captured.workspaces)[0];
+      expect(captured.workspaces[name].cleanupOwner?.pid).toBe(running.child.pid);
+      expect(captured.workspaces[name].ports).toBeDefined();
+      running.child.kill("SIGKILL");
+      await waitUntil(
+        () => running.child.pid !== undefined && !isAlive(running.child.pid),
+        "cleaner death",
+      );
+      expect(pids.every(isAlive)).toBe(true);
+      for (const args of [
+        ["teardown", linked],
+        ["remove", linked, "--force"],
+      ]) {
+        const retry = runCli(fx.repo, args, { INTERRUPT_DIR: join(fx.root, "home") });
+        expect(retry.status, retry.stderr).toBe(1);
+        expect(retry.stderr).toMatch(/abandoned cleanup.*explicit recovery/i);
+        expect(readWorkspaces(fx.repo)).toEqual(captured);
+        expect(readFileSync(resource, "utf8")).toBe("original");
+      }
+      expect(runCli(fx.repo, ["setup", "--path", linked, "--force"]).status).toBe(1);
+      expect(runDev(linked, ["setup"]).status).toBe(1);
+      expect(runDev(linked, ["up"]).status).toBe(1);
+      expect(readWorkspaces(fx.repo)).toEqual(captured);
+      expect(pids.every(isAlive)).toBe(true);
+      process.kill(-pids[0], "SIGKILL");
+      await waitUntil(() => pids.every((pid) => !isAlive(pid)), "owned purge group termination");
+      await waitUntil(() => running.closed, "killed CLI output closure");
+      // All fixture lifecycle callers have returned and the known purge group is stopped.
+      const recovered = readWorkspaces(fx.repo);
+      delete recovered.workspaces[name].cleanupOwner;
+      writeWorkspaces(fx.repo, recovered);
+      expect(readWorkspaces(fx.repo)).toEqual(recovered);
+      expect(recovered.workspaces[name]).toMatchObject({
+        cleanupPending: true,
+        recipe: captured.workspaces[name].recipe,
+        ports: captured.workspaces[name].ports,
+      });
+      expect(recovered.runtimeOwners).toEqual(captured.runtimeOwners);
+      const retry = runCli(fx.repo, ["teardown", linked], { INTERRUPT_DIR: join(fx.root, "home") });
+      expect(retry.status, retry.stderr).toBe(0);
+      expect(existsSync(resource)).toBe(false);
+      expect(runCli(fx.repo, ["setup", "--path", linked]).status).toBe(0);
+      writeFileSync(resource, "replacement");
+      expect(readFileSync(resource, "utf8")).toBe("replacement");
+      if (companionRuntime)
+        expect(Object.values(readWorkspaces(fx.repo).runtimeOwners ?? {})[0].generation).not.toBe(
+          Object.values(captured.runtimeOwners ?? {})[0].generation,
+        );
+    },
+    TIMEOUT_MS,
+  );
+
   it(
     "rejects a stale cleaner at local settlement without releasing its replacement claim",
     async () => {
@@ -130,8 +203,9 @@ describe("installed workspace CLI cancellation", () => {
       expect(running.output).toMatch(/cleanup ownership lost/i);
       expect(readWorkspaces(fx.repo).workspaces[name]).toEqual(entry);
       const retry = runCli(fx.repo, ["teardown"], { INTERRUPT_DIR: fx.root });
-      expect(retry.status, retry.stderr).toBe(0);
-      expect(Object.values(readWorkspaces(fx.repo).workspaces)).toEqual([]);
+      expect(retry.status, retry.stderr).toBe(1);
+      expect(retry.stderr).toMatch(/abandoned cleanup.*explicit recovery/i);
+      expect(readWorkspaces(fx.repo).workspaces[name]).toEqual(entry);
     },
     TIMEOUT_MS,
   );
@@ -155,10 +229,15 @@ describe("installed workspace CLI cancellation", () => {
     TIMEOUT_MS,
   );
 
-  it.each(["teardown", "removeHere", "abandonedPreparation"])(
-    "retains interrupted target-owned purge through %s, including internal re-exec cleanup",
-    async (command) => {
-      const fx = fixture();
+  it.each([
+    { command: "teardown", companionRuntime: false },
+    { command: "teardown", companionRuntime: true },
+    { command: "removeHere", companionRuntime: false },
+    { command: "abandonedPreparation", companionRuntime: false },
+  ])(
+    "retains interrupted target-owned purge through $command, companion=$companionRuntime, including internal re-exec cleanup",
+    async ({ command, companionRuntime }) => {
+      const fx = fixture({ companionRuntime });
       const linked = join(fx.root, "linked");
       execFileSync("git", ["worktree", "add", "-b", "linked", linked], { cwd: fx.repo });
       expect(runCli(fx.repo, ["setup", "--path", linked]).status).toBe(0);

@@ -306,7 +306,7 @@ describe("external runtime ownership", () => {
 });
 
 describe("exclusive workspace cleanup ownership", () => {
-  it("recovers only dead claims and rejects stale settlement and release without losing retry evidence", async () => {
+  it("requires explicit recovery of abandoned cleanup and rejects stale settlement without losing retry evidence", async () => {
     const runtime = await activeTarget();
     const first = await updateWorkspaces(main, storage.registryDir, (registry) =>
       claimCleanupOwnership(registry, storage.currentWorktree),
@@ -320,6 +320,18 @@ describe("exclusive workspace cleanup ownership", () => {
     await updateWorkspaces(main, storage.registryDir, (registry) => {
       const entry = assertCleanupOwnership(registry, first);
       entry.cleanupOwner = { ...first.owner, pid: exitedPid() };
+    });
+    const abandoned = registryBytes();
+    await expect(
+      updateWorkspaces(main, storage.registryDir, (registry) =>
+        claimCleanupOwnership(registry, storage.currentWorktree),
+      ),
+    ).rejects.toThrow(/abandoned cleanup.*explicit recovery/i);
+    expect(registryBytes()).toBe(abandoned);
+    // This fixture never launched cleanup subprocesses; explicit recovery keeps the pending gate.
+    await updateWorkspaces(main, storage.registryDir, (registry) => {
+      const entry = findWorkspaceByPath(registry, storage.currentWorktree)?.entry;
+      if (entry) delete entry.cleanupOwner;
     });
     const replacement = await updateWorkspaces(main, storage.registryDir, (registry) =>
       claimCleanupOwnership(registry, storage.currentWorktree),

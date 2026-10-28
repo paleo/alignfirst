@@ -1146,7 +1146,9 @@ async function disposeTargetRuntime(
   await disposeRuntime(disposal, kernel.config.signal);
 }
 
+/** Requested purge identity, revalidated under the registry lock before cleanup admission. */
 interface CleanupRequest extends PurgeContext {
+  /** Captured registration timestamp; a replacement entry must not inherit this request. */
   createdAt: string;
 }
 
