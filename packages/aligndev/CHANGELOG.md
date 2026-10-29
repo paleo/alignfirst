@@ -1,5 +1,11 @@
 # aligndev
 
+## 0.30.1
+
+### Patch Changes
+
+- 06e5847: Updated Claude Code parent launch guidance to set an explicit background timeout.
+
 ## 0.30.0
 
 ### Minor Changes
