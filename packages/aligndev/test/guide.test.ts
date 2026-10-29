@@ -1273,8 +1273,11 @@ describe("codingAgent guides", () => {
       stdout.indexOf("### Pi parent"),
       stdout.indexOf("### Claude Code parent"),
     );
-    expect(claude).toContain("background-execution facility with no time limit");
-    expect(claude).toContain("subject to your tool timeout (10 minutes in Claude Code)");
+    expect(claude).toContain("Coding runs can last hours.");
+    expect(claude).toContain("`run_in_background`");
+    expect(claude).toContain("`timeout` set to the maximum your Bash tool description states");
+    expect(claude).not.toContain("BASH_MAX_TIMEOUT_MS");
+    expect(claude).not.toContain("with no time limit");
     expect(claude).toContain("when the harness wakes the session as the command exits");
     expect(pi).not.toContain("request escalated permissions");
     expect(pi).not.toContain("sandbox disabled");
