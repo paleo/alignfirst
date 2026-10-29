@@ -1,7 +1,7 @@
 ---
 name: alignfirst-setup-guide
 description: >-
-  Install, upgrade, recommend, or combine AlignFirst protocols, skills, Docmap and multi-stack workspaces; prepare projects through repository or companion files; set up AlignDev for an OpenClaw assistant or a coding-agent assistant.
+  Install, upgrade, recommend AlignFirst protocols, skills, Docmap and multi-stack workspaces; prepare projects through repository or companion files; set up AlignDev for an OpenClaw assistant or a coding-agent assistant.
 license: CC0 1.0
 metadata:
   author: Paleo
@@ -10,6 +10,25 @@ metadata:
 ---
 
 # AlignFirst Setup Guide
+
+## Check freshness first
+
+Before investigation, recommendations or setup, fetch the upstream skill read-only:
+
+```sh
+curl --fail --silent --show-error --location --max-time 20 --range 0-1023 \
+  https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/skills/alignfirst-setup-guide/SKILL.md \
+  | sed -n '1,/^---$/p'
+```
+
+It prints only the upstream frontmatter. Compare its `metadata.version` with this loaded skill's `metadata.version` using semantic version ordering, not string ordering.
+
+- **Upstream is newer:** stop and suggest `npx skills update -g`. Explain that it updates all global skills. Do not run it. Ask the user to restart or reload the agent after updating so it reads the new instructions.
+- **Fetch fails or either version is missing or invalid:** stop and report that freshness could not be verified. Proceed only with explicit user approval.
+
+Never use `npx skills check` for this gate; it aliases `update` and can install updates. Maintainers must bump `metadata.version` whenever this skill, its references or its assets change.
+
+## Routing
 
 Route by the user's intent. Inspect the repository and load the relevant references before changes. Protocols, skills, Docmap and workspaces can each be adopted independently. Require a clean working tree immediately before project mutations; read-only discovery needs no clean-tree gate.
 
