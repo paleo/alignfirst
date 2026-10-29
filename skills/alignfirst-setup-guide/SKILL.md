@@ -1,15 +1,34 @@
 ---
 name: alignfirst-setup-guide
 description: >-
-  Install, upgrade, recommend, or combine AlignFirst protocols, skills, Docmap and multi-stack workspaces; prepare projects through repository or companion files; set up AlignDev for an OpenClaw assistant or a coding-agent assistant.
+  Install, upgrade, recommend AlignFirst protocols, skills, Docmap and multi-stack workspaces; prepare projects through repository or companion files; set up AlignDev for an OpenClaw assistant or a coding-agent assistant.
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.55.0"
+  version: "0.55.1"
   repository: https://github.com/paleo/alignfirst
 ---
 
 # AlignFirst Setup Guide
+
+## Check freshness first
+
+Before investigation, recommendations or setup, fetch the upstream skill read-only:
+
+```sh
+curl --fail --silent --show-error --location --max-time 20 --range 0-1023 \
+  https://raw.githubusercontent.com/paleo/alignfirst/refs/heads/main/skills/alignfirst-setup-guide/SKILL.md \
+  | sed -n '1,/^---$/p'
+```
+
+It prints only the upstream frontmatter. Compare its `metadata.version` with this loaded skill's `metadata.version` using semantic version ordering, not string ordering.
+
+- **Upstream is newer:** stop and suggest `npx skills update -g`. Explain that it updates all global skills. Do not run it. Ask the user to restart or reload the agent after updating so it reads the new instructions.
+- **Fetch fails or either version is missing or invalid:** stop and report that freshness could not be verified. Proceed only with explicit user approval.
+
+Never use `npx skills check` for this gate; it aliases `update` and can install updates. Maintainers must bump `metadata.version` whenever this skill, its references or its assets change.
+
+## Routing
 
 Route by the user's intent. Inspect the repository and load the relevant references before changes. Protocols, skills, Docmap and workspaces can each be adopted independently. Require a clean working tree immediately before project mutations; read-only discovery needs no clean-tree gate.
 
@@ -30,9 +49,25 @@ When asked what to adopt, inspect repository evidence and available skills. Pres
 
 Global choices are `aligndev` (assistant playbook), `alignfirst` (protocol recognition), `paseo-alignfirst-workspace` (Paseo lifecycle), and command shortcuts `alspec`, `alplan`, `al`, `almerge`, `alreview`, `aldescription`, `alcatchup`, `alcatchupaad`, `alcatchupspec`. Command skills retain `disable-model-invocation: true`. Humans use `/name` in Claude/Copilot/Cursor, `$name` in Codex and `/skill:name` in Pi. The protocol-recognition skill is unnecessary when canonical project context instructions already supply it.
 
-A missing name in the session's skill list means unavailable here, not absent on disk. If the host exposes no list, availability is unknown. This check needs no filesystem scan or installer. Install globally only with approval, using the selected reference's current command. A skill alone supplies no executable Pi tools. Preserve duplicate-tool audits and native trust/permission policies. For Paseo, read its skill before creating/removing actual workspaces and preserve archive-before-removal.
+A missing name in the session's skill list means unavailable here, not absent on disk. If the host exposes no list, availability is unknown. This check needs no filesystem scan or installer. Install globally only with approval, using the selected reference's current command. A skill alone supplies no executable Pi tools. Preserve duplicate-tool audits and native trust/permission policies.
 
 Recommend protocols and Docmap regardless of language. Workspace isolation is also language-neutral; preserve existing project commands by expressing them in the selected configuration's workspace recipe. An absent manifest supplies protocol-ready defaults. Detect existing tooling and propose conversion rather than running incompatible old wrappers against new registries. Determine whether a separate work-files repository already exists before offering one.
+
+## Paseo setup
+
+When the user uses Paseo, recommend installing `paseo-alignfirst-workspace` globally with approval:
+
+```sh
+npx -y skills add https://github.com/paleo/alignfirst --global --yes --skill paseo-alignfirst-workspace </dev/null
+```
+
+Add `--agent <host>` to target the user's coding host. Recommend adding this line to the system prompt in Paseo settings:
+
+```text
+You are running inside Paseo.
+```
+
+Read the skill before creating/removing actual workspaces and preserve archive-before-removal.
 
 ## Project instructions
 

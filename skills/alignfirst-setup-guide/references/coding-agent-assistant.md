@@ -117,9 +117,27 @@ The `aligndev` skill goes in the developer's global agent configuration:
 npx -y skills add https://github.com/paleo/alignfirst --global --yes --skill aligndev </dev/null
 ```
 
-Add `--agent claude-code`, `--agent codex` or `--agent pi` to target one host. The verified `skills@1.7.2` Pi target installs globally under `~/.agents/skills/`, which Pi discovers. Check the installer's current help/source when upgrading rather than assuming its layout. Restart the agent after installation.
+Add `--agent claude-code`, `--agent codex` or `--agent pi` to target one host. The `skills` Pi target installs globally under `~/.agents/skills/`, which Pi discovers. Check the installer's current help/source when upgrading rather than assuming its layout. Restart the agent after installation.
 
 Without a skill, add the "Aligndev" section from the [`aligndev` README](https://github.com/paleo/alignfirst/tree/main/packages/aligndev#without-a-skill) to the developer's global agent instructions instead. The user then asks the session to work with aligndev.
+
+### Claude Code launch timeout
+
+For a Claude Code parent, recommend merging this into `~/.claude/settings.json` to allow delegated runs beyond two hours:
+
+```json
+{
+  "env": {
+    "BASH_MAX_TIMEOUT_MS": "86400000"
+  }
+}
+```
+
+Preserve existing settings and other `env` entries. If the parent uses `CLAUDE_CONFIG_DIR`, use that directory's `settings.json`. This raises the Bash timeout ceiling to 24 hours; launches still need an explicit `timeout` set to the maximum stated by the parent's Bash tool, alongside `run_in_background`. Restart Claude Code after changing the setting.
+
+### Paseo
+
+When the user uses Paseo, follow [Paseo setup](../SKILL.md#paseo-setup): recommend the workspace skill and the system prompt marker.
 
 ## 4. Install Pi tools for the requested roles
 

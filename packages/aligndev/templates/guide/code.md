@@ -120,7 +120,9 @@ Pi uses ordinary OS permissions and saved project trust, not an implied sandbox.
 
 ### Claude Code parent
 
-Coding runs can be long (several hours is fine), and a foreground command is subject to your tool timeout (10 minutes in Claude Code). Use your own background-execution facility with no time limit. When sandboxing is enabled, run `{{ALIGNDEV}} code` with the sandbox disabled: the child needs network and writes outside the project. Retain the initial `Session file: <path>` control line. End the launch turn on its acknowledgement without polling; follow "After a run completes" when the harness wakes the session as the command exits.
+Coding runs can last hours. Launch with `run_in_background` and pass `timeout` set to the maximum your Bash tool description states.
+
+When sandboxing is enabled, run `{{ALIGNDEV}} code` with the sandbox disabled: the child needs network and writes outside the project. Retain the initial `Session file: <path>` control line. End the launch turn on its acknowledgement without polling; follow "After a run completes" when the harness wakes the session as the command exits.
 
 ### Codex parent
 
