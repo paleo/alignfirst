@@ -8,7 +8,7 @@ Run `npx -y alignfirst context` from the repository root as your first command i
 
 **Package manager**: npm workspaces (root `package.json` declares `"workspaces": ["packages/*"]`).
 
-**Runtime**: Node 26 (`.nvmrc`), managed with fnm. ESM only (`"type": "module"`). Prefix Node commands with `fnm exec --using=.nvmrc`.
+**Runtime**: Node 26 (`.nvmrc`). ESM only (`"type": "module"`).
 
 **Language**: TypeScript with `strict: true`, `module: NodeNext`. Each package has a `tsconfig.build.json` (emits `dist/`) and a `tsconfig.json` (`noEmit`, includes `src` + `test`).
 
@@ -40,7 +40,7 @@ This repository is on *GitHub*.
 
 A **workspace** is a git worktree (with its branch) plus its own dev setup: symlinked shared directories and seeded config files. Workspaces are isolated, so you can work on several branches in parallel. This repository has no dev server, so the system runs portless: nothing to start, no `dev` script.
 
-The selected `alignfirst.json` holds nested conventions, the explicit developer-instructions reference and the workspace recipe. Run `fnm exec --using=.nvmrc npm run workspace -- --guide` after building. For a fresh linked worktree, retain its cwd and bootstrap through the already built main-checkout bin as documented in `DEVELOPERS.md`; do not download a published older CLI or invoke nonexistent target build output. Paseo owns Git deletion: archive first, teardown through that external entry, then let Paseo remove it.
+The selected `alignfirst.json` holds nested conventions, the explicit developer-instructions reference and the workspace recipe. Run `npx -y alignfirst workspace --guide` for lifecycle procedures. A fresh linked worktree can run `npx -y alignfirst workspace setup` before dependencies or build output exist. See `DEVELOPERS.md` for project preparation.
 
 The side-32 implementation workspace's live runtime state is intentionally pending the coordinated upgrade in `docs/upgrading-multi-stack-workspaces.md`. Do not run the new lifecycle against old registries. Configuration/context reads and work-file sync are safe independently of runtime adoption.
 

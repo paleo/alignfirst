@@ -1,6 +1,6 @@
 {
   "worktree": {
-    "setup": "main=$(git worktree list --porcelain | awk '/^worktree / {sub(/^worktree /, \"\"); print; exit}'); fnm exec --using=\"$main/.nvmrc\" node \"$main/packages/alignfirst/bin/alignfirst.mjs\" workspace setup",
-    "teardown": "main=$(git worktree list --porcelain | awk '/^worktree / {sub(/^worktree /, \"\"); print; exit}'); fnm exec --using=\"$main/.nvmrc\" node \"$main/packages/alignfirst/bin/alignfirst.mjs\" workspace teardown"
+    "setup": "npx -y alignfirst workspace setup",
+    "teardown": "npx -y alignfirst workspace teardown"
   }
 }

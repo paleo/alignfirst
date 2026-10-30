@@ -40,7 +40,7 @@ async function smoke() {
   for (const name of ["alignfirst", "aligndev"]) {
     assert.ok(
       existsSync(join(repository, "packages", name, "dist", "cli.js")),
-      `Build ${name} first: fnm exec --using=.nvmrc npm run build`,
+      `Build ${name} first: npm run build`,
     );
   }
   const root = mkdtempSync(join(tmpdir(), "coding-profiles-smoke-"));

@@ -44,7 +44,7 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
 
 > ⚠️ **Never `rm -rf artifacts` (or `.gateway-logs`).** Each run lands in its own **timestamped** subdir, so runs accumulate without colliding — deleting the directory throws away prior runs you may still need. These are bind-mount outputs; leave them in place.
 
-The reviewed toolchain is Node 26, npm `12.2.0`, Corepack `0.36.0` and pnpm `12.14.0`. Run local npm 12 commands without a global install, for example `fnm exec --using=.nvmrc npx --yes --package=npm@12.2.0 npm run env:build --prefix aligndev-openclaw-tests` from the repository root. npm 12 blocks dependency lifecycle scripts by default; the root and standalone manifests approve only the reviewed OpenClaw, esbuild and koffi versions. GenAI's no-op and protobufjs's warning-only scripts stay disabled. Re-review these policies when their versions change.
+The reviewed toolchain is Node 26, npm `12.2.0`, Corepack `0.36.0` and pnpm `12.14.0`. Run local npm 12 commands without a global install, for example `npx --yes --package=npm@12.2.0 npm run env:build --prefix aligndev-openclaw-tests` from the repository root. npm 12 blocks dependency lifecycle scripts by default; the root and standalone manifests approve only the reviewed OpenClaw, esbuild and koffi versions. GenAI's no-op and protobufjs's warning-only scripts stay disabled. Re-review these policies when their versions change.
 
 The generic host CLI can alternatively run on Bun 1.4.4 via `bunx --bun @alignfirst/openclaw-test` or explicitly Bun-owned scripts. This does not change the reviewed npm build/vendor/lockfile workflow above or the Node container toolchain. For a new Bun consumer, follow init's Docker Node/npm lockfile-preparation instructions before image builds; see the [package README](../../packages/openclaw-test/README.md#init). Docker, OpenClaw and native coding agents retain their own prerequisites.
 
@@ -261,10 +261,10 @@ Existing consumers with retired settings/wrappers/state first follow [the clean-
 From the repository root, using Node 26:
 
 ```sh
-fnm exec --using=.nvmrc npm run build
-fnm exec --using=.nvmrc npm test --prefix aligndev-openclaw-tests
-fnm exec --using=.nvmrc npm run typecheck --prefix aligndev-openclaw-tests
-fnm exec --using=.nvmrc npm test --workspace aligndev -- test/code/pi-agent.test.ts
+npm run build
+npm test --prefix aligndev-openclaw-tests
+npm run typecheck --prefix aligndev-openclaw-tests
+npm test --workspace aligndev -- test/code/pi-agent.test.ts
 sh -n aligndev-openclaw-tests/scripts/gateway-entrypoint.sh
 ```
 

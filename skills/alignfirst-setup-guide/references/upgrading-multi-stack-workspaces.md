@@ -17,7 +17,7 @@ Record the installed runtime/CLI and wrapper versions, main path, `git worktree 
 
 Check every worktree for pending finalizers, live spawn PIDs/process groups, command-managed services, containers, volumes, databases, tunnels and name-keyed sidecars. Dead PIDs do not prove external resources are gone. Stop new lifecycle operations during the cutover. Wait for pending finalizers or resolve abandoned ownership explicitly before cleanup.
 
-Agree which data to preserve and where it is backed up. Obtain approval before destructive teardown, volume deletion or worktree removal. External owners retain Git deletion; preserve Paseo archive-before-removal ordering. Do not use force to bypass locks, shared-target protection or failed cleanup.
+Agree which data to preserve and where it is backed up. Obtain approval before destructive teardown, volume deletion or worktree removal. Use teardown hooks when an external tool performs deletion; use `workspace remove` for direct removal. Do not use force to bypass locks, shared-target protection or failed cleanup.
 
 ## 2. Clean resources with the old installation
 

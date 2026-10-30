@@ -59,15 +59,15 @@ B7 remains blocked and unshipped; production waiting is unchanged. Removing thes
 From the repository root:
 
 ```sh
-fnm exec --using=.nvmrc npm test --workspace @alignfirst/pi-subagent
-fnm exec --using=.nvmrc npm test --workspace @alignfirst/pi-background
-fnm exec --using=.nvmrc npm run test:integration --workspace @alignfirst/pi-background
-fnm exec --using=.nvmrc npm run typecheck --workspace @alignfirst/pi-subagent
-fnm exec --using=.nvmrc npm run typecheck --workspace @alignfirst/pi-background
-fnm exec --using=.nvmrc npm run build --workspace @alignfirst/pi-subagent
-fnm exec --using=.nvmrc npm run build --workspace @alignfirst/pi-background
-fnm exec --using=.nvmrc npm run lint --workspace @alignfirst/pi-subagent
-fnm exec --using=.nvmrc npm run lint --workspace @alignfirst/pi-background
+npm test --workspace @alignfirst/pi-subagent
+npm test --workspace @alignfirst/pi-background
+npm run test:integration --workspace @alignfirst/pi-background
+npm run typecheck --workspace @alignfirst/pi-subagent
+npm run typecheck --workspace @alignfirst/pi-background
+npm run build --workspace @alignfirst/pi-subagent
+npm run build --workspace @alignfirst/pi-background
+npm run lint --workspace @alignfirst/pi-subagent
+npm run lint --workspace @alignfirst/pi-background
 ```
 
 `packages/pi-background/test/integration/aligndev-integration.test.ts` runs through `test:integration`, builds its CLI prerequisites and packs the background extension. It exercises quiet/result identity, out-of-order worktrees, failure/authentication, cancellation and runtime new/resume/fork/reload/quit. Fixture-local executables reject accidental npx/registry fallback.
@@ -75,7 +75,7 @@ fnm exec --using=.nvmrc npm run lint --workspace @alignfirst/pi-background
 After builds, run the packed-distribution gate:
 
 ```sh
-fnm exec --using=.nvmrc npm run release:smoke
+npm run release:smoke
 ```
 
 It installs the CLI tarballs without Pi, then creates three separate disposable Pi 1.3.0 installs. `scripts/pi-packed-smoke.mjs` uses package manifests and the public resource loader/runtime, with network-rejecting scripted providers. It checks assets/peers, duplicate registration, load-time resources, synchronous children, protected compaction/navigation, stale native follow-ups and concurrent process cleanup during replacement. Missing root entries and invalid default factories must fail the public loader check. `scripts/pi-packed-presentation.mjs` checks unversioned npm-source discovery against those same local tarballs, then captures a prompt-free real TUI startup through `scripts/pi-packed-tui.py`. It verifies package labels without `:dist` and single tool registration; Python 3 and a Unix PTY are required. On Linux the combined install also runs nested Pi/bash process groups. The drivers make no external model requests; only npm installation needs registry access.
@@ -83,7 +83,7 @@ It installs the CLI tarballs without Pi, then creates three separate disposable 
 Live tests stay outside `npm test`, CI and release smoke. Opt in explicitly after builds:
 
 ```sh
-fnm exec --using=.nvmrc node scripts/pi-live-acceptance.mjs --run
+node scripts/pi-live-acceptance.mjs --run
 ```
 
 The runner packs and installs disposable artifacts, resolves the explicit Terra selector from Pi's catalog and checks existing authentication. `PI_ACCEPTANCE_MODEL` can select another explicit Terra ID; it never chooses a non-Terra fallback. An unavailable model or credential fails the command. It copies only the selected provider's stored credential into a mode-0600 temporary auth file and removes the isolated installation in `finally`. Sanitized evidence is retained in the printed directory. The terminal lifecycle probe requires Linux and Python 3. To repeat one group, set `PI_ACCEPTANCE_CASE` to `subagents`, `ordinaryCompletion`, `aligndev`, `failureCancellation` or `cliLifecycle`.

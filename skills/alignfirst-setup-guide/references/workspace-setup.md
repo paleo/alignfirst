@@ -110,7 +110,7 @@ The same CLI can prepare isolated `.venv`, per-worktree databases and multiple p
 
 `workspace setup -c <branch> --from <ref>` creates; `workspace setup <branch>` reuses; `--path <path>` chooses a destination. Without branch/path, setup adopts the current registered Git root without switching branches. `workspace list --json` combines Git, resource registrations and external runtime owners without adopting or cleaning them. Rows expose nullable `runtimeDir` and `runtimeState` (`active`, `retained` or `deletionPending`). Runtime-only rows have null names/recipes, no ports and unprepared status.
 
-Paseo or another external owner runs `workspace setup` inside its checkout, then `workspace teardown` before its own deletion. Preserve Paseo's archive-before-removal procedure. Adoption does not transfer Git deletion ownership.
+External-tool hooks run `workspace setup` inside the target checkout and `workspace teardown` before the tool deletes it. An agent removing a workspace directly uses `workspace remove`. Creation by an external tool does not prohibit this route.
 
 `dev down` stops owned processes and command services. `workspace teardown` additionally runs destructive purge and releases identity/ports, preserving files, dependencies, links and Git state. `workspace remove` adds protected Git deletion and preserves branches. `workspace prune` explicitly cleans orphans before pruning Git metadata. Companion teardown retains runtime files and ownership after releasing resource names/ports. Remove disposes the target runtime after Git succeeds. Prune also disposes clean runtime-only orphans after external Git deletion, without another purge. Deletion failure retains discoverable deletionPending state; retry handles missing runtime directories. Live preparation/finalizers and startup claims block cleanup, even with a missing checkout. Wait for their owners first. Force bypasses dirtiness only; it never bypasses protected targets or failed cleanup.
 
@@ -122,7 +122,7 @@ An abruptly killed cleaner can leave destructive stop/purge subprocesses alive. 
 
 ## Agent Instructions
 
-In coding-agent `AGENTS.md` and, for an assistant, the explicitly referenced developer guide, describe the project's readiness and point to `npx -y alignfirst workspace --guide`. Record stack-specific commands and quirks, not a duplicate command reference. With protocols, retain the canonical context bootstrap; otherwise document branch/commit conventions and exclude effective plans, `.local` and `.local-wt` from broad searches.
+In coding-agent `AGENTS.md` and, for an assistant, the explicitly referenced developer guide, describe the project's readiness and point to `npx -y alignfirst workspace --guide`. Record stack-specific commands and quirks, not a duplicate command reference. Keep tool-specific lifecycle hooks in the tool's configuration rather than project instructions. With protocols, retain the canonical context bootstrap; otherwise document branch/commit conventions and exclude effective plans, `.local` and `.local-wt` from broad searches.
 
 ## The AlignDev Contract
 

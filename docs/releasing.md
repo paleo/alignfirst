@@ -21,7 +21,7 @@ Stable releases publish from GitHub Actions through npm trusted publishing (OIDC
 
 A push that publishes nothing — a feature merge, a docs-only merge — leaves `check` reporting no pending version, so no approval is ever requested.
 
-The publish job uses Node 26 and npm `12.2.0`, which retains trusted publishing and automatic OIDC provenance. npm 12 blocks dependency lifecycle scripts by default; the root manifest records version-scoped approvals for the reviewed build dependencies. The workflow identity, release approval and trusted-publisher bindings are unchanged. Locally, use `fnm exec --using=.nvmrc npx --yes --package=npm@12.2.0 npm <command>` rather than upgrading a global installation.
+The publish job uses Node 26 and npm `12.2.0`, which retains trusted publishing and automatic OIDC provenance. npm 12 blocks dependency lifecycle scripts by default; the root manifest records version-scoped approvals for the reviewed build dependencies. The workflow identity, release approval and trusted-publisher bindings are unchanged. Locally, use `npx --yes --package=npm@12.2.0 npm <command>` rather than upgrading a global installation.
 
 ## Verifying provenance
 

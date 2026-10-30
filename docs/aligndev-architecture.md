@@ -122,11 +122,11 @@ Unique-profile inference intentionally changes new-session selection: configured
 
 ## Manual Offline Profile Smoke
 
-The named **manual** check runs direct CLI integration against built `alignfirst` and `aligndev` entry points. Prerequisites are installed workspace dependencies, fnm with the repository's Node 26 runtime, Git on PATH, and a POSIX host with executable symlink support. From the repository root:
+The named **manual** check runs direct CLI integration against built `alignfirst` and `aligndev` entry points. Prerequisites are installed workspace dependencies, the repository's Node 26 runtime, Git on PATH, and a POSIX host with executable symlink support. From the repository root:
 
 ```sh
-fnm exec --using=.nvmrc npm run build
-fnm exec --using=.nvmrc npm run test:coding-profiles
+npm run build
+npm run test:coding-profiles
 ```
 
 The command runs [`scripts/coding-profiles-smoke.mjs`](../scripts/coding-profiles-smoke.mjs). It checks profile selection, real CLI reports, linked worktrees, companion placement, resume identity and independent quota routing. Stale settings must warn only on stderr while help, guide, JSON reports and a launch succeed; invalid recognized fields must still fail. Reads preserve the settings bytes. Disposable homes, projects and native CLI shims keep it offline and isolate settings, synthetic identities and process cleanup. Native agents, credentials and providers are not required.

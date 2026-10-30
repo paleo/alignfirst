@@ -95,10 +95,10 @@ Process-query failures and unconfirmed survivors are cleanup errors. Unresolved 
 From the repository root, using the repository's Node version:
 
 ```sh
-fnm exec --using=.nvmrc npm test --workspace @alignfirst/pi-subagent
-fnm exec --using=.nvmrc npm run typecheck --workspace @alignfirst/pi-subagent
-fnm exec --using=.nvmrc npm run build --workspace @alignfirst/pi-subagent
-fnm exec --using=.nvmrc npm run lint --workspace @alignfirst/pi-subagent
+npm test --workspace @alignfirst/pi-subagent
+npm run typecheck --workspace @alignfirst/pi-subagent
+npm run build --workspace @alignfirst/pi-subagent
+npm run lint --workspace @alignfirst/pi-subagent
 ```
 
 Tests include real descendant trees, TERM-ignoring and separately grouped children, natural leader exit with inherited/closed pipes, descendants created during grace, an actual Pi child running bash, a deterministic headless Pi parent invoking parallel subagents, saved-trust/refusal cases, actual SDK reload, and an actual Pi parent shutdown with nested Pi/bash work. They make no external model calls. Repository `npm run release:smoke` verifies standalone packed installs, independently and alongside the background package. Opt-in Terra checks, including a headless parent delegating single/parallel assignments, are documented in [Pi Extensions](../../docs/pi-extensions.md#checks).

@@ -5,7 +5,7 @@ description: >-
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.55.1"
+  version: "0.55.2"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -67,7 +67,18 @@ Add `--agent <host>` to target the user's coding host. Recommend adding this lin
 You are running inside Paseo.
 ```
 
-Read the skill before creating/removing actual workspaces and preserve archive-before-removal.
+Keep project-specific hooks in `paseo.json`. Run these commands inside the target worktree, adding the project's runtime prefix when needed:
+
+```json
+{
+  "worktree": {
+    "setup": "npx -y alignfirst workspace setup",
+    "teardown": "npx -y alignfirst workspace teardown"
+  }
+}
+```
+
+The published CLI works before local dependencies or build output exist. Teardown hooks preserve the worktree for the tool's deletion step. For agent-initiated removal, read the workspace skill, archive first, then use `workspace remove`. Keep Paseo-specific lifecycle instructions out of project agent instructions and developer guides.
 
 ## Project instructions
 
@@ -90,7 +101,7 @@ An assistant coordinates the conversation and delegates coding to the coding **a
 3. Docmap and meaningful project docs. When `docs/` is absent and documentation is part of preparation, follow [docmap-bootstrapping.md](references/docmap-bootstrapping.md).
 4. A unified workspace route through `alignfirst workspace`. The optional recipe in the selected merged configuration declares project commands; without `workspace`/`devServer`, setup is protocol-ready and performs no install/build/start. Prepare effective plans and selected runtime storage first; only project runtime requires ignored/untracked `.local-wt/`. Document separate stack commands when defaults are used.
 5. Confirmed runtime requirements. Node projects declare their version through `.nvmrc`, `.node-version` or `engines.node`; ask when none exists. Python and other runtimes retain their documented tools. Running the CLI through Node/Bun does not change project commands.
-6. A project-specific developer guide, commonly `DEVELOPERS.md` or `README.md`, with its relative path explicitly recorded as `developerInstructions`. Use `alignfirst developer-instructions` to read conventions and configured content, and nullable `locations.developerInstructions` to locate edits. Without a reference there is no filename fallback. Include confirmed commands, architecture, documentation map, workflow and verification. Include the workspace guide pointer and its actual readiness boundary, public URLs when services exist, and external ownership rules.
+6. A project-specific developer guide, commonly `DEVELOPERS.md` or `README.md`, with its relative path explicitly recorded as `developerInstructions`. Use `alignfirst developer-instructions` to read conventions and configured content, and nullable `locations.developerInstructions` to locate edits. Without a reference there is no filename fallback. Include confirmed commands, architecture, documentation map, workflow and verification. Include the workspace guide pointer and its actual readiness boundary, and public URLs when services exist. Keep tool-specific lifecycle hooks in the tool's configuration.
 7. `aligndev project doctor --root <projects-directory>` passes after settings/manifest creation and before workspace setup. A range belongs solely in `devServer.ports`; use `project free-ports` as a lookup when the inventory owns an enclosing range.
 
 Assistant preparation skips command-skill installation and global bootstrap changes unless separately requested. Companion-only preparation follows its authorization and location checks. Native coding-agent permissions are unchanged; report protected-path refusals rather than bypassing them.

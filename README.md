@@ -59,10 +59,10 @@ At the end, feel free to uninstall the skill. It won't be used by your project a
 After a fresh clone:
 
 ```sh
-fnm exec --using=.nvmrc npm install
-fnm exec --using=.nvmrc npm run build
+npm install
+npm run build
 # Prepare ignored effective .plans separately, then:
-fnm exec --using=.nvmrc npm run workspace -- setup
+npm run workspace -- setup
 ```
 
-Tracked settings, nested conventions, the developer-instructions reference and the workspace recipe live in one `alignfirst.json`. A fresh linked worktree must bootstrap from the already built main-checkout CLI while retaining the target cwd; see [`DEVELOPERS.md`](DEVELOPERS.md) for the exact command and Paseo teardown ownership. Existing old runtime state needs the [coordinated upgrade](docs/upgrading-multi-stack-workspaces.md) before lifecycle use.
+Tracked settings, nested conventions, the developer-instructions reference and the workspace recipe live in one `alignfirst.json`. A fresh linked worktree can run `npx -y alignfirst workspace setup` without local dependencies or build output; see [`DEVELOPERS.md`](DEVELOPERS.md) for preparation and cleanup. Existing old runtime state needs the [coordinated upgrade](docs/upgrading-multi-stack-workspaces.md) before lifecycle use.
