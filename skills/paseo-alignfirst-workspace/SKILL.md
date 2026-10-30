@@ -4,7 +4,7 @@ description: Register or archive an AlignFirst workspace or an existing worktree
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.3.2"
+  version: "0.3.3"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -21,13 +21,13 @@ First, you need:
 
 ```sh
 paseo workspace create \
-  --isolation=worktree \
+  --isolation=local \
   --project "<project-id>" \
   --path="<absolute-worktree-path>" \
   --title="<branch-name>"
 ```
 
-Keep the `=` characters. Replace the placeholders with the actual values.
+Keep the `=` characters. The `local` value for isolation is correct for an existing worktree. Replace the placeholders with the actual values.
 
 ## Archive a Paseo workspace
 
