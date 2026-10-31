@@ -32,7 +32,7 @@ For local mode, create `.plans/` and ignore it. A public project's README should
 
 `plans.autoArchive: true` makes sync archive stale tickets and completed no-ticket sessions under `_archives/`; remove it to opt out. `ALIGNFIRST_ARCHIVE_DAYS` defaults to 7. Running `_aligndev/*.running.md` logs are excluded from snapshots. Shared sync serializes through a clone lock, consolidates pending sync commits and retries busy/advancing remotes up to three times. A conflict aborts rebase and retains local commits; resolve it in the clone with `git pull --rebase`, then retry sync.
 
-With the canonical `alignfirst context` bootstrap, the CLI supplies the sync instruction. Otherwise document: after every `.plans/` change, run `npx -y alignfirst sync`. The assistant's explicitly referenced developer guide names the repository and sync command.
+With the canonical `alignfirst context` bootstrap, the CLI supplies the sync instruction; do not duplicate it in the developer guide. Otherwise document: after every `.plans/` change, run `npx -y alignfirst sync`. Include work-files provisioning in the README's local installation procedure only when it requires a manual step.
 
 ## Before workspace setup
 

@@ -22,7 +22,7 @@ Project placement uses per-worktree `.local-wt/`, ignored, untracked and free of
 
 Setup never provisions missing plans, selects companions or edits tracked ignore rules. Prepare these separately through [plans setup](plans-setup.md) or [companion setup](companion-setup.md). For an assistant, the separately authorized `aligndev guide work-files-setup` procedure precedes ticket reservation, request capture and coding effects.
 
-Without a manifest, setup is synchronous and protocol-ready: Git, work files and runtime storage. It installs nothing, seeds no application configuration, allocates no ports and starts no services. `--full` and dev startup require declared services. Usable untracked `.local` is shared by default when present; tracked `.local` stays branch-local. Explicit `workspace.sharedDirs` adds project directories and cannot override plans/runtime policies.
+Without a manifest, setup is synchronous and protocol-ready: Git, work files and runtime storage. It installs nothing, seeds no application configuration, allocates no ports and starts no services. `--full` and dev startup require declared services. Usable untracked `.local` is shared by default when present; tracked `.local` stays branch-local. When authoring configuration, explicitly add `.local` to `workspace.sharedDirs` if the directory exists and is gitignored. Check `git check-ignore .local/` and verify `git ls-files -- .local` is empty; report tracked or staged conflicts before proceeding. Preserve other shared entries, and do not create `.local` just to populate this list. Explicit sharing cannot override plans/runtime policies.
 
 ## Configuration
 
@@ -34,7 +34,7 @@ The editor schema ships at `alignfirst/schemas/alignfirst-v1.schema.json`. Valid
 
 ## Manifest and project scripts
 
-Copy [alignfirst.json](../assets/alignfirst.json) and adapt its commands. It is data, not an expression language. The asset is a Node example with an invocation-bound concurrency limit and opt-in Node startup-error preset; scripts own stack-specific details. Add `developerInstructions` only when supplying or recommending that file. `alignfirst developer-instructions` prints conventions first, then configured content with its resolved source path. It discovers no fallback filename. The optional groups are `workspace` and `devServer`.
+Copy [alignfirst.json](../assets/alignfirst.json) and adapt its commands and conventions. Confirm unclear conventions using [project setup](alignfirst-skills-setup.md#configure-the-project). It is data, not an expression language. The asset is a Node example with an invocation-bound concurrency limit and opt-in Node startup-error preset; scripts own stack-specific details. Add `developerInstructions` only when supplying or recommending that file. `alignfirst developer-instructions` prints conventions first, then configured content with its resolved source path. It discovers no fallback filename. The optional groups are `workspace` and `devServer`.
 
 `workspace` accepts `sharedDirs`, `gitignoredFiles`, named sequential `preSetup`, `finalize`, `purge` steps and `summary`. Finalize runs in a detached installed-CLI child; ordinary setup waits. `--detached` returns pending, and `workspace wait` joins it. Cancelling either waiter leaves an already-spawned finalizer running independently. Without a custom summary, setup and status report the workspace name, path, branch and preparation status. Failed/partial setup retains files and identity; repair the reported problem and retry the printed setup command.
 
@@ -122,7 +122,9 @@ An abruptly killed cleaner can leave destructive stop/purge subprocesses alive. 
 
 ## Agent Instructions
 
-In coding-agent `AGENTS.md` and, for an assistant, the explicitly referenced developer guide, describe the project's readiness and point to `npx -y alignfirst workspace --guide`. Record stack-specific commands and quirks, not a duplicate command reference. Keep tool-specific lifecycle hooks in the tool's configuration rather than project instructions. With protocols, retain the canonical context bootstrap; otherwise document branch/commit conventions and exclude effective plans, `.local` and `.local-wt` from broad searches.
+With protocols, use the [canonical context bootstrap](alignfirst-skills-setup.md#project-instructions) in `AGENTS.md`. Omit generic workspace-readiness text, workspace-guide pointers and search exclusions supplied by the CLI. Preserve project-specific rules; workspace-only adoption does not add protocol instructions.
+
+Follow [Project documentation defaults](../SKILL.md#project-documentation-defaults) for the README's local installation procedure and the developer guide's daily commands and essential references. Keep tool-specific lifecycle hooks in the tool's configuration.
 
 ## The AlignDev Contract
 

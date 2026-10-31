@@ -14,7 +14,7 @@ Installing the CLI globally provides the bare `alignfirst` command:
 npm install -g alignfirst
 ```
 
-Offer this in the README as a convenience and use the bare command when describing it. Project instructions remain on `npx alignfirst` and never depend on the global installation.
+Offer global installation only when requested. Omit it from generated READMEs by default. Project instructions remain on `npx alignfirst` and never depend on the global installation.
 
 ## Install the Skills
 
@@ -96,7 +96,9 @@ mkdir .plans
 printf '%s\n' .plans >> .gitignore
 ```
 
-Detect the conventions first. Take the ticket format from branches and tickets: `^\d+$` for issue numbers, `^[A-Z]+-\d+$` for Jira-like keys, or none without a convention. The pattern is one anchored expression; alternatives go inside a group, as in `^(ABC|XYZ)-\d+$`. Take the branch-name template from existing branches, and the commit style from `git log --oneline -20`. Resolve the default branch with `git ls-remote --symref origin HEAD`; use the sole remote when `origin` is absent, and ask the user when several non-`origin` remotes exist. Omit any convention that repository evidence cannot establish.
+Detect existing conventions first. Take the ticket format from branches and tickets: `^\d+$` for issue numbers or `^[A-Z]+-\d+$` for Jira-like keys. The pattern is one anchored expression; alternatives go inside a group, as in `^(ABC|XYZ)-\d+$`. Take the branch-name template from existing branches, and the commit style from `git log --oneline -20`. Resolve the default branch with `git ls-remote --symref origin HEAD`; use the sole remote when `origin` is absent, and ask the user when several non-`origin` remotes exist.
+
+When evidence is missing or unclear, ask the user to confirm conventions before writing them. Suggest numeric ticket IDs, `main`, `{TICKET_ID}/{slug-1-3-words}` branches, conventional commits with bracketed ticket references, and no agent attribution, as shown below. Preserve established conventions; omit a field only when the user chooses to leave it unspecified.
 
 ### Without `alignfirst.json`
 
@@ -114,7 +116,7 @@ Add `- Default branch: {DEFAULT_BRANCH}.` only when `git symbolic-ref refs/remot
 
 ### With `alignfirst.json`
 
-Write `alignfirst.json` with the detected fields. Use `alignfirst.jsonc` for comments or trailing commas; never leave both variants in the selected location:
+Include a `conventions` section by default, using detected or user-confirmed values. The following example is the suggested baseline when conventions are unclear. Use `alignfirst.jsonc` for comments or trailing commas; never leave both variants in the selected location:
 
 ```json
 {
@@ -133,6 +135,10 @@ Write `alignfirst.json` with the detected fields. Use `alignfirst.jsonc` for com
 ```
 
 Keep `plans.autoArchive: true`, including in local mode; the user can remove it to opt out. Keep only applicable optional fields. Unknown properties are rejected. The selected document also holds optional `workspace`/`devServer`; port ranges belong only in `devServer.ports`. One required schema version covers all sections. Optional `$schema` is URI metadata and is never fetched. Future breaking formats require in-memory converters retained through the CLI major. Existing retired settings/wrappers follow [the upgrade runbook](upgrading-multi-stack-workspaces.md).
+
+When `.local/` exists and is gitignored, include it explicitly in `workspace.sharedDirs`, preserving other entries. Verify it contains no tracked or staged files before sharing it. See [workspace setup](workspace-setup.md#required-baseline-and-defaults).
+
+For README and developer-guide content, follow [Project documentation defaults](../SKILL.md#project-documentation-defaults).
 
 ### Local installation
 
@@ -156,10 +162,10 @@ When the repository adopts AlignFirst skills or protocols, read the existing `AG
 ```markdown
 ## Start every session with the project context
 
-Run `npx -y alignfirst context` from the repository root as your first command, whatever the task. It prints the project conventions (ticket IDs, branch names, commits), the documentation map, and the AlignFirst protocols.
+Run `npx -y alignfirst context` from the repository root once, as your first command in the session, whatever the task. It prints the project conventions (ticket IDs, branch names, commits), the documentation map, and the AlignFirst protocols.
 ```
 
-Replace any `Docmap - Seek Documentation` section and redundant protocol instructions. Preserve essential-documentation lists and project conventions that are not represented in `alignfirst.json` or `alignfirst.jsonc`.
+Replace any `Docmap - Seek Documentation` section and redundant protocol instructions. Remove generic workspace-readiness text, workspace-guide pointers and search exclusions already supplied by the AlignFirst CLI. The context bootstrap is sufficient for default AlignFirst guidance. Preserve essential-documentation lists and project-specific rules or conventions that are not represented in `alignfirst.json` or `alignfirst.jsonc`.
 
 ### Repositories Without AlignFirst Instructions
 
@@ -168,7 +174,7 @@ A developer who works in a repository without this section, such as a companion-
 ```markdown
 ## AlignFirst - Start every session with the project context
 
-When you work on the project `/path/to/a/project`, run `npx -y alignfirst context` as your first command, whatever the task.
+When you work on the project `/path/to/a/project`, run `npx -y alignfirst context` from the repository root once, as your first command in the session, whatever the task.
 ```
 
 Add one line per such project to the same section. The section uses no agent-specific mechanism.

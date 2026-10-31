@@ -5,7 +5,7 @@ description: >-
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.55.2"
+  version: "0.55.3"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -88,6 +88,14 @@ The published CLI works before local dependencies or build output exist. Teardow
 
 Global skills do not opt every repository into protocols. Workspace and Docmap adoption alone do not opt it into protocols either.
 
+## Project documentation defaults
+
+Keep generated entry points minimal. Preserve useful existing project content.
+
+- `README.md` contains the local environment installation procedure. With workspaces, use a `## Local environment installation` section containing `npx -y alignfirst workspace setup`, with the project's runtime prefix when needed. Include prerequisites or manual steps only when required to make that procedure work. Omit generic tooling explanations, optional global installations, command catalogs and pending-work notices by default.
+- `DEVELOPERS.md`, titled `# Developer Reference`, is the entry point for an assistant session. Include confirmed daily development commands, especially how to build and test, plus project-specific guidance needed to use them. Link to the most important documentation when it helps the assistant begin work; keep this selection short. When those details are undecided, the title alone is sufficient. Omit generic AlignFirst explanations, full documentation indexes, status filler and verification lists for the setup itself.
+- Record a developer guide's relative path as `developerInstructions` when supplying it. Detailed project documentation belongs in `docs/` and is discovered through Docmap.
+
 ## A repository that must stay untouched
 
 Use [companion-setup.md](references/companion-setup.md). Protocols and Docmap can keep all selected files outside the repository. A registration's `defaultLocation: "companion"` can also select the complete recipe and external runtime. This creates no checkout runtime directory/link or runtime ignore rule. Placement is not a write sandbox: project commands, shared directories, application outputs and Git operations retain their writes. Obtain approval for those effects.
@@ -101,7 +109,7 @@ An assistant coordinates the conversation and delegates coding to the coding **a
 3. Docmap and meaningful project docs. When `docs/` is absent and documentation is part of preparation, follow [docmap-bootstrapping.md](references/docmap-bootstrapping.md).
 4. A unified workspace route through `alignfirst workspace`. The optional recipe in the selected merged configuration declares project commands; without `workspace`/`devServer`, setup is protocol-ready and performs no install/build/start. Prepare effective plans and selected runtime storage first; only project runtime requires ignored/untracked `.local-wt/`. Document separate stack commands when defaults are used.
 5. Confirmed runtime requirements. Node projects declare their version through `.nvmrc`, `.node-version` or `engines.node`; ask when none exists. Python and other runtimes retain their documented tools. Running the CLI through Node/Bun does not change project commands.
-6. A project-specific developer guide, commonly `DEVELOPERS.md` or `README.md`, with its relative path explicitly recorded as `developerInstructions`. Use `alignfirst developer-instructions` to read conventions and configured content, and nullable `locations.developerInstructions` to locate edits. Without a reference there is no filename fallback. Include confirmed commands, architecture, documentation map, workflow and verification. Include the workspace guide pointer and its actual readiness boundary, and public URLs when services exist. Keep tool-specific lifecycle hooks in the tool's configuration.
+6. A project-specific developer guide, commonly `DEVELOPERS.md` or `README.md`, with its relative path explicitly recorded as `developerInstructions`. Use `alignfirst developer-instructions` to read conventions and configured content, and nullable `locations.developerInstructions` to locate edits. Without a reference there is no filename fallback. Follow [Project documentation defaults](#project-documentation-defaults). Include confirmed daily commands, especially build and test, relevant project constraints, and useful references to essential documentation. Put local installation in the README, and include public URLs when services exist. Keep tool-specific lifecycle hooks in the tool's configuration.
 7. `aligndev project doctor --root <projects-directory>` passes after settings/manifest creation and before workspace setup. A range belongs solely in `devServer.ports`; use `project free-ports` as a lookup when the inventory owns an enclosing range.
 
 Assistant preparation skips command-skill installation and global bootstrap changes unless separately requested. Companion-only preparation follows its authorization and location checks. Native coding-agent permissions are unchanged; report protected-path refusals rather than bypassing them.

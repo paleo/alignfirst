@@ -4,7 +4,7 @@ This repository documents and operates `{{SERVER_HOST}}`, the server that runs *
 
 ## Start every session with the project context
 
-Run `npx -y alignfirst context` from the repository root as your first command, whatever the task. It prints the project conventions (ticket IDs, branch names, commits), the documentation map, and the AlignFirst protocols.
+Run `npx -y alignfirst context` from the repository root once, as your first command in the session, whatever the task. It prints the project conventions (ticket IDs, branch names, commits), the documentation map, and the AlignFirst protocols.
 
 ## Sysadmin workflow
 
@@ -19,12 +19,6 @@ Repository specifics:
 
 - Runbooks match `docs/installations/01-server-setup.md`: one short line of prose, then a fenced code block.
 - `.reports/` is committed.
-
-## Workspaces
-
-A **workspace** is a git worktree with effective work files and isolated runtime storage. This repository has no install/build steps, seeded application config or dev services. Usable untracked `.local` is shared when present.
-
-Run `npx -y alignfirst workspace --guide` for the full procedures. The merged configuration is setup-only; readiness implies no build or running service. Prepare effective plans and selected runtime storage; only project runtime needs ignored, untracked `.local-wt/`.
 
 ## Writing OpenClaw workspace files
 
