@@ -82,6 +82,12 @@ for (const agent of Object.keys(legacySettings)) {
       runSection(f, "Bootstrap backup before conversion", 1);
       assert.equal(readFileSync(f.deployed, "utf8"), f.originalSettings);
       assert(!existsSync(join(f.home, "seed/old-seed-only")), "Execute the actual seed refresh");
+      run(f, "bash", [
+        "--noprofile",
+        "--norc",
+        "-euc",
+        section(f, "Writable AlignFirst home", "installations/06-security-hardening.md")[0],
+      ]);
       runSection(f, "One-time: convert direct launch settings");
       assert.deepEqual(JSON.parse(readFileSync(f.deployed, "utf8")), f.reviewedSettings);
       // The runbook requires operator-reviewed replacement of former Claude native skill links.
@@ -113,8 +119,9 @@ for (const agent of Object.keys(legacySettings)) {
       const events = readFileSync(f.log, "utf8");
       assert(events.indexOf("kill\n") < events.indexOf("tar:create\n"));
       assert(events.indexOf("tar:list\n") < events.indexOf("rsync\n"));
-      assert(events.indexOf("rsync\n") < events.indexOf("chattr:-i\n"));
-      assert(events.indexOf("chattr:+i\n") < events.indexOf("openclaw\n"));
+      assert(events.indexOf("rsync\n") < events.indexOf("chattr:-ia\n"));
+      assert(events.indexOf("chattr:-ia\n") < events.indexOf("openclaw\n"));
+      assert(!events.includes("chattr:+i\n"), "Settings migration must not re-lock AlignFirst");
     });
   });
 
@@ -328,9 +335,9 @@ function onlyBackup(f, kind) {
   return join(base, entries[0]);
 }
 
-function section(f, heading) {
-  const doc = readFileSync(join(f.admin, "docs/operations/update-assistant.md"), "utf8");
-  const text = doc.split(`\n## ${heading}\n`)[1]?.split("\n## ")[0];
+function section(f, heading, path = "operations/update-assistant.md") {
+  const doc = readFileSync(join(f.admin, "docs", path), "utf8");
+  const text = doc.split(new RegExp(`\\n#{2,3} ${heading}\\n`))[1]?.split(/\n#{2,3} /u)[0];
   assert(text !== undefined, `Missing section: ${heading}`);
   return [...text.matchAll(/```sh\n([\s\S]*?)\n```/gu)].map((match) => match[1]);
 }
@@ -389,6 +396,15 @@ if (name === "sudo") {
   if (command.endsWith("/alignfirst-assistant-kill")) {
     inside(command); assert.equal(args.length, 0); log("kill");
   } else {
+    if (command === "find") {
+      assert.equal(args[0], join(home, ".alignfirst"));
+      assert([
+        ["(", "-type", "d", "-o", "-type", "f", ")", "-exec", "chattr", "-ia", "{}", "+"],
+        ["-type", "d", "-exec", "chmod", "u+rwx", "{}", "+"],
+        ["-type", "f", "-exec", "chmod", "u+rw", "{}", "+"],
+      ].some(expected => JSON.stringify(expected) === JSON.stringify(args.slice(1))));
+      execute("/usr/bin/find", args);
+    }
     assert(["install", "chattr", "chown", "rsync"].includes(command) ||
       [join(root, "opt/fixture/libexec/bootstrap-backup.sh"), join(home, "seed/bin/backup.sh")].includes(command));
     execute(command, args);
@@ -401,17 +417,18 @@ if (name === "sudo") {
   const safe = [];
   while (args[0]?.startsWith("-")) {
     const flag = args.shift();
-    if (["-o", "-g"].includes(flag)) assert.equal(args.shift(), "root");
+    if (["-o", "-g"].includes(flag))
+      assert.equal(args.shift(), args.at(-1) === join(home, ".alignfirst/aligndev.settings.json") ? "fixture" : "root");
     else if (flag === "-m") safe.push(flag, args.shift());
     else { assert(["-d", "-D"].includes(flag)); safe.push(flag); }
   }
   for (const path of args) inside(path);
   execute("/usr/bin/install", [...safe, ...args]);
 } else if (name === "chown") {
-  assert.deepEqual(args.slice(0, 2), ["-R", "fixture:fixture"]);
+  assert.deepEqual(args.slice(0, 2), [args.at(-1) === join(home, ".alignfirst") ? "-Rh" : "-R", "fixture:fixture"]);
   args.slice(2).forEach(inside);
 } else if (name === "chattr") {
-  assert(["-i", "+i"].includes(args[0])); log("chattr:" + args.shift());
+  assert.equal(args[0], "-ia"); log("chattr:" + args.shift());
   args.forEach(inside);
 } else if (name === "rsync") {
   assert.deepEqual(args.slice(0, 2), ["-a", "--delete"]);

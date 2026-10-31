@@ -5,7 +5,7 @@ description: >-
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.55.3"
+  version: "0.55.4"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -118,7 +118,7 @@ Assistant preparation skips command-skill installation and global bootstrap chan
 
 Read [aligndev-openclaw.md](references/aligndev-openclaw.md), including its deployment gate, before rendering/upgrading. The generated private admin repository owns installation/operations runbooks. Do not load deployment procedures for ordinary project tooling.
 
-The three overlays use named profiles and inventoried native stores. Pi retains its approved writable `auth.json` exception; other managed resources remain maintenance-protected. Offline template checks do not certify deployment, OS hardening, authentication or conversation behavior. Do not perform live/admin operations without separate authorization.
+The three overlays use named profiles and inventoried native stores. The entire service `~/.alignfirst/` tree stays service-owned and writable, without immutable or append-only flags. Pi retains its approved writable `auth.json` exception; other managed resources outside `~/.alignfirst/` remain maintenance-protected. Offline template checks do not certify deployment, OS hardening, authentication or conversation behavior. Do not perform live/admin operations without separate authorization.
 
 ## A coding agent as the assistant
 

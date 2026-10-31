@@ -174,8 +174,7 @@ install_environment_files() {
 
 install_aligndev_config() {
   echo "[seed] aligndev settings — $ALIGNDEV_CONFIG_FILE"
-  # Writes nothing when the file is unchanged, so a re-seed succeeds while 06 keeps the file and
-  # its directory immutable.
+  # Settings and the entire AlignFirst home stay service-owned and writable.
   if [ ! -d "$ALIGNFIRST_HOME" ]; then install -d -m 755 "$ALIGNFIRST_HOME"; fi
   if ! cmp -s "$DIR/aligndev.settings.json" "$ALIGNDEV_CONFIG_FILE"; then
     install -m 644 "$DIR/aligndev.settings.json" "$ALIGNDEV_CONFIG_FILE"
@@ -189,8 +188,7 @@ install_aligndev_config() {
 }
 
 create_companions_dir() {
-  # The companions and their registry. The directory stays service-owned inside the locked
-  # directory, so the assistant registers a project and creates its companion on its own.
+  # The assistant manages companions and their registry directly.
   if [ ! -d "$COMPANIONS_DIR" ]; then install -d -m 755 "$COMPANIONS_DIR"; fi
 }
 

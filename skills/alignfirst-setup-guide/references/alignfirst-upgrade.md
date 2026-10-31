@@ -45,6 +45,10 @@ generated output.
 The v1 and v2 migrations preserve project knowledge and remove their legacy layouts. After either
 one, continue with the v3 migration for the CLI installation and project config.
 
+## Keep the Service AlignFirst Home Writable
+
+On an AlignDev OpenClaw host, the entire service `~/.alignfirst/` tree must stay service-owned and writable, including the directory itself, AlignDev settings, companions and future descendants. Remove legacy immutable and append-only flags through [Writable AlignFirst home](../assets/aligndev-openclaw-template/base/docs/installations/06-security-hardening.md#writable-alignfirst-home) in the generated `06-security-hardening.md`. Update the maintenance controls before migrating; older wrappers can restore the retired locks. Every historical migration below preserves this writable state. Protections outside this tree remain unchanged, including Pi's existing writable authentication exception.
+
 ## Move the Home Directory
 
 `alignfirst` 0.6.0 and `aligndev` 0.20.0 read their files from `~/.alignfirst/` only. `alignfirst` 0.7.0 reads the companion registry from `~/.alignfirst/companions/registry.json`. When `~/.config/alignfirst/` or a `companions.json` exists on the machine, migrate once:
@@ -54,7 +58,7 @@ one, continue with the v3 migration for the CLI installation and project config.
 3. Move `companions.json`, from `~/.config/alignfirst/` or `~/.alignfirst/`, to `~/.alignfirst/companions/registry.json`. Remove `root` from it; the registry no longer accepts it.
 4. Remove `~/.config/alignfirst/`, then run `alignfirst doctor` in a project that has a companion.
 
-On an AlignDev OpenClaw host, `~/.alignfirst/` and its files are immutable. The operator unlocks them, moves the files, and gives `registry.json` to the service account, which edits it. The operator then removes `infra/openclaw/companions.json` from the admin repository, re-seeds, and locks `~/.alignfirst/` as `06-security-hardening.md` describes.
+On an AlignDev OpenClaw host, first apply [Keep the Service AlignFirst Home Writable](#keep-the-service-alignfirst-home-writable). The operator moves the files, preserves service ownership and writability throughout `~/.alignfirst/`, removes `infra/openclaw/companions.json` from the admin repository, and re-seeds. Do not restore the old locks.
 
 ## Rename the AlignDev Settings
 
@@ -63,16 +67,11 @@ On an AlignDev OpenClaw host, `~/.alignfirst/` and its files are immutable. The 
 1. Move it to `~/.alignfirst/aligndev.settings.json`. The schema is unchanged.
 2. Run `aligndev guide code`, version 0.23.0 or later. It fails on an invalid file.
 
-On an AlignDev OpenClaw host, the file and `~/.alignfirst/` are root-owned and immutable (`06-security-hardening.md`). The new maintenance wrapper unlocks the directory and `aligndev.settings.json`, never the old file, and reads the coding agent from the admin repository's `infra/openclaw/aligndev.settings.json`. The operator migrates during `update-assistant.md`, in this order:
+On an AlignDev OpenClaw host, the operator migrates during `update-assistant.md`, in this order:
 
-1. In the admin repository, rename `infra/openclaw/aligndev.config.json` to `infra/openclaw/aligndev.settings.json`, and bring `seed.sh`, `bin/assistant-maintenance.sh`, `bin/backup.sh` and the docs to the current template. Commit, pull on the host, and reinstall the maintenance controls, as the first section of `update-assistant.md` does.
-2. Install `aligndev` 0.23.0 through the npm packages section of `update-assistant.md`.
-3. Remove the immutable flag from the old file, as root:
-
-   ```sh
-   sudo chattr -i /home/<service-user>/.alignfirst/aligndev.config.json
-   ```
-
+1. In the admin repository, rename `infra/openclaw/aligndev.config.json` to `infra/openclaw/aligndev.settings.json`, and bring `seed.sh`, the inventory/policy helpers, maintenance/backup scripts and runbooks to the current template. Commit, pull on the host, and reinstall the maintenance controls as `update-assistant.md` describes.
+2. Apply [Keep the Service AlignFirst Home Writable](#keep-the-service-alignfirst-home-writable), including the old settings file.
+3. Install a current `aligndev` through the npm packages section of `update-assistant.md`.
 4. Remove the old file and re-seed in one `config` window. The seed installs `aligndev.settings.json` from the admin repository and validates it:
 
    ```sh
@@ -80,11 +79,7 @@ On an AlignDev OpenClaw host, the file and `~/.alignfirst/` are root-owned and i
      bash -c 'rm ~/.alignfirst/aligndev.config.json && ~/seed/seed.sh'
    ```
 
-5. Check the lock. The wrapper restores it on exit: `aligndev.settings.json` and `~/.alignfirst/` are root-owned and immutable again.
-
-   ```sh
-   sudo lsattr -d /home/<service-user>/.alignfirst /home/<service-user>/.alignfirst/aligndev.settings.json
-   ```
+5. Verify service ownership, writability and absence of immutable/append-only flags throughout `~/.alignfirst/` using the generated [Writable AlignFirst home](../assets/aligndev-openclaw-template/base/docs/installations/06-security-hardening.md#writable-alignfirst-home) checks. Maintenance must leave this tree writable.
 
 ## Convert AlignDev Launch Settings
 
@@ -118,7 +113,7 @@ to:
 
 New-session precedence is explicit → project → global → automatic resolution. Resume inserts its recorded named profile before global resolution. Historical blank or missing profiles read as null and keep detected built-ins unless explicit/project/global selection replaces them; configured counts and flags do not trigger inference. No or multiple detected parents still fail, and the original transcript stays unchanged. A deleted recorded profile requires a higher-precedence selection. Resume requires the same agent and native conversation identity; Pi also requires its recorded real cwd. Current profile mappings resolve retained aliases, so their native targets can change. A disallowed retained model requires an explicit `--model`, never an automatic profile-default switch. Null keeps the native conversation model. Status remains readable when launch references or model defaults are no longer valid.
 
-On an OpenClaw host, convert the private admin repository and protected settings together through controlled maintenance. Upgrade `seed.sh`, the inventory/policy helpers, maintenance/backup scripts and runbooks together. Install both helpers root-owned under `/opt/<service-user>/libexec` before invoking the new wrapper. Every deployment child and enabled explicit native quota source needs `configDir: null` for native defaults or a string for explicit storage; omission is invalid. Inventory all profiles, not just the global selection. Preserve existing strings during this migration; changing directory-selection mode requires separate operator confirmation. Run the rendered `update-assistant.md` sequence before restarting. For Pi, retain the approved writable `auth.json`/adjacent-lock exception and regenerate the protected launcher after npm-prefix hardening is restored. The deployment and harness profile migrations are separate integrations; do not install a profile-aware CLI over unconverted templates.
+On an OpenClaw host, convert the private admin repository and deployed settings together through controlled maintenance, preserving the [writable service AlignFirst home](#keep-the-service-alignfirst-home-writable). Upgrade `seed.sh`, the inventory/policy helpers, maintenance/backup scripts and runbooks together. Install both helpers root-owned under `/opt/<service-user>/libexec` before invoking the new wrapper. Every deployment child and enabled explicit native quota source needs `configDir: null` for native defaults or a string for explicit storage; omission is invalid. Inventory all profiles, not just the global selection. Preserve existing strings during this migration; changing directory-selection mode requires separate operator confirmation. Run the rendered `update-assistant.md` sequence before restarting. For Pi, retain the approved writable `auth.json`/adjacent-lock exception and regenerate the protected launcher after npm-prefix hardening is restored. The deployment and harness profile migrations are separate integrations; do not install a profile-aware CLI over unconverted templates.
 
 ## Review AlignDev Native-Directory Selection
 
@@ -180,7 +175,7 @@ Unique-profile inference is an intentional behavior change. New runs that previo
 
 Historical null/missing-profile resumes are separate: without an explicit/project/global replacement, they still detect the parent and use only built-ins, ignoring configured counts and flags. The new record keeps null and the original transcript remains unchanged. Named resumes keep their recorded name ahead of changed global settings or flags; a deleted recorded name requires an explicit or project replacement.
 
-On an OpenClaw host, update the private admin repository and protected settings through controlled maintenance. Explicit valid `code.profile` remains mandatory even with one profile or a true flag. Preserve all native-store isolation and Pi authentication exceptions; upgrade the inventory helper and retain seed validation of every profile.
+On an OpenClaw host, update the private admin repository and deployed settings through controlled maintenance, preserving the [writable service AlignFirst home](#keep-the-service-alignfirst-home-writable). Explicit valid `code.profile` remains mandatory even with one profile or a true flag. Preserve all native-store isolation and Pi authentication exceptions; upgrade the inventory helper and retain seed validation of every profile.
 
 ## Rename the AlignDev Message-Tool Topics
 

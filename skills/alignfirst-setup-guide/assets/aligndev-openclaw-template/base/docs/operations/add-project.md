@@ -62,7 +62,7 @@ The deployment default is `code.profile`. To route this project elsewhere, edit 
 }
 ```
 
-Use the real main-worktree path, not a linked worktree. A selection alone creates no companion and relocates no work files. The registry stays service-writable; it can choose any account provisioned in protected settings. It is routing, not account authorization.
+Use the real main-worktree path, not a linked worktree. A selection alone creates no companion and relocates no work files. The registry stays service-writable; it can choose any provisioned account. Both the registry and AlignDev settings are service-writable routing, not account authorization.
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && alignfirst config --json && aligndev guide code'

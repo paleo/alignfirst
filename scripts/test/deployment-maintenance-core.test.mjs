@@ -384,15 +384,19 @@ test("hardening reserves real discovery names, protects sticky anchors and prese
   });
 });
 
-test("maintenance contains before unlock and restores in reverse after success, failure and TERM", () => {
+test("maintenance restores protected scopes but leaves AlignFirst writable after every outcome", () => {
   for (const outcome of ["success", "failure", "signal", "partial-unlock"]) {
     fixture((f) => {
       f.prepare();
       f.install();
+      const openclawConfig = join(f.home, ".openclaw/openclaw.json");
+      mkdirSync(dirname(openclawConfig), { recursive: true });
+      writeFileSync(openclawConfig, "{}\n");
       const result = spawnSync(
         "bash",
         [
           f.wrapper,
+          "config",
           "instructions",
           "agent-config",
           "agent-skills",
@@ -417,6 +421,18 @@ test("maintenance contains before unlock and restores in reverse after success, 
         .filter((index) => index >= 0);
       assert.equal(kill.length, 2);
       assert(kill[0] < unlock);
+      const alignfirstHome = dirname(f.deployed);
+      assert(
+        !calls.some(
+          (call) =>
+            ["chown", "chmod", "chattr"].includes(call[0]) &&
+            call
+              .slice(2)
+              .some((path) => path === alignfirstHome || path.startsWith(`${alignfirstHome}/`)),
+        ),
+        "maintenance must not change ownership, modes or attributes under ~/.alignfirst",
+      );
+      assert(f.immutable().includes(openclawConfig), "OpenClaw configuration stays protected");
       assert(
         calls.some((call, index) => index > kill[1] && call[0] === "chattr" && call[1] === "+i"),
       );

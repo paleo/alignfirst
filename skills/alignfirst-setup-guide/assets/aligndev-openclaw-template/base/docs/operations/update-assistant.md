@@ -57,6 +57,10 @@ sudo rsync -a --delete infra/openclaw/ /home/{{SERVICE_USER}}/seed/
 sudo chown -R {{SERVICE_USER}}:{{SERVICE_USER}} /home/{{SERVICE_USER}}/seed
 ```
 
+## Writable AlignFirst home
+
+After the bootstrap backup, apply [Writable AlignFirst home](../installations/06-security-hardening.md#writable-alignfirst-home) before any settings replacement or maintenance window. This removes legacy immutable/append-only flags and restores service ownership throughout `~/.alignfirst/`. The updated wrapper leaves that tree writable.
+
 ## One-time: convert direct launch settings
 
 Before installing profile-aware AlignDev or opening its first maintenance window, manually convert the admin repository's settings to this overlay's named-profile shape. Keep the existing agent, permission bypass and API-key removals. Set `code.profile` to the profile name. Confirm each coding/quota directory mode with the operator: preserve an existing explicit string unless a mode change is approved; use null to pin native-default mode, including removal of inherited native directory variables. Remove conflicting native-directory `env`/`unset` entries. A default-path string is not equivalent to null, and changing modes does not promise to preserve a Claude macOS Keychain login. Preserve permission flags, API-key removals and model defaults. Obtain approval for the reviewed settings replacement; no command below converts settings automatically. Unknown or obsolete keys warn on stderr and are ignored, including direct launch fields and `code.defaultProfiles`; they supply no legacy behavior. Manually move needed default-map preferences to matching profiles' `default: true`, omitting singleton flags and keeping profile names. Recognized invalid values, duplicate defaults and deployment safety violations still fail.
@@ -65,12 +69,8 @@ Upgrade AlignDev, `deployment-profiles.mjs`, `deployment-policy.mjs`, settings a
 
 ```sh
 sudo /usr/local/sbin/alignfirst-assistant-kill
-sudo chattr -i /home/{{SERVICE_USER}}/.alignfirst \
+sudo install -o {{SERVICE_USER}} -g {{SERVICE_USER}} -m 644 infra/openclaw/aligndev.settings.json \
   /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
-sudo install -o root -g root -m 644 infra/openclaw/aligndev.settings.json \
-  /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
-sudo chattr +i /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json \
-  /home/{{SERVICE_USER}}/.alignfirst
 ```
 
 Complete the package upgrade before CLI help, delegation or restart. After upgrading, re-seed through `config instructions agent-skills agent-config`, then reapply [06](../installations/06-security-hardening.md). The inventory covers every provisioned coding/quota store, including isolated custom paths beneath the service home. No account files or historical transcripts are migrated.
@@ -137,7 +137,7 @@ The login hook must remain after the environment bridge and any PATH assignments
 
 Run this section once, on a deployment that still has `@alignfirst/alcode` and `@alignfirst/alproject`. `aligndev` replaces both and prints the playbook through `aligndev guide`, so OpenClaw's managed playbook copy goes away.
 
-1. Bring the admin repository to the current template: the variant's `infra/openclaw/aligndev.settings.json`, the `ALIGNFIRST_CODE_*` lines removed from `infra/openclaw/environment.d/coding-agent.conf` (delete the file when nothing else remains), the new maintenance wrapper, seed modules and workspace `AGENTS.md`. Then repeat [Maintenance controls](#maintenance-controls): the new wrapper reads the coding agent from `aligndev.settings.json`, and its `config` scope covers the aligndev settings.
+1. Bring the admin repository to the current template: the variant's `infra/openclaw/aligndev.settings.json`, the `ALIGNFIRST_CODE_*` lines removed from `infra/openclaw/environment.d/coding-agent.conf` (delete the file when nothing else remains), the new maintenance wrapper, seed modules and workspace `AGENTS.md`. Then repeat [Maintenance controls](#maintenance-controls): the new wrapper reads the coding agent from `aligndev.settings.json`, while its `config` scope protects only `openclaw.json`. Keep `~/.alignfirst/` service-owned and writable.
 2. Swap the packages:
 
    ```sh

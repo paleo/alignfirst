@@ -47,7 +47,7 @@ A backup at `~/backups/deployment/<stamp>/` contains plain deployment files, an 
 | `openclaw.env` | `~/.openclaw/.env` | — |
 | `workspace/*.md` | `~/.openclaw/workspace/` | `workspace` |
 | `environment.d/*.conf` | `~/.config/environment.d/` | — |
-| `aligndev.settings.json` | `~/.alignfirst/aligndev.settings.json` | `config` |
+| `aligndev.settings.json` | `~/.alignfirst/aligndev.settings.json` | — |
 | `companions/` (with `registry.json`) | `~/.alignfirst/companions/` | — |
 | `thread-handoff/state.sqlite*` | `~/.openclaw/thread-handoff/` | — |
 | `native/store-*` and `native/resource-*` | Original native/custom stores and declared external resources from `native/mapping.json` | `native-recovery` |

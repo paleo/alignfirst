@@ -8,9 +8,8 @@
 #   alignfirst-assistant-maintenance <scope> [<scope> ...] -- <command> [<argument> ...]
 #   alignfirst-assistant-maintenance native-recovery -- <private-native-backup-directory>
 #
-# Scopes: config, workspace, packages, skills, projects, instructions, agent-skills, agent-config. The config
-# scope covers openclaw.json and the aligndev settings (~/.alignfirst/aligndev.settings.json) with their
-# directory ~/.alignfirst. The companions directory, with its registry, stays service-owned.
+# Scopes: config, workspace, packages, skills, projects, instructions, agent-skills, agent-config.
+# The config scope covers openclaw.json. The entire ~/.alignfirst tree stays service-owned and writable.
 
 set -Eeuo pipefail
 
@@ -19,8 +18,7 @@ SERVICE_HOME=/home/{{SERVICE_USER}}
 ADMIN_USER={{SERVER_ADMIN_USER}}
 ADMIN_REPOSITORY=/home/{{SERVER_ADMIN_USER}}/{{ADMIN_REPOSITORY_NAME}}
 PROJECTS_MARKER="$SERVICE_HOME/projects/.alignfirst-projects.json"
-ALIGNFIRST_HOME="$SERVICE_HOME/.alignfirst"
-ALIGNDEV_CONFIG_FILE="$ALIGNFIRST_HOME/aligndev.settings.json"
+ALIGNDEV_CONFIG_FILE="$SERVICE_HOME/.alignfirst/aligndev.settings.json"
 KILL_SWITCH=/usr/local/sbin/alignfirst-assistant-kill
 LIBEXEC=/opt/{{SERVICE_USER}}/libexec
 declare -a SCOPES=()
@@ -201,14 +199,8 @@ unlock_scopes() {
 }
 
 unlock_config() {
-  local path
   chattr -i "$SERVICE_HOME/.openclaw/openclaw.json"
   chown "$SERVICE_USER:$SERVICE_USER" "$SERVICE_HOME/.openclaw/openclaw.json"
-  for path in "$ALIGNFIRST_HOME" "$ALIGNDEV_CONFIG_FILE"; do
-    [ -e "$path" ] || continue
-    chattr -i "$path"
-    chown "$SERVICE_USER:$SERVICE_USER" "$path"
-  done
 }
 
 unlock_workspace() {
@@ -304,23 +296,10 @@ validate_managed_paths() {
 }
 
 restore_config() {
-  local status=0
-  validate_managed_paths "$SERVICE_HOME/.openclaw/openclaw.json" \
-    "$ALIGNDEV_CONFIG_FILE" || return 1
+  validate_managed_paths "$SERVICE_HOME/.openclaw/openclaw.json" || return 1
   chown "$SERVICE_USER:$SERVICE_USER" "$SERVICE_HOME/.openclaw/openclaw.json" &&
     chmod 600 "$SERVICE_HOME/.openclaw/openclaw.json" &&
-    chattr +i "$SERVICE_HOME/.openclaw/openclaw.json" || status=1
-  if [ -e "$ALIGNDEV_CONFIG_FILE" ]; then
-    chown root:root "$ALIGNDEV_CONFIG_FILE" &&
-      chmod 644 "$ALIGNDEV_CONFIG_FILE" &&
-      chattr +i "$ALIGNDEV_CONFIG_FILE" || status=1
-  fi
-  if [ -d "$ALIGNFIRST_HOME" ]; then
-    chown root:root "$ALIGNFIRST_HOME" &&
-      chmod 755 "$ALIGNFIRST_HOME" &&
-      chattr +i "$ALIGNFIRST_HOME" || status=1
-  fi
-  return "$status"
+    chattr +i "$SERVICE_HOME/.openclaw/openclaw.json"
 }
 
 restore_workspace() {

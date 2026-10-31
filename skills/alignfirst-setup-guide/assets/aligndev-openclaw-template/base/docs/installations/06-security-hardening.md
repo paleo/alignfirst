@@ -18,9 +18,9 @@ read_when:
 
 `{{SERVICE_USER}}` has no sudo, so filesystem permissions are a guarantee, not an instruction. Two mechanisms: `chattr +i` (the owner can neither modify nor delete the file; only root removes the flag), and ownership handoff to `root` or `{{SERVER_ADMIN_USER}}` with the write bits stripped. Each locked directory root that sits in a service-writable parent is flagged as well; otherwise the tree could be renamed and recreated writable.
 
-The assistant can no longer edit managed instructions or protected global packages. Its improvement path is a proposal, reviewed and applied through this repository. Memory, sessions, logs, `workspace/scratch/`, and project-runtime globals stay writable.
+The assistant can no longer edit managed instructions or protected global packages. Its improvement path is a proposal, reviewed and applied through this repository. The entire `~/.alignfirst/` tree, memory, sessions, logs, `workspace/scratch/`, and project-runtime globals stay writable.
 
-Pi's sole approved executable-declaration exception is native `<agent-dir>/auth.json`. It stays private, service-owned and replaceable, including adjacent lock operations, for normal OAuth login and automatic credential/refresh-token renewal. It can contain executable API-key commands; any same-UID process can persist such commands for later execution as that account. This is account-level persistence, not administrator privilege escalation. Permissions cannot distinguish renewal from another same-UID write. Project trust is not a sandbox.
+Within Pi's native stores, the approved executable-declaration exception is `<agent-dir>/auth.json`. It stays private, service-owned and replaceable, including adjacent lock operations, for normal OAuth login and automatic credential/refresh-token renewal. It can contain executable API-key commands; any same-UID process can persist such commands for later execution as that account. This is account-level persistence, not administrator privilege escalation. Permissions cannot distinguish renewal from another same-UID write. Project trust is not a sandbox.
 
 ## Install the maintenance controls
 
@@ -66,18 +66,20 @@ sudo chmod 644 /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
 sudo chattr +i /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
 ```
 
-So are the aligndev settings (`~/.alignfirst/aligndev.settings.json`), with their directory `~/.alignfirst/`. Protect the directory as well as the file against parent replacement. The native policy below also protects service-home anchors; neither measure replaces the other.
+### Writable AlignFirst home
+
+The entire `~/.alignfirst/` tree stays service-owned and writable, including `aligndev.settings.json`, companions and their registry. The assistant can create, edit, atomically replace and remove entries without a maintenance window. Settings can change delegated commands and account routing; they are not a protected authorization boundary.
+
+For existing hosts, install the current maintenance wrapper first so later windows cannot re-lock this tree. While the account is contained, remove legacy immutable/append-only flags and restore owner access. These commands preserve content and do not follow symlinks:
 
 ```sh
-sudo chown root:root /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
-sudo chmod 644 /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
-sudo chattr +i /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
-sudo chown root:root /home/{{SERVICE_USER}}/.alignfirst
-sudo chmod 755 /home/{{SERVICE_USER}}/.alignfirst
-sudo chattr +i /home/{{SERVICE_USER}}/.alignfirst
+sudo find /home/{{SERVICE_USER}}/.alignfirst \( -type d -o -type f \) -exec chattr -ia {} +
+sudo chown -Rh {{SERVICE_USER}}:{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst
+sudo find /home/{{SERVICE_USER}}/.alignfirst -type d -exec chmod u+rwx {} +
+sudo find /home/{{SERVICE_USER}}/.alignfirst -type f -exec chmod u+rw {} +
 ```
 
-The seed's `~/.alignfirst/companions/` stays service-owned, its companion registry included. The locked parent keeps it in place, and the assistant registers a project and creates its companion there on its own.
+Keep native-agent stores and protected resources outside this tree. OpenClaw configuration, skills and global packages retain their protections.
 
 ## Skills and instructions
 
@@ -168,7 +170,7 @@ EOS
 
 ## Unlocking for maintenance
 
-Use `/usr/local/sbin/alignfirst-assistant-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `projects`, `instructions`, `agent-skills` and `agent-config`. The `config` scope covers `openclaw.json` and the aligndev settings with their directory `~/.alignfirst/`. The native scopes cover every inventoried profile/store, not just `code.profile`: `instructions` covers managed context/system files, `agent-skills` native skills, and `agent-config` Pi declarations, trust, executable helpers, packages and other resources. `skills` also covers native skills. Before an unlock, the wrapper validates paths, contains the account and refreshes `~/seed/` from this repository. It saves resolved admin/deployed inventories in a root-private directory so original resources remain tracked when declarations change. Its `EXIT` trap contains the account again before restoring ownership, modes and immutable flags on success, failure or interruption. Failed recontainment aborts privileged cleanup and leaves gateway state unknown. Failed cleanup retains the inventory path for [operator recovery](../operations/recover-assistant.md#failed-maintenance-cleanup); never pass it to a service-account command.
+Use `/usr/local/sbin/alignfirst-assistant-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `projects`, `instructions`, `agent-skills` and `agent-config`. The `config` scope covers `openclaw.json`; `~/.alignfirst/` remains writable throughout maintenance. The native scopes cover every inventoried profile/store, not just `code.profile`: `instructions` covers managed context/system files, `agent-skills` native skills, and `agent-config` Pi declarations, trust, executable helpers, packages and other resources. `skills` also covers native skills. Before an unlock, the wrapper validates paths, contains the account and refreshes `~/seed/` from this repository. It saves resolved admin/deployed inventories in a root-private directory so original resources remain tracked when declarations change. Its `EXIT` trap contains the account again before restoring ownership, modes and immutable flags on success, failure or interruption. Failed recontainment aborts privileged cleanup and leaves gateway state unknown. Failed cleanup retains the inventory path for [operator recovery](../operations/recover-assistant.md#failed-maintenance-cleanup); never pass it to a service-account command.
 
 The operation runbooks supply the scopes and service-account command. Start the gateway only after the wrapper reports that hardening was restored and exits 0.
 
@@ -192,12 +194,31 @@ As the service account, every write must fail with `Operation not permitted` or 
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.openclaw/workspace/AGENTS.md'
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.openclaw/openclaw.json'
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/projects/.alignfirst-projects.json'
-sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.alignfirst/aligndev.settings.json'
-sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.alignfirst ~/.alignfirst-x'
-sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.alignfirst/companions ~/.alignfirst/companions-x'
 sudo -H -u {{SERVICE_USER}} bash -lc 'touch ~/.openclaw/skills/probe'
 sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.agents ~/.agents-x'
 sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.openclaw/skills ~/.openclaw/skills-x'
+```
+
+AlignFirst writes must succeed. Open existing settings and registry for writing without changing their contents, then exercise creation, atomic replacement and deletion in a disposable directory:
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -l <<'EOS'
+set -e
+for file in "$HOME/.alignfirst/aligndev.settings.json" "$HOME/.alignfirst/companions/registry.json"; do
+  [ -e "$file" ] || continue
+  /usr/bin/node -e 'const fs = require("node:fs"); fs.closeSync(fs.openSync(process.argv[1], "r+"));' "$file"
+done
+probe=$(mktemp -d "$HOME/.alignfirst/.write-probe.XXXXXX")
+trap 'rm -rf -- "$probe"' EXIT
+printf 'original\n' > "$probe/file"
+printf 'replacement\n' > "$probe/new"
+mv -f "$probe/new" "$probe/file"
+rm "$probe/file"
+rmdir "$probe"
+trap - EXIT
+EOS
+sudo find /home/{{SERVICE_USER}}/.alignfirst \( -type d -o -type f \) -exec lsattr -d {} +
+# Expected: no immutable (i) or append-only (a) flags.
 ```
 
 A project-runtime global install must succeed and leave the protected launcher selected. The trap removes the test package on success or failure. If this runtime already contains `cowsay`, use a clean test runtime to preserve that installation:
