@@ -276,7 +276,8 @@ describe("collision-safe identity", () => {
     reserved[`wt-${hash}-2`] = entry("/occupied/numeric");
     writeWorkspaces(mainWorktree, registryDir, { workspaces: reserved });
     expect((await register(path)).name).toBe(`wt-${hash}-3`);
-    for (const [name, value] of Object.entries(reserved)) expect(entries()[name]).toEqual(value);
+    const retained = entries();
+    for (const [name, value] of Object.entries(reserved)) expect(retained[name]).toEqual(value);
   });
 
   it("allocates main/linked collisions in either registration order", async () => {

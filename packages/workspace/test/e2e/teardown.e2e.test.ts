@@ -9,6 +9,7 @@ import {
   realpathSync,
   renameSync,
   symlinkSync,
+  unlinkSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -22,6 +23,7 @@ import type { PurgeContext } from "../../src/workspace.js";
 import type { WorkspaceEntry, WorkspacesRegistry } from "../../src/workspaces.js";
 import {
   createFixtureRepo,
+  cleanupFixture,
   type FixtureOptions,
   type FixtureRepo,
   fixtureRegistryDir,
@@ -38,41 +40,30 @@ const barriers: string[] = [];
 const sleepers: number[] = [];
 
 afterEach(async () => {
-  const finalizers: number[] = [];
+  const failures: unknown[] = [];
   for (const barrier of barriers.splice(0)) {
-    writeFileSync(barrier, "release\n");
-    if (existsSync(`${barrier}.entered`)) {
-      finalizers.push(Number(readFileSync(`${barrier}.entered`, "utf-8")));
+    try {
+      writeFileSync(barrier, "release\n");
+    } catch (error) {
+      failures.push(error);
     }
   }
-  const ownedFixtures = fixtures.splice(0);
-  const unsettled: string[] = [];
-  try {
-    for (const fixture of ownedFixtures) {
-      if (!existsSync(registryFile(fixture.repo, "workspaces.json"))) continue;
-      for (const entry of Object.values(readWorkspaces(fixture.repo).workspaces)) {
-        if (entry.status !== "pending") continue;
-        const result = runCli(fixture.repo, ["wait", entry.worktree]);
-        if (result.error || entryAt(fixture.repo, entry.worktree)?.entry.status === "pending") {
-          unsettled.push(entry.worktree);
-        }
-      }
-    }
-    for (const fixture of ownedFixtures) {
-      const log = join(fixture.repo, "finalize-pids.jsonl");
-      if (existsSync(log)) {
-        finalizers.push(...readFileSync(log, "utf-8").trim().split("\n").map(Number));
-      }
-    }
-    for (const pid of new Set(finalizers)) await waitForExit(pid);
-  } finally {
-    for (const pid of sleepers.splice(0)) {
+  for (const pid of sleepers.splice(0)) {
+    try {
       if (isAlive(pid)) process.kill(pid, "SIGKILL");
       await waitForExit(pid);
+    } catch (error) {
+      failures.push(error);
     }
-    for (const fixture of ownedFixtures) rmSync(fixture.root, { recursive: true, force: true });
   }
-  expect(unsettled).toEqual([]);
+  for (const fx of fixtures.splice(0)) {
+    try {
+      await cleanupFixture(fx);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length > 0) throw new AggregateError(failures, "Teardown fixture cleanup failed");
 });
 
 describe("workspace teardown (e2e)", () => {
@@ -250,18 +241,27 @@ describe("workspace teardown (e2e)", () => {
       setup(fx.repo, linked, true);
       const target = requiredEntry(fx.repo, linked);
       rmSync(linked, { recursive: true, force: true });
-      rmSync(join(fx.repo, missing === "manifest" ? "alignfirst.json" : "scripts/lifecycle.mjs"));
-      const failed = runCli(fx.repo, ["prune", "--json"]);
-      expect(failed.status).toBe(1);
-      expect(failed.stdout).toBe("");
-      expect(failed.stderr).toContain(
-        missing === "manifest" ? "manifest recipe is missing" : "purge purge",
+      const removed = join(
+        fx.repo,
+        missing === "manifest" ? "alignfirst.json" : "scripts/lifecycle.mjs",
       );
-      expect(requiredEntry(fx.repo, linked)).toEqual({
-        ...target,
-        entry: { ...target.entry, ...(missing === "script" ? { cleanupPending: true } : {}) },
-      });
-      expect(purges(fx.repo)).toEqual([]);
+      const saved = readFileSync(removed);
+      rmSync(removed);
+      try {
+        const failed = runCli(fx.repo, ["prune", "--json"]);
+        expect(failed.status).toBe(1);
+        expect(failed.stdout).toBe("");
+        expect(failed.stderr).toContain(
+          missing === "manifest" ? "manifest recipe is missing" : "purge purge",
+        );
+        expect(requiredEntry(fx.repo, linked)).toEqual({
+          ...target,
+          entry: { ...target.entry, ...(missing === "script" ? { cleanupPending: true } : {}) },
+        });
+        expect(purges(fx.repo)).toEqual([]);
+      } finally {
+        writeFileSync(removed, saved);
+      }
     },
     TEST_TIMEOUT_MS,
   );
@@ -289,22 +289,26 @@ describe("workspace teardown (e2e)", () => {
         git(fx.repo, ["worktree", "remove", "--force", linked]);
         mkdirSync(linked);
       }
-      const result = runCli(fx.repo, ["remove", linked, "--force", "--json"]);
-      expect(result.status).toBe(1);
-      expect(result.stdout).toBe("");
-      expect(result.stderr).toContain(
-        kind === "locked"
-          ? "locked worktree"
-          : kind === "nested"
-            ? "another registered worktree"
-            : kind === "shared"
-              ? "protected shared directory"
-              : "not an exact registered Git worktree root",
-      );
-      expect(requiredEntry(fx.repo, linked)).toEqual(target);
-      expect(purges(fx.repo)).toEqual([]);
-      expect(resourceEvents(fx.repo)).toEqual([]);
-      expect(existsSync(linked)).toBe(true);
+      try {
+        const result = runCli(fx.repo, ["remove", linked, "--force", "--json"]);
+        expect(result.status).toBe(1);
+        expect(result.stdout).toBe("");
+        expect(result.stderr).toContain(
+          kind === "locked"
+            ? "locked worktree"
+            : kind === "nested"
+              ? "another registered worktree"
+              : kind === "shared"
+                ? "protected shared directory"
+                : "not an exact registered Git worktree root",
+        );
+        expect(requiredEntry(fx.repo, linked)).toEqual(target);
+        expect(purges(fx.repo)).toEqual([]);
+        expect(resourceEvents(fx.repo)).toEqual([]);
+        expect(existsSync(linked)).toBe(true);
+      } finally {
+        if (kind === "unregistered") rmSync(linked, { recursive: true, force: true });
+      }
     },
     TEST_TIMEOUT_MS,
   );
@@ -381,9 +385,6 @@ describe("workspace teardown (e2e)", () => {
       const result = runCli(fx.repo, ["teardown"]);
       expect(result.status, result.stderr).toBe(0);
       expect(lstatSync(dirname(registryFile(fx.repo, "workspaces.json"))).isDirectory()).toBe(true);
-      expect(lstatSync(dirname(registryFile(fx.repo, "workspaces.json"))).isSymbolicLink()).toBe(
-        false,
-      );
       expect(entryAt(fx.repo, linked)).toEqual(original);
       expect(entryAt(fx.repo, fx.repo)).toBeUndefined();
       expect(realpathSync(join(linked, ".shared"))).toBe(join(fx.repo, ".shared"));
@@ -413,20 +414,28 @@ describe("workspace teardown (e2e)", () => {
       const renamed = join(fx.root, "renamed");
       renameSync(fx.repo, renamed);
       fx.repo = renamed;
-      git(renamed, ["worktree", "repair"]);
-      const result = runCli(renamed, ["teardown"]);
-      expect(result.status, result.stderr).toBe(0);
-      expect(entryAt(renamed, renamed)).toBeUndefined();
-      expect(entryAt(renamed, linked)).toEqual(other);
-      expect(purges(renamed)).toEqual([
-        {
-          name: oldName,
-          worktree: renamed,
-          mainWorktree: renamed,
-          runtimeDir: join(renamed, ".local-wt"),
-          verbose: false,
-        },
-      ]);
+      try {
+        git(renamed, ["worktree", "repair"]);
+        const result = runCli(renamed, ["teardown"]);
+        expect(result.status, result.stderr).toBe(0);
+        expect(entryAt(renamed, renamed)).toBeUndefined();
+        expect(entryAt(renamed, linked)).toEqual(other);
+        expect(purges(renamed)).toEqual([
+          {
+            name: oldName,
+            worktree: renamed,
+            mainWorktree: renamed,
+            runtimeDir: join(renamed, ".local-wt"),
+            verbose: false,
+          },
+        ]);
+      } finally {
+        // Main teardown preserves sibling files, including these now-dangling absolute links.
+        for (const path of [".plans", ".local-wt/workspace-registry"]) {
+          unlinkSync(join(linked, path));
+          symlinkSync(join(renamed, path), join(linked, path));
+        }
+      }
     },
     TEST_TIMEOUT_MS,
   );
@@ -491,9 +500,10 @@ describe("workspace teardown (e2e)", () => {
       const failed = runCli(fx.repo, ["teardown", linked], { E2E_PURGE_FAIL: "1" });
       expect(failed.status).not.toBe(0);
       expect(failed.stderr).toContain("e2e purge boom");
-      expect(requiredEntry(fx.repo, linked).name).toBe(target.name);
-      expect(requiredEntry(fx.repo, linked).entry.cleanupOwner).toBeUndefined();
-      expect(requiredEntry(fx.repo, linked).entry.cleanupPending).toBe(true);
+      const retained = requiredEntry(fx.repo, linked);
+      expect(retained.name).toBe(target.name);
+      expect(retained.entry.cleanupOwner).toBeUndefined();
+      expect(retained.entry.cleanupPending).toBe(true);
       expect(devEntries(fx.repo)).toMatchObject([{ cleanupPending: true }]);
       expect(runCli(fx.repo, ["teardown", linked]).status).toBe(0);
       expect(entryAt(fx.repo, linked)).toBeUndefined();
@@ -732,8 +742,7 @@ describe("workspace teardown (e2e)", () => {
       setup(fx.repo, first);
       const original = requiredEntry(fx.repo, first);
       expect(runCli(fx.repo, ["teardown", second]).status).toBe(0);
-      const unrelated = createFixtureRepo();
-      fixtures.push(unrelated);
+      const unrelated = createFixtureRepo({}, (created) => fixtures.push(created));
       const plain = join(fx.root, "plain", "review");
       mkdirSync(plain, { recursive: true });
       for (const selector of ["typo", join(fx.root, "missing", "review"), plain, unrelated.repo]) {
@@ -869,14 +878,18 @@ describe("workspace teardown (e2e)", () => {
       setup(fx.repo, linked);
       const before = requiredEntry(fx.repo, linked);
       rmSync(linked, { recursive: true, force: true });
-      const result = runCli(fx.repo, ["prune"], { E2E_PURGE_RECREATE_WORKTREE: "1" });
-      expect(result.status).toBe(1);
-      expect(result.stderr).toContain("no longer orphaned");
-      expect(requiredEntry(fx.repo, linked)).toEqual({
-        ...before,
-        entry: { ...before.entry, cleanupPending: true },
-      });
-      expect(purges(fx.repo)[0].name).toBe(before.name);
+      try {
+        const result = runCli(fx.repo, ["prune"], { E2E_PURGE_RECREATE_WORKTREE: "1" });
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain("no longer orphaned");
+        expect(requiredEntry(fx.repo, linked)).toEqual({
+          ...before,
+          entry: { ...before.entry, cleanupPending: true },
+        });
+        expect(purges(fx.repo)[0].name).toBe(before.name);
+      } finally {
+        rmSync(linked, { recursive: true, force: true });
+      }
     },
     TEST_TIMEOUT_MS,
   );
@@ -1021,9 +1034,7 @@ function externalStorage(fx: FixtureRepo, target: string) {
 }
 
 function fixture(options?: FixtureOptions): FixtureRepo {
-  const fx = createFixtureRepo(options);
-  fixtures.push(fx);
-  return fx;
+  return createFixtureRepo(options, (fx) => fixtures.push(fx));
 }
 
 function addWorktree(fx: FixtureRepo, path: string, branch: string): string {
@@ -1034,7 +1045,11 @@ function addWorktree(fx: FixtureRepo, path: string, branch: string): string {
 }
 
 function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf-8", stdio: "pipe" });
+  return execFileSync("git", ["-c", "user.name=E2E", "-c", "user.email=e2e@example.com", ...args], {
+    cwd,
+    encoding: "utf-8",
+    stdio: "pipe",
+  });
 }
 
 function setup(repo: string, worktree: string, full = false): void {

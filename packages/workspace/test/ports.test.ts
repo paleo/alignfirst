@@ -177,11 +177,12 @@ describe("resolveDevPortsConfig", () => {
       },
       /"api": `mainWorktree` \(47101\) lies in the range 47100\.\.47103 dedicated to "front"/,
     ],
-  ])("rejects %s", (_, config, message) => {
+  ])("rejects %s", async (_, config, message) => {
     // Invalid on purpose: the validation guards a JavaScript config the types cannot.
     const untyped = config as DevPortsConfig;
-    expect(() => resolveDevPortsConfig(untyped)).toThrow(ConfigError);
-    expect(() => resolveDevPortsConfig(untyped)).toThrow(message);
+    const attempt = Promise.resolve().then(() => resolveDevPortsConfig(untyped));
+    await expect(attempt).rejects.toThrow(ConfigError);
+    await expect(attempt).rejects.toThrow(message);
   });
 
   it("rejects a pin on a bad port", () => {
@@ -327,9 +328,7 @@ describe("reconcilePorts", () => {
     const config: DevPortsConfig = { first: 47100, last: 47101, declare: ["web", "api"] };
     const attempt = reconcile({ config, others: [47101] });
     await expect(attempt).rejects.toThrow(WorkspaceError);
-    await expect(reconcile({ config, others: [47101] })).rejects.toThrow(
-      /47100\.\.47101 for "api".*remove/,
-    );
+    await expect(attempt).rejects.toThrow(/47100\.\.47101 for "api".*remove/);
   });
 
   describe("with a dedicated range", () => {
@@ -402,7 +401,7 @@ describe("reconcilePorts", () => {
       };
       const attempt = reconcile({ config, others: [47100, 47101] });
       await expect(attempt).rejects.toThrow(WorkspaceError);
-      await expect(reconcile({ config, others: [47100, 47101] })).rejects.toThrow(
+      await expect(attempt).rejects.toThrow(
         /range 47100\.\.47101 dedicated to "front".*dev.*setup.*remove/,
       );
     });

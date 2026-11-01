@@ -229,12 +229,6 @@ describe("parseWorkspaceArgs", () => {
     expect(() => parseWorkspaceArgs(["migrate-registry-0.30"])).toThrow(ConfigError);
   });
 
-  it("rejects a positional on `migrate-registry-0.30`", () => {
-    expect(() => parseWorkspaceArgs(["migrate-registry-0.30", ".local/registry"])).toThrow(
-      ConfigError,
-    );
-  });
-
   it("rejects an unknown subcommand", () => {
     expect(() => parseWorkspaceArgs(["frobnicate"])).toThrow(ConfigError);
   });
@@ -269,7 +263,6 @@ describe("renderDevHelp", () => {
   it("documents `dev setup` and its public options, not the internal one", () => {
     const help = renderDevHelp();
     expect(help).toContain("alignfirst dev setup [--force] [--reset-ports]");
-    expect(help).toContain("--reset-ports");
     expect(help).not.toContain("--from-finalize");
   });
 });

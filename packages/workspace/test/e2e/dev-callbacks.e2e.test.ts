@@ -12,6 +12,9 @@ import {
   cliExecutable,
   alignfirstBin,
   createFixtureRepo,
+  cleanupFixture,
+  joinFixtureFinalizers,
+  recordDevActivity,
   installResourceRecipe,
   resourceEvents,
   type FixtureRepo,
@@ -53,12 +56,24 @@ interface RunningChild {
 }
 
 afterEach(async () => {
-  for (const barrier of barriers.splice(0)) writeFileSync(barrier, "release\n");
   const failures: unknown[] = [];
+  for (const barrier of barriers.splice(0)) {
+    try {
+      writeFileSync(barrier, "release\n");
+    } catch (error) {
+      failures.push(error);
+    }
+  }
   const ownedChildren = children.splice(0);
   for (const running of ownedChildren) {
     try {
-      if (!running.closed) running.child.kill("SIGTERM");
+      if (
+        !running.closed &&
+        running.child.exitCode === null &&
+        running.child.signalCode === null &&
+        !running.child.killed
+      )
+        running.child.kill("SIGTERM");
       await waitUntil(() => running.closed, "foreground cleanup");
     } catch (err) {
       failures.push(err);
@@ -71,37 +86,14 @@ afterEach(async () => {
     }
   }
   for (const fx of fixtures.splice(0)) {
-    const pids = new Set([
-      ...spawns(fx).map((event) => event.pid),
-      ...devEntries(fx).flatMap((entry) => Object.values(entry.pids)),
-    ]);
-    for (const pid of pids) {
-      try {
-        if (isAlive(pid)) process.kill(-pid, "SIGKILL");
-        await waitUntil(() => !isAlive(pid), `spawn ${pid} cleanup`);
-      } catch (err) {
-        failures.push(err);
+    try {
+      if (ownedChildren.some((running) => !running.closed)) {
+        await joinFixtureFinalizers(fx);
+        throw new Error(`Foreground ownership unresolved; retained ${fx.root}`);
       }
-    }
-    for (const entry of Object.values(readWorkspaces(fx.repo).workspaces)) {
-      if (entry.status === "pending") {
-        const joined = runCli(fx.repo, ["wait", entry.worktree]);
-        if (joined.error || joined.status !== 0) failures.push(joined.stderr);
-      }
-    }
-    const finalizers = jsonLines<number>(join(fx.repo, "finalize-pids.jsonl"));
-    for (const pid of finalizers) {
-      try {
-        await waitUntil(() => !isAlive(pid), `finalizer ${pid} cleanup`);
-      } catch (err) {
-        failures.push(err);
-      }
-    }
-    if (
-      ownedChildren.every((running) => running.closed) &&
-      [...pids, ...finalizers].every((pid) => !isAlive(pid))
-    ) {
-      rmSync(fx.root, { recursive: true, force: true });
+      await cleanupFixture(fx);
+    } catch (error) {
+      failures.push(error);
     }
   }
   expect(failures).toEqual([]);
@@ -607,8 +599,7 @@ describe("registered callback identity (e2e)", () => {
 });
 
 function prepareTarget(devSetup = true, companionRuntime = false): Target {
-  const fx = createFixtureRepo({ companionRuntime });
-  fixtures.push(fx);
+  const fx = createFixtureRepo({ companionRuntime }, (created) => fixtures.push(created));
   const first = addWorktree(fx, "one/review", "one");
   const root = addWorktree(fx, "two/review", "two");
   for (const worktree of [first, root]) setup(fx, worktree);
@@ -641,6 +632,7 @@ function foreground(
   env: Record<string, string> = {},
   args: string[] = [],
 ): RunningChild {
+  recordDevActivity(target.fx, "dev", args);
   const child = spawn(cliExecutable, [alignfirstBin, "dev", ...args], {
     cwd: target.nested,
     env: { ...process.env, HOME: join(target.fx.root, "home"), ...ENV, ...env },
@@ -652,6 +644,9 @@ function foreground(
       running.output = (running.output + data.toString()).slice(-16_000);
     });
   }
+  child.on("error", (error) => {
+    running.output = (running.output + error.message).slice(-16_000);
+  });
   child.on("close", () => {
     running.closed = true;
   });

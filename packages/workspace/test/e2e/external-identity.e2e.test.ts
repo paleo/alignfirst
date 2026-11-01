@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -8,9 +8,9 @@ import { resolveWorkspaceStorage } from "../../src/storage.js";
 import type { WorkspaceEntry } from "../../src/workspaces.js";
 import {
   createFixtureRepo,
+  cleanupFixture,
   type FixtureRepo,
   type FixtureOptions,
-  fixtureRegistryDir,
   installResourceRecipe,
   resourceEvents,
   readWorkspaces,
@@ -19,7 +19,7 @@ import {
 } from "./fixture.js";
 
 const TEST_TIMEOUT_MS = 60_000;
-const fixtures: ExternalFixture[] = [];
+const fixtures: FixtureRepo[] = [];
 const barriers: string[] = [];
 
 interface ExternalFixture extends FixtureRepo {
@@ -28,41 +28,22 @@ interface ExternalFixture extends FixtureRepo {
 }
 
 afterEach(async () => {
-  for (const barrier of barriers.splice(0)) writeFileSync(barrier, "release\n");
-  const joined: { error: Error | undefined; status: string }[] = [];
   const failures: unknown[] = [];
-  for (const fixture of fixtures.splice(0)) {
-    // Join detached finalizers even when an assertion failed before the scenario's explicit wait.
+  for (const barrier of barriers.splice(0)) {
     try {
-      const registry = join(fixtureRegistryDir(fixture.repo), "workspaces.json");
-      if (existsSync(registry)) {
-        for (const entry of Object.values(readWorkspaces(fixture.repo).workspaces)) {
-          const waited = runCli(fixture.repo, ["wait", entry.worktree]);
-          joined.push({
-            error: waited.error,
-            status: entryAt(fixture, entry.worktree).entry.status,
-          });
-        }
-      }
+      writeFileSync(barrier, "release\n");
     } catch (error) {
       failures.push(error);
-    } finally {
-      const log = join(fixture.repo, "finalize-pids.jsonl");
-      if (existsSync(log)) {
-        const pids = readFileSync(log, "utf-8").trim().split("\n").map(Number);
-        const results = await Promise.allSettled(pids.map(waitForExit));
-        for (const result of results) {
-          if (result.status === "rejected") failures.push(result.reason);
-        }
-      }
-      rmSync(fixture.root, { recursive: true, force: true });
     }
   }
-  expect(failures).toEqual([]);
-  for (const result of joined) {
-    expect(result.error).toBeUndefined();
-    expect(result.status).not.toBe("pending");
+  for (const fixture of fixtures.splice(0)) {
+    try {
+      await cleanupFixture(fixture);
+    } catch (error) {
+      failures.push(error);
+    }
   }
+  if (failures.length > 0) throw new AggregateError(failures, "External fixture cleanup failed");
 });
 
 describe("externally created same-basename worktrees", () => {
@@ -180,7 +161,7 @@ describe("externally created same-basename worktrees", () => {
       const { repo, first, second } = fixture;
       writeFileSync(join(repo, "workspace.local"), "customized-main\n");
       expect(runCli(repo, ["setup"], undefined, first).status).toBe(0);
-      expect(runCli(second, ["setup"]).status).toBe(0);
+      expect(runCli(fixture, ["setup"], undefined, second).status).toBe(0);
       const one = entryAt(fixture, first);
       const two = entryAt(fixture, second);
       expect(one.name).toBe("same");
@@ -341,7 +322,7 @@ describe("externally created same-basename worktrees", () => {
       expect(entryAt(fixture, second).name).toBe(name);
       expect(entryAt(fixture, second).entry.devSetupFailure).toBeUndefined();
       expect(entryAt(fixture, second).entry.devSetupAt).toBeDefined();
-      expect(runDev(second, ["setup"]).status).toBe(0);
+      expect(runDev(fixture, ["setup"], undefined, second).status).toBe(0);
       expect(readFileSync(join(second, "setup-runs.log"), "utf-8")).toBe("force=false\n");
       expect(entryAt(fixture, first).entry).toEqual(original);
     },
@@ -354,13 +335,15 @@ function git(cwd: string, args: string[]): string {
 }
 
 function externalFixture(options: FixtureOptions = {}): ExternalFixture {
-  const fixture = createFixtureRepo({ fallbackSeeding: true, sharedDirs: [".shared"], ...options });
+  const fixture = createFixtureRepo(
+    { fallbackSeeding: true, sharedDirs: [".shared"], ...options },
+    (fx) => fixtures.push(fx),
+  );
   const first = join(fixture.root, "managed", "one", "same");
   const second = join(fixture.root, "external", "nested", "two", "same");
   mkdirSync(join(fixture.root, "managed", "one"), { recursive: true });
   mkdirSync(join(fixture.root, "external", "nested", "two"), { recursive: true });
-  const external = { ...fixture, first, second };
-  fixtures.push(external);
+  const external = Object.assign(fixture, { first, second });
   for (const [path, branch] of [
     [first, "external-one"],
     [second, "external-two"],
@@ -390,22 +373,5 @@ async function waitForFile(file: string): Promise<void> {
   while (!existsSync(file)) {
     if (Date.now() > deadline) throw new Error(`Timed out waiting for ${file}`);
     await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-}
-
-async function waitForExit(pid: number): Promise<void> {
-  const deadline = Date.now() + 5_000;
-  while (isAlive(pid)) {
-    if (Date.now() > deadline) throw new Error(`Fixture process ${pid} did not exit`);
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-}
-
-function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
   }
 }

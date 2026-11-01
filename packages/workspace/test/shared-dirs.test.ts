@@ -56,7 +56,6 @@ describe("linkSharedDirectories", () => {
     linkSharedDirectories(ctx, [".local", ".plans"], () => {});
     expect(lstatSync(join(main, ".local")).isDirectory()).toBe(true);
     expect(lstatSync(join(main, ".plans")).isDirectory()).toBe(true);
-    expect(lstatSync(join(main, ".plans")).isSymbolicLink()).toBe(false);
   });
 
   it("keeps an existing shared directory and an existing link untouched", () => {

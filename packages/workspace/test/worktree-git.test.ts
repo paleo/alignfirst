@@ -22,8 +22,6 @@ beforeEach(() => {
   repo = join(root, "repo");
   mkdirSync(repo);
   git(["init", "-b", "main"]);
-  git(["config", "user.email", "test@example.com"]);
-  git(["config", "user.name", "Test"]);
   // `createBranch` passes `--no-track`; pin the key it neutralises so the assertion cannot pass
   // because of the developer's own `branch.autoSetupMerge`.
   git(["config", "branch.autoSetupMerge", "always"]);
@@ -40,10 +38,11 @@ afterEach(() => {
 const run = { verbose: false };
 
 describe("createBranch conflicts", () => {
-  it("throws on an exact conflict without --dedupe, mentioning --dedupe", () => {
+  it("throws on an exact conflict without --dedupe, mentioning --dedupe", async () => {
     git(["branch", "test"]);
-    expect(() => createBranch("test", ctx, run)).toThrow(WorkspaceError);
-    expect(() => createBranch("test", ctx, run)).toThrow(/--dedupe/);
+    const attempt = Promise.resolve().then(() => createBranch("test", ctx, run));
+    await expect(attempt).rejects.toThrow(WorkspaceError);
+    await expect(attempt).rejects.toThrow(/--dedupe/);
   });
 
   it("suffixes an exact conflict with --dedupe", () => {
@@ -65,12 +64,13 @@ describe("createBranch conflicts", () => {
     expect(existsSync(join(root, "repo-test-2"))).toBe(true);
   });
 
-  it("throws on an ancestor conflict even with --dedupe", () => {
+  it("throws on an ancestor conflict even with --dedupe", async () => {
     git(["branch", "test"]);
-    expect(() => createBranch("test/abc", ctx, run, { dedupe: true })).toThrow(WorkspaceError);
-    expect(() => createBranch("test/abc", ctx, run, { dedupe: true })).toThrow(
-      'conflicts with existing branch "test"',
+    const attempt = Promise.resolve().then(() =>
+      createBranch("test/abc", ctx, run, { dedupe: true }),
     );
+    await expect(attempt).rejects.toThrow(WorkspaceError);
+    await expect(attempt).rejects.toThrow('conflicts with existing branch "test"');
   });
 
   it("keeps branch and directory aligned when a candidate directory is taken", () => {
@@ -123,7 +123,10 @@ describe("worktree error paths", () => {
 });
 
 function git(args: string[]): void {
-  execFileSync("git", args, { cwd: repo, stdio: "pipe" });
+  execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], {
+    cwd: repo,
+    stdio: "pipe",
+  });
 }
 
 function gitOutput(args: string[]): string {

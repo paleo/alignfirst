@@ -1,11 +1,21 @@
 import { execFileSync, spawnSync, type SpawnSyncReturns } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { WorkspaceManifest, Command } from "../../src/workspace-config-types.js";
 import type { WorkspacesRegistry } from "../../src/workspaces.js";
+import type { DevServerEntry } from "../../src/dev-servers-registry.js";
+import type { StartupOwners } from "../../src/startup-registry.js";
 
 export const packageRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 export const alignfirstBin = join(packageRoot, "..", "alignfirst", "bin", "alignfirst.mjs");
@@ -19,10 +29,12 @@ const probe = spawnSync(
 if (probe.status !== 0) throw new Error(`Workspace CLI runtime failed: ${probe.stderr}`);
 export const cliRuntime: { bun?: string; executable: string } = JSON.parse(probe.stdout);
 export const DEV_PORTS = { first: 47100, last: 47109, excluded: 47101 };
+const fixtures = new Set<FixtureRepo>();
 
 export interface FixtureRepo {
   root: string;
   repo: string;
+  devActivityAttempted: boolean;
 }
 
 export interface FixtureOptions {
@@ -35,9 +47,15 @@ export interface FixtureOptions {
 }
 
 /** Disposable Git, home and project-owned scripts. No consumer wrapper or local dependencies. */
-export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
+export function createFixtureRepo(
+  options: FixtureOptions = {},
+  register?: (fixture: FixtureRepo) => void,
+): FixtureRepo {
   const root = mkdtempSync(join(tmpdir(), "workspace-e2e-"));
   const repo = join(root, "fixrepo");
+  const fixture = { root, repo, devActivityAttempted: false };
+  fixtures.add(fixture);
+  register?.(fixture);
   mkdirSync(join(root, "home"));
   mkdirSync(join(repo, "scripts"), { recursive: true });
   mkdirSync(join(repo, ".plans"));
@@ -49,7 +67,7 @@ export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
     writeFileSync(join(repo, "workspace.template"), "committed-template\n");
   writeFileSync(
     join(repo, ".gitignore"),
-    `${["/.plans", "/.local", "/.local-wt/", ...(options.sharedDirs ?? []).map((dir) => `/${dir}`), "workspace.local", "required.local", "ports.env", "ports.txt", "setup-runs.log", "finalized.txt", "finalize-context.json", "*-runs.jsonl", "finalize-pids.jsonl"].join("\n")}\n`,
+    `${["/.plans", "/.local", "/.local-wt/", ...(options.sharedDirs ?? []).map((dir) => `/${dir}`), "workspace.local", "required.local", "ports.env", "ports.txt", "setup-runs.log", "finalized.txt", "finalize-context.json", "*-runs.jsonl", "finalize-pids.jsonl", "finalize-owners.jsonl"].join("\n")}\n`,
   );
   writeFileSync(
     join(repo, "alignfirst.json"),
@@ -82,11 +100,9 @@ export function createFixtureRepo(options: FixtureOptions = {}): FixtureRepo {
       );
   }
   git(repo, ["init", "-b", "main"]);
-  git(repo, ["config", "user.email", "e2e@example.com"]);
-  git(repo, ["config", "user.name", "E2E"]);
   git(repo, ["add", "."]);
   git(repo, ["commit", "-m", "init"]);
-  return { root, repo };
+  return fixture;
 }
 
 function fixtureManifest(options: FixtureOptions): WorkspaceManifest {
@@ -173,8 +189,12 @@ async function barrier(name) {
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
 }
-if (action === "finalize") {
+if (action === "finalize" || action === "trackFinalizer") {
   appendFileSync(join(ctx.mainWorktree, "finalize-pids.jsonl"), JSON.stringify(process.pid) + "\\n");
+  appendFileSync(join(ctx.mainWorktree, "finalize-owners.jsonl"), JSON.stringify(process.ppid) + "\\n");
+}
+if (action === "trackFinalizer") process.exit(0);
+if (action === "finalize") {
   await barrier("E2E_FINALIZE_BARRIER");
   await new Promise((resolve) => setTimeout(resolve, Number(process.env.E2E_FINALIZE_DELAY_MS ?? 0)));
   if (process.env.E2E_FINALIZE_FAIL === "1") throw new Error("e2e boom");
@@ -236,6 +256,7 @@ export function installResourceRecipe(
   version: string,
   options: { service?: boolean } = {},
 ): void {
+  ownedFixture(worktree).devActivityAttempted = true;
   const file = join(worktree, "alignfirst.json");
   const manifest: WorkspaceManifest = JSON.parse(readFileSync(file, "utf8"));
   const command = (action: string): Command => ({
@@ -301,47 +322,215 @@ export function resourceEvents(repo: string): ResourceEvent[] {
 }
 
 function git(repo: string, args: string[]): void {
-  execFileSync("git", args, { cwd: repo, stdio: "pipe" });
+  execFileSync("git", ["-c", "user.name=E2E", "-c", "user.email=e2e@example.com", ...args], {
+    cwd: repo,
+    stdio: "pipe",
+  });
 }
 
 export function runCli(
-  repo: string,
+  target: FixtureRepo | string,
   args: string[],
   env?: Record<string, string>,
-  cwd = repo,
+  cwd = typeof target === "string" ? target : target.repo,
 ): SpawnSyncReturns<string> {
-  return run(repo, "workspace", args, env, cwd);
+  return run(ownedFixture(target), "workspace", args, env, cwd);
 }
 
 export function runDev(
-  worktree: string,
+  target: FixtureRepo | string,
   args: string[],
   env?: Record<string, string>,
-  cwd = worktree,
+  cwd = typeof target === "string" ? target : target.repo,
 ): SpawnSyncReturns<string> {
-  return run(worktree, "dev", args, env, cwd);
+  return run(ownedFixture(target), "dev", args, env, cwd);
+}
+
+function ownedFixture(target: FixtureRepo | string): FixtureRepo {
+  if (typeof target !== "string") return target;
+  const fixture = [...fixtures].find((candidate) => {
+    const path = relative(candidate.root, resolve(target));
+    return path !== ".." && !path.startsWith(`..${sep}`);
+  });
+  if (!fixture) throw new Error(`Pass the owning fixture for external target ${target}`);
+  return fixture;
 }
 
 function run(
-  repo: string,
+  fixture: FixtureRepo,
   command: string,
   args: string[],
   env: Record<string, string> | undefined,
   cwd: string,
 ): SpawnSyncReturns<string> {
-  const main = dirname(
-    execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
-      cwd: repo,
-      encoding: "utf8",
-    }).trim(),
-  );
+  recordDevActivity(fixture, command, args);
   return spawnSync(cliExecutable, [alignfirstBin, command, ...args], {
     cwd,
     encoding: "utf8",
-    env: { ...process.env, HOME: join(dirname(main), "home"), ...env },
+    env: { ...process.env, HOME: join(fixture.root, "home"), ...env },
     stdio: "pipe",
     timeout: 60000,
   });
+}
+
+export function recordDevActivity(fixture: FixtureRepo, command: string, args: string[]): void {
+  if (
+    (command === "workspace" && args[0] === "setup" && args.includes("--full")) ||
+    (command === "dev" &&
+      (args.length === 0 || ["setup", "up", "restart", "--restart", "--evict"].includes(args[0])))
+  ) {
+    fixture.devActivityAttempted = true;
+  }
+}
+
+export async function cleanupFixture(
+  fixture: FixtureRepo,
+  env: Record<string, string> = {},
+): Promise<void> {
+  const failures: unknown[] = [];
+  try {
+    await joinFixtureFinalizers(fixture);
+  } catch (error) {
+    throw new Error(`Unsettled preparation; retained ${fixture.root}`, { cause: error });
+  }
+  // Inspect unpruned records before any CLI can discard all-dead command-service ownership.
+  const before = fixtureDevEntries(fixture);
+  const registry = join(fixtureRegistryDir(fixture.repo), "workspaces.json");
+  const entries = existsSync(registry)
+    ? Object.values(readWorkspaces(fixture.repo).workspaces)
+    : [];
+  const resources = join(fixture.root, "resources");
+  const hasResources = () => existsSync(resources) && readdirSync(resources).length > 0;
+  const targets = new Set(before.map((entry) => entry.worktree));
+  for (const entry of entries) {
+    if (fixture.devActivityAttempted || hasResources() || entry.cleanupPending)
+      targets.add(entry.worktree);
+  }
+  const pids = new Set([
+    ...before.flatMap((entry) => Object.values(entry.pids)),
+    ...fixtureJsonLines<{ pid: number }>(join(fixture.repo, "spawn-runs.jsonl")).map(
+      (event) => event.pid,
+    ),
+  ]);
+  for (const target of targets) {
+    try {
+      const result = runCli(fixture, ["teardown", target], {
+        E2E_CALLBACK_LIFECYCLE: "1",
+        ...env,
+      });
+      if (result.error || result.status !== 0)
+        throw new Error(`Cleanup ${target}: ${result.error?.message ?? result.stderr}`);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  for (const pid of pids) {
+    try {
+      await waitForFixtureExit(pid);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (fixtureDevEntries(fixture).length > 0 || hasResources())
+    failures.push(new Error("Owned dev records or command resources remain"));
+  const startups = join(fixtureRegistryDir(fixture.repo), "dev-startups.json");
+  if (existsSync(startups)) {
+    const pending: StartupOwners = JSON.parse(readFileSync(startups, "utf8"));
+    if (pending.owners.length > 0) failures.push(new Error("Owned startup claims remain"));
+  }
+  if (existsSync(registry)) {
+    const settled = readWorkspaces(fixture.repo);
+    for (const entry of Object.values(settled.workspaces)) {
+      if (
+        entry.status === "pending" ||
+        entry.preparationOwner ||
+        entry.cleanupOwner ||
+        entry.cleanupPending
+      )
+        failures.push(new Error(`Unsettled workspace ${entry.worktree}`));
+    }
+    for (const owner of Object.values(settled.runtimeOwners ?? {})) {
+      if (owner.state === "deletionPending" || owner.deletionClaim)
+        failures.push(new Error(`Unsettled runtime ${owner.runtimeDir}`));
+    }
+  }
+  if (failures.length > 0)
+    throw new AggregateError(failures, `Fixture cleanup failed; retained ${fixture.root}`);
+  rmSync(fixture.root, { recursive: true, force: true });
+  fixtures.delete(fixture);
+}
+
+export async function joinFixtureFinalizers(fixture: FixtureRepo): Promise<void> {
+  const failures: unknown[] = [];
+  const pendingOwners: number[] = [];
+  const registry = join(fixtureRegistryDir(fixture.repo), "workspaces.json");
+  if (existsSync(registry)) {
+    for (const entry of Object.values(readWorkspaces(fixture.repo).workspaces)) {
+      if (entry.status !== "pending" || entry.cleanupPending) continue;
+      if (entry.preparationOwner) pendingOwners.push(entry.preparationOwner.pid);
+      const result = runCli(fixture, ["wait", entry.worktree]);
+      const settled = Object.values(readWorkspaces(fixture.repo).workspaces).find(
+        (current) => current.worktree === entry.worktree,
+      );
+      // A finalized failure returns 1. A timeout, signal or still-pending record is unresolved.
+      if (
+        result.error ||
+        (result.status !== 0 && result.status !== 1) ||
+        settled?.status === "pending" ||
+        settled?.preparationOwner
+      )
+        failures.push(
+          new Error(`Preparation ${entry.worktree}: ${result.error?.message ?? result.stderr}`),
+        );
+    }
+  }
+  const pids = [...new Set([...pendingOwners, ...fixtureFinalizerPids(fixture)])];
+  const joined = await Promise.allSettled(pids.map(waitForFixtureExit));
+  for (const result of joined) {
+    if (result.status === "rejected") failures.push(result.reason);
+  }
+  if (failures.length > 0) throw new AggregateError(failures, "Finalizer ownership did not settle");
+}
+
+function fixtureFinalizerPids(fixture: FixtureRepo): number[] {
+  return [
+    ...new Set([
+      ...fixtureJsonLines<number>(join(fixture.repo, "finalize-owners.jsonl")),
+      ...fixtureJsonLines<number>(join(fixture.repo, "finalize-pids.jsonl")),
+    ]),
+  ];
+}
+
+function fixtureDevEntries(fixture: FixtureRepo): DevServerEntry[] {
+  const file = join(fixtureRegistryDir(fixture.repo), "dev-servers.json");
+  return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")).servers : [];
+}
+
+function fixtureJsonLines<T>(file: string): T[] {
+  return existsSync(file)
+    ? readFileSync(file, "utf8")
+        .split("\n")
+        .filter((line) => line !== "")
+        .map((line) => JSON.parse(line))
+    : [];
+}
+
+async function waitForFixtureExit(pid: number): Promise<void> {
+  const deadline = Date.now() + 15_000;
+  while (fixturePidAlive(pid)) {
+    if (Date.now() > deadline) throw new Error(`Owned fixture process ${pid} did not exit`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+function fixturePidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ESRCH") return false;
+    throw error;
+  }
 }
 
 export function readWorkspaces(repo: string): WorkspacesRegistry {

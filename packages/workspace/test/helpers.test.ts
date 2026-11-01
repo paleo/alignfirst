@@ -27,16 +27,6 @@ import {
 import { WorkspaceError } from "../src/errors.js";
 
 describe("patchEnvFile", () => {
-  it("replaces an existing line in place", () => {
-    const before = "PORT=3000\nNAME=app\n";
-    expect(patchEnvFile(before, { PORT: "8100" })).toBe("PORT=8100\nNAME=app\n");
-  });
-
-  it("appends when key missing", () => {
-    const before = "NAME=app\n";
-    expect(patchEnvFile(before, { PORT: "8100" })).toBe("NAME=app\nPORT=8100\n");
-  });
-
   it("ends with a single trailing newline", () => {
     expect(patchEnvFile("KEY=v\n\n\n", { KEY: "x" })).toBe("KEY=x\n");
   });

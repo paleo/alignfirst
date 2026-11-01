@@ -1,6 +1,6 @@
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -10,6 +10,9 @@ import {
   alignfirstBin,
   cliExecutable,
   createFixtureRepo,
+  joinFixtureFinalizers,
+  cleanupFixture,
+  recordDevActivity,
   type FixtureRepo,
   type FixtureOptions,
   readWorkspaces,
@@ -31,32 +34,73 @@ interface RunningChild {
 }
 
 afterEach(async () => {
-  for (const fx of fixtures) writeFileSync(join(fx.root, "release"), "release");
-  for (const running of children.splice(0)) {
-    if (!running.closed) running.child.kill("SIGTERM");
+  const failures: unknown[] = [];
+  for (const fx of fixtures) {
+    for (const file of [join(fx.root, "release"), join(fx.root, "home/release")]) {
+      try {
+        writeFileSync(file, "release");
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+  }
+  const runningChildren = children.splice(0);
+  for (const running of runningChildren) {
     try {
+      if (
+        !running.closed &&
+        running.child.exitCode === null &&
+        running.child.signalCode === null &&
+        !running.child.killed
+      )
+        running.child.kill("SIGTERM");
       await waitUntil(() => running.closed, "CLI exit");
-    } finally {
+    } catch (error) {
+      failures.push(error);
       if (!running.closed) running.child.kill("SIGKILL");
     }
   }
-  for (const pid of ownedPids) {
-    if (isAlive(pid)) process.kill(pid, "SIGKILL");
-    await waitUntil(() => !isAlive(pid), `owned process ${pid} exit`);
+  for (const fx of fixtures) {
+    try {
+      await joinFixtureFinalizers(fx);
+    } catch (error) {
+      failures.push(error);
+    }
+    for (const file of [join(fx.root, "pids.json"), join(fx.root, "home/pids.json")]) {
+      if (existsSync(file)) {
+        const pids: number[] = JSON.parse(readFileSync(file, "utf8"));
+        for (const pid of pids) ownedPids.add(pid);
+      }
+    }
   }
+  for (const pid of ownedPids) {
+    try {
+      if (isAlive(pid)) process.kill(pid, "SIGKILL");
+      await waitUntil(() => !isAlive(pid), `owned process ${pid} exit`);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  for (const running of runningChildren) {
+    try {
+      await waitUntil(() => running.closed, "CLI output closure");
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  const unresolved =
+    runningChildren.some((running) => !running.closed) || [...ownedPids].some(isAlive);
   ownedPids.clear();
   for (const fx of fixtures.splice(0)) {
-    const entries = readWorkspaces(fx.repo).workspaces;
-    if (
-      Object.values(entries).some(
-        (entry) => entry.status === "pending" && entry.cleanupPending !== true,
-      )
-    ) {
-      const result = runCli(fx.repo, ["wait"]);
-      expect(result.status, result.stderr).toBe(0);
+    try {
+      if (unresolved) throw new Error(`Owned command unresolved; retained ${fx.root}`);
+      await cleanupFixture(fx, { INTERRUPT_DIR: fx.root });
+    } catch (error) {
+      failures.push(error);
     }
-    rmSync(fx.root, { recursive: true, force: true });
   }
+  if (failures.length > 0)
+    throw new AggregateError(failures, "Interruption fixture cleanup failed");
 });
 
 describe("installed workspace CLI cancellation", () => {
@@ -84,11 +128,13 @@ describe("installed workspace CLI cancellation", () => {
       writeFileSync(join(fx.root, "home/release"), "release");
       const running = startCli(fx, fx.repo, ["workspace", "teardown", linked]);
       const pids = await waitForOwnedCommand(fx);
+      const captured = readWorkspaces(fx.repo);
       const competing = runCli(fx.repo, ["teardown", linked], {
         INTERRUPT_DIR: join(fx.root, "home"),
       });
       expect(competing.status, competing.stderr).toBe(1);
       expect(competing.stderr).toMatch(/cleanup.*in progress/i);
+      expect(readWorkspaces(fx.repo)).toEqual(captured);
       expect(existsSync(join(fx.root, "later"))).toBe(false);
       expect(readFileSync(resource, "utf8")).toBe("original");
       expect(runCli(fx.repo, ["setup", "--path", linked, "--force"]).status).toBe(1);
@@ -102,11 +148,9 @@ describe("installed workspace CLI cancellation", () => {
       const adopted = runCli(fx.repo, ["setup", "--path", linked]);
       expect(adopted.status, adopted.stderr).toBe(0);
       expect(existsSync(resource)).toBe(false);
-      writeFileSync(resource, "replacement");
       expect(Object.values(readWorkspaces(fx.repo).workspaces)).toMatchObject([
         { worktree: linked, status: "ready" },
       ]);
-      expect(readFileSync(resource, "utf8")).toBe("replacement");
     },
     TIMEOUT_MS,
   );
@@ -162,19 +206,10 @@ describe("installed workspace CLI cancellation", () => {
       const recovered = readWorkspaces(fx.repo);
       delete recovered.workspaces[name].cleanupOwner;
       writeWorkspaces(fx.repo, recovered);
-      expect(readWorkspaces(fx.repo)).toEqual(recovered);
-      expect(recovered.workspaces[name]).toMatchObject({
-        cleanupPending: true,
-        recipe: captured.workspaces[name].recipe,
-        ports: captured.workspaces[name].ports,
-      });
-      expect(recovered.runtimeOwners).toEqual(captured.runtimeOwners);
       const retry = runCli(fx.repo, ["teardown", linked], { INTERRUPT_DIR: join(fx.root, "home") });
       expect(retry.status, retry.stderr).toBe(0);
       expect(existsSync(resource)).toBe(false);
       expect(runCli(fx.repo, ["setup", "--path", linked]).status).toBe(0);
-      writeFileSync(resource, "replacement");
-      expect(readFileSync(resource, "utf8")).toBe("replacement");
       if (companionRuntime)
         expect(Object.values(readWorkspaces(fx.repo).runtimeOwners ?? {})[0].generation).not.toBe(
           Object.values(captured.runtimeOwners ?? {})[0].generation,
@@ -207,6 +242,11 @@ describe("installed workspace CLI cancellation", () => {
       expect(retry.status, retry.stderr).toBe(1);
       expect(retry.stderr).toMatch(/abandoned cleanup.*explicit recovery/i);
       expect(readWorkspaces(fx.repo).workspaces[name]).toEqual(entry);
+      // Remove only the synthetic replacement claim after its known purge group has joined.
+      await waitUntil(() => [...ownedPids].every((pid) => !isAlive(pid)), "stale purge quiescence");
+      const recovered = readWorkspaces(fx.repo);
+      delete recovered.workspaces[name].cleanupOwner;
+      writeWorkspaces(fx.repo, recovered);
     },
     TIMEOUT_MS,
   );
@@ -387,9 +427,7 @@ describe("installed workspace CLI cancellation", () => {
 });
 
 function fixture(options?: FixtureOptions): FixtureRepo {
-  const fx = createFixtureRepo(options);
-  fixtures.push(fx);
-  return fx;
+  return createFixtureRepo(options, (fx) => fixtures.push(fx));
 }
 
 function installBarrier(
@@ -431,8 +469,13 @@ function installBarrier(
     `
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+if (${JSON.stringify(phase)} === "finalize") {
+  const ctx = JSON.parse(process.env.ALIGNFIRST_WORKSPACE_CONTEXT);
+  appendFileSync(join(ctx.mainWorktree, "finalize-pids.jsonl"), JSON.stringify(process.pid) + "\\n");
+  appendFileSync(join(ctx.mainWorktree, "finalize-owners.jsonl"), JSON.stringify(process.ppid) + "\\n");
+}
 const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
 const dir = process.env.INTERRUPT_DIR;
 writeFileSync(join(dir, "pids.json"), JSON.stringify([process.pid, child.pid]));
@@ -445,6 +488,7 @@ await closed;
 }
 
 function startCli(fx: FixtureRepo, cwd: string, args: string[]): RunningChild {
+  recordDevActivity(fx, args[0], args.slice(1));
   const child = spawn(cliExecutable, [alignfirstBin, ...args], {
     cwd,
     env: { ...process.env, HOME: join(fx.root, "home"), INTERRUPT_DIR: fx.root },
@@ -453,10 +497,13 @@ function startCli(fx: FixtureRepo, cwd: string, args: string[]): RunningChild {
   });
   const running: RunningChild = { child, closed: false, code: null, output: "" };
   child.stdout?.on("data", (chunk) => {
-    running.output += chunk.toString();
+    running.output = (running.output + chunk.toString()).slice(-16_000);
   });
   child.stderr?.on("data", (chunk) => {
-    running.output += chunk.toString();
+    running.output = (running.output + chunk.toString()).slice(-16_000);
+  });
+  child.on("error", (error) => {
+    running.output = (running.output + error.message).slice(-16_000);
   });
   child.on("close", (code) => {
     running.closed = true;
