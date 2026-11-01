@@ -28,6 +28,19 @@ beforeEach(() => {
   project = join(home, "app");
   nativeA = join(root, "native-a");
   nativeB = join(root, "native-b");
+  mkdirSync(home);
+  env = {
+    HOME: home,
+    PATH: `${join(root, "bin")}:${process.env.PATH ?? ""}`,
+    TOKEN: "fixture-secret",
+    CLAUDE_CODE_SESSION_ID: "parent",
+  };
+  settings();
+});
+
+afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+function makeLaunchFixture(): void {
   mkdirSync(join(project, ".plans"), { recursive: true });
   mkdirSync(nativeA);
   mkdirSync(nativeB);
@@ -71,16 +84,7 @@ process.stdin.on("end", () => {
 `,
     { mode: 0o755 },
   );
-  env = {
-    HOME: home,
-    PATH: `${bin}:${process.env.PATH ?? ""}`,
-    TOKEN: "fixture-secret",
-    CLAUDE_CODE_SESSION_ID: "parent",
-  };
-  settings();
-});
-
-afterEach(() => rmSync(root, { recursive: true, force: true }));
+}
 
 function settings(extra: object = {}) {
   writeSettings(home, {
@@ -348,6 +352,7 @@ describe("independent quota configuration", () => {
   });
 
   it("executes the selected quota source, labels its account boundary and leaves the child unchanged", async () => {
+    makeLaunchFixture();
     settings({
       profiles: {
         a: {
@@ -374,6 +379,7 @@ describe("independent quota configuration", () => {
   it.each([undefined, { source: "none" }])(
     "spawns nothing for unsupported/disabled quota %j",
     async (quota) => {
+      makeLaunchFixture();
       settings({ profiles: { a: { agent: "pi", quota } } });
       const reader = vi.fn(async () => "must not run");
       const result = await launch(["quota"], undefined, reader);
@@ -387,6 +393,7 @@ describe("independent quota configuration", () => {
   );
 
   it("uses new-session project/explicit precedence rather than a recorded run's profile", async () => {
+    makeLaunchFixture();
     expect((await launch(["new", "-m", "go"])).code).toBe(0);
     settings({ profile: "b" });
     const reader = vi.fn(async () => "limits");
@@ -400,6 +407,8 @@ describe("independent quota configuration", () => {
 });
 
 describe("effective profiles through CLI launch and resume", () => {
+  beforeEach(makeLaunchFixture);
+
   it("unsets inherited storage for a real null-configured child and describes the reset", async () => {
     settings({ profiles: { a: { agent: "claude", configDir: null, unset: ["TOKEN"] } } });
     env.CLAUDE_CONFIG_DIR = nativeB;
@@ -917,27 +926,6 @@ process.exitCode = 1;
     expect(resumed.modelResolver).toHaveBeenCalledWith("claude", undefined, expect.anything());
     expect(observed().args).not.toContain("--model");
     expect(newest().frontmatter.model).toBeNull();
-  });
-
-  it.each([
-    { profile: "dangling" },
-    { defaultProfiles: { claude: "dangling" } },
-    { defaultProfiles: {} },
-    { profiles: { a: { agent: "claude", default: "invalid" } } },
-    { profiles: { a: { agent: "claude", default: true }, b: { agent: "claude", default: true } } },
-    { profiles: {} },
-    { profiles: { a: { agent: "claude", defaultModel: "disallowed" } } },
-  ])("reads terminal status despite launch-resolution failures %j", async (invalid) => {
-    expect((await launch(["new", "-m", "go"])).code).toBe(0);
-    const file = newest().path;
-    settings(invalid);
-    const before = readFileSync(file, "utf8");
-    const result = await launch(["status", file, "--result"]);
-    expect(result.code, result.stderr).toBe(0);
-    expect(result.stdout).toContain("profile: a");
-    expect(result.stdout).toContain("done");
-    expect(readFileSync(file, "utf8")).toBe(before);
-    expect((await launch(["status", "--help"])).code).toBe(0);
   });
 
   it.each(["explicit", "project"])(

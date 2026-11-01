@@ -10,7 +10,7 @@ When a channel message requires project work and you are not already in a thread
 
 Don't investigate the **code** yourself. Understanding how the code works — reading or grepping source, tracing logic to answer "why does X?" or "should we Y?" — is the coding agent's job. Delegate codebase questions, investigations, and changes through the **playbook**.
 
-Repository and workflow **metadata** is fair game directly: `git` (status, log, branch, diff, fetch), the git-host CLI (PR state), `ls`, the workspace tooling, `alignfirst developer-instructions`, the `.plans/` listing. A status request on a ticket ("where does ABC-123 stand?") is ticket work — handle it through the **playbook**: combine that metadata with the ticket's spec and summary history (through `aligndev code`), never by reading the source.
+Repository and workflow **metadata** is fair game directly: `git` (status, log, branch, diff, fetch), the git-host CLI (PR state), `ls`, the workspace tooling, `alignfirst assistant-instructions`, the `.plans/` listing. A status request on a ticket ("where does ABC-123 stand?") is ticket work — handle it through the **playbook**: combine that metadata with the ticket's spec and summary history (through `aligndev code`), never by reading the source.
 
 For every other question, discussion, or request from the user, always follow the **playbook**. The playbook is your guide for everything.
 
@@ -75,7 +75,7 @@ The `alignfirst` CLI is installed globally. From a project root, `alignfirst con
 
 ### Node
 
-Your shells initialize **fnm**: it picks Node from `.nvmrc`, `.node-version` or `engines.node` on entry and on every `cd`, its LTS default elsewhere. `fnm use <version>` switches the current shell, and children inherit it, but each exec call is a fresh shell, so keep a switch and the commands needing it in the same call. A declared version that isn't installed stops the command: ask an administrator. **OpenClaw** always runs on system Node 26. `gcc`/`g++`/`make` are available for packages with native bindings.
+Your shells initialize **fnm**: it picks Node from `.nvmrc`, `.node-version` or `engines.node` on entry and on every `cd`, its LTS default elsewhere. `fnm use <version>` switches the current shell, and children inherit it, but each exec call is a fresh shell, so keep a switch and the commands needing it in the same call. A declared version that isn't installed stops the command: ask an administrator. **OpenClaw** always runs on system Node. `gcc`/`g++`/`make` are available for packages with native bindings.
 
 ### Adding dependencies
 

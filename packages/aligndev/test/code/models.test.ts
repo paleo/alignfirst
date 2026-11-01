@@ -100,16 +100,16 @@ describe("Codex executable model resolution", () => {
       " provider/model:high ",
     );
     await expect(resolve("pi", undefined, CONTEXT)).resolves.toBeUndefined();
-    await expect(resolve("codex", "gpt-5.6-terra", CONTEXT)).resolves.toBe("gpt-5.6-terra");
+    await expect(resolve("codex", "gpt-6.1-terra", CONTEXT)).resolves.toBe("gpt-6.1-terra");
     expect(runner).not.toHaveBeenCalled();
   });
 
   it("reuses one successfully parsed catalog without requiring other aliases", async () => {
     const runner = vi.fn(async () =>
-      JSON.stringify({ models: [{ slug: "gpt-5.6-terra" }, { slug: "gpt-5.7-luna" }] }),
+      JSON.stringify({ models: [{ slug: "gpt-6.1-terra" }, { slug: "gpt-5.7-luna" }] }),
     );
     const resolve = createExecutableModelResolver(runner);
-    await expect(resolve("codex", "terra", CONTEXT)).resolves.toBe("gpt-5.6-terra");
+    await expect(resolve("codex", "terra", CONTEXT)).resolves.toBe("gpt-6.1-terra");
     await expect(resolve("codex", "luna", CONTEXT)).resolves.toBe("gpt-5.7-luna");
     expect(runner).toHaveBeenCalledTimes(1);
   });
@@ -121,10 +121,9 @@ describe("Codex executable model resolution", () => {
     ["missing alias", async () => JSON.stringify({ models: [{ slug: "gpt-5.6-luna" }] })],
   ])("reports an actionable %s", async (_name, runner) => {
     const resolve = createExecutableModelResolver(runner);
-    await expect(resolve("codex", "terra", CONTEXT)).rejects.toThrow(/Update the Codex CLI/);
-    await expect(resolve("codex", "terra", CONTEXT)).rejects.toThrow(
-      /`code.profiles.<name>.models` in the aligndev settings/,
-    );
+    const attempt = resolve("codex", "terra", CONTEXT);
+    await expect(attempt).rejects.toThrow(/Update the Codex CLI/);
+    await expect(attempt).rejects.toThrow(/`code.profiles.<name>.models` in the aligndev settings/);
   });
 
   it.each([new Error("injected-catalog-secret"), "injected-catalog-secret"])(
@@ -133,10 +132,9 @@ describe("Codex executable model resolution", () => {
       const resolver = createExecutableModelResolver(async () => {
         throw failure;
       });
-      await expect(resolver("codex", "sol", CONTEXT)).rejects.toThrow(/Update the Codex CLI/);
-      await expect(resolver("codex", "sol", CONTEXT)).rejects.not.toThrow(
-        "injected-catalog-secret",
-      );
+      const attempt = resolver("codex", "sol", CONTEXT);
+      await expect(attempt).rejects.toThrow(/Update the Codex CLI/);
+      await expect(attempt).rejects.not.toThrow("injected-catalog-secret");
     },
   );
 
@@ -154,8 +152,9 @@ process.exit(${exitCode});
       );
       const resolver = createExecutableModelResolver();
       const context = { cwd: root, env: { HOME: root, CODEX_HOME: root, PATH: root } };
-      await expect(resolver("codex", "sol", context)).rejects.toThrow(/Update the Codex CLI/);
-      await expect(resolver("codex", "sol", context)).rejects.not.toThrow("native-catalog-secret");
+      const attempt = resolver("codex", "sol", context);
+      await expect(attempt).rejects.toThrow(/Update the Codex CLI/);
+      await expect(attempt).rejects.not.toThrow("native-catalog-secret");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

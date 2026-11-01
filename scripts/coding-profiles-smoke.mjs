@@ -464,14 +464,14 @@ async function profileOnlyChecks(f) {
       const report = await reportAt(f, cwd);
       assert.deepEqual(report.aligndev, { profile: "a" });
       assert.equal(report.companion, null);
-      assert.equal(report.locations.developerInstructions, null);
+      assert.equal(report.locations.assistantInstructionsFile, null);
       assert.deepEqual(report.locations.workspaceRuntime, {
         in: "project",
         path: join(cwd, ".local-wt"),
         exists: false,
       });
       for (const [item, location] of Object.entries(report.locations)) {
-        if (item === "developerInstructions" || item === "workspaceRuntime") continue;
+        if (item === "assistantInstructionsFile" || item === "workspaceRuntime") continue;
         assert.equal(location.in, "project");
         assert.equal(
           location.path,
@@ -615,14 +615,14 @@ async function companionChecks(f) {
     assert.deepEqual(report.aligndev, { profile: "b" });
     assert.equal(report.companion.dir, f.companion);
     assert.equal(report.companion.exists, false);
-    assert.equal(report.locations.developerInstructions, null);
+    assert.equal(report.locations.assistantInstructionsFile, null);
     assert.deepEqual(report.locations.workspaceRuntime, {
       in: "project",
       path: join(f.companionProject, ".local-wt"),
       exists: false,
     });
     for (const [item, location] of Object.entries(report.locations)) {
-      if (item === "developerInstructions" || item === "workspaceRuntime") continue;
+      if (item === "assistantInstructionsFile" || item === "workspaceRuntime") continue;
       assert.equal(location.in, "companion");
       assert.equal(
         location.path,

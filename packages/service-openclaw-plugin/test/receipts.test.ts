@@ -1,8 +1,7 @@
 import type { OpenClawPluginToolContext, PluginLogger } from "openclaw/plugin-sdk/plugin-entry";
 import { describe, expect, it, vi } from "vitest";
 import { createReceiptCoordinator } from "../src/thread-handoff/receipts.js";
-import { createHandoffStore } from "../src/thread-handoff/state.js";
-import { temporaryStateDir } from "./helpers.js";
+import { createTestHandoffStore, temporaryStateDir } from "./helpers.js";
 
 const PRODUCTION_SLACK_RESULT = {
   channel: "slack",
@@ -233,7 +232,7 @@ function coordinator(
   insertReceipt?: () => void,
   conversationId = "C1",
 ) {
-  const store = createHandoffStore(temporaryStateDir());
+  const store = createTestHandoffStore(temporaryStateDir());
   if (insertReceipt) store.insertReceipt = insertReceipt;
   const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
   let currentTime = 0;
@@ -254,7 +253,7 @@ function coordinator(
     },
   });
   receipts.captureContext(context);
-  return { receipts, context, logger };
+  return { receipts, context, logger, dispose: () => store.close() };
 }
 
 function observe(

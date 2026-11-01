@@ -12,7 +12,7 @@ For internals (topology, Dockerfile pair, mocked-CLI shim, channel plugin mechan
 npm i -D @alignfirst/openclaw-test @alignfirst/openclaw-channel-mock-core @alignfirst/openclaw-discord-mock @alignfirst/openclaw-slack-mock openclaw
 ```
 
-Requires Docker Compose. The host CLI supports the Node versions in `engines.node` or Bun 1.4.4, the tested Bun baseline. Its eager OpenClaw dependency graph uses APIs absent from older Bun releases; Bun 1.3.3 is incompatible.
+Requires Docker Compose. The host CLI supports the Node versions in `engines.node` or Bun 1.4.4, the tested Bun baseline. The container-only `bus` and `runner` commands load the OpenClaw dependency graph on demand. That graph uses APIs absent from older Bun releases; Bun 1.3.3 is incompatible.
 
 Published bins retain Node shebangs, so ordinary `bunx @alignfirst/openclaw-test` normally runs Node when it is installed. Bun-only hosts should use `bunx --bun @alignfirst/openclaw-test` (`bun x --bun` is equivalent). Direct `bun <installed-entry.mjs>` and project scripts launched with `bun --bun run <script>` also preserve Bun. This covers the host CLI, not Docker, OpenClaw or native coding agents running under Bun. Containers retain Node 26 and npm.
 
@@ -49,8 +49,8 @@ OPENROUTER_API_KEY=sk-or-… # Required for an OpenRouter agent or judge.
 OPENCLAW_WORKSPACE_DIR=/path/to/your/openclaw-workspace
 
 # Model catalog: full LiteLLM refs. `run --model` picks by bare id (suffix after the last "/").
-OPENCLAW_TEST_MODELS=anthropic/claude-sonnet-5,custom-openrouter/qwen/qwen3.8-flash
-OPENCLAW_DEFAULT_TEST_MODEL=claude-sonnet-5
+OPENCLAW_TEST_MODELS=anthropic/claude-sonnet-5-5,custom-openrouter/qwen/qwen3.8-flash
+OPENCLAW_DEFAULT_TEST_MODEL=claude-sonnet-5-5
 
 ```
 
@@ -91,7 +91,7 @@ npm run e2e -- --channel all --all                                  # every scen
 npm run e2e -- --channel discord-mock <scenario>                    # restrict to one channel
 npm run e2e -- --channel webchat <scenario>                         # the apps' surface
 npm run e2e -- --channel all --model qwen3.8-flash <scenario>        # pick a model by bare id
-npm run e2e -- --channel all --model claude-sonnet-5,qwen3.8-flash <s>  # a comma list of bare ids
+npm run e2e -- --channel all --model claude-sonnet-5-5,qwen3.8-flash <s>  # a comma list of bare ids
 npm run e2e -- --channel all --model all <scenario>                 # run every model in OPENCLAW_TEST_MODELS
 npm run e2e -- --channel all --iterations 5 <scenario>              # repeat each (scenario, channel) pair 5×
 npm run e2e -- --channel all --iterations 5 --max-failures 1 <s>    # abort a pair after >1 failure
@@ -129,10 +129,10 @@ Assert on `conversation.id` / `threadId`, not envelope formatting.
 
 ## Judge model
 
-Defaults to `openrouter/anthropic/claude-haiku-4.5`, billed to `OPENROUTER_API_KEY`. Override it
+Defaults to `openrouter/anthropic/claude-haiku-5.5`, billed to `OPENROUTER_API_KEY`. Override it
 via `OPENCLAW_TEST_JUDGE_MODEL` on the `runner` service (set in your consumer overlay). OpenRouter
 refs use `openrouter/<model>`; direct Anthropic refs use `anthropic/<model>`, for example
-`anthropic/claude-haiku-4-5`. The judge is **not** an OpenClaw agent — don't
+`anthropic/claude-haiku-5-5`. The judge is **not** an OpenClaw agent — don't
 configure it in `openclaw.json`.
 
 ## Attribution

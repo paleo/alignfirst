@@ -254,7 +254,9 @@ function createFakeGateway(): FakeGateway {
     const params = JSON.parse(argv[5] as string) as Record<string, unknown>;
     calls.push({ method, params });
     try {
-      return { exitCode: 0, stdout: JSON.stringify(handlers[method]?.(params)), stderr: "" };
+      if (!Object.hasOwn(handlers, method)) throw new Error(`Unexpected gateway RPC: ${method}`);
+      const handler = handlers[method];
+      return { exitCode: 0, stdout: JSON.stringify(handler(params)), stderr: "" };
     } catch (err) {
       return { exitCode: 1, stdout: "", stderr: (err as Error).message };
     }

@@ -8,13 +8,8 @@ describe("extractTaggedBlock", () => {
   });
 
   it("preserves newlines and embedded JSON inside the tag", () => {
-    const raw = '<result-json>\n{\n  "a": 1\n}\n</result-json>';
+    const raw = '<result-json> \t\n{\n  "a": 1\n}\n\t </result-json>';
     expect(extractTaggedBlock(raw, "result-json")).toBe('{\n  "a": 1\n}');
-  });
-
-  it("trims leading and trailing whitespace inside the tag", () => {
-    const raw = "<result-json>   payload   </result-json>";
-    expect(extractTaggedBlock(raw, "result-json")).toBe("payload");
   });
 
   it("throws when the opening tag is missing", () => {

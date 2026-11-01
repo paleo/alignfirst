@@ -10,7 +10,7 @@ This package works independently of any project tooling and of the subagent exte
 pi install npm:@alignfirst/pi-background
 ```
 
-Requires Node.js 22.19.0 or later. Tested with **Pi 1.3.0**, **Node 26.8.1 / 22.23.3**, and **Linux**. The exact Node 22.19.0 floor has not been exercised. macOS and Windows through WSL are supported targets but have not been exercised here. Native Windows is refused before process launch. Host peer ranges are `*` under Pi's package rules; they do not certify future Pi versions.
+Requires the Node.js runtime declared in `engines.node`. See the [supported and tested baseline](https://github.com/paleo/alignfirst/blob/main/docs/pi-extensions.md#supported-and-tested-baseline) for Pi compatibility and checks not rerun after the dependency upgrade. macOS and Windows through WSL are supported targets but have not been exercised here. Native Windows is refused before process launch. Host peer ranges are `*` under Pi's package rules; they do not certify future Pi versions.
 
 The package declares root `index.js` as its sole Pi extension entry. It forwards the default factory from compiled `dist/index.js`, so Pi displays the npm package label without `:dist`. Loading starts no process or timer. Installation and loading do not install profiles, skills, or the other extension.
 
@@ -115,11 +115,13 @@ Linux cleanup verifies process-start identities before signalling. macOS uses pr
 
 ## Maintainer checks
 
+From the repository root, complete `npm run build` before integration, including filtered files. Preflight checks provisioning only; rebuild after source changes.
+
 ```sh
+npm run build
 npm test --workspace @alignfirst/pi-background
 npm run test:integration --workspace @alignfirst/pi-background
 npm run typecheck --workspace @alignfirst/pi-background
-npm run build --workspace @alignfirst/pi-background
 npm run lint --workspace @alignfirst/pi-background
 npm pack --workspace @alignfirst/pi-background --dry-run --json
 ```

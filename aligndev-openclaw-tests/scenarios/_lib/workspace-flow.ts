@@ -1,5 +1,5 @@
 import type { ScenarioContext } from "@alignfirst/openclaw-test";
-import { execMatches, readsDeveloperInstructions } from "./agent-tool-calls.ts";
+import { execMatches, readsAssistantInstructions } from "./agent-tool-calls.ts";
 import { assertBranchForTicket, escapeRegExp, waitForAnyWorktreeDir } from "./fixture-state.ts";
 import { isMetaNarration } from "./meta-narration.ts";
 import { expectCodingDelegation, type CodingAgentMockHandle } from "./mock-coding-agent.ts";
@@ -65,9 +65,9 @@ export async function runWorkspaceFlow(
 
   // Instructions are selected by the invoked worktree, not discovered by filename.
   await ctx.waitForAgentToolCall(
-    (c) => readsDeveloperInstructions(c, projectPath) || readsDeveloperInstructions(c, worktreeDir),
+    (c) => readsAssistantInstructions(c, projectPath) || readsAssistantInstructions(c, worktreeDir),
     {
-      label: "agent reads the project developer instructions",
+      label: "agent reads the project assistant instructions",
       timeoutMs: 120_000,
     },
   );

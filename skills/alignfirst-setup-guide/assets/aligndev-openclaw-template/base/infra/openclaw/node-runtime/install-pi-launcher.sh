@@ -5,8 +5,8 @@ if [ "$(id -u)" -ne 0 ]; then
   printf 'Pi launcher installation requires the operator (root).\n' >&2
   exit 1
 fi
-if [ "$#" -ne 1 ]; then
-  printf 'Usage: install-pi-launcher.sh <exact-reviewed-version>\n' >&2
+if [ "$#" -ne 0 ]; then
+  printf 'Usage: install-pi-launcher.sh\n' >&2
   exit 1
 fi
 if [ ! -x /usr/bin/node ]; then
@@ -25,7 +25,7 @@ fi
 launcher=$(mktemp)
 trap 'rm -f -- "$launcher"' EXIT
 /usr/bin/node /opt/{{SERVICE_USER}}/libexec/pi-launcher.mjs \
-  "$package_root" "$1" "$prefix" > "$launcher"
+  "$package_root" "$prefix" > "$launcher"
 install -d -o root -g root -m 755 /opt/{{SERVICE_USER}}/bin
 install -o root -g root -m 755 "$launcher" /opt/{{SERVICE_USER}}/bin/pi
-printf 'Installed protected Pi launcher using /usr/bin/node (Pi %s).\n' "$1"
+printf 'Installed protected Pi launcher using /usr/bin/node.\n'

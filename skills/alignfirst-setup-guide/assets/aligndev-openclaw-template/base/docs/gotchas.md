@@ -32,7 +32,7 @@ Pi prepends `<agent-dir>/bin` for native tool-helper discovery. Provision approv
 
 ## Pi auth is writable; declarations and their anchors are protected
 
-`deployment-policy.mjs` protects managed context/settings/trust/resources and their parents across every profile, custom store and quota store. It reserves absent context alternatives as directory sentinels. Do not replace `AGENTS.override.md` with an empty file: it would hide the normal instruction file. The pinned loader treats empty system/appended prompts as neutral.
+`deployment-policy.mjs` protects managed context/settings/trust/resources and their parents across every profile, custom store and quota store. It reserves absent context alternatives as directory sentinels. Do not replace `AGENTS.override.md` with an empty file: it would hide the normal instruction file. Pi's loader treats empty system/appended prompts as neutral.
 
 Native roots and their ancestors up to the service home are root-owned sticky writable `1770` anchors. The service group can create ordinary files but cannot rename protected root-owned children. Freezing a whole Pi directory would break authentication locks and renewal. Blanket `chmod 644` breaks executable packages.
 
@@ -101,13 +101,13 @@ Every `openclaw` command that rewrites the config (`config set`, `plugins instal
 
 ## When the bot may stay silent
 
-OpenClaw decides at admission whether a turn owes a reply. A group or channel message may end silent only when `agents.defaults.silentReply.group` is `"allow"` and the message does not mention the bot. The default has been `"disallow"` since 2026.9.6, so the seed sets `"allow"`: the channel is always-on, and most of its messages need no answer. A required turn that ends on `NO_REPLY` gets a context-free finalization instead, and its output, or `The tool run finished, but no final summary was produced. I did not repeat any completed actions.`, posts to the channel.
+OpenClaw decides at admission whether a turn owes a reply. A group or channel message may end silent only when `agents.defaults.silentReply.group` is `"allow"` and the message does not mention the bot. The default is `"disallow"`, so the seed sets `"allow"`: the channel is always-on, and most of its messages need no answer. A required turn that ends on `NO_REPLY` gets a context-free finalization instead, and its output, or `The tool run finished, but no final summary was produced. I did not repeat any completed actions.`, posts to the channel.
 
 Implicit mentions count as mentions. The kind `bot_thread_participant` covers *every* later message in a thread the assistant has spoken in, which is the normal state of a work thread. The kinds ship enabled for every channel (`channels.defaults.implicitMentions`), but only the Slack plugin emits `bot_thread_participant`; Discord emits `reply_to_bot` alone. The Slack seed therefore sets `channels.slack.implicitMentions.threadParticipation false`. That costs no inbound message: the allowlisted channel sets `requireMention: false`, and a turn is dropped only when `requireMention` is on.
 
 ## Other bots' messages start turns
 
-Since 2026.9.7, Discord and Slack accept messages from other bots under the rules that apply to humans: `allowBots` defaults to on. The allowlisted channel sets `requireMention: false`, so each post from a CI or integration bot there starts a model turn. OpenClaw's bot-loop protection caps a rapid exchange between two bots at 20 events a minute. For a noisy bot, set `channels.<surface>.allowBots` to `"mentions"` or `false` through [configure-assistant.md](operations/configure-assistant.md); its messages stay readable as context.
+Discord and Slack accept messages from other bots under the rules that apply to humans: `allowBots` defaults to on. The allowlisted channel sets `requireMention: false`, so each post from a CI or integration bot there starts a model turn. OpenClaw's bot-loop protection caps a rapid exchange between two bots at 20 events a minute. For a noisy bot, set `channels.<surface>.allowBots` to `"mentions"` or `false` through [configure-assistant.md](operations/configure-assistant.md); its messages stay readable as context.
 
 ## `MEDIA:` and `message` attachments read different media roots
 

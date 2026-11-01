@@ -22,7 +22,7 @@ try {
 }
 
 function run() {
-  const model = process.env.PI_ACCEPTANCE_MODEL ?? "openai/gpt-5.6-terra";
+  const model = process.env.PI_ACCEPTANCE_MODEL ?? "openai/gpt-6.1-terra";
   assert.match(model, /^[^/]+\/gpt-[\d.]+-terra$/, "Only an explicit Terra selector is authorized");
   const agentDir = join(root, "home/.pi/agent");
   mkdirSync(agentDir, { recursive: true });
@@ -76,7 +76,7 @@ function run() {
       "--omit=peer",
       "--no-audit",
       "--no-fund",
-      "@earendil-works/pi-coding-agent@1.3.0",
+      "@earendil-works/pi-coding-agent@1.4.0",
       ...tarballs,
     ],
     { cwd: root, stdio: "pipe" },

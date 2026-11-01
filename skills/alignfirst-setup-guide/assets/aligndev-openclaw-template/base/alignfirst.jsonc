@@ -6,7 +6,7 @@
     // TEAM_PLANS_SECTION
     "autoArchive": true
   },
-  "developerInstructions": "DEVELOPERS.md",
+  "assistantInstructionsFile": "DEVELOPERS.md",
   "conventions": {
     "ticketIdPattern": "^\\d+$",
     "git": {

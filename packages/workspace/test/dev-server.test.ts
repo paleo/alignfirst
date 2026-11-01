@@ -31,11 +31,7 @@ describe("watchForExternalStop", () => {
     alive.delete(20);
     vi.advanceTimersByTime(100);
     expect(onStopped).toHaveBeenCalledTimes(1);
-  });
 
-  it("stops polling after firing", () => {
-    const onStopped = vi.fn();
-    watchForExternalStop([10], onStopped, () => false, 100);
     vi.advanceTimersByTime(300);
     expect(onStopped).toHaveBeenCalledTimes(1);
   });

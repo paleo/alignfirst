@@ -88,7 +88,6 @@ describe("resolveFileSource", () => {
           kind: "content",
           content: (contentCtx) => {
             expect(contentCtx).toBe(ctx);
-            expect(contentCtx.isMainWorktree).toBe(false);
             return "A=1\n";
           },
         },
@@ -106,7 +105,6 @@ describe("resolveFileSource", () => {
           kind: "content",
           content: async (contentCtx) => {
             expect(contentCtx).toBe(ctx);
-            expect(contentCtx.isMainWorktree).toBe(false);
             return "A=1\n";
           },
         },

@@ -5,6 +5,7 @@ import {
 } from "@alignfirst/workspace/config";
 import { readFileSync } from "node:fs";
 
+import { normalizeAssistantInstructionsFile } from "./assistant-instructions-setting.js";
 import { CliError } from "./cli-error.js";
 import { errorMessage } from "./errors.js";
 import type { ProjectLayout } from "./project-layout.js";
@@ -31,7 +32,8 @@ export function readProjectConfig(path: string): ProjectConfigFile {
   }
 }
 
-export function validateProjectConfig(value: unknown, label: string): ProjectConfig {
+export function validateProjectConfig(input: unknown, label: string): ProjectConfig {
+  const value = normalizeAssistantInstructionsFile(input, label);
   try {
     validateConfigSchema<ProjectConfig>(value, projectSchema, label);
   } catch (error) {

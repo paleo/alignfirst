@@ -14,7 +14,7 @@ export interface ProjectConfig extends WorkspaceManifest {
    * Explicit instructions-file path relative to the selected project or companion root. It must
    * remain within that root, including through symlinks. Omit when no file should be selected.
    */
-  developerInstructions?: string;
+  assistantInstructionsFile?: string;
 }
 
 /** Repository-specific guidance for ticket detection, branch names and commit messages. */

@@ -321,7 +321,7 @@ for (const [agent, adapter] of [
     if (agent === "codex") {
       const catalog = await fixture.invoke("codex", ["debug", "models", "--bundled"]);
       assert.equal(catalog.exitCode, 0);
-      assert.match(catalog.stdout, /gpt-5\.6-terra/u);
+      assert.match(catalog.stdout, /gpt-6\.1-terra/u);
     }
   });
 }

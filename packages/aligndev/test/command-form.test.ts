@@ -69,7 +69,7 @@ describe("command forms", () => {
       { platform: "codingAgent" },
       forms,
     );
-    expect(working).toContain(`\`${forms.alignfirst} developer-instructions\``);
+    expect(working).toContain(`\`${forms.alignfirst} assistant-instructions\``);
     expect(working).toContain(`\`${forms.alignfirst} config --json\``);
   });
 
@@ -136,31 +136,23 @@ describe("command forms", () => {
     expect(global.code, global.stderr).toBe(0);
     expect(global.stdout).not.toContain("npx -y");
     expect(global.stdout).toMatch(GLOBAL_COMMAND);
-  });
 
-  it("prints the npx alignfirst form in the code usage and the delegation guide", async () => {
-    for (const args of [
-      ["code", "--help"],
-      ["guide", "code"],
-    ]) {
-      const npx = await run(args, NPX_ENV);
+    if (_name === "the code usage" || _name === "the delegation guide") {
       expect(npx.stdout).toContain("`npx -y alignfirst ticket --side`");
-      const global = await run(args, {});
       expect(global.stdout).toContain("`alignfirst ticket --side`");
     }
-  });
-
-  it("uses the same command form in Pi background commands and result retrieval", async () => {
-    for (const env of [{}, NPX_ENV]) {
-      const result = await run(["guide", "code"], env);
-      const command = env === NPX_ENV ? "npx -y aligndev" : "aligndev";
-      expect(result.code, result.stderr).toBe(0);
-      expect(result.stdout).toContain(`"command":"${command} code new --message-file`);
-      expect(result.stdout).toContain(
-        `${command} code resume <sessionId> --message-file <path> --quiet --meta <fresh-run-key>`,
-      );
-      expect(result.stdout).toContain(`${command} code status <exact-file> --result`);
-      expect(result.stdout).toContain(`${command} code status --meta <unique-run-key> --result`);
+    if (_name === "the delegation guide") {
+      for (const [result, command] of [
+        [npx, "npx -y aligndev"],
+        [global, "aligndev"],
+      ] as const) {
+        expect(result.stdout).toContain(`"command":"${command} code new --message-file`);
+        expect(result.stdout).toContain(
+          `${command} code resume <sessionId> --message-file <path> --quiet --meta <fresh-run-key>`,
+        );
+        expect(result.stdout).toContain(`${command} code status <exact-file> --result`);
+        expect(result.stdout).toContain(`${command} code status --meta <unique-run-key> --result`);
+      }
     }
   });
 

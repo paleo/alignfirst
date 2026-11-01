@@ -89,7 +89,7 @@ for (const mode of ["shared", "missing", "tracked"] as const) {
       const config = {
         schemaVersion: 1,
         conventions: { ticketIdPattern: "^ABC-\\d+$" },
-        developerInstructions: "DEVELOPERS.md",
+        assistantInstructionsFile: "DEVELOPERS.md",
         plans: { autoArchive: true },
         workspace: { finalize: [{ name: "Must be removed", run: ["false"] }] },
         devServer: { maxConcurrentDevServers: 2 },
@@ -116,7 +116,7 @@ for (const mode of ["shared", "missing", "tracked"] as const) {
         JSON.parse(cli(alignfirst, repo, "config", "--json")).config,
         retainedConfig,
       );
-      assert.match(cli(alignfirst, repo, "developer-instructions"), /small ESM library/);
+      assert.match(cli(alignfirst, repo, "assistant-instructions"), /small ESM library/);
       assert.equal(
         JSON.parse(readFileSync(join(repo, "package.json"), "utf8")).dependencies,
         undefined,

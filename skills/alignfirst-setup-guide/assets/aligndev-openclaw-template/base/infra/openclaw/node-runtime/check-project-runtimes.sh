@@ -238,6 +238,7 @@ export default function (pi) {
       runtime: process.execPath, cwd: process.cwd(), child: child.stdout.trim(), path: process.env.PATH,
     }));
   });
+  // Consume the probe before model/auth validation; the catalog selector makes no request.
   pi.on("input", () => ({ action: "handled" }));
 }
 PI_RUNTIME
@@ -249,7 +250,7 @@ PI_RUNTIME
       PI_OFFLINE=1 "$PROJECT_SHELL" -c '
         pi --offline --no-extensions --extension "$PI_RUNTIME_EXTENSION" \
           --no-skills --no-prompt-templates --no-themes --no-context-files --no-mcp \
-          --no-session --model openai/gpt-4.1 --print runtime-probe < /dev/null
+          --no-session --model openai/gpt --print runtime-probe < /dev/null
       ' >/dev/null 2>&1) || return 1
     /usr/bin/node --input-type=module - "$record" "$directory" "$expected_child" <<'PI_ASSERT'
 import assert from "node:assert/strict";

@@ -461,7 +461,7 @@ describe("project discovery", () => {
       {
         path: old,
         message: expect.stringContaining(
-          `The alignfirst CLI used in ${old} is too old: aligndev requires the workspace-aware alignfirst config --json contract (merged configuration, developerInstructions, workspaceRuntime and selectionOrigins). Upgrade alignfirst.`,
+          `The alignfirst CLI used in ${old} is too old: aligndev requires the workspace-aware alignfirst config --json contract (merged configuration, assistantInstructionsFile, workspaceRuntime and selectionOrigins). Upgrade alignfirst.`,
         ),
       },
     ]);
@@ -573,7 +573,7 @@ describe("project classification and companions", () => {
       projects: {
         [project]: {
           dir: "app",
-          items: { ".plans": "companion", developerInstructions: "companion" },
+          items: { ".plans": "companion", assistantInstructionsFile: "companion" },
         },
       },
     });
@@ -585,7 +585,7 @@ describe("project classification and companions", () => {
       dir: companion,
       exists: true,
       defaultLocation: "auto",
-      items: { developerInstructions: "companion" },
+      items: { assistantInstructionsFile: "companion" },
     });
     expect(list.projects[0].locations[".plans"]).toEqual({
       path: join(companion, ".plans"),
@@ -596,12 +596,12 @@ describe("project classification and companions", () => {
     const status = JSON.parse((await runProjects(fixture, ["status", "app", "--json"])).stdout);
     expect(status.configSource).toBeNull();
     expect(status.companion).toEqual(list.projects[0].companion);
-    expect(status.locations.developerInstructions).toBeNull();
+    expect(status.locations.assistantInstructionsFile).toBeNull();
 
     const text = (await runProjects(fixture, ["status", "app"])).stdout;
     expect(text).toContain("  Config source: (none)\n");
     expect(text).toContain(`  Companion: ${JSON.stringify(companion)}\n`);
-    expect(text).toContain("  Developer instructions: (not configured)\n");
+    expect(text).toContain("  Assistant instructions: (not configured)\n");
     expect(text).toContain(`  Work files: ${JSON.stringify(join(companion, ".plans"))}\n`);
   });
 
@@ -612,13 +612,13 @@ describe("project classification and companions", () => {
     mkdirSync(companion, { recursive: true });
     writeProjectConfig(companion, {
       portRange: range(28120, 28129),
-      developerInstructions: "notes/dev.md",
+      assistantInstructionsFile: "notes/dev.md",
     });
     writeRegistry(fixture.home, {
       projects: {
         [project]: {
           dir: "app",
-          items: { alignfirst: "companion", developerInstructions: "companion" },
+          items: { alignfirst: "companion", assistantInstructionsFile: "companion" },
         },
       },
     });
@@ -626,7 +626,7 @@ describe("project classification and companions", () => {
     expect(listed.code, listed.stderr).toBe(0);
     const report = JSON.parse(listed.stdout);
     expect(report.projects[0].portRange).toEqual(range(28120, 28129));
-    expect(report.projects[0].locations.developerInstructions).toEqual({
+    expect(report.projects[0].locations.assistantInstructionsFile).toEqual({
       path: join(companion, "notes/dev.md"),
       in: "companion",
       exists: false,
@@ -697,7 +697,7 @@ describe("project status", () => {
           in: "project",
           exists: false,
         },
-        developerInstructions: {
+        assistantInstructionsFile: {
           path: join(project, "DEVELOPERS.md"),
           in: "project",
           exists: false,
@@ -721,7 +721,7 @@ describe("project status", () => {
     expect(text.stdout).toContain('  Ticket id pattern: "^P-\\\\d+$"');
     expect(text.stdout).toContain("  Config source: project\n  Companion: (none)\n");
     expect(text.stdout).toContain(
-      `  Developer instructions: ${JSON.stringify(join(project, "DEVELOPERS.md"))} (missing)\n`,
+      `  Assistant instructions: ${JSON.stringify(join(project, "DEVELOPERS.md"))} (missing)\n`,
     );
     expect(text.stdout).toContain(
       `  Work files: ${JSON.stringify(join(project, ".plans"))} (missing)\n`,

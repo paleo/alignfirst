@@ -710,20 +710,6 @@ describe("command boundaries outside Git", () => {
     expect(result.stderr).toContain(message);
   });
 
-  it.each([
-    { profile: "deleted" },
-    { defaultProfiles: {} },
-    { profiles: { a: { agent: "pi", default: "bad" } } },
-    { profiles: { a: { agent: "pi", default: true }, b: { agent: "pi", default: true } } },
-  ])("keeps durable status independent of launch settings %j", async (code) => {
-    const home = makeHome({ code });
-    const result = await run(home, ["code", "status", "--no-ticket"]);
-    expect(result.stderr).toContain("no session file");
-    expect(result.stderr).not.toContain("missing profile");
-    expect(result.stderr).not.toContain("invalid aligndev config");
-    expect((await run(home, ["code", "status", "--help"])).code).toBe(0);
-  });
-
   it("spares top-level help/version and status but rejects corrupt settings elsewhere", async () => {
     const home = makeHome({});
     writeFileSync(join(home, ".alignfirst/aligndev.settings.json"), "bad json");

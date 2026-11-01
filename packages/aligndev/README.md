@@ -35,7 +35,7 @@ For a coding-agent assistant, parent host and delegated child are independent: a
 
 ## Configuration boundary
 
-AlignDev requires the workspace-aware `alignfirst config --json` report: top-level `workspace` metadata with absolute registry/runtime paths, `selectionOrigins`, logical locations and independent `aligndev` selection. One selected `alignfirst.json`/`.jsonc` with `schemaVersion: 1` holds nested conventions, plans, explicit developer instructions and optional recipes. Project configuration rejects unknown properties. Companion/global settings retain tolerant warnings. Inventory ranges come only from workspace `devServer.ports`; `project free-ports` looks up a free block without reserving it.
+AlignDev requires the workspace-aware `alignfirst config --json` report: top-level `workspace` metadata with absolute registry/runtime paths, `selectionOrigins`, logical locations and independent `aligndev` selection. One selected `alignfirst.json`/`.jsonc` with `schemaVersion: 1` holds nested conventions, plans, explicit assistant instructions and optional recipes. Project configuration rejects unknown properties. Companion/global settings retain tolerant warnings. Inventory ranges come only from workspace `devServer.ports`; `project free-ports` looks up a free block without reserving it.
 
 ## Start in Claude Code, Codex or Pi
 
@@ -85,7 +85,7 @@ Then ask your session to work with aligndev.
 ### Requirements
 
 - Node.js 22.11 or later with `npx -y aligndev`, or Bun with `bunx --bun aligndev` (`bun x --bun` is equivalent). Bun 1.4.4 is the tested CLI baseline; compatibility with every older release is not promised.
-- The selected child installed and authenticated under the same effective environment and cwd as the child. Apply the profile's `unset/env/configDir`, including HOME, PATH and credential routing, before using `claude` then `/login`, `codex login`, or `pi` then `/login <provider>` (or configured provider credentials). A bare login in another shell may select another account. Pi requires Node.js 22.19 or later; the Pi adapter and extensions target Pi 1.3.0.
+- The selected child installed and authenticated under the same effective environment and cwd as the child. Apply the profile's `unset/env/configDir`, including HOME, PATH and credential routing, before using `claude` then `/login`, `codex login`, or `pi` then `/login <provider>` (or configured provider credentials). A bare login in another shell may select another account. Pi keeps its own runtime requirements; see the [extension compatibility baseline](https://github.com/paleo/alignfirst/blob/main/docs/pi-extensions.md#supported-and-tested-baseline).
 - For Pi, select a usable native model, preferably `provider/model` (optional thinking suffix). Authenticate in the same account/configuration used by the child; never expose credential values in diagnostics.
 - Linux or macOS, or Windows through WSL.
 
@@ -192,7 +192,11 @@ npx -y skills add https://github.com/paleo/alignfirst --global --skill alignfirs
 
 Deployments require null or a string for every coding profile and enabled explicit quota source; omission is invalid there. Generated service defaults use null. Inventory still records absolute filesystem paths, while native commands unset the directory variable for null or set its resolved value for a string.
 
-Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code, Codex or Pi variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the preparation contract: project context, usable work files, docmap, runtime procedures and an explicitly referenced developer guide, in the repository or its companion. `alignfirst developer-instructions` prints conventions and that content without filename discovery. The workspace recipe is optional; default preparation is protocol-ready.
+Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code, Codex or Pi variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the preparation contract: project context, usable work files, docmap, runtime procedures and an explicitly referenced assistant guide, in the repository or its companion. `alignfirst assistant-instructions` prints conventions and that content without filename discovery. The workspace recipe is optional; default preparation is protocol-ready.
+
+## Maintainer checks
+
+From the repository root, run the complete `npm run build`, then `npm run test:integration --workspace aligndev`. Filtered integration files require the same build. Preflight checks provisioning only; rebuild after source changes.
 
 ## Under the Hood
 

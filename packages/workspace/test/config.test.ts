@@ -40,7 +40,7 @@ it("distinguishes absence, broken links, ambiguity and strict JSON/JSONC without
   expect(() => readConfigFile(jsonc)).toThrow("valid JSONC");
 });
 
-it("resolves safe nonnegative startup limits without reading ambient values", () => {
+it("resolves safe nonnegative startup limits without reading ambient values", async () => {
   const binding = { env: "DEV_LIMIT", default: 5 };
   expect(resolveDevServerLimit(undefined, {})).toBeUndefined();
   expect(resolveDevServerLimit(0, {})).toBe(0);
@@ -62,10 +62,11 @@ it("resolves safe nonnegative startup limits without reading ambient values", ()
     "9007199254740992",
     "PRIVATE",
   ]) {
-    expect(() => resolveDevServerLimit(binding, { DEV_LIMIT: value })).toThrow(
-      "maxConcurrentDevServers: DEV_LIMIT",
+    const attempt = Promise.resolve().then(() =>
+      resolveDevServerLimit(binding, { DEV_LIMIT: value }),
     );
-    expect(() => resolveDevServerLimit(binding, { DEV_LIMIT: value })).not.toThrow("PRIVATE");
+    await expect(attempt).rejects.toThrow("maxConcurrentDevServers: DEV_LIMIT");
+    await expect(attempt).rejects.not.toThrow("PRIVATE");
   }
   for (const value of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1, Number.POSITIVE_INFINITY]) {
     expect(() =>

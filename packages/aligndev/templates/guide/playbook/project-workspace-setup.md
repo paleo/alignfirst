@@ -20,7 +20,7 @@ The setup phase of a working session: decide the workplace and get it ready befo
 {{#codingAgent}}
 - `{{GUIDE}} code` — the delegation manual. Required every time you run this procedure, status requests included; do not skip it because no coding seems planned.
 {{/codingAgent}}
-- Run `{{ALIGNFIRST}} developer-instructions` from the current workplace when known, otherwise deliberately from PROJECT_PATH — how to create a worktree or a branch. The command prints conventions even without a configured guide.
+- Run `{{ALIGNFIRST}} assistant-instructions` from the current workplace when known, otherwise deliberately from PROJECT_PATH — how to create a worktree or a branch. The command prints conventions even without a configured guide.
 
 ## Step 1 — Requirements
 
@@ -179,7 +179,7 @@ Skip on sub-path 3 (no branch — nothing to sync). If Step 4 was skipped, selec
 2. **Guard uncommitted work.** Run `git status`. If the worktree is dirty, have the agent commit a WIP first (even if it doesn't compile) — never sync over uncommitted work.
 3. **Merge the remote branch.** If the branch has a remote counterpart, fetch its remote if it differs from the base's, then merge its freshly fetched ref into the local branch to catch up. Delegate to the agent (`merge` protocol) when it doesn't fast-forward or conflicts.
 4. **Catch up with the base branch.** If the selected base ref has commits not yet in this branch, run the "Updating a branch with the base branch" flow — without asking; step 7 tells the user what came in.
-5. **Refresh the workspace if commits came in.** If the merge brought in new commits, run the "Refreshing the workspace after a branch refresh" flow: reinstall dependencies, rebuild, run the new migrations.
+5. **Refresh the workspace if commits came in.** If the merge brought in new commits, run the "Refreshing the workspace after a branch refresh" flow.
 6. **Check for an open MR/PR** on this branch and note its state.
 7. **Report what changed.** If either merge brought in new commits, post a one-line summary so the user knows the ground shifted.
 
@@ -201,7 +201,7 @@ Combine them into the report and post it in the conversation; use `--catchup` wh
 
 ## Step 7 — Start the work
 
-Run `{{ALIGNFIRST}} developer-instructions` from the selected workplace now that its path and branch are settled. Resolve any source-file editing location through `{{ALIGNFIRST}} config --json` there, using nullable `locations.developerInstructions`.
+Run `{{ALIGNFIRST}} assistant-instructions` from the selected workplace now that its path and branch are settled. Resolve any source-file editing location through `{{ALIGNFIRST}} config --json` there, using nullable `locations.assistantInstructionsFile`.
 
 {{#thread}}
 The workspace is ready. Before a coding delegation, apply the takeover-turn race checkpoint in the playbook (`{{GUIDE}}`). Then announce what you're about to do in one line and do it. The user's request is the go-ahead; asking them to confirm it again wastes a turn.

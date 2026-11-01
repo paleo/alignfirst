@@ -24,7 +24,7 @@ const storageProbe = fileURLToPath(
 
 // Preserve the accepted auth.json persistence risk; these probes do not certify OS hardening.
 test("deployment audit uses the pinned native package and declared npm entry", () => {
-  assert.equal(piManifest.version, "1.3.0", "Re-audit native storage on Pi upgrades");
+  assert.equal(piManifest.version, "1.4.0", "Re-audit native storage on Pi upgrades");
   assert.equal(piManifest.engines.node, ">=22.19.0");
   assert.equal(piManifest.bin.pi, "dist/bundle/cli.js");
   assert(existsSync(piCli));

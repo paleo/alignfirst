@@ -82,7 +82,7 @@ Any other key is a work conversation. Run `git rev-parse --path-format=absolute 
 
 - PROJECT_PATH is the main worktree of the session's working directory: the parent of `git rev-parse --path-format=absolute --git-common-dir`. PROJECT is its directory name.
 - The workplace is the session's worktree (`git rev-parse --show-toplevel`) and its branch (`git branch --show-current`).
-- Run `{{ALIGNFIRST}} config --json` and `{{ALIGNFIRST}} developer-instructions` from the workplace. Retain the nullable `locations.developerInstructions` from the report to identify the configured source. The default branch is `config.conventions.git.defaultBranch` in the report, else the default branch identified by the project's instructions or configured remote. Ask when it is unclear. The report also names the project's companion directory, where its AlignFirst files may live.
+- Run `{{ALIGNFIRST}} config --json` and `{{ALIGNFIRST}} assistant-instructions` from the workplace. Retain the nullable `locations.assistantInstructionsFile` from the report to identify the configured source. The default branch is `config.conventions.git.defaultBranch` in the report, else the default branch identified by the project's instructions or configured remote. Ask when it is unclear. The report also names the project's companion directory, where its AlignFirst files may live.
 {{/conversation}}
 {{#conversation}}
 
@@ -174,7 +174,7 @@ Resolve what the request leaves open:
 - Consultations require only PROJECT and PROJECT_PATH to start. Follow `{{GUIDE}} consultation` before ticket preflight, request capture, or workspace setup. A supplied ticket is context; the runbook decides whether to record the discussion.
 
 {{#openclaw}}
-Once a single-project request's PROJECT_PATH is known, run `{{ALIGNDEV}} project status <PROJECT_PATH>`. The report names its companion directory and nullable `locations.developerInstructions`. Run `{{ALIGNFIRST}} developer-instructions` from the selected workplace, or deliberately from PROJECT_PATH when no workplace is selected.
+Once a single-project request's PROJECT_PATH is known, run `{{ALIGNDEV}} project status <PROJECT_PATH>`. The report names its companion directory and nullable `locations.assistantInstructionsFile`. Run `{{ALIGNFIRST}} assistant-instructions` from the selected workplace, or deliberately from PROJECT_PATH when no workplace is selected.
 {{/openclaw}}
 
 For changes, protocol requests, and ticket status requests, complete `{{GUIDE}} work-files-setup` as soon as PROJECT_PATH is known, before known-ticket `sync`/`ticket`, side-ticket reservation, or request capture.
@@ -214,7 +214,7 @@ Skip this step for consultations and operational work.
 
 For new single-project work where the user explicitly says there is no ticket or asks for a side ticket, complete `{{GUIDE}} work-files-setup` from PROJECT_PATH, then:
 
-1. Run `{{ALIGNFIRST}} developer-instructions` from the selected workplace, or deliberately from PROJECT_PATH when no workplace is selected. It prints project conventions and any explicitly configured content.
+1. Run `{{ALIGNFIRST}} assistant-instructions` from the selected workplace, or deliberately from PROJECT_PATH when no workplace is selected. It prints project conventions and any explicitly configured content.
 2. Run `{{ALIGNFIRST}} sync`, so identifier selection sees the current shared task set.
 {{#openclaw}}
 3. Run `{{ALIGNFIRST}} ticket --side` from PROJECT_PATH (`exec`). It creates the ticket directory and prints it as TICKET_DIR; TICKET_ID is the `side-N` it reports.
@@ -401,7 +401,7 @@ After writing or editing any file under `.plans/` yourself, run `{{ALIGNFIRST}} 
 A project has up to three entry points:
 
 - `README.md` — presentation, getting-started procedure…
-- The explicitly configured developer instructions — the agent's user, human or AI: you. Run `{{ALIGNFIRST}} developer-instructions` from the selected worktree. It reports the absolute source path for interpreting relative links. Without a configured reference, it prints conventions only; there is no filename fallback.
+- The explicitly configured assistant instructions — the agent's user, human or AI: you. Run `{{ALIGNFIRST}} assistant-instructions` from the selected worktree. It reports the absolute source path for interpreting relative links. Without a configured reference, it prints conventions only; there is no filename fallback.
 - `AGENTS.md` — the agent. When the project's instructions come from its companion, the companion's `.alignfirst-instructions/context.md` replaces it for the agent, and `{{ALIGNFIRST}} context` prints it.
 
 The rest of the documentation (`docs/`, …) addresses everybody.
@@ -452,8 +452,8 @@ For an active development branch that needs to catch up with its base, follow th
 
 Every time a branch refresh brings in new commits (`git pull`, `git merge`, fast-forward, base-branch merge, …):
 
-1. Reinstall dependencies with the project's package manager.
-2. Rebuild, if the project needs it.
+1. Install dependencies if the incoming changes invalidate the installed dependencies.
+2. Rebuild affected outputs if needed for the next task.
 3. Run the database migrations, if the new commits added some.
 
 Delegate the sequence to the agent.
@@ -468,13 +468,13 @@ Before non-trivial code changes, like executing a plan, stop declared services w
 
 ### Tests, lint, build
 
-The project's checks are routine hygiene. The agent usually runs them on its own; have it run the checks only when they were forgotten.
+The project's checks are routine hygiene. The agent usually runs them on its own; request only missing, relevant checks. Scope automated checks and other development tooling to the task's needs, reusing valid results and skipping unnecessary work. Broaden for uncertain impact or project requirements. Pass this rule to the agent and report material omissions.
 
 ### Always test the work manually
 
 Manual testing is what ends a code change: beyond the automated checks, the change gets exercised before any MR/PR and before telling the user it's finished. On the completion turn, verify first, then report, one consolidated message that ends the turn:
 
-1. Confirm the checks passed (see "Tests, lint, build").
+1. Confirm the applicable checks passed (see "Tests, lint, build").
 2. Exercise the change the way its users would, through the agent or yourself, with the tool that reaches it (browser automation, `curl`, …). On a project with a dev-server, start it and drive the change in the UI. Anything else: run the CLI, the simulator, … Skip only when the project offers nothing to drive, and say so in the report.
 {{#thread}}
 3. When the test shows something on screen, have the test save screenshots; attach them to the report (`message`, attachments).
@@ -520,12 +520,12 @@ When the user brings up acceptance testing, first be sure who runs it — ask wh
 
 ### Project rules and docs
 
-Run `{{ALIGNFIRST}} config --json` from the selected worktree before editing instructions. Use the nullable `locations.developerInstructions` to identify the configured file; its path and existence are explicit. Use `locations[".alignfirst-instructions"]` for coding-agent companion context, with `.alignfirst-instructions/context.md` in place of `AGENTS.md`. The agent edits selected companion files in place. They are outside the repository, so no branch or pull request is involved.
+Run `{{ALIGNFIRST}} config --json` from the selected worktree before editing instructions. Use the nullable `locations.assistantInstructionsFile` to identify the configured file; its path and existence are explicit. Use `locations[".alignfirst-instructions"]` for coding-agent companion context, with `.alignfirst-instructions/context.md` in place of `AGENTS.md`. The agent edits selected companion files in place. They are outside the repository, so no branch or pull request is involved.
 
 Two triggers, both edited through the agent:
 
-- You learn something non-obvious about how to work in a project — a command, a quirk, a convention not yet written down. Propose capturing it in the resolved configured developer-instructions file, ask for confirmation, then have the agent make the edit. With no reference, propose a suitable file and an explicit `developerInstructions` entry in the selected configuration, respecting its logical item placement; obtain approval before creating either.
-- The user asks to retain a rule for the project. No confirmation needed for the requested rule: retain it in the resolved developer-instructions file and, when relevant to coding, the coding-agent instructions. With no configured reference, obtain approval for a suitable file and explicit `developerInstructions` setting before writing. Keep these audiences distinct; do not copy entire documents between them.
+- You learn something non-obvious about how to work in a project — a command, a quirk, a convention not yet written down. Propose capturing it in the resolved configured assistant-instructions file, ask for confirmation, then have the agent make the edit. With no reference, propose a suitable file and an explicit `assistantInstructionsFile` entry in the selected configuration, respecting its logical item placement; obtain approval before creating either.
+- The user asks to retain a rule for the project. No confirmation needed for the requested rule: retain it in the resolved assistant-instructions file and, when relevant to coding, the coding-agent instructions. With no configured reference, obtain approval for a suitable file and explicit `assistantInstructionsFile` setting before writing. Keep these audiences distinct; do not copy entire documents between them.
 
 {{#thread}}
 When the thread has an active ticket and the rule is simple, add it on the current branch, so the ticket's PR carries it. When the rule is complex or the thread has no ticket, reserve a side ticket (Step 5), set up a workspace on a new branch for the rule, and create a pull request.
@@ -560,7 +560,7 @@ _Note: Before every code review, always start by updating both the base branch a
 
 A code review is the review workflow from the delegation guide: a fresh agent session (`review` protocol) writes a review file, then an optional fix step runs in a second fresh session, never in the review session. What to do with the review file depends on the case:
 
-- **Wrapping up your own work** — before creating a MR/PR, run the full workflow automatically, fix step included: decide the fixes with the agent in the AAD discussion. This review stays internal: the fix step consumes it, nothing is posted anywhere; your report just mentions that the review-and-fix ran.
+- **Wrapping up your own work** — before creating a MR/PR, run the review and fix steps automatically: decide the fixes with the agent in the AAD discussion. Consider returning to the review session afterward, as the delegation guide describes. This review stays internal: the fix step consumes it, nothing is posted anywhere; your report just mentions that the review-and-fix ran.
 - **The user asks to review a PR/MR** (e.g. a teammate's branch) — follow the PR/MR review sequence below.
 - **The user asks to review a branch or workspace** — check for an open PR/MR on that branch first; if one exists, follow the PR/MR review sequence. Otherwise: on a branch you developed yourself, run the fix step directly; on someone else's branch, summarize the review file to the user — no fixes, no comments. Take the TICKET_ID from the branch name; ask the user when it carries none.
 
@@ -593,7 +593,7 @@ The author of a branch you reviewed pushes fixes and asks you to check them, or 
 
 You are the judge of when the ticket's scope is done — a ticket can span several coding sessions, so no single run completion decides it. When you judge it done, create the MR/PR without asking.
 
-Before creating it: the code compiles, lint and tests pass, and you exercised the change manually (see "Always test the work manually"). Then run the review workflow with its fix step (see "Code review" above) — automatic, part of creating any MR/PR.
+Before creating it: the applicable checks pass (see "Tests, lint, build"), and you exercised the change manually (see "Always test the work manually"). Then run the review workflow with its fix step (see "Code review" above) — automatic, part of creating any MR/PR.
 
 After creating the MR/PR (via `{{ALIGNDEV}} code`):
 
@@ -603,7 +603,7 @@ After creating the MR/PR (via `{{ALIGNDEV}} code`):
 Whenever you observe that a PR/MR is merged:
 
 1. Remove the source branch's linked workspace as "Cleanup requests" describes. A branch worked on in place stays checked out: the user decides when to leave it.
-2. Delegate the refresh of the merge target without a protocol: in the main worktree, clean and on its base branch, fetch and fast-forward it, then reinstall dependencies, rebuild, and run new migrations when required.
+2. Delegate the refresh of the merge target without a protocol: in the main worktree, clean and on its base branch, fetch and fast-forward it, then apply "Refreshing the workspace after a branch refresh".
 3. Report the removed workspace and refreshed branch. When unsuitable plans block the refresh delegation, the removal still happens; report the blocked refresh.
 {{#app}}
 
@@ -641,7 +641,7 @@ When the user asks to clean the workspaces, from PROJECT_PATH:
 
 1. List the worktrees through `{{ALIGNFIRST}} workspace list --json`.
 2. For each linked workspace, find its branch's PR/MR through the configured code-hosting tool. Remove the workspace as in "Cleanup requests", only when that PR/MR is merged. Leave the others intact: in-place work, no PR/MR, or an unmerged PR/MR. Stop on the first failed removal.
-3. When a workspace was removed, delegate the merge target's refresh as after a merge above, installing from the committed lockfile without rewriting it (`npm ci` with npm).
+3. When a workspace was removed, delegate the merge target's refresh as after a merge above. Any needed installation uses the committed lockfile without rewriting it (`npm ci` with npm).
 4. Report every decision, any blocked refresh, and the final base-branch state.
 
 {{#thread}}

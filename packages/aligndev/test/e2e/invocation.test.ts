@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { writeConfig } from "../helpers.js";
 
@@ -22,12 +22,6 @@ interface Fixture {
   cwd: string;
   env: NodeJS.ProcessEnv;
 }
-
-beforeAll(() => {
-  for (const workspace of ["@alignfirst/docmap", "alignfirst", "aligndev"]) {
-    execFileSync("npm", ["run", "build", "--workspace", workspace], { cwd: root, stdio: "pipe" });
-  }
-}, 60_000);
 
 afterEach(() => {
   for (const directory of temporary.splice(0)) rmSync(directory, { recursive: true, force: true });

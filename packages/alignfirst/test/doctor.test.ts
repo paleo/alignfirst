@@ -203,7 +203,7 @@ describe("doctor command", () => {
         `[ok] Companion: directory ${companion} (missing)`,
         `[ok] Companion: alignfirst (auto): ${join(companion, "alignfirst.json")} (companion, missing)`,
         `[ok] Companion: .alignfirst-instructions (auto): ${join(companion, ".alignfirst-instructions")} (companion, missing)`,
-        "[ok] Companion: developerInstructions (auto): not configured",
+        "[ok] Companion: assistantInstructionsFile (auto): not configured",
         `[ok] Companion: workspaceRuntime (auto): ${join(project, ".local-wt")} (project, missing)`,
         `[warn] Companion: docs (companion): ${join(companion, "docs")} (companion, missing)`,
         `[ok] Companion: .plans (project): ${join(project, ".plans")} (project)`,

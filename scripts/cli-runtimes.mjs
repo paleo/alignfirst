@@ -142,7 +142,7 @@ function buildAndInstall(env) {
     ...packages.flatMap((name) => ["--workspace", `./packages/${name}`]),
   ];
   run("build", npm, buildArgs, { ...env, HOME: process.env.HOME }, repository);
-  const dependencies = { openclaw: "2026.10.5", "yarn-classic": "npm:yarn@1.22.22" };
+  const dependencies = { openclaw: "2026.10.9", "yarn-classic": "npm:yarn@1.22.22" };
   for (const name of packages) {
     const packed = run(
       `pack-${name}`,

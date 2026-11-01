@@ -4,7 +4,7 @@ An assistant is a dedicated Linux service account. It receives work through Slac
 
 ## Deployment gate
 
-The three overlays use explicit named profiles on both surfaces. Pi targets 1.3.0 and Node.js 22.19.0 or later. Its protected launcher executes the verified npm CLI with `/usr/bin/node`, preserving cwd, arguments, environment and project PATH. Packaged subagents reuse that Node through `process.execPath`. AlignDev's own minimum Node requirement remains separate.
+The three overlays use explicit named profiles on both surfaces. Install current stable Pi on current Node LTS and inspect the installed packages' declared compatibility. Native deployment acceptance remains host-side. Its protected launcher executes the verified npm CLI with `/usr/bin/node`, preserving cwd, arguments, environment and project PATH. Packaged subagents reuse that Node through `process.execPath`.
 
 **Approved Pi authentication exception:** `<agent-dir>/auth.json` stays private, service-owned and writable/replaceable, with adjacent locking, for normal native OAuth login and automatic credential/refresh-token renewal. It can also contain executable API-key commands. Any process under that account can persist such commands for later Pi execution. This is account-level persistence, not administrator privilege escalation; filesystem permissions cannot distinguish a refresh from another same-UID write. The entire service `~/.alignfirst/` tree also stays service-owned and writable, without immutable or append-only flags. All other managed instructions, executable resources, settings/declarations, trust and launchers outside that tree retain controlled-maintenance protection. Project trust is not a sandbox.
 
@@ -58,7 +58,7 @@ The **assistant** is fixed: every deployment uses OpenClaw and its embedded runt
 
 ### Placeholder Vocabulary
 
-`{{TOKEN}}` is replaced at render time. `<value>` in angle brackets is filled by the human at execution time (a Node version, a VPS IP, a secret) and never appears in this table. One execution-time value is a *name*, not a secret: `<DNS_CREDENTIAL_VARIABLE>` in the Caddyfile and in `09` is the environment variable the selected Caddy DNS module documents; the human writes it into `/etc/caddy/gateway.env` and into the `acme_dns` line.
+`{{TOKEN}}` is replaced at render time. `<value>` in angle brackets is filled by the human at execution time (a project runtime requirement, a VPS IP, a secret) and never appears in this table. One execution-time value is a *name*, not a secret: `<DNS_CREDENTIAL_VARIABLE>` in the Caddyfile and in `09` is the environment variable the selected Caddy DNS module documents; the human writes it into `/etc/caddy/gateway.env` and into the `acme_dns` line.
 
 | Token | Supplied by | Used by |
 | --- | --- | --- |
@@ -123,7 +123,7 @@ On the operator's machine, from the installed skill directory:
 6. Work-files repository on: delete the `TEAM_PLANS_SECTION` marker lines. The guarded block in `alignfirst.jsonc` writes `plans.repositoryFolder` as `{{ADMIN_REPOSITORY_NAME}}`. Off: delete each block, including that field.
 7. Replace every `{{TOKEN}}`, after all overlays are present and the derived tokens are computed. `sed` handles single-line values; the member list needs the editor or a Node one-liner. Include the merged `alignfirst.jsonc` and dotfiles (`.env.example`, `.alignfirst-projects.json`) in the sweep. Manifest `${{ reference }}` lookups are runtime syntax, not render tokens.
 8. Validate the complete rendered configuration with `npx -y alignfirst config --json`. No workspace package dependency or wrapper installation is required.
-9. Install `sysadmin` project-locally, so the clone carries it: `npx -y skills add https://github.com/paleo/skills --yes --agent <claude-code|codex|pi> --skill sysadmin </dev/null`. The CLI writes the skill under the agent's project skill directory (`.claude/skills/` for Claude, `.agents/skills/` for Codex/Pi) and the repository's own `skills-lock.json`; both are committed. The verified `skills@1.7.2` Pi target uses `.agents/skills/`; recheck the installed CLI contract when upgrading.
+9. Install `sysadmin` project-locally, so the clone carries it: `npx -y skills add https://github.com/paleo/skills --yes --agent <claude-code|codex|pi> --skill sysadmin </dev/null`. The CLI writes the skill under the agent's project skill directory (`.claude/skills/` for Claude, `.agents/skills/` for Codex/Pi) and the repository's own `skills-lock.json`; both are committed. Recheck the installed CLI's target layout when upgrading.
 10. Run the audits below.
 11. `git init -b main`, first commit `chore: initialize assistant administration`, `git remote add origin {{ADMIN_REPOSITORY_URL}}`, push. The repository stays private.
 
@@ -165,7 +165,7 @@ Every runbook states its role and its position at the top. Human steps are marke
 9. `06-security-hardening.md` — last, to protect managed resources while keeping the entire service `~/.alignfirst/` tree writable.
 10. `07-channel.md`, smoke test — operator, from the chat client.
 11. `docs/operations/use-the-apps.md` — connects the desktop apps through the SSH tunnel; operator: device and node checks. Tailscale Serve for the mobile apps is opt-in and later. Human: Tailscale login and tailnet settings; operator: Serve through a re-seed, then each device's approval.
-12. `docs/operations/add-project.md` for each managed project. Prepare the project first through this skill's "Prepare a Project for an Assistant" route, which writes one selected `alignfirst.json` or `.jsonc`, including optional recipe sections and an explicit developer-instructions reference. Prepare effective plans and selected runtime storage before setup in both work-files modes. Only project runtime needs ignored `.local-wt/`. For existing wrappers/state, first follow [the clean-break runbook](upgrading-multi-stack-workspaces.md). Project discovery then needs no registration step.
+12. `docs/operations/add-project.md` for each managed project. Prepare the project first through this skill's "Prepare a Project for an Assistant" route, which writes one selected `alignfirst.json` or `.jsonc`, including optional recipe sections and an explicit assistant-instructions reference. Prepare effective plans and selected runtime storage before setup in both work-files modes. Only project runtime needs ignored `.local-wt/`. For existing wrappers/state, first follow [the clean-break runbook](upgrading-multi-stack-workspaces.md). Project discovery then needs no registration step.
 
 The operator records each task in `.reports/`, committed. The operations runbooks own the rest: `use-the-apps.md` (devices), `configure-assistant.md` (re-seed, secret rotation), `update-assistant.md`, `update-workspace.md`, `recover-assistant.md` (kill switch, backup, restore), `pair-dm-sender.md` (Discord).
 
@@ -177,7 +177,7 @@ The `assistant` files are named after the role, not the instance. An operator wh
 
 The deployment invariants are distribution-independent: an unprivileged service account, rootless containers, user-owned configuration and secrets, explicit environment propagation, and a supervised user service.
 
-> **Note:** Commands shown are for Ubuntu 24.04. Adapt package, firewall, filesystem, and service-manager commands for another Linux server when needed.
+> **Note:** Commands shown are for Ubuntu. Adapt package, firewall, filesystem, and service-manager commands for another Linux server when needed.
 
 The generated runbooks contain the concrete Ubuntu commands. Keep root commands separate from service-account commands when adapting them.
 

@@ -32,19 +32,9 @@ let output: string[];
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "installed-cli-"));
-  execFileSync("git", ["init", "-q", root]);
   const executable = join(root, "runtime with spaces");
   const entryPoint = join(root, "installed cli with spaces.mjs");
-  symlinkSync(process.execPath, executable);
   capture = join(root, "child.json");
-  writeFileSync(
-    entryPoint,
-    `import { writeFileSync } from "node:fs";
-writeFileSync(process.env.CAPTURE, JSON.stringify({ argv: process.argv.slice(1), cwd: process.cwd(), marker: process.env.MARKER }));
-console.log("child progress");
-process.exit(Number(process.env.CHILD_EXIT ?? 0));
-`,
-  );
   output = [];
   operation = {
     cwd: root,
@@ -67,6 +57,23 @@ process.exit(Number(process.env.CHILD_EXIT ?? 0));
   };
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+function prepareGit(): void {
+  execFileSync("git", ["init", "-q", root]);
+}
+
+function prepareInstalledCli(): void {
+  prepareGit();
+  symlinkSync(process.execPath, operation.invocation.executable);
+  writeFileSync(
+    operation.invocation.entryPoint,
+    `import { writeFileSync } from "node:fs";
+writeFileSync(process.env.CAPTURE, JSON.stringify({ argv: process.argv.slice(1), cwd: process.cwd(), marker: process.env.MARKER }));
+console.log("child progress");
+process.exit(Number(process.env.CHILD_EXIT ?? 0));
+`,
+  );
+}
 
 function captured(): { argv: string[]; cwd: string; marker: string } {
   return JSON.parse(readFileSync(capture, "utf8"));
@@ -96,6 +103,7 @@ describe("installed CLI boundary", () => {
   });
 
   it("full setup routes child progress separately, forwards flags/env/cwd, and retries dev failure with preparation ready", async () => {
+    prepareInstalledCli();
     operation.env.CHILD_EXIT = "7";
     await expect(
       runWorkspace(config, {
@@ -124,6 +132,7 @@ describe("installed CLI boundary", () => {
   });
 
   it("default-only preparation completes without spawning an empty finalizer", async () => {
+    prepareGit();
     config.hasDevServer = false;
     const result = await runWorkspace(config, {
       ...operation,
@@ -140,6 +149,7 @@ describe("installed CLI boundary", () => {
   it.each([true, false])(
     "detached full setup retains target cwd and flags, with finalize steps=%s",
     async (hasFinalizeSteps) => {
+      prepareInstalledCli();
       config.finalizeWorkspace = hasFinalizeSteps
         ? () => {
             throw new Error("Finalization belongs to the child");
@@ -168,6 +178,7 @@ describe("installed CLI boundary", () => {
   );
 
   it("finalize reports step progress and records a dev failure without failing preparation", async () => {
+    prepareInstalledCli();
     const preparationOwner = { pid: process.pid, token: "test-handoff" };
     await registerWorkspace({
       preparationOwner,
@@ -211,6 +222,7 @@ describe("installed CLI boundary", () => {
   });
 
   it("dispatches a stop child through the installed CLI in the actual target cwd", async () => {
+    prepareInstalledCli();
     const target = join(root, "stop target");
     mkdirSync(target);
     await registerWorkspace({
@@ -234,6 +246,7 @@ describe("installed CLI boundary", () => {
   });
 
   it("refuses a dev-only record without durable recipe identity before cleanup", async () => {
+    prepareGit();
     const target = join(root, "dev-only");
     mkdirSync(target);
     writeFileSync(join(target, "alignfirst.jsonc"), '{"schemaVersion":1,}');
@@ -262,6 +275,7 @@ describe("installed CLI boundary", () => {
   });
 
   it("re-executes removal outside the current target with fixed argv", async () => {
+    prepareInstalledCli();
     const target = join(root, "linked target");
     execFileSync(
       "git",

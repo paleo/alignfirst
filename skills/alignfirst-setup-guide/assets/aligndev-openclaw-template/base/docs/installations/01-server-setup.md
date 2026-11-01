@@ -9,7 +9,7 @@ read_when:
 
 **Human administrator**, on a fresh server, from the laptop. First runbook of the execution order: `01` → `02` → `03` → `05` → `07` (platform part) → `04` → `08` → `09` when selected → `06` → `07` (smoke test). The last step installs Claude Code, Codex or Pi for the admin account; from there, a session in the cloned repository takes over as the **operator**. Admin and service accounts authenticate separately.
 
-> **Note:** Commands shown are for Ubuntu 24.04. Adapt package, firewall, filesystem, and service-manager commands for another Linux server when needed.
+> **Note:** Commands shown are for Ubuntu. Adapt package, firewall, filesystem, and service-manager commands for another Linux server when needed.
 
 Every command below runs as the cloud image's default user (`ubuntu`) until the admin account exists, then as `{{SERVER_ADMIN_USER}}`.
 
@@ -137,17 +137,16 @@ echo 'fs.inotify.max_user_instances=1024'   | sudo tee -a /etc/sysctl.conf
 
 ## 6. Node
 
-Install the newest Node 26 from NodeSource. OpenClaw supports `>=24.16.0 <25 || >=26.1.0`; this deployment keeps the admin account, OpenClaw and its companion CLIs on the pinned system runtime. The admin account uses no version manager. Pi 1.3.0 and the optional `pi-subagent` package require Node >=22.19.0; this deployment's system Node also satisfies OpenClaw's higher requirement. Pi's service launcher uses `/usr/bin/node` while preserving the project PATH.
+Install current Node LTS from NodeSource. Check the installed OpenClaw, coding agent and companion CLIs' declared runtime compatibility before use. The admin account uses no version manager. OpenClaw and Pi's service launcher use `/usr/bin/node`; project shells select their own runtime without changing those launchers or the protected package prefix.
 
 ```sh
-curl -fsSL https://deb.nodesource.com/setup_26.x | sudo -E bash -
-sudo apt install -y nodejs=<node-version>-1nodesource1
-sudo apt-mark hold nodejs
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+sudo apt install -y nodejs
 /usr/bin/node --version
 /usr/bin/npm --version
 ```
 
-Node 26 bundles a current npm. Put the admin account's global packages under `~/.local`; Ubuntu includes `~/.local/bin` in the account's default PATH:
+Node LTS bundles npm. Put the admin account's global packages under `~/.local`; Ubuntu includes `~/.local/bin` in the account's default PATH:
 
 ```sh
 npm config set prefix ~/.local --location=user
@@ -155,19 +154,13 @@ npm config get prefix
 # Expected: /home/{{SERVER_ADMIN_USER}}/.local
 ```
 
-To move to another pinned version later:
-
-```sh
-sudo apt-mark unhold nodejs
-sudo apt install -y nodejs=<node-version>-1nodesource1
-sudo apt-mark hold nodejs
-```
+During runtime maintenance, rerun the NodeSource setup and plain `nodejs` installation above. Verify declared compatibility and restart affected services through the update runbook.
 
 ## 7. Containers
 
 Containers run rootless under Podman; there is no Docker daemon. Membership in the `docker` group amounts to root (the daemon API mounts any path as root), and root Docker's published ports bypass UFW (DNAT happens before the INPUT chain). Podman's rootless listener is filtered like any process, and a container escape yields the invoking account's rights.
 
-Podman comes from the distro with `uidmap` (`newuidmap`/`newgidmap`). Ubuntu 24.04's `kernel.apparmor_restrict_unprivileged_userns=1` is satisfied by the packaged profile. Short image names need a search registry, which noble does not ship:
+Podman comes from the distro with `uidmap` (`newuidmap`/`newgidmap`). On Ubuntu, the packaged AppArmor profile satisfies `kernel.apparmor_restrict_unprivileged_userns=1`. Short image names need a search registry; add it when absent from the distro configuration:
 
 ```sh
 sudo apt install -y podman uidmap

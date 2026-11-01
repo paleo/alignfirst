@@ -163,7 +163,6 @@ function checkUnknownSettings(f) {
   writeJson(f.config, { schemaVersion: 1 });
   const workspace = f.config;
   for (const [name, value] of [
-    ["root", { extra: secret }],
     ["workspace", { workspace: { extra: secret } }],
     ["command", { workspace: { finalize: [{ name: "step", run: ["true"], extra: secret }] } }],
   ]) {

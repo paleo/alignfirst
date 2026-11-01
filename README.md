@@ -65,4 +65,4 @@ npm run build
 npm run workspace -- setup
 ```
 
-Tracked settings, nested conventions, the developer-instructions reference and the workspace recipe live in one `alignfirst.json`. A fresh linked worktree can run `npx -y alignfirst workspace setup` without local dependencies or build output; see [`DEVELOPERS.md`](DEVELOPERS.md) for preparation and cleanup. Existing old runtime state needs the [coordinated upgrade](docs/upgrading-multi-stack-workspaces.md) before lifecycle use.
+Tracked settings, nested conventions, the assistant-instructions reference and the workspace recipe live in one `alignfirst.json`. A fresh linked worktree can run `npx -y alignfirst workspace setup` without local dependencies or build output; see [`DEVELOPERS.md`](DEVELOPERS.md) for preparation and cleanup. Existing old runtime state needs the [coordinated upgrade](docs/upgrading-multi-stack-workspaces.md) before lifecycle use.

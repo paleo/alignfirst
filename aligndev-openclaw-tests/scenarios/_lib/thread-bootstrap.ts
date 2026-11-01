@@ -5,7 +5,7 @@ import {
   execMatches,
   inputOf,
   invokesAligndevCode,
-  readsDeveloperInstructions,
+  readsAssistantInstructions,
   readsFile,
 } from "./agent-tool-calls.ts";
 import { escapeRe } from "./common-constants.ts";
@@ -172,7 +172,7 @@ async function assertChannelSessionHandedOff(
   assertStarterCalls(ctx, parentCalls, opts.threadId);
   const forbidden = parentCalls.filter(
     (call) =>
-      readsDeveloperInstructions(call) ||
+      readsAssistantInstructions(call) ||
       readsFile(call, "DEVELOPERS.md") ||
       readsFile(call, "README.md") ||
       invokesAligndevCode(call) ||

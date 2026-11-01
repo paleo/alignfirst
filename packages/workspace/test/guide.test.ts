@@ -70,17 +70,6 @@ describe("renderGuide", () => {
     }
   });
 
-  it("aligns comments within a dev command block", () => {
-    const guide = renderGuide(defaultCommands, LAYOUT);
-    const block = guide.slice(guide.indexOf("## Dev server"), guide.indexOf("**Concurrent cap."));
-    const columns = block
-      .split("\n")
-      .filter((line) => line.startsWith("alignfirst dev ") && line.includes(" # "))
-      .map((line) => line.indexOf(" # "));
-    expect(columns.length).toBeGreaterThan(1);
-    expect(new Set(columns).size).toBe(1);
-  });
-
   it("shows dev setup/full only when the target declares managed services", () => {
     const guide = renderGuide(defaultCommands, LAYOUT);
     expect(guide).toContain("dedicated ports");

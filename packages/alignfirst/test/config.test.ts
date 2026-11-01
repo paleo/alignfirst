@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   configureGit,
@@ -13,10 +13,71 @@ import {
 
 const dirs: string[] = [];
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
 describe("config command", () => {
+  it.each([
+    {
+      name: "legacy-only settings",
+      reference: { developerInstructions: "legacy.md" },
+      item: { developerInstructions: "companion" },
+      expectedFile: "legacy.md",
+      expectedLocation: "companion",
+    },
+    {
+      name: "canonical settings over conflicting legacy settings",
+      reference: {
+        developerInstructions: "legacy.md",
+        assistantInstructionsFile: "canonical.md",
+      },
+      item: { developerInstructions: "companion", assistantInstructionsFile: "project" },
+      expectedFile: "canonical.md",
+      expectedLocation: "project",
+    },
+    {
+      name: "canonical settings over invalid legacy settings",
+      reference: { developerInstructions: false, assistantInstructionsFile: "canonical.md" },
+      item: { developerInstructions: false, assistantInstructionsFile: "project" },
+      expectedFile: "canonical.md",
+      expectedLocation: "project",
+    },
+  ])("reports canonical names for $name without rewriting authored files", async (settings) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { root, home, project, companion } = makeCompanionProject({
+      alignfirst: "project",
+      ...settings.item,
+    });
+    dirs.push(root);
+    const configPath = join(project, "alignfirst.jsonc");
+    const configText = `{/* authored */ "schemaVersion":1,${JSON.stringify(settings.reference).slice(1, -1)},}`;
+    writeFileSync(configPath, configText);
+    const registry = join(home, ".alignfirst", "companions", "registry.json");
+    const registryText = readFileSync(registry, "utf8");
+    const result = await runMain(["config", "--json"], { cwd: project, home });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    const expectedRoot = settings.expectedLocation === "project" ? project : companion;
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      config: { assistantInstructionsFile: settings.expectedFile },
+      companion: { items: { assistantInstructionsFile: settings.expectedLocation } },
+      locations: {
+        assistantInstructionsFile: {
+          path: join(expectedRoot, settings.expectedFile),
+          in: settings.expectedLocation,
+          exists: false,
+        },
+      },
+      selectionOrigins: { assistantInstructionsFile: "item" },
+    });
+    expect(result.stdout).not.toContain('"developerInstructions"');
+    const warnings = warn.mock.calls.flat().join("\n");
+    expect(warnings).toContain("developerInstructions");
+    expect(warnings).toContain("assistantInstructionsFile");
+    expect(readFileSync(configPath, "utf8")).toBe(configText);
+    expect(readFileSync(registry, "utf8")).toBe(registryText);
+  });
+
   it("reports missing families without creating files", async () => {
     const cwd = temp();
     const before = readdirSync(cwd);
@@ -158,10 +219,10 @@ describe("config command", () => {
       selectionOrigins: {
         alignfirst: "item",
         workspaceRuntime: "item",
-        developerInstructions: "builtin",
+        assistantInstructionsFile: "builtin",
       },
       locations: {
-        developerInstructions: null,
+        assistantInstructionsFile: null,
         workspaceRuntime: { in: "companion", exists: false },
       },
       workspace: {

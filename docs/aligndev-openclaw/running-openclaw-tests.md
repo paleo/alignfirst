@@ -34,7 +34,7 @@ npm run build --prefix ..
 # Build and pack local packages, install them, then build the harness image.
 npm run env:build
 npm run env:up
-npm run e2e -- --model gpt-5.6-terra --channel slack-mock A03-question
+npm run e2e -- --model gpt-6.1-terra --channel slack-mock A03-question
 npm run env:down
 ```
 
@@ -44,9 +44,9 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
 
 > ⚠️ **Never `rm -rf artifacts` (or `.gateway-logs`).** Each run lands in its own **timestamped** subdir, so runs accumulate without colliding — deleting the directory throws away prior runs you may still need. These are bind-mount outputs; leave them in place.
 
-The reviewed toolchain is Node 26, npm `12.2.0`, Corepack `0.36.0` and pnpm `12.14.0`. Run local npm 12 commands without a global install, for example `npx --yes --package=npm@12.2.0 npm run env:build --prefix aligndev-openclaw-tests` from the repository root. npm 12 blocks dependency lifecycle scripts by default; the root and standalone manifests approve only the reviewed OpenClaw, esbuild and koffi versions. GenAI's no-op and protobufjs's warning-only scripts stay disabled. Re-review these policies when their versions change.
+Use the repository's Node 26 runtime and the reviewed npm CLI and local invocation in [Releasing](../releasing.md#flow). The harness Dockerfile and fixture `packageManager` declare the build tools. npm 12 blocks dependency lifecycle scripts by default; the root and standalone manifests approve only the reviewed OpenClaw, esbuild and koffi versions. GenAI's no-op and protobufjs's warning-only scripts stay disabled. Re-review these policies when their versions change.
 
-The generic host CLI can alternatively run on Bun 1.4.4 via `bunx --bun @alignfirst/openclaw-test` or explicitly Bun-owned scripts. This does not change the reviewed npm build/vendor/lockfile workflow above or the Node container toolchain. For a new Bun consumer, follow init's Docker Node/npm lockfile-preparation instructions before image builds; see the [package README](../../packages/openclaw-test/README.md#init). Docker, OpenClaw and native coding agents retain their own prerequisites.
+The generic host CLI can alternatively run on Bun via `bunx --bun @alignfirst/openclaw-test` or explicitly Bun-owned scripts. This does not change the reviewed npm build/vendor/lockfile workflow above or the Node container toolchain. For a new Bun consumer, follow init's Docker Node/npm lockfile-preparation instructions before image builds; see the [package README](../../packages/openclaw-test/README.md#init). Docker, OpenClaw and native coding agents retain their own prerequisites.
 
 ## Shared-daemon isolation
 
@@ -54,15 +54,15 @@ Use a disposable consumer copy with a unique basename for concurrent work. Copy 
 
 The stock CLI writes the version-only base tag `paleo/openclaw-test-base:<package-version>` and derives worker project names from the consumer basename. Exporting `OPENCLAW_TEST_BASE_TAG` or `COMPOSE_PROJECT_NAME` does not override those decisions. For concurrent acceptance, bypass `env build`, `env up` and `run` with manual builds and raw Compose:
 
-1. Choose a nonce-qualified base tag, a unique consumer image and an explicit unique Compose project. For example, use `0.23.3-side-27-<nonce>`, `side-27-openclaw-<nonce>:acceptance` and `side-27-openclaw-<nonce>-w1`. Keep package versions unchanged.
+1. Choose a nonce-qualified base tag, a unique consumer image and an explicit unique Compose project. For example, use `acceptance-<nonce>`, `openclaw-<nonce>:acceptance` and `openclaw-<nonce>-w1`. Keep package versions unchanged.
 2. Build the installed package's unchanged `Dockerfile.base` with the caller's UID/GID. Build only Compose's `bus` target; all services share its image. Select the local-image-store builder per command, without changing the global builder:
 
    ```sh
    # HARNESS_RUN and all path overrides below must be absolute.
    package_dir="$HARNESS_RUN/node_modules/@alignfirst/openclaw-test"
-   export OPENCLAW_TEST_BASE_TAG="0.23.3-side-27-$nonce"
-   export OPENCLAW_TEST_CONSUMER_IMAGE="side-27-openclaw-$nonce:acceptance"
-   project="side-27-openclaw-$nonce-w1"
+   export OPENCLAW_TEST_BASE_TAG="acceptance-$nonce"
+   export OPENCLAW_TEST_CONSUMER_IMAGE="openclaw-$nonce:acceptance"
+   project="openclaw-$nonce-w1"
    BUILDX_BUILDER=default docker build -f "$package_dir/Dockerfile.base" \
      --build-arg ASSISTANT_UID="$(id -u)" --build-arg ASSISTANT_GID="$(id -g)" \
      -t "paleo/openclaw-test-base:$OPENCLAW_TEST_BASE_TAG" "$package_dir"
@@ -71,7 +71,7 @@ The stock CLI writes the version-only base tag `paleo/openclaw-test-base:<packag
    ```
 
    Here `default` is the Docker-driver builder on the default context. A container-driver builder cannot resolve a local-only base tag. Set absolute `OPENCLAW_TEST_PROJECT_DIR`, `OPENCLAW_TEST_PACKAGE_DIR`, workspace/config/scenarios/output paths and `ALIGNFIRST_REPO_DIR` before Compose. Pre-create writable bind-mount directories as the caller. Keep the dedicated Codex home outside the build context and mount it read-only.
-3. Securely render a private runtime config using the runner's environment expansion, empty-key provider dropping and selected `agents.entries.main.model`. Keep expanded secrets outside artifacts/build contexts, with mode `0600`. For authorized Terra acceptance, select `openai/gpt-5.6-terra`, use the Haiku/OpenRouter judge and clear Anthropic/Z.AI keys. Forward the same private environment, config and worker paths on every Compose command.
+3. Securely render a private runtime config using the runner's environment expansion, empty-key provider dropping and selected `agents.entries.main.model`. Keep expanded secrets outside artifacts/build contexts, with mode `0600`. For authorized Terra acceptance, select `openai/gpt-6.1-terra`, use the Haiku/OpenRouter judge and clear Anthropic/Z.AI keys. Forward the same private environment, config and worker paths on every Compose command.
 4. Refresh a private worker workspace before each cell. Start only the owned bus/gateway with `up -d --no-build --pull never --force-recreate --wait bus gateway`. Invoke `run --rm --no-deps --pull never --use-aliases runner` with the scenario, channel, model ID/ref, iteration index/width, base stamp and results-directory arguments from `packages/openclaw-test/src/loop.ts`. Check both the runner exit and its cell JSON. Recreate between cells; do not use stack reuse.
 5. Wait for every runner and tear down only the explicit owned project with the same Compose files and environment. Remove only its owned volumes/networks when needed. Preserve timestamped results and sanitized build/gateway logs. Inspect exact project/service labels and sanitized load errors; expanded Compose configuration can expose secrets.
 
@@ -79,10 +79,10 @@ Unique tags isolate names, not CPU, RAM, disk or build cache. Agree on a resourc
 
 ## Configuration
 
-Use only Terra (`openai/gpt-5.6-terra`) for conversation-model tests. The judge runs `openrouter/anthropic/claude-haiku-4.5` on `OPENROUTER_API_KEY`. The Anthropic, Qwen and GLM providers in `openclaw.json` stay as examples at their latest model versions; the runner drops a provider whose key is empty.
+Use only Terra (`openai/gpt-6.1-terra`) for conversation-model tests. This version has not yet been validated by live scenarios; the dated acceptance records below describe earlier runs. The judge runs `openrouter/anthropic/claude-haiku-5.5` on `OPENROUTER_API_KEY`. The Anthropic, Qwen and GLM providers in `openclaw.json` stay as examples at their latest model versions; the runner drops a provider whose key is empty.
 
 - `OPENCLAW_WORKSPACE_DIR=./workspace` — the `myassistant` workspace, bind-mounted into the gateway. Workspace edits iterate live.
-- `OPENCLAW_CODEX_HOME` — absolute path to a file-backed Codex home. Required for `openai/gpt-5.6-terra`. The gateway mounts it read-only and imports its ChatGPT/Codex credential into the disposable `main` agent's OpenClaw auth store at startup; no OpenAI Platform API key is required. Create a dedicated login so test authentication is isolated from the main Codex session:
+- `OPENCLAW_CODEX_HOME` — absolute path to a file-backed Codex home. Required for `openai/gpt-6.1-terra`. The gateway mounts it read-only and imports its ChatGPT/Codex credential into the disposable `main` agent's OpenClaw auth store at startup; no OpenAI Platform API key is required. Create a dedicated login so test authentication is isolated from the main Codex session:
 
   ```sh
   mkdir -p .codex-home
@@ -98,12 +98,12 @@ Use only Terra (`openai/gpt-5.6-terra`) for conversation-model tests. The judge 
 
   The plugin installs, the repair and Doctor share one image layer, which then drops the plugin captures they left. Since 2026.10, loading a plugin with native binaries (Codex) hardlinks its files and checks the link's inode. Overlayfs gives a new inode to a lower-layer file with several links when the link copies it up, so a split layer or a leftover capture makes Codex fail to load: `Native plugin artifact changed during admission`.
 - `ALIGNFIRST_REPO_DIR` — host path to the monorepo root (build it first). Live-mounted read-only at `/opt/alignfirst`; the `aligndev` and `alignfirst` wrappers run both CLIs from the checkout. `aligndev code` runs for real, while `claude`, `codex` and `pi` resolve to the mock through PATH. `aligndev guide` reads its templates at runtime, so edits iterate live: the playbook comes from `packages/aligndev/templates/guide/playbook/`, and the delegation instructions (`aligndev guide code`) from `packages/aligndev/templates/guide/code.md`.
-- `CODING_AGENT=codex|claude|pi` — required mocked-child selector, independent of the OpenClaw conversation model. `CODING_AGENT_MODELS`, a comma-separated list, optionally replaces accepted model names or pins a full Codex slug/Pi-native selector. Both reach the gateway and runner. The pure `scripts/coding-agent-settings.ts` helper generates `code.profile: "harness"` and `code.profiles.harness: { agent, models? }`, with `platform: "openclaw"` and `projectsRoot: "/home/assistant/projects"`. The thin writer saves it to `/home/assistant/.alignfirst/aligndev.settings.json`; missing/invalid selectors fail startup. Empty model lists add no override or default model. A09 explicitly selects `terra` for Codex, `sonnet` for Claude or `openai/gpt-5.6-terra` for Pi; model-list overrides must allow that selection. Pi mocks need neither a real Pi CLI nor Pi credentials. Terra/OpenClaw's Codex credential import remains independent, including with a mocked Pi child.
-- [`docker-compose.yml`](../../aligndev-openclaw-tests/docker-compose.yml) — one shared fixture volume on gateway and runner at `/home/assistant/projects`; the monorepo bind mount on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL` defaults to `openrouter/anthropic/claude-haiku-4.5` on `runner` and accepts a host override.
+- `CODING_AGENT=codex|claude|pi` — required mocked-child selector, independent of the OpenClaw conversation model. `CODING_AGENT_MODELS`, a comma-separated list, optionally replaces accepted model names or pins a full Codex slug/Pi-native selector. Both reach the gateway and runner. The pure `scripts/coding-agent-settings.ts` helper generates `code.profile: "harness"` and `code.profiles.harness: { agent, models? }`, with `platform: "openclaw"` and `projectsRoot: "/home/assistant/projects"`. The thin writer saves it to `/home/assistant/.alignfirst/aligndev.settings.json`; missing/invalid selectors fail startup. Empty model lists add no override or default model. A09 explicitly selects `terra` for Codex, `sonnet` for Claude or `openai/gpt-6.1-terra` for Pi; model-list overrides must allow that selection. Pi mocks need neither a real Pi CLI nor Pi credentials. Terra/OpenClaw's Codex credential import remains independent, including with a mocked Pi child.
+- [`docker-compose.yml`](../../aligndev-openclaw-tests/docker-compose.yml) — one shared fixture volume on gateway and runner at `/home/assistant/projects`; the monorepo bind mount on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL` defaults to `openrouter/anthropic/claude-haiku-5.5` on `runner` and accepts a host override.
 
 ## Fixtures
 
-Each scenario starts fresh: [`scripts/reset-fixture.mjs`](../../aligndev-openclaw-tests/scripts/reset-fixture.mjs) (run via `ctx.execInGateway(...)`) materializes three Git repositories on `main`, copied from the committed [`projects-fixture/template/`](../../aligndev-openclaw-tests/projects-fixture/template/). `nimbus` and `lumen` live under `/home/assistant/projects`; `orion` lives under `/home/assistant/projects/external-projects`. Each project has one merged `alignfirst.json` with nested conventions, an explicit `developerInstructions` reference and the workspace/dev recipe, a project-specific package name, `README.md` and `DEVELOPERS.md` headings, its own 20-port block (6500, 6520, and 6540), and an untracked `.plans/` directory.
+Each scenario starts fresh: [`scripts/reset-fixture.mjs`](../../aligndev-openclaw-tests/scripts/reset-fixture.mjs) (run via `ctx.execInGateway(...)`) materializes three Git repositories on `main`, copied from the committed [`projects-fixture/template/`](../../aligndev-openclaw-tests/projects-fixture/template/). `nimbus` and `lumen` live under `/home/assistant/projects`; `orion` lives under `/home/assistant/projects/external-projects`. Each project has one merged `alignfirst.json` with nested conventions, an explicit `assistantInstructionsFile` reference and the workspace/dev recipe, a project-specific package name, `README.md` and `DEVELOPERS.md` headings, its own 20-port block (6500, 6520, and 6540), and an untracked `.plans/` directory.
 
 Workspace setup is portless. The checkout CLI allocates `frontend` and generates `local.env` on `dev` or `dev setup`; reset does not seed that file. `REMOTE_DEV_DOMAIN` takes precedence over `REMOTE_DEV_HOST`, then localhost. Both environment inputs participate in run-file invalidation. The default fixture uses project-local `.local-wt/workspace-registry`. The config report supplies absolute `registryDir`/`runtimeDir`; companion placement instead uses one direct shared external registry and separate path-derived runtimes, without checkout runtime links. Scripts use `ALIGNFIRST_WORKSPACE_CONTEXT`; reset personalizes the copied merged document without overwriting its recipe.
 
@@ -174,7 +174,7 @@ For authorized acceptance, rebuild the CLIs and harness image from `aligndev-ope
 ```bash
 npm run build --prefix ..
 npm run env:build
-CODING_AGENT=codex npm run e2e -- --model gpt-5.6-terra --channel slack-mock --iterations 1 \
+CODING_AGENT=codex npm run e2e -- --model gpt-6.1-terra --channel slack-mock --iterations 1 \
   A01-new-work-to-be-done A08-go-ahead-delegation
 ```
 
@@ -183,7 +183,7 @@ Inspect the cell results, transcripts and gateway logs. Investigate and fix unex
 The app scenarios run on `webchat` only:
 
 ```bash
-CODING_AGENT=codex npm run e2e -- --model gpt-5.6-terra --channel webchat \
+CODING_AGENT=codex npm run e2e -- --model gpt-6.1-terra --channel webchat \
   A26-app-conversation-from-home A27-managed-worktree-conversation
 ```
 
@@ -284,7 +284,7 @@ The dependencies are `file:vendor/<pkg>.tgz`; [`scripts/vendor-packages.mjs`](..
 
 The plugin is explicitly allowlisted, loaded from its installed package path, and exposes optional tool `thread_handoff`. Slack uses `replyToMode: "off"`; Discord remains non-automatic. Both surface IDs map to their native receipt contract in `plugins.entries.alignfirst-service.config.channelSurfaces`.
 
-The complementary deterministic suite makes no model calls and runs outside Docker against the OpenClaw executable pinned in the root lockfile:
+The complementary deterministic suite makes no model calls and runs outside Docker against the OpenClaw executable pinned in the root lockfile. Complete `npm run build` from the repository root first, including for filtered integration files. Preflight checks provisioning only; rebuild after source changes:
 
 ```sh
 KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace @alignfirst/service-openclaw-plugin --prefix ..
@@ -292,7 +292,7 @@ KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace @alignfirst
 
 It retains test-owned gateway logs, scripted-provider requests, configuration, and SQLite restart state under `/tmp/thread-handoff-*`. Omit the environment variable to clean fixtures automatically. Both surfaces cover abrupt pending and post-claim restarts, exact canonical session keys and continuation after restart. Immediate startup keeps its 20-second bound and `attemptCount: 1`; recovery deliberately records a second attempt.
 
-To repeat that suite against a clean standalone packed install outside Docker, set `THREAD_HANDOFF_PACKED_ROOT` to its absolute consumer directory. The fixture selects that install's OpenClaw executable and installed channel/service plugins instead of repository package paths. Its scripted local provider makes no external model requests. This supplements image loading; it does not certify official plugin capture, credential import or Terra behavior.
+To repeat that suite against a clean standalone packed install outside Docker, set `THREAD_HANDOFF_PACKED_ROOT` to its absolute consumer directory. The fixture selects that install's OpenClaw executable and installed channel/service plugins instead of repository package paths. Provision that consumer separately; the root build does not install it. Its scripted local provider makes no external model requests. This supplements image loading; it does not certify official plugin capture, credential import or Terra behavior.
 
 ## Layout
 

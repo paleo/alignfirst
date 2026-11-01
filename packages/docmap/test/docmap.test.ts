@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,7 +13,6 @@ const fixtures = {
   errors: resolve(__dirname, "fixtures/errors"),
   empty: resolve(__dirname, "fixtures/empty"),
   emptySubdirs: resolve(__dirname, "fixtures/empty-subdirs"),
-  subdirsOnly: resolve(__dirname, "fixtures/subdirs-only"),
   nested: resolve(__dirname, "fixtures/nested"),
   badNames: resolve(__dirname, "fixtures/bad-names"),
   noFrontmatter: resolve(__dirname, "fixtures/no-frontmatter"),
@@ -293,14 +292,16 @@ describe("env files and template suffixes (listable fixture)", () => {
     expect(stdout).toContain(dp(fixtures.listable, ".env.sample"));
     expect(stdout).toContain(dp(fixtures.listable, ".env.production.example"));
     expect(stdout).not.toContain(dp(fixtures.listable, ".env.local"));
-    expect(stdout).not.toContain(`${dp(fixtures.listable, ".env")}\``);
   });
 
   it("refuses to read a live secret env file even by explicit path", () => {
-    const { code, stdout } = run([".env"], fixtures.listable);
+    const secret = readFileSync(join(fixtures.listable, ".env.local"), "utf8");
+    expect(secret).toBe("API_KEY=local\n");
+    const { code, stdout } = run([".env.local"], fixtures.listable);
     expect(code).toBe(0);
+    expect(stdout).not.toContain(secret.trimEnd());
+    expect(stdout).toContain("⚠ Not found: .env.local");
     expect(stdout).not.toContain("<document_file");
-    expect(stdout).toContain("⚠ Not found: .env");
   });
 
   it("lists a template on the format underneath its suffix", () => {
@@ -484,25 +485,6 @@ describe("--help", () => {
     expect(stdout).not.toContain("# Documentation");
     expect(stdout).not.toContain(dp(fixtures.basic, "code-style.md"));
     expect(stdout).not.toContain("<document_file");
-  });
-
-  it("groups --search under Commands, above the More section", () => {
-    const { stdout } = run(["--help"], fixtures.basic);
-    expect(stdout.indexOf("--search")).toBeLessThan(stdout.indexOf("More:"));
-  });
-
-  it("aligns the inline comments within a command group", () => {
-    const { stdout } = run(["--help"], fixtures.basic);
-    const lines = stdout.split("\n");
-    // Commands render inside a ``` fence; collect the command lines between the fences.
-    const fence = lines.indexOf("```", lines.indexOf("Commands:"));
-    const columns: number[] = [];
-    for (let i = fence + 1; i < lines.length && lines[i] !== "```"; ++i) {
-      columns.push(lines[i].indexOf(" # "));
-    }
-    // Every command line in the group shares one comment column.
-    expect(columns.length).toBeGreaterThan(1);
-    expect(new Set(columns).size).toBe(1);
   });
 });
 

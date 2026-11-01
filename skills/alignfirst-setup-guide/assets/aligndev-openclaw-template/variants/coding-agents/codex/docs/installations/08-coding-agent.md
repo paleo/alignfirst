@@ -182,7 +182,7 @@ sudo /usr/local/sbin/alignfirst-assistant-maintenance packages -- \
   /opt/{{SERVICE_USER}}/libexec/admin-npm install -g @openai/codex@latest
 sudo -H -u {{SERVICE_USER}} bash -lc '
 PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell \
-DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> \
+DEFAULT_NODE="$(fnm default)" PINNED_NODE=<project-node-version> \
 CODING_AGENT=codex \
   /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh
 '
@@ -208,7 +208,7 @@ Exercise the runtime harness through the real gateway. This catches shell-snapsh
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash <<'EOF'
-runtime_prompt='Run this read-only command with exec: PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> CODING_AGENT=codex /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh. Reply exactly RUNTIME_OK when it passes. Otherwise reply RUNTIME_CHECK_FAILED and include the failure output.'
+runtime_prompt='Run this read-only command with exec: PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell DEFAULT_NODE="$(fnm default)" PINNED_NODE=<project-node-version> CODING_AGENT=codex /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh. Reply exactly RUNTIME_OK when it passes. Otherwise reply RUNTIME_CHECK_FAILED and include the failure output.'
 /opt/{{SERVICE_USER}}/bin/openclaw agent --agent main \
   --session-id "$(cat /proc/sys/kernel/random/uuid)" \
   --message "$runtime_prompt" --json

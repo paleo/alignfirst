@@ -12,7 +12,7 @@
     "plans:sync": "alignfirst sync",
     "lint": "biome check",
     "lint:fix": "biome check --write",
-    "build": "npm run build --workspace @alignfirst/docmap --workspace @alignfirst/workspace --workspace alignfirst && npm run build --workspaces --if-present",
+    "build": "npm run build --workspace @alignfirst/docmap --workspace @alignfirst/workspace --workspace alignfirst --workspace aligndev --workspace @alignfirst/openclaw-channel-mock-core --workspace @alignfirst/openclaw-discord-mock --workspace @alignfirst/openclaw-slack-mock --workspace @alignfirst/openclaw-test --workspace @alignfirst/pi-subagent --workspace @alignfirst/pi-background --workspace @alignfirst/service-openclaw-plugin",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "clear": "npm run clear --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
@@ -29,7 +29,7 @@
     "@google/genai": false,
     "esbuild@0.28.2": true,
     "koffi@3.3.2": true,
-    "openclaw@2026.10.5": true,
+    "openclaw@2026.10.9": true,
     "protobufjs": false
   },
   "devDependencies": {

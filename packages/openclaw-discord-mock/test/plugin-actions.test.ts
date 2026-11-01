@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 import { createBus } from "@alignfirst/openclaw-channel-mock-core";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished } from "vitest";
 import { discordMockPlugin } from "../src/plugin.js";
 
 const CHANNEL_ID = "discord-mock";
@@ -16,16 +16,24 @@ async function startBus(): Promise<BusFixture> {
       res.end("not found");
     }
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+  onTestFinished(() => stopBus(server));
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("failed to bind test bus");
   return { server, baseUrl: `http://127.0.0.1:${address.port}`, bus };
 }
 
-async function stopBus(fixture: BusFixture) {
+async function stopBus(server: Server) {
+  if (!server.listening) return;
   await new Promise<void>((resolve, reject) => {
-    fixture.server.close((error) => (error ? reject(error) : resolve()));
-    fixture.server.closeAllConnections?.();
+    server.close((error) => (error ? reject(error) : resolve()));
+    server.closeAllConnections?.();
   });
 }
 
@@ -65,9 +73,6 @@ describe("discord-mock handleAction (post-normalization shape)", () => {
   beforeEach(async () => {
     fixture = await startBus();
   });
-  afterEach(async () => {
-    await stopBus(fixture);
-  });
 
   it("send with `to` posts to the channel", async () => {
     await runHandler(fixture, "send", { to: "sample-project", text: "hello" });
@@ -83,7 +88,7 @@ describe("discord-mock handleAction (post-normalization shape)", () => {
     expect(snap.messages[0].threadId).toBe("T1");
   });
 
-  it("thread-create with text posts the body atomically", async () => {
+  it("thread-create with text creates the thread and delivers its body", async () => {
     const created = (await runHandler(fixture, "thread-create", {
       to: "sample-project",
       title: "Topic",
@@ -115,25 +120,18 @@ describe("discord-mock handleAction (post-normalization shape)", () => {
     expect(snap.messages.length).toBe(0);
   });
 
-  it("resolves a native thread channel target back to its stored parent", async () => {
+  it("send to a native thread channel preserves its parent and renames only on request", async () => {
     const thread = fixture.bus.state.createThread({
       accountId: "default",
       conversationId: "Sample-Project",
-      title: "T",
-    });
-    await runHandler(fixture, "send", { to: `channel:${thread.id}`, text: "wake" });
-    expect(fixture.bus.state.getSnapshot().messages.at(-1)).toMatchObject({
-      conversation: { id: "Sample-Project" },
-      threadId: thread.id,
-    });
-  });
-
-  it("send to a native thread channel delivers the message and renames the thread", async () => {
-    const thread = fixture.bus.state.createThread({
-      accountId: "default",
-      conversationId: "sample-project",
       title: "Original topic",
     });
+    await runHandler(fixture, "send", { to: `channel:${thread.id}`, text: "wake" });
+    const plain = fixture.bus.state.getSnapshot();
+    expect(plain.messages).toMatchObject([
+      { text: "wake", conversation: { id: "Sample-Project" }, threadId: thread.id },
+    ]);
+    expect(plain.threads[0]).toMatchObject({ id: thread.id, title: "Original topic" });
     const result = (await runHandler(fixture, "send", {
       to: `channel:${thread.id}`,
       text: "work started",
@@ -143,9 +141,9 @@ describe("discord-mock handleAction (post-normalization shape)", () => {
       threadRename: { ok: true, channelId: thread.id, name: "Updated topic" },
     });
     const snapshot = fixture.bus.state.getSnapshot();
-    expect(snapshot.messages).toHaveLength(1);
-    expect(snapshot.messages[0]).toMatchObject({
-      conversation: { id: "sample-project" },
+    expect(snapshot.messages).toHaveLength(2);
+    expect(snapshot.messages[1]).toMatchObject({
+      conversation: { id: "Sample-Project" },
       threadId: thread.id,
       text: "work started",
     });
@@ -210,15 +208,6 @@ describe("discord-mock handleAction (post-normalization shape)", () => {
     expect(snapshot.threads[0]).toMatchObject({ id: thread.id, title: "Original topic" });
   });
 
-  it("declares threadId as the thread-reply delivery target alias", () => {
-    const alias = actions.messageActionTargetAliases?.["thread-reply"];
-    expect(alias?.deliveryTargetAliases).toEqual(["threadId"]);
-    expect(alias?.resolveDeliveryTarget?.({ args: { threadId: "t1" } })).toBe("channel:t1");
-    expect(alias?.resolveDeliveryTarget?.({ args: { to: "channel:c1", threadId: "t1" } })).toBe(
-      undefined,
-    );
-  });
-
   it("thread-reply to an unknown thread posts nothing", async () => {
     const before = fixture.bus.state.getSnapshot().messages.length;
     await expect(
@@ -232,7 +221,7 @@ describe("discord-mock handleAction (post-normalization shape)", () => {
     expect(fixture.bus.state.getSnapshot().messages.length).toBe(before);
   });
 
-  it("react/read/edit/delete on normalized shape", async () => {
+  it("react/reactions/edit/delete on normalized shape", async () => {
     const sent = await runHandler(fixture, "send", { to: "sample-project", text: "first" });
     const messageId = JSON.parse((sent as { content: Array<{ text: string }> }).content[0].text)
       .message.id as string;
@@ -246,6 +235,17 @@ describe("discord-mock handleAction (post-normalization shape)", () => {
     expect(readMsg.reactions.length).toBe(1);
     await runHandler(fixture, "delete", { messageId });
     expect(fixture.bus.state.getSnapshot().messages[0].deleted).toBe(true);
+  });
+});
+
+describe("discord-mock descriptor", () => {
+  it("declares threadId as the thread-reply delivery target alias", () => {
+    const alias = actions.messageActionTargetAliases?.["thread-reply"];
+    expect(alias?.deliveryTargetAliases).toEqual(["threadId"]);
+    expect(alias?.resolveDeliveryTarget?.({ args: { threadId: "t1" } })).toBe("channel:t1");
+    expect(alias?.resolveDeliveryTarget?.({ args: { to: "channel:c1", threadId: "t1" } })).toBe(
+      undefined,
+    );
   });
 
   it("describeMessageTool exposes the full Discord surface", () => {

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -13,9 +13,11 @@ afterEach(() => {
 describe("agent discovery", () => {
   it("provides a generic bundled worker without creating a user directory", () => {
     const dir = temporary();
+    const agentDir = join(dir, "absent");
+    expect(existsSync(agentDir)).toBe(false);
     const worker = discoverAgents({
       cwd: dir,
-      agentDir: join(dir, "absent"),
+      agentDir,
       scope: "user",
       trusted: false,
     })("worker");
@@ -24,7 +26,7 @@ describe("agent discovery", () => {
       source: "bundled",
       tools: ["read", "bash", "edit", "write"],
     });
-    expect(worker.prompt).not.toMatch(/alignfirst|aligndev/i);
+    expect(existsSync(agentDir)).toBe(false);
   });
 
   it("resolves user then explicitly trusted project overrides deterministically", () => {

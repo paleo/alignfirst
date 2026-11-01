@@ -72,7 +72,7 @@ describe("registered public subagent tool", () => {
   });
 
   it.each(["error", "length", "malformed", "incomplete", "startup-error", "signal"])(
-    "fails %s even if the protocol process exits zero",
+    "reports protocol, startup or process failure for %s",
     async (task) => {
       const host = harness();
       const result = await host.tool.execute(task, { task }, undefined, undefined, host.context);

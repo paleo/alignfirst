@@ -14,6 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { fixtureEnvironment } from "./environment.js";
 
 const packageRoot = resolve(import.meta.dirname, "..");
 const cli = join(packageRoot, "bin", "cli.mjs");
@@ -29,6 +30,7 @@ if (bun !== undefined && !existsSync(bun)) throw new Error(`Missing BUN_BIN: ${b
 vi.setConfig({ testTimeout: 30_000 });
 
 afterEach(async () => {
+  const unexpectedCommands: string[][] = [];
   for (const child of children.splice(0)) {
     if (child.exitCode === null && child.signalCode === null) {
       child.kill("SIGTERM");
@@ -42,6 +44,7 @@ afterEach(async () => {
   }
   for (const root of roots.splice(0)) {
     for (const record of records({ log: join(root, "project", "docker.jsonl") })) {
+      if (record.unexpected !== undefined) unexpectedCommands.push(record.unexpected);
       for (const pid of [record.pid, record.worker]) {
         if (pid === undefined) continue;
         if (alive(pid)) process.kill(pid, "SIGKILL");
@@ -50,6 +53,7 @@ afterEach(async () => {
     }
     rmSync(root, { recursive: true, force: true });
   }
+  expect(unexpectedCommands, "Unexpected fake Docker commands").toEqual([]);
 });
 
 describe.each(runtimes)("built harness with %s", (runtime) => {
@@ -578,6 +582,7 @@ interface Consumer {
 }
 
 interface DockerRecord {
+  unexpected?: string[];
   args?: string[];
   pid?: number;
   worker?: number;
@@ -619,7 +624,7 @@ function consumer(): Consumer {
   const log = join(root, "docker.jsonl");
   writeFileSync(log, "");
   const env: NodeJS.ProcessEnv = {
-    ...process.env,
+    ...fixtureEnvironment(),
     HOME: home,
     XDG_STATE_HOME: join(home, "state"),
     PATH: `${bin}${delimiter}${process.env.PATH}`,

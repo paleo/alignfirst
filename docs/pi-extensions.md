@@ -42,11 +42,11 @@ Once submitted, a message is **Pi-owned**. Native follow-ups can survive interru
 
 ## Supported and tested baseline
 
-Both packages target **Pi 1.3.0**, require **Node.js 22.19.0 or later**, and currently carry version **0.1.1**. Deterministic package/host tests have run on **Linux**, **Node 26.8.1**, **Node 24.22.0** and **Node 22.23.3**, with local scripted providers. The exact Node 22.19.0 floor has not been exercised. macOS and Windows through WSL are supported targets awaiting platform acceptance; native Windows is refused before launch. Host peer ranges of `*` follow Pi packaging rules and do not certify future versions.
+Both packages require **Node.js 22.19.0 or later**. Ordinary unit suites pass on **Linux / Node 26.13.0 / Pi 1.4.0**. Integration, packed-smoke, CLI-runtime and live acceptance were excluded from this upgrade. Earlier Pi 1.3.0 deterministic package/host tests ran on **Linux**, **Node 26.8.1**, **Node 24.22.0** and **Node 22.23.3**, with local scripted providers. The exact Node 22.19.0 floor has not been exercised. macOS and Windows through WSL are supported targets awaiting platform acceptance; native Windows is refused before launch. Host peer ranges of `*` follow Pi packaging rules and do not certify future versions.
 
-The deterministic matrices cover public tools, bounded results, ownership races, real descendants, headless subagents, native idle/busy delivery and lifecycle replacement. Release smoke additionally installs each packed extension independently and together against Pi 1.3.0. Cross-product tests launch the real AlignDev CLI through a packed background extension, with controlled child streams and companion-backed worktrees.
+The historical deterministic matrices cover public tools, bounded results, ownership races, real descendants, headless subagents, native idle/busy delivery and lifecycle replacement. Earlier release smoke installed each packed extension independently and together against Pi 1.3.0. Cross-product tests launch the real AlignDev CLI through a packed background extension, with controlled child streams and companion-backed worktrees.
 
-Live acceptance has exercised **openai/gpt-5.6-terra**, including headless single/parallel delegation, idle and busy completion without further human input, quiet AlignDev Pi children, exact result retrieval and dependent verification, out-of-order worktrees, question relay, authentication failure and explicit cancellation without coding retry. Real terminal quit and `/reload` checks verify cleanup after a model-launched job. These observations establish the tested workflow, not general model obedience. Pi work does not certify or migrate the outstanding Claude/Codex/OpenClaw completion paths.
+Historical live acceptance with Terra exercised headless single/parallel delegation, idle and busy completion without further human input, quiet AlignDev Pi children, exact result retrieval and dependent verification, out-of-order worktrees, question relay, authentication failure and explicit cancellation without coding retry. Real terminal quit and `/reload` checks verify cleanup after a model-launched job. These observations establish the tested workflow, not general model obedience. Pi work does not certify or migrate the outstanding Claude/Codex/OpenClaw completion paths.
 
 ## Archived headless feasibility research
 
@@ -59,18 +59,17 @@ B7 remains blocked and unshipped; production waiting is unchanged. Removing thes
 From the repository root:
 
 ```sh
+npm run build
 npm test --workspace @alignfirst/pi-subagent
 npm test --workspace @alignfirst/pi-background
 npm run test:integration --workspace @alignfirst/pi-background
 npm run typecheck --workspace @alignfirst/pi-subagent
 npm run typecheck --workspace @alignfirst/pi-background
-npm run build --workspace @alignfirst/pi-subagent
-npm run build --workspace @alignfirst/pi-background
 npm run lint --workspace @alignfirst/pi-subagent
 npm run lint --workspace @alignfirst/pi-background
 ```
 
-`packages/pi-background/test/integration/aligndev-integration.test.ts` runs through `test:integration`, builds its CLI prerequisites and packs the background extension. It exercises quiet/result identity, out-of-order worktrees, failure/authentication, cancellation and runtime new/resume/fork/reload/quit. Fixture-local executables reject accidental npx/registry fallback.
+`packages/pi-background/test/integration/aligndev-integration.test.ts` runs through `test:integration` and packs the prebuilt background extension. Complete the root `npm run build` first, including for filtered files. Integration preflight checks provisioning only; rebuild after source changes. It exercises quiet/result identity, out-of-order worktrees, failure/authentication, cancellation and runtime new/resume/fork/reload/quit. Fixture-local executables reject accidental npx/registry fallback.
 
 After builds, run the packed-distribution gate:
 
@@ -78,7 +77,7 @@ After builds, run the packed-distribution gate:
 npm run release:smoke
 ```
 
-It installs the CLI tarballs without Pi, then creates three separate disposable Pi 1.3.0 installs. `scripts/pi-packed-smoke.mjs` uses package manifests and the public resource loader/runtime, with network-rejecting scripted providers. It checks assets/peers, duplicate registration, load-time resources, synchronous children, protected compaction/navigation, stale native follow-ups and concurrent process cleanup during replacement. Missing root entries and invalid default factories must fail the public loader check. `scripts/pi-packed-presentation.mjs` checks unversioned npm-source discovery against those same local tarballs, then captures a prompt-free real TUI startup through `scripts/pi-packed-tui.py`. It verifies package labels without `:dist` and single tool registration; Python 3 and a Unix PTY are required. On Linux the combined install also runs nested Pi/bash process groups. The drivers make no external model requests; only npm installation needs registry access.
+It installs the CLI tarballs without Pi, then creates three separate disposable Pi installs at the test driver's pinned version. `scripts/pi-packed-smoke.mjs` uses package manifests and the public resource loader/runtime, with network-rejecting scripted providers. It checks assets/peers, duplicate registration, load-time resources, synchronous children, protected compaction/navigation, stale native follow-ups and concurrent process cleanup during replacement. Missing root entries and invalid default factories must fail the public loader check. `scripts/pi-packed-presentation.mjs` checks unversioned npm-source discovery against those same local tarballs, then captures a prompt-free real TUI startup through `scripts/pi-packed-tui.py`. It verifies package labels without `:dist` and single tool registration; Python 3 and a Unix PTY are required. On Linux the combined install also runs nested Pi/bash process groups. The drivers make no external model requests; only npm installation needs registry access.
 
 Live tests stay outside `npm test`, CI and release smoke. Opt in explicitly after builds:
 

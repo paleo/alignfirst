@@ -17,7 +17,7 @@ Browser ──HTTPS/443──> Caddy ──forward_auth──> Authelia (127.0.0
 
 Projects derive their URLs from `REMOTE_DEV_DOMAIN={{DEV_DOMAIN}}`, already in `environment.d/common.conf`, in their run-file patches ([add-project.md](../operations/add-project.md)).
 
-> **Note:** Commands shown are for Ubuntu 24.04. Adapt package, firewall, filesystem, and service-manager commands for another Linux server when needed.
+> **Note:** Commands shown are for Ubuntu. Adapt package, firewall, filesystem, and service-manager commands for another Linux server when needed.
 
 ## Prerequisites
 
@@ -72,7 +72,7 @@ curl -s http://127.0.0.1:9091/api/health   # {"status":"OK"}
 
 ## Caddy
 
-Official apt repository, the DNS module, then hold the package so an apt upgrade cannot drop the module. Upgrades go through `caddy upgrade`, which preserves modules.
+Install current stable Caddy from its official apt repository, then create a separate binary with the DNS module. Use Caddy's [documented Debian/Ubuntu diversion and alternatives setup](https://caddyserver.com/docs/build#package-support-files-for-custom-builds-for-debianubunturaspbian) to keep the custom binary selected across apt upgrades. Apt updates `/usr/bin/caddy.default` and the package's support files; the custom binary is upgraded separately.
 
 ```sh
 sudo curl -1fsSL 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
@@ -85,10 +85,23 @@ Signed-By: /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 EOT
 sudo apt update
 sudo apt install -y caddy
-sudo caddy add-package {{CADDY_DNS_MODULE}}
-sudo apt-mark hold caddy
-caddy list-modules | grep dns.providers.{{CADDY_DNS_PROVIDER}}
+sudo install -m 755 /usr/bin/caddy /usr/bin/caddy.custom
+sudo /usr/bin/caddy.custom add-package {{CADDY_DNS_MODULE}}
+sudo dpkg-divert --divert /usr/bin/caddy.default --rename /usr/bin/caddy
+sudo update-alternatives --install /usr/bin/caddy caddy /usr/bin/caddy.default 10
+sudo update-alternatives --install /usr/bin/caddy caddy /usr/bin/caddy.custom 50
+caddy list-modules | grep -Fx 'dns.providers.{{CADDY_DNS_PROVIDER}}'
 ```
+
+During operator maintenance, [`caddy upgrade`](https://caddyserver.com/docs/command-line#caddy-upgrade) replaces the selected custom binary with the latest build containing the same registered modules. Verify the DNS module before restarting to activate it:
+
+```sh
+sudo caddy upgrade &&
+  caddy list-modules | grep -Fx 'dns.providers.{{CADDY_DNS_PROVIDER}}' &&
+  sudo systemctl restart caddy
+```
+
+After apt upgrades, verify `readlink -f /usr/bin/caddy` still resolves to `/usr/bin/caddy.custom` and repeat the module check above. Stop maintenance if either check fails.
 
 The DNS credential lives in `/etc/caddy/gateway.env` (root-only, never committed), under the variable name the module documents, loaded through a systemd drop-in:
 

@@ -36,14 +36,14 @@ describe("Codex argv", () => {
   it("builds new and resumed commands with normal sandboxing", () => {
     expect(buildCodexArgs(BASE)).toEqual(["exec", "--json", "--sandbox", "workspace-write", "-"]);
     expect(
-      buildCodexArgs({ ...BASE, resume: "thread-1", executableModel: "gpt-5.6-terra" }),
+      buildCodexArgs({ ...BASE, resume: "thread-1", executableModel: "gpt-6.1-terra" }),
     ).toEqual([
       "exec",
       "--json",
       "--sandbox",
       "workspace-write",
       "--model",
-      "gpt-5.6-terra",
+      "gpt-6.1-terra",
       "resume",
       "thread-1",
       "-",
@@ -56,7 +56,7 @@ describe("Codex argv", () => {
         ...BASE,
         additionalDirectories: ["/companions/proj"],
         resume: "thread-1",
-        executableModel: "gpt-5.6-terra",
+        executableModel: "gpt-6.1-terra",
       }),
     ).toEqual([
       "exec",
@@ -66,7 +66,7 @@ describe("Codex argv", () => {
       "--add-dir",
       "/companions/proj",
       "--model",
-      "gpt-5.6-terra",
+      "gpt-6.1-terra",
       "resume",
       "thread-1",
       "-",

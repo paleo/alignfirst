@@ -48,7 +48,13 @@ export function forwardSettingsWarnings(stderr: string): string {
 
 function isSettingsWarning(line: string): boolean {
   if (/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(line)) return false;
-  return /^Warning: ignoring unknown companion registry setting /u.test(line);
+  return (
+    /^Warning: ignoring unknown companion registry setting /u.test(line) ||
+    /^Warning: developerInstructions is deprecated in .+; use assistantInstructionsFile instead\. assistantInstructionsFile takes precedence when both are set\.$/u.test(
+      line,
+    ) ||
+    line === "Warning: developer-instructions is deprecated; use assistant-instructions instead."
+  );
 }
 
 export function describeAlignfirst(command: string[], cwd: string, env: NodeJS.ProcessEnv): string {

@@ -26,7 +26,7 @@ Without a manifest, setup is synchronous and protocol-ready: Git, work files and
 
 ## Configuration
 
-One selected `alignfirst.json` or `alignfirst.jsonc` contains `conventions`, `plans`, optional `developerInstructions`, `workspace` and `devServer`. A companion may select this complete family with `items.alignfirst`; sections are never merged across sources. Project-selected recipes remain branch-local. Commands still default to the target checkout as cwd.
+One selected `alignfirst.json` or `alignfirst.jsonc` contains `conventions`, `plans`, optional `assistantInstructionsFile`, `workspace` and `devServer`. A companion may select this complete family with `items.alignfirst`; sections are never merged across sources. Project-selected recipes remain branch-local. Commands still default to the target checkout as cwd.
 
 The document requires one `schemaVersion: 1` and accepts optional URI-valued `$schema` as editor metadata. It is never fetched or used to choose runtime validation. `.json` is strict JSON; `.jsonc` accepts comments and trailing commas. Both extensions in one selected location are an error. Unknown properties and unsupported schema majors fail with upgrade guidance; invalid files never select defaults. Discovery starts at the current Git worktree root, including from nested cwd. Outside Git, project settings use the caller directory.
 
@@ -34,7 +34,7 @@ The editor schema ships at `alignfirst/schemas/alignfirst-v1.schema.json`. Valid
 
 ## Manifest and project scripts
 
-Copy [alignfirst.json](../assets/alignfirst.json) and adapt its commands and conventions. Confirm unclear conventions using [project setup](alignfirst-skills-setup.md#configure-the-project). It is data, not an expression language. The asset is a Node example with an invocation-bound concurrency limit and opt-in Node startup-error preset; scripts own stack-specific details. Add `developerInstructions` only when supplying or recommending that file. `alignfirst developer-instructions` prints conventions first, then configured content with its resolved source path. It discovers no fallback filename. The optional groups are `workspace` and `devServer`.
+Copy [alignfirst.json](../assets/alignfirst.json) and adapt its commands and conventions. Confirm unclear conventions using [project setup](alignfirst-skills-setup.md#configure-the-project). It is data, not an expression language. The asset is a Node example with an invocation-bound concurrency limit and opt-in Node startup-error preset; scripts own stack-specific details. Add `assistantInstructionsFile` only when supplying or recommending that file. `alignfirst assistant-instructions` prints conventions first, then configured content with its resolved source path. It discovers no fallback filename. The optional groups are `workspace` and `devServer`.
 
 `workspace` accepts `sharedDirs`, `gitignoredFiles`, named sequential `preSetup`, `finalize`, `purge` steps and `summary`. Finalize runs in a detached installed-CLI child; ordinary setup waits. `--detached` returns pending, and `workspace wait` joins it. Cancelling either waiter leaves an already-spawned finalizer running independently. Without a custom summary, setup and status report the workspace name, path, branch and preparation status. Failed/partial setup retains files and identity; repair the reported problem and retry the printed setup command.
 
@@ -124,7 +124,7 @@ An abruptly killed cleaner can leave destructive stop/purge subprocesses alive. 
 
 With protocols, use the [canonical context bootstrap](alignfirst-skills-setup.md#project-instructions) in `AGENTS.md`. Omit generic workspace-readiness text, workspace-guide pointers and search exclusions supplied by the CLI. Preserve project-specific rules; workspace-only adoption does not add protocol instructions.
 
-Follow [Project documentation defaults](../SKILL.md#project-documentation-defaults) for the README's local installation procedure and the developer guide's daily commands and essential references. Keep tool-specific lifecycle hooks in the tool's configuration.
+Follow [Project documentation defaults](../SKILL.md#project-documentation-defaults) for the README's local installation procedure and the assistant guide's daily commands and essential references. Keep tool-specific lifecycle hooks in the tool's configuration.
 
 ## The AlignDev Contract
 

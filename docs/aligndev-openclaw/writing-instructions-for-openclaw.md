@@ -33,7 +33,7 @@ Text only for a coding agent.
 {{/codingAgent}}
 ```
 
-Project instructions are read at execution time through `{{ALIGNFIRST}} developer-instructions` from the selected workplace. The command prints conventions and explicitly configured content; without a reference it prints conventions only. Use nullable `locations.developerInstructions` from `config --json` to locate edits. Guide rendering does not inspect project filenames or offer project-file condition blocks.
+Assistant instructions are read at execution time through `{{ALIGNFIRST}} assistant-instructions` from the selected workplace. The command prints conventions and explicitly configured content; without a reference it prints conventions only. Use nullable `locations.assistantInstructionsFile` from `config --json` to locate edits. Guide rendering does not inspect project filenames or offer project-file condition blocks.
 
 A platform block sits at the top level. A surface block and `{{#thread}}` never sit inside a `{{#codingAgent}}` block, and `{{#conversation}}` sits anywhere. An unknown name, a misplaced block, an unclosed block or a stray closing marker fails the render, naming the template and the line.
 
@@ -194,7 +194,7 @@ Lesson: the file the assistant reads *first* on a turn sets its frame. If that f
 If the same agent ignores a procedure on one run and follows it on another, the doc is probably ambiguous, not unlucky — but confirm the rate before rewriting. A single failure in ten green runs is variance, not a defect; tightening a 90%-reliable instruction can over-constrain the sibling paths. Measure first:
 
 ```sh
-npm run e2e -- --model gpt-5.6-terra --channel discord-mock --iterations 10 --max-failures 10 A01-new-work-to-be-done
+npm run e2e -- --model gpt-6.1-terra --channel discord-mock --iterations 10 --max-failures 10 A01-new-work-to-be-done
 ```
 
 `--max-failures` defaults to `1` (aborts the pair after the second failure), so raise it to see the full pass/fail rate; omit `--stop-on-fail`. Only if the failure rate is material, tighten the structure — one sentence, one template, one ordering — and re-run to confirm the fix sticks across iterations.

@@ -41,7 +41,7 @@ try {
   writeFileSync(
     join(artifacts, "outcomes.json"),
     JSON.stringify(
-      { model, pi: "1.3.0", node: process.version, platform: process.platform, outcomes, traces },
+      { model, pi: "1.4.0", node: process.version, platform: process.platform, outcomes, traces },
       undefined,
       2,
     ),

@@ -1,16 +1,18 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import type { WorkspaceEntry } from "../../src/workspaces.js";
 import {
   createFixtureRepo,
+  cleanupFixture,
+  cliExecutable,
   DEV_PORTS,
   type FixtureOptions,
   type FixtureRepo,
-  packageRoot,
+  fixtureRegistryDir,
   readWorkspaces,
   runCli,
   runDev,
@@ -20,33 +22,26 @@ import {
 // Each scenario spawns the CLI plus a detached finalize child — give them room.
 const TEST_TIMEOUT_MS = 60_000;
 
-const createdRoots: string[] = [];
-
-beforeAll(() => {
-  buildIfStale();
-}, 120_000);
+const fixtures: FixtureRepo[] = [];
+const barriers: string[] = [];
 
 afterEach(async () => {
-  for (const root of createdRoots.splice(0)) {
-    const repo = join(root, "fixrepo");
-    if (existsSync(registryFile(repo))) {
-      for (const entry of Object.values(readWorkspaces(repo).workspaces)) {
-        if (entry.status === "pending") runCli(repo, ["wait", entry.worktree]);
-      }
+  const failures: unknown[] = [];
+  for (const barrier of barriers.splice(0)) {
+    try {
+      writeFileSync(barrier, "release\n");
+    } catch (error) {
+      failures.push(error);
     }
-    const log = join(repo, "finalize-pids.jsonl");
-    if (existsSync(log)) {
-      for (const pid of readFileSync(log, "utf-8").trim().split("\n").map(Number)) {
-        const deadline = Date.now() + 10_000;
-        while (isAlive(pid)) {
-          if (Date.now() > deadline) throw new Error(`Finalizer ${pid} did not exit`);
-          await new Promise((resolve) => setTimeout(resolve, 25));
-        }
-      }
-    }
-    runDev(repo, ["down", "--all"]);
-    rmSync(root, { recursive: true, force: true });
   }
+  for (const fx of fixtures.splice(0)) {
+    try {
+      await cleanupFixture(fx);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length > 0) throw new AggregateError(failures, "Setup fixture cleanup failed");
 });
 
 describe("workspace setup (e2e)", () => {
@@ -65,6 +60,10 @@ describe("workspace setup (e2e)", () => {
       ];
       target.workspace.finalize = [
         {
+          name: "track finalizer",
+          run: [cliExecutable, "scripts/lifecycle.mjs", "trackFinalizer"],
+        },
+        {
           name: "target finalize",
           run: "echo noisy-finalize; printf target > finalized-target.txt",
         },
@@ -72,10 +71,34 @@ describe("workspace setup (e2e)", () => {
       target.workspace.summary = { command: { run: "echo noisy-summary" } };
       writeFileSync(manifestPath, JSON.stringify(target));
       execFileSync("git", ["add", "alignfirst.json"], { cwd: repo });
-      execFileSync("git", ["commit", "-m", "target recipe"], { cwd: repo, stdio: "pipe" });
+      execFileSync(
+        "git",
+        [
+          "-c",
+          "user.name=E2E",
+          "-c",
+          "user.email=e2e@example.com",
+          "commit",
+          "-m",
+          "target recipe",
+        ],
+        { cwd: repo, stdio: "pipe" },
+      );
       execFileSync("git", ["branch", "target-recipe"], { cwd: repo });
       writeFileSync(manifestPath, caller);
-      execFileSync("git", ["commit", "-am", "caller recipe"], { cwd: repo, stdio: "pipe" });
+      execFileSync(
+        "git",
+        [
+          "-c",
+          "user.name=E2E",
+          "-c",
+          "user.email=e2e@example.com",
+          "commit",
+          "-am",
+          "caller recipe",
+        ],
+        { cwd: repo, stdio: "pipe" },
+      );
       const result = runCli(repo, ["setup", "-c", "selected", "--from", "target-recipe", "--json"]);
       expect(result.status, result.stderr).toBe(0);
       const record = JSON.parse(result.stdout).workspace;
@@ -139,14 +162,23 @@ describe("workspace setup (e2e)", () => {
 
   it(
     "detached setup returns before READY, then `wait` finalizes",
-    () => {
-      const { repo } = fixture();
-      const detached = runCli(repo, ["setup", "-c", "feat-y", "-d"]);
+    async () => {
+      const fx = fixture();
+      const { repo } = fx;
+      const barrier = join(fx.root, "finalizer.release");
+      barriers.push(barrier);
+      const detached = runCli(fx, ["setup", "-c", "feat-y", "-d"], {
+        E2E_FINALIZE_BARRIER: barrier,
+      });
       const detachedOut = detached.stdout + detached.stderr;
 
       expect(detached.status).toBe(0);
       expect(detachedOut).toContain("Setup continuing in background.");
       expect(detachedOut).toContain("Join it with");
+      await waitForFile(`${barrier}.entered`);
+      expect(entryFor(repo, "fixrepo-feat-y").status).toBe("pending");
+      expect(existsSync(join(repo, "..", "fixrepo-feat-y", "finalized.txt"))).toBe(false);
+      writeFileSync(barrier, "release\n");
 
       const waited = runCli(repo, ["wait", "fixrepo-feat-y"]);
       expect(waited.status).toBe(0);
@@ -611,10 +643,12 @@ describe("workspace remove (e2e)", () => {
   it(
     "retains the workspace when target-owned stop fails after killing recorded processes",
     () => {
-      const { repo } = fixture();
+      const fx = fixture();
+      const { repo } = fx;
       expect(runCli(repo, ["setup", "-c", "feat-rm"]).status).toBe(0);
       const linked = sibling(repo, "fixrepo-feat-rm");
       const pid = startOrphanableSleeper();
+      fx.devActivityAttempted = true;
       try {
         writeFileSync(
           join(repo, ".local-wt", "workspace-registry", "dev-servers.json"),
@@ -680,9 +714,7 @@ describe("list and status (e2e)", () => {
 });
 
 function fixture(options?: FixtureOptions): FixtureRepo {
-  const fx = createFixtureRepo(options);
-  createdRoots.push(fx.root);
-  return fx;
+  return createFixtureRepo(options, (fx) => fixtures.push(fx));
 }
 
 function entryFor(repo: string, name: string): WorkspaceEntry {
@@ -728,7 +760,15 @@ function isAlive(pid: number): boolean {
 }
 
 function registryFile(repo: string): string {
-  return join(repo, ".local-wt", "workspace-registry", "workspaces.json");
+  return join(fixtureRegistryDir(repo), "workspaces.json");
+}
+
+async function waitForFile(file: string): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (!existsSync(file)) {
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${file}`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
 }
 
 function setupLog(repo: string, worktreeDir: string): string {
@@ -736,27 +776,4 @@ function setupLog(repo: string, worktreeDir: string): string {
     join(repo, "..", worktreeDir, ".local-wt", "logs", "workspace-setup.log"),
     "utf-8",
   );
-}
-
-// Rebuild `dist/` only when it is missing or older than the newest `src/` file, so a second `vitest`
-// run in a row skips the rebuild.
-function buildIfStale(): void {
-  const distIndex = join(packageRoot, "dist", "index.js");
-  if (existsSync(distIndex) && statSync(distIndex).mtimeMs >= newestSrcMtime()) {
-    console.log("[e2e] dist is up to date; skipping build.");
-    return;
-  }
-  console.log("[e2e] building @alignfirst/workspace…");
-  execFileSync("npm", ["run", "build"], { cwd: packageRoot, stdio: "inherit" });
-}
-
-function newestSrcMtime(): number {
-  const srcDir = join(packageRoot, "src");
-  let newest = 0;
-  for (const rel of readdirSync(srcDir, { recursive: true })) {
-    const full = join(srcDir, rel.toString());
-    const stat = statSync(full);
-    if (stat.isFile()) newest = Math.max(newest, stat.mtimeMs);
-  }
-  return newest;
 }

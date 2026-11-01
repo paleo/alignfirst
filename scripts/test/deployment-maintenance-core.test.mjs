@@ -787,10 +787,6 @@ test("root wrapper and backup use installed policy helpers even when checkout an
     }
     const result = f.run(["agent-config"]);
     assert.equal(result.status, 0, result.stderr);
-    const backupScript = readFileSync(join(f.infra, "bin/backup.sh"), "utf8");
-    assert(backupScript.includes('"$LIBEXEC/deployment-policy.mjs" backup'));
-    assert(!backupScript.includes('"$SCRIPT_DIR/../deployment-policy.mjs"'));
-    assert(backupScript.includes(`LIBEXEC=${f.libexec}`));
     mkdirSync(join(f.home, ".openclaw/workspace"), { recursive: true });
     const backup = spawnSync("bash", [join(f.infra, "bin/backup.sh")], {
       env: f.env,

@@ -23,7 +23,7 @@ Before setup, prepare usable effective plans, untracked by the product repositor
 
 Without a manifest, readiness is synchronous and protocol-ready. No install/build, application seeding, ports or services are implied. `--full` and dev startup require declared services.
 
-One selected `alignfirst.json` or `.jsonc` holds `schemaVersion: 1`, optional URI-valued `$schema`, nested `conventions`, `plans`, optional `developerInstructions`, `workspace` and `devServer`. Project-selected recipes are branch-local; companions may supply the complete document. Sections never merge across sources. JSON is strict; JSONC allows comments/trailing commas. Ambiguity, unknown properties and unsupported schemas fail without fallback. The sole project range is `devServer.ports`.
+One selected `alignfirst.json` or `.jsonc` holds `schemaVersion: 1`, optional URI-valued `$schema`, nested `conventions`, `plans`, optional `assistantInstructionsFile`, `workspace` and `devServer`. Project-selected recipes are branch-local; companions may supply the complete document. Sections never merge across sources. JSON is strict; JSONC allows comments/trailing commas. Ambiguity, unknown properties and unsupported schemas fail without fallback. The sole project range is `devServer.ports`.
 
 Commands/scripts own stack-specific preparation, pure idempotent transformations, summaries and cleanup. `ALIGNFIRST_WORKSPACE_CONTEXT` supplies phase-limited JSON while stdin remains available for transformations. Every phase includes absolute `runtimeDir`, with optional `configurationDir` and `companionDir`. Spawn services use log-regex readiness and may opt into `error: { preset: "node" }` startup heuristics; a custom log expression combines with the preset using OR. Command services own their readiness. The per-repository environment cap accepts a number or `{ env, default }`; zero/omission means unlimited. Only real startup resolves invocation overrides; no dotenv is loaded. Managed environments require a spawn process. See the [setup reference](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/workspace-setup.md) for the complete manifest, interpolation restrictions, Python examples and ABI.
 
@@ -35,6 +35,10 @@ Existing targets use their current recipe. Missing manifest-backed targets requi
 
 Workspace storage is version 4 with storage ownership, required merged-family recipe provenance and external runtime owners; dev/startup storage remains version 1. Old/unknown state is rejected before mutation. Existing wrappers, settings or slot registries require [the clean-break upgrade runbook](https://github.com/paleo/alignfirst/blob/main/docs/upgrading-multi-stack-workspaces.md), including all-worktree resource accounting. Never delete registry files instead of cleaning resources.
 
-The complete editor schema ships with AlignFirst. Future breaking majors use sequential in-memory conversion retained through the CLI major, without rewriting committed files. This initial release supplies no converter for retired wrappers/settings.
+The complete editor schema ships with AlignFirst. Future breaking majors use sequential in-memory conversion retained through the CLI major, without rewriting committed files.
+
+## Maintainer checks
+
+From the repository root, run the complete `npm run build`, then `npm run test:integration --workspace @alignfirst/workspace`. Filtered integration files require the same build. Preflight checks provisioning only; rebuild after source changes. Integration remains serialized because fixtures share ports 47100–47109.
 
 For kernel internals and accepted limitations, see [Workspace Architecture](https://github.com/paleo/alignfirst/blob/main/docs/workspace-architecture.md).

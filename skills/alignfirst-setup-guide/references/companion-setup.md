@@ -19,21 +19,23 @@ The default companion is under `~/.alignfirst/companions/`; relative `--dir` res
 
 For all AlignFirst-owned files and runtime in the companion, set this registration's `defaultLocation` to `"companion"`. An explicit item overrides the default, including explicit `"auto"`. Omission preserves built-in defaults. Preserve other entries, fields, item selections and profiles. For plans-only preparation, set only `projects[companion.key].items[".plans"]` to `"companion"`, using the report's key. Existing project plans remain untouched and unused; do not copy, merge, migrate, archive or delete them.
 
-The logical items are `alignfirst`, `.alignfirst-instructions`, `developerInstructions`, `workspaceRuntime`, `docs`, `.plans` and `_aligndev`. The retired `DEVELOPERS.md` item supplies no selection semantics.
+The logical items are `alignfirst`, `.alignfirst-instructions`, `assistantInstructionsFile`, `workspaceRuntime`, `docs`, `.plans` and `_aligndev`. The retired `DEVELOPERS.md` item supplies no selection semantics.
 
 - Ordinary `auto` selects an existing companion item, then project, then the companion creation destination. Explicit project/companion settings select that destination even when missing.
 - `alignfirst` selects the whole `alignfirst.json`/`.jsonc` family. Both extensions in the selected location fail; sections are never merged across sources.
-- `developerInstructions` selects the root for the configuration's explicit relative file reference. Without a reference its location is null, with no filename discovery.
+- `assistantInstructionsFile` selects the root for the configuration's explicit relative file reference. Without a reference its location is null, with no filename discovery.
 - `workspaceRuntime` uses external storage only when effectively companion. Project/auto is always local, independent of directory existence.
 - `_aligndev` accepts companion/auto. Explicit companion selects companion plans-shaped session storage; auto follows effective plans. When unset, a companion default selects companion sessions, otherwise sessions follow plans. Separate companion sessions with auto plans are rejected to prevent creation from changing plans selection.
+
+The deprecated `developerInstructions` config field and registry item, and `developer-instructions` command, remain accepted with `console.warn` diagnostics on stderr. `assistantInstructionsFile` takes precedence when both names exist; an invalid new value fails without fallback. Reads normalize in memory without rewriting files, reports emit only the new name, and `schemaVersion` remains 1.
 
 Reread config. Verify `locations`, `selectionOrigins`, and that `.plans` and each intended write resolve inside `companion.dir`. `locations.alignfirst` identifies the actual selected filename or canonical `.json` destination. Stop if selection sends an unauthorized write into the project. Missing companion directories are destinations, not fallback signals. A profile-only registration supplies no companion placement.
 
 ## 3. Prepare selected files
 
-Write one selected configuration using [project settings](alignfirst-skills-setup.md#with-alignfirstjson): `schemaVersion: 1`, optional URI-valued `$schema`, nested `conventions`, root `plans`, and optional recipe sections. For an assistant, choose a developer guide such as `DEVELOPERS.md` or `README.md`, record its relative path as `developerInstructions`, then write it at `locations.developerInstructions.path`. Include confirmed runtimes, commands and readiness boundaries. Run `alignfirst developer-instructions`; conventions appear first, followed by configured content and its source. A configured missing/unreadable file fails.
+Write one selected configuration using [project settings](alignfirst-skills-setup.md#with-alignfirstjson): `schemaVersion: 1`, optional URI-valued `$schema`, nested `conventions`, root `plans`, and optional recipe sections. For an assistant, choose an assistant guide such as `DEVELOPERS.md` or `README.md`, record its relative path as `assistantInstructionsFile`, then write it at `locations.assistantInstructionsFile.path`. Include confirmed runtimes, commands and readiness boundaries. Run `alignfirst assistant-instructions`; conventions appear first, followed by configured content and its source. A configured missing/unreadable file fails.
 
-Add `.alignfirst-instructions/context.md` for coding-agent context beyond settings, without a bootstrap section. `alignfirst context` prints it; keep it distinct from human/assistant developer instructions. Use existing repository docs or bootstrap selected companion docs when requested. No project runtime/version file is written in untouched mode.
+Add `.alignfirst-instructions/context.md` for coding-agent context beyond settings, without a bootstrap section. `alignfirst context` prints it; keep it distinct from human/assistant instructions. Use existing repository docs or bootstrap selected companion docs when requested. No project runtime/version file is written in untouched mode.
 
 Create effective companion `.plans` while preserving existing content. With a separately authorized work-files repository, `alignfirst plans setup <clone>` creates its link at the selected location. Assistant preparation follows `aligndev guide work-files-setup` before ticket reservation, request capture or coding delegation, even when project plans are usable. Verify the same target/selection from existing linked worktrees. No redundant project plans link is needed.
 

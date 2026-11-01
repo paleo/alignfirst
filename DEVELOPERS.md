@@ -1,4 +1,4 @@
-# Developer Guide
+# Developer Reference
 
 The everyday workflow of this repository. Run `npm run docmap` for the design documentation.
 
@@ -8,7 +8,7 @@ An npm-workspaces monorepo of TypeScript packages (ESM only, `strict: true`), pu
 
 ## Workspaces
 
-A workspace is a Git worktree plus its setup. `alignfirst.json` holds nested conventions, the explicit `developerInstructions: "DEVELOPERS.md"` reference and the recipe. Setup shares effective plans, usable untracked `.local` and harness artifacts, optionally seeds editor/harness settings, then finalizes with named `npm install` and `npm run build` steps. Runtime placement follows the companion registry; this checkout's retained state remains pending the upgrade below. This repository has no dev server or `dev` script.
+A workspace is a Git worktree plus its setup. `alignfirst.json` holds nested conventions, the explicit `assistantInstructionsFile: "DEVELOPERS.md"` reference and the recipe. Setup shares effective plans, usable untracked `.local` and harness artifacts, optionally seeds editor/harness settings, then finalizes with named `npm install` and `npm run build` steps. Runtime placement follows the companion registry; this checkout's retained state remains pending the upgrade below. This repository has no dev server or `dev` script.
 
 Prepare ignored effective plans separately before workspace setup. From a fresh clone or linked worktree, run the published CLI without requiring local dependencies or build output:
 
@@ -29,12 +29,13 @@ Existing participating worktrees with old runtime registries, including the side
 
 ## Everyday commands
 
-The tooling runs through the `alignfirst` CLI built in this workspace, so run `npm run build` first.
+Run the complete `npm run build` from the repository root before checks. Integration tests, including filtered files, use those artifacts and never rebuild. Their preflight checks required files only; rebuild after source changes.
 
 | Command | Purpose |
 |---------|---------|
 | `npm run build` | Build every package |
 | `npm test` | Test every package (`npm test --workspace <name>` for one) |
+| `npm run test:integration --workspace <name>` | Run a package's integration suite after the root build |
 | `npm run lint` / `npm run lint:fix` | Check / fix with Biome |
 | `npm run docmap` | Browse the project documentation |
 | `npm run workspace -- <command>` | Manage worktree workspaces (`--guide` for the procedures) |

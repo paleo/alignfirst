@@ -107,7 +107,7 @@ export function renderProjectStatus(details: ProjectDetails): string {
     `  Config source: ${details.configSource ?? "(none)"}`,
     `  Companion: ${renderCompanion(details.companion)}`,
     `  AlignDev profile: ${renderNullableValue(details.aligndev?.profile ?? null)}`,
-    `  Developer instructions: ${renderLocation(details.locations.developerInstructions)}`,
+    `  Assistant instructions: ${renderLocation(details.locations.assistantInstructionsFile)}`,
     `  Work files: ${renderLocation(details.locations[".plans"])}`,
     `  Work-files folder: ${renderNullableValue(details.plansFolder)}`,
     `  Ticket id pattern: ${renderNullableValue(details.ticketIdPattern)}`,

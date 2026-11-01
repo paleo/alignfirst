@@ -431,9 +431,10 @@ describe("status", () => {
   ])("reads status without loading invalid settings: %s", async (settings) => {
     const settingsPath = join(dir, ".alignfirst", "aligndev.settings.json");
     writeFileSync(settingsPath, settings);
-    writeStatusRecord(process.pid);
+    const runningPath = sessionFilePath.replace(/\.md$/, ".running.md");
+    writeStatusRecord(process.pid, runningPath);
     const result = "substantive report\n\n---- Later result ----\n\nacknowledgement";
-    applyCompletion(sessionFilePath, {
+    const completedPath = applyCompletion(runningPath, {
       status: "succeeded",
       exitReason: "completed",
       endedAt: "2026-08-29T11:56:29.000Z",
@@ -441,10 +442,12 @@ describe("status", () => {
       result,
     });
     const before = readFileSync(settingsPath);
-    const output = await status([sessionFilePath, "--result"]);
+    const completedBytes = readFileSync(completedPath);
+    const output = await status([runningPath, "--result"]);
     expect(output).toContain("status: succeeded\n");
     expect(output).toContain(`${RESULT_MARKER}\n${result}\n`);
     expect(await status(["--help"])).toContain("without reading settings");
+    expect(readFileSync(completedPath)).toEqual(completedBytes);
     expect(readFileSync(settingsPath)).toEqual(before);
     const records = listSessionRecords(join(dir, ".plans"), readMachineId(dir));
     const stderr = makeSink();
@@ -462,6 +465,7 @@ describe("status", () => {
     if (settings.includes("gone")) expect(stderr.text()).toContain("gone");
     else expect(stderr.text()).toContain(settingsPath);
     expect(listSessionRecords(join(dir, ".plans"), readMachineId(dir))).toEqual(records);
+    expect(readFileSync(completedPath)).toEqual(completedBytes);
     expect(readFileSync(settingsPath)).toEqual(before);
   });
 
@@ -976,7 +980,7 @@ function reportWithCompanion(items: ItemName[]): ProjectReport {
       items: {
         alignfirst: "auto",
         ".alignfirst-instructions": "auto",
-        developerInstructions: "auto",
+        assistantInstructionsFile: "auto",
         workspaceRuntime: "auto",
         docs: "auto",
         ".plans": "auto",
@@ -986,7 +990,7 @@ function reportWithCompanion(items: ItemName[]): ProjectReport {
     selectionOrigins: {
       alignfirst: "builtin",
       ".alignfirst-instructions": "builtin",
-      developerInstructions: "builtin",
+      assistantInstructionsFile: "builtin",
       workspaceRuntime: "builtin",
       docs: "builtin",
       ".plans": "builtin",
@@ -996,7 +1000,7 @@ function reportWithCompanion(items: ItemName[]): ProjectReport {
     locations: {
       alignfirst: location("alignfirst.json", "alignfirst"),
       ".alignfirst-instructions": location(".alignfirst-instructions", ".alignfirst-instructions"),
-      developerInstructions: location("DEVELOPERS.md", "developerInstructions"),
+      assistantInstructionsFile: location("DEVELOPERS.md", "assistantInstructionsFile"),
       workspaceRuntime: location(".local-wt", "workspaceRuntime"),
       docs: location("docs", "docs"),
       ".plans": location(".plans", ".plans"),
@@ -1179,7 +1183,7 @@ describe("launch guards", () => {
   it("rejects a cross-agent resume before discovery or session creation", async () => {
     seedRecord("codex.md", { status: "succeeded", sessionId: "abc", agent: "codex" });
     const before = listSessionRecords(plans, readMachineId(home)).length;
-    const modelResolver = vi.fn(async () => "gpt-5.6-terra");
+    const modelResolver = vi.fn(async () => "gpt-6.1-terra");
     const stderr = makeSink();
     const otherHome = makeHome({
       platform: "codingAgent",

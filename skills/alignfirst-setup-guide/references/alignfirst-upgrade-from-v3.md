@@ -1,6 +1,6 @@
-# Upgrade from AlignFirst v3
+# Migrate Full-Content Skills and `plans-share`
 
-Replace the full-content v3 skills and `plans-share` package with the AlignFirst CLI and v4 stub skills. The
+Replace full-content protocol skills and the `plans-share` package with the AlignFirst CLI and CLI-backed stub skills. The
 migration leaves no `plans-share` compatibility package or npm-script wrappers.
 
 ## Install the CLI
@@ -100,7 +100,7 @@ Current `alignfirst workspace setup` validates effective plans and selected runt
 
 ## Update the Skills
 
-Replace the v3 protocol content with the v4 stubs:
+Replace full protocol content with CLI-backed stubs:
 
 ```sh
 npx -y skills update --global --yes

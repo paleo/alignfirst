@@ -5,7 +5,7 @@ description: >-
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.55.4"
+  version: "0.55.6"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -36,7 +36,7 @@ Route by the user's intent. Inspect the repository and load the relevant referen
 
 Install or upgrade only what the user requested. Do not add unrelated tools or present the full menu.
 
-- **CLI, protocols or skills:** [alignfirst-skills-setup.md](references/alignfirst-skills-setup.md). Skills invoke the CLI without a separate installation. Existing v1/v2/v3 skills or old home layouts first use [alignfirst-upgrade.md](references/alignfirst-upgrade.md).
+- **CLI, protocols or skills:** [alignfirst-skills-setup.md](references/alignfirst-skills-setup.md). Skills invoke the CLI without a separate installation. Legacy full-content skills, `_docs/` instructions or old home layouts first use [alignfirst-upgrade.md](references/alignfirst-upgrade.md).
 - **Work-files repository:** [plans-setup.md](references/plans-setup.md).
 - **Docmap:** [docmap-setup.md](references/docmap-setup.md). For docs adoption, follow its bootstrapping/migration references when relevant.
 - **Workspace, any stack:** [workspace-setup.md](references/workspace-setup.md). Node, Python, Rust and monorepos use the same `alignfirst workspace`/`alignfirst dev` CLI. No project wrapper or local kernel dependency is needed. Never recommend reimplementing the kernel for another language.
@@ -78,7 +78,7 @@ Keep project-specific hooks in `paseo.json`. Run these commands inside the targe
 }
 ```
 
-The published CLI works before local dependencies or build output exist. Teardown hooks preserve the worktree for the tool's deletion step. For agent-initiated removal, read the workspace skill, archive first, then use `workspace remove`. Keep Paseo-specific lifecycle instructions out of project agent instructions and developer guides.
+The published CLI works before local dependencies or build output exist. Teardown hooks preserve the worktree for the tool's deletion step. For agent-initiated removal, read the workspace skill, archive first, then use `workspace remove`. Keep Paseo-specific lifecycle instructions out of project agent instructions and assistant guides.
 
 ## Project instructions
 
@@ -94,7 +94,7 @@ Keep generated entry points minimal. Preserve useful existing project content.
 
 - `README.md` contains the local environment installation procedure. With workspaces, use a `## Local environment installation` section containing `npx -y alignfirst workspace setup`, with the project's runtime prefix when needed. Include prerequisites or manual steps only when required to make that procedure work. Omit generic tooling explanations, optional global installations, command catalogs and pending-work notices by default.
 - `DEVELOPERS.md`, titled `# Developer Reference`, is the entry point for an assistant session. Include confirmed daily development commands, especially how to build and test, plus project-specific guidance needed to use them. Link to the most important documentation when it helps the assistant begin work; keep this selection short. When those details are undecided, the title alone is sufficient. Omit generic AlignFirst explanations, full documentation indexes, status filler and verification lists for the setup itself.
-- Record a developer guide's relative path as `developerInstructions` when supplying it. Detailed project documentation belongs in `docs/` and is discovered through Docmap.
+- Record an assistant guide's relative path as `assistantInstructionsFile` when supplying it. Detailed project documentation belongs in `docs/` and is discovered through Docmap.
 
 ## A repository that must stay untouched
 
@@ -108,8 +108,8 @@ An assistant coordinates the conversation and delegates coding to the coding **a
 2. Usable effective plans, untracked by the product repository. A separate work-files repository may track them. Use the separately authorized `aligndev guide work-files-setup` for missing/project-tracked plans, before ticket reservation, request capture or coding effects. Preserve old history without unsolicited copying.
 3. Docmap and meaningful project docs. When `docs/` is absent and documentation is part of preparation, follow [docmap-bootstrapping.md](references/docmap-bootstrapping.md).
 4. A unified workspace route through `alignfirst workspace`. The optional recipe in the selected merged configuration declares project commands; without `workspace`/`devServer`, setup is protocol-ready and performs no install/build/start. Prepare effective plans and selected runtime storage first; only project runtime requires ignored/untracked `.local-wt/`. Document separate stack commands when defaults are used.
-5. Confirmed runtime requirements. Node projects declare their version through `.nvmrc`, `.node-version` or `engines.node`; ask when none exists. Python and other runtimes retain their documented tools. Running the CLI through Node/Bun does not change project commands.
-6. A project-specific developer guide, commonly `DEVELOPERS.md` or `README.md`, with its relative path explicitly recorded as `developerInstructions`. Use `alignfirst developer-instructions` to read conventions and configured content, and nullable `locations.developerInstructions` to locate edits. Without a reference there is no filename fallback. Follow [Project documentation defaults](#project-documentation-defaults). Include confirmed daily commands, especially build and test, relevant project constraints, and useful references to essential documentation. Put local installation in the README, and include public URLs when services exist. Keep tool-specific lifecycle hooks in the tool's configuration.
+5. Confirmed runtime requirements. Honor Node projects' `.nvmrc`, `.node-version` or `engines.node`; without a declaration, use current Node LTS unless the project's requirements say otherwise. Python and other runtimes retain their documented tools. Running the CLI through Node/Bun does not change project commands.
+6. A project-specific assistant guide, commonly `DEVELOPERS.md` or `README.md`, with its relative path explicitly recorded as `assistantInstructionsFile`. Use `alignfirst assistant-instructions` to read conventions and configured content, and nullable `locations.assistantInstructionsFile` to locate edits. Without a reference there is no filename fallback. Follow [Project documentation defaults](#project-documentation-defaults). Include confirmed daily commands, especially build and test, relevant project constraints, and useful references to essential documentation. Put local installation in the README, and include public URLs when services exist. Keep tool-specific lifecycle hooks in the tool's configuration.
 7. `aligndev project doctor --root <projects-directory>` passes after settings/manifest creation and before workspace setup. A range belongs solely in `devServer.ports`; use `project free-ports` as a lookup when the inventory owns an enclosing range.
 
 Assistant preparation skips command-skill installation and global bootstrap changes unless separately requested. Companion-only preparation follows its authorization and location checks. Native coding-agent permissions are unchanged; report protected-path refusals rather than bypassing them.
@@ -125,6 +125,8 @@ The three overlays use named profiles and inventoried native stores. The entire 
 For Claude Code, Codex or a persistent Pi session on one project, read [coding-agent-assistant.md](references/coding-agent-assistant.md). Pi uses `/skill:aligndev` and separately installed executable capabilities; installing a skill alone provides none. OpenClaw remains the persistent parent for its deployment route.
 
 ## Investigation rules
+
+Install current stable packages and current Node LTS. Inspect the installed packages' declared runtime and peer compatibility before use. Preserve project-owned runtime requirements and system/project isolation. Review source and security changes before operator-controlled maintenance; an unversioned install does not authorize unattended updates.
 
 Detect the package manager from `packageManager`, then root lockfiles, falling back to npm. Translate application commands to the confirmed toolchain. CLI forms remain `npx -y alignfirst` for Node and `bunx --bun alignfirst` for explicit Bun; project scripts are optional conveniences.
 

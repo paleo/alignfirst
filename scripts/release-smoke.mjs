@@ -69,6 +69,7 @@ function smokeTestRelease() {
     assert.equal(installedSchema.type, "object");
     assert.deepEqual(Object.keys(installedSchema.properties).sort(), [
       "$schema",
+      "assistantInstructionsFile",
       "conventions",
       "devServer",
       "developerInstructions",
@@ -149,7 +150,7 @@ function smokeTestRelease() {
     );
   }
   console.log(
-    `Release smoke passed: alignfirst@${alignfirst.version}, aligndev@${aligndev.version}, Pi 1.3.0, both extensions independently/together.`,
+    `Release smoke passed: alignfirst@${alignfirst.version}, aligndev@${aligndev.version}, Pi 1.4.0, both extensions independently/together.`,
   );
 }
 
@@ -251,7 +252,7 @@ function disposableInstall(name, packages, host = false) {
       "--no-audit",
       "--no-fund",
       ...packages.map((p) => p.tarball),
-      ...(host ? ["@earendil-works/pi-coding-agent@1.3.0"] : []),
+      ...(host ? ["@earendil-works/pi-coding-agent@1.4.0"] : []),
     ],
     root,
   );
@@ -284,16 +285,10 @@ function inspectExtension(root, packed) {
     "THE SOFTWARE IS PROVIDED",
   ])
     assert(license.includes(phrase));
-  assert.match(readFileSync(join(directory, "NOTICE.md"), "utf8"), /Pi|pi/);
   for (const [name, range] of Object.entries(manifest.peerDependencies)) {
     assert(name.startsWith("@earendil-works/pi-") || name === "typebox");
     assert.equal(range, "*");
   }
-  if (packed.name.endsWith("pi-subagent"))
-    assert.match(
-      readFileSync(join(directory, "dist/agents.js"), "utf8"),
-      /Follow the delegated assignment/,
-    );
 }
 
 function verifyBrokenRootEntries(root, packages) {

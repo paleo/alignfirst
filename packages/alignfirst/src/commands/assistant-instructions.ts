@@ -4,14 +4,14 @@ import { readInstructions } from "../instructions.js";
 import { parseBareCommandArgs } from "../parse-args.js";
 import { layoutOf } from "../project-layout.js";
 
-export function runDeveloperInstructions(ctx: CommandContext, args: string[]): number {
-  const usage = `Usage: ${ctx.form} developer-instructions\n`;
+export function runAssistantInstructions(ctx: CommandContext, args: string[]): number {
+  const usage = `Usage: ${ctx.form} assistant-instructions\n`;
   if (parseBareCommandArgs(ctx, args, usage)) return 0;
-  const location = layoutOf(ctx).locations.developerInstructions;
+  const location = layoutOf(ctx).locations.assistantInstructionsFile;
   const content = location === null ? undefined : readInstructions(location.path);
   ctx.stdout.write(renderConventionsSection(ctx));
   if (location !== null && content !== undefined) {
-    ctx.stdout.write(`\n# Developer Instructions\n\nSource: ${location.path}\n\n${content}`);
+    ctx.stdout.write(`\n# Assistant Instructions\n\nSource: ${location.path}\n\n${content}`);
   }
   return 0;
 }

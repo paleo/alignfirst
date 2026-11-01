@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { platform } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   canonicalCwd,
@@ -16,6 +16,17 @@ import {
 } from "../src/port-holder.js";
 import type { ResolvedSpawnServer } from "../src/server-descriptor.js";
 
+const isUnix = platform() !== "win32";
+const dirSymlinkType = platform() === "win32" ? "junction" : "dir";
+const listeners: Listener[] = [];
+const timers: NodeJS.Timeout[] = [];
+
+interface Listener {
+  server: Server;
+  port: number;
+  closed: Promise<void>;
+}
+
 function spawnServer(name: string, port?: number): ResolvedSpawnServer {
   const server: ResolvedSpawnServer = {
     kind: "spawn",
@@ -26,9 +37,6 @@ function spawnServer(name: string, port?: number): ResolvedSpawnServer {
   if (port !== undefined) server.port = port;
   return server;
 }
-
-const isUnix = platform() !== "win32";
-const dirSymlinkType = platform() === "win32" ? "junction" : "dir";
 
 describe("isPidOurs", () => {
   it("matches exact cwd", () => {
@@ -82,57 +90,53 @@ describe("canonicalCwd", () => {
   });
 });
 
-describe.skipIf(!isUnix)("findPortHolder", () => {
-  let server: Server | undefined;
-  let port = 0;
+afterEach(async () => {
+  for (const timer of timers.splice(0)) clearTimeout(timer);
+  await Promise.all(listeners.splice(0).map(closeListener));
+});
 
-  beforeEach(async () => {
-    server = createServer();
-    await new Promise<void>((resolve) => {
-      server?.listen(0, "127.0.0.1", () => resolve());
+async function listen(): Promise<Listener> {
+  const server = createServer();
+  const closed = new Promise<void>((resolve) => server.once("close", resolve));
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
     });
-    const addr = server.address();
-    if (addr === null || typeof addr === "string") throw new Error("no port");
-    port = addr.port;
   });
+  const address = server.address();
+  if (address === null || typeof address === "string") throw new Error("no port");
+  const listener = { server, port: address.port, closed };
+  listeners.push(listener);
+  return listener;
+}
 
-  afterEach(async () => {
-    if (server) await new Promise<void>((r) => server?.close(() => r()));
-  });
+async function closeListener(listener: Listener): Promise<void> {
+  if (listener.server.listening) listener.server.close();
+  await listener.closed;
+}
 
-  it("finds the holder of a listening port", () => {
+describe.skipIf(!isUnix)("findPortHolder", () => {
+  it("finds the holder of a listening port", async () => {
+    const { port } = await listen();
     const holder = findPortHolder(port);
-    expect(holder).toBeDefined();
     expect(holder?.pid).toBe(process.pid);
     expect(holder?.cwd).toBeTruthy();
   });
 
-  it("returns undefined for an unused port", () => {
-    expect(findPortHolder(1)).toBeUndefined();
+  it("returns undefined for an unused port", async () => {
+    const listener = await listen();
+    await closeListener(listener);
+    expect(findPortHolder(listener.port)).toBeUndefined();
   });
 });
 
 describe.skipIf(!isUnix)("detectPortConflicts", () => {
-  let server: Server | undefined;
-  let port = 0;
-
-  beforeEach(async () => {
-    server = createServer();
-    await new Promise<void>((resolve) => {
-      server?.listen(0, "127.0.0.1", () => resolve());
-    });
-    const addr = server.address();
-    if (addr === null || typeof addr === "string") throw new Error("no port");
-    port = addr.port;
-  });
-
-  afterEach(async () => {
-    if (server) await new Promise<void>((r) => server?.close(() => r()));
-  });
-
   it("returns no conflicts when ports are free", async () => {
-    await new Promise<void>((r) => server?.close(() => r()));
-    server = undefined;
+    const listener = await listen();
+    const { port } = listener;
+    await closeListener(listener);
     const conflicts = await detectPortConflicts(
       [spawnServer("web", port)],
       realpathSync(process.cwd()),
@@ -141,6 +145,7 @@ describe.skipIf(!isUnix)("detectPortConflicts", () => {
   });
 
   it("classifies a holder in our cwd as 'ours'", async () => {
+    const { port } = await listen();
     const conflicts = await detectPortConflicts(
       [spawnServer("web", port)],
       realpathSync(process.cwd()),
@@ -151,6 +156,7 @@ describe.skipIf(!isUnix)("detectPortConflicts", () => {
   });
 
   it("classifies a holder outside our cwd as 'foreign'", async () => {
+    const { port } = await listen();
     const conflicts = await detectPortConflicts([spawnServer("web", port)], "/nonexistent-xyz");
     expect(conflicts).toHaveLength(1);
     expect(conflicts[0]?.kind).toBe("foreign");
@@ -179,30 +185,22 @@ describe.skipIf(!isUnix)("detectPortConflicts", () => {
 
 describe.skipIf(!isUnix)("waitForPortsFree", () => {
   it("returns [] immediately when no ports are busy", async () => {
-    const stillBusy = await waitForPortsFree([1], 200);
+    const listener = await listen();
+    await closeListener(listener);
+    const stillBusy = await waitForPortsFree([listener.port], 200);
     expect(stillBusy).toEqual([]);
   });
 
   it("returns the port when it stays busy past the deadline", async () => {
-    const server = createServer();
-    await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
-    const addr = server.address();
-    if (addr === null || typeof addr === "string") throw new Error("no port");
-    try {
-      const stillBusy = await waitForPortsFree([addr.port], 200);
-      expect(stillBusy).toEqual([addr.port]);
-    } finally {
-      await new Promise<void>((r) => server.close(() => r()));
-    }
+    const { port } = await listen();
+    const stillBusy = await waitForPortsFree([port], 200);
+    expect(stillBusy).toEqual([port]);
   });
 
   it("returns [] once a busy port becomes free before the deadline", async () => {
-    const server = createServer();
-    await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
-    const addr = server.address();
-    if (addr === null || typeof addr === "string") throw new Error("no port");
-    setTimeout(() => server.close(), 150);
-    const stillBusy = await waitForPortsFree([addr.port], 2000);
+    const listener = await listen();
+    timers.push(setTimeout(() => listener.server.close(), 150));
+    const stillBusy = await waitForPortsFree([listener.port], 2000);
     expect(stillBusy).toEqual([]);
   });
 });

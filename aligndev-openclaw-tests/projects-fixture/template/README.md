@@ -12,7 +12,7 @@ pnpm dev
 
 Workspace setup installs dependencies. The first `pnpm dev` or `pnpm dev setup` allocates ports and creates `local.env`.
 
-The merged `alignfirst.json` declares conventions, recipe and the explicit [`DEVELOPERS.md`](DEVELOPERS.md) reference. Run `alignfirst developer-instructions` to read conventions and that guide. Runtime placement follows the companion registry; scripts use `ALIGNFIRST_WORKSPACE_CONTEXT.runtimeDir` for owned sidecars.
+The merged `alignfirst.json` declares conventions, recipe and the explicit [`DEVELOPERS.md`](DEVELOPERS.md) reference. Run `alignfirst assistant-instructions` to read conventions and that guide. Runtime placement follows the companion registry; scripts use `ALIGNFIRST_WORKSPACE_CONTEXT.runtimeDir` for owned sidecars.
 
 ### Remote access
 

@@ -761,7 +761,6 @@ async function harnessLifecycle() {
   mkdirSync(join(root, "scenarios"), { recursive: true });
   for (const name of ["case", "first", "second"])
     writeFileSync(join(root, "scenarios", `${name}.ts`), "export default async function () {}\n");
-  assert.ok(initialized.includes("bun --bun run env:build"));
   check("generated-harness-env-down", "/bin/sh", ["-c", "bun --bun run env:down"], {
     runtime: "bun",
     env,

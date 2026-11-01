@@ -53,10 +53,12 @@ it("publishes manifest examples accepted by the production CLI without consumer 
           default: 5,
         });
         expect(report.config.devServer.servers[0].error).toEqual({ preset: "node" });
-        expect(report.locations.developerInstructions).toBeNull();
+        expect(report.locations.assistantInstructionsFile).toBeNull();
       } else {
-        expect(report.config.developerInstructions).toBe("DEVELOPERS.md");
-        expect(report.locations.developerInstructions.path).toBe(join(project, "DEVELOPERS.md"));
+        expect(report.config.assistantInstructionsFile).toBe("DEVELOPERS.md");
+        expect(report.locations.assistantInstructionsFile.path).toBe(
+          join(project, "DEVELOPERS.md"),
+        );
       }
       rmSync(path);
     }

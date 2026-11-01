@@ -1,6 +1,6 @@
 # OpenClaw Context Engineering
 
-How OpenClaw assembles the assistant's context — what gets auto-loaded, what doesn't, and the budgets that bound it. Source verified against OpenClaw 2026.10.5 in the upstream repo (`src/agents/workspace.ts`, `bootstrap-cache.ts`, `system-prompt.ts`, `embedded-agent-helpers/bootstrap.ts`). A read-only clone lives at `.local/openclaw/` for spot-checking.
+How OpenClaw assembles the assistant's context — what gets auto-loaded, what doesn't, and the budgets that bound it. Bootstrap and context sources statically reviewed against OpenClaw 2026.10.9 in the upstream repo (`src/agents/workspace.ts`, `bootstrap-cache.ts`, `system-prompt.ts`, `embedded-agent-helpers/bootstrap.ts`). A read-only clone lives at `.local/openclaw/` for spot-checking. The 2026.10.9 upgrade used a private clone and did not rerun gateway or model acceptance; dated observations below retain their original versions.
 
 When you actually edit a workspace file, also read [`writing-instructions-for-openclaw.md`](./writing-instructions-for-openclaw.md) — heuristics from past test regressions.
 

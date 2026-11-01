@@ -4,7 +4,7 @@ Run synchronous Pi subagents with separate contexts. The package registers one t
 
 ## Install
 
-Requires Pi 1.3.0 and Node.js 22.19 or newer. Linux is exercised by this package's subprocess tests on Node 26.8.1 and 22.23.3. The exact Node 22.19.0 floor has not been exercised. macOS support uses the Unix process-table implementation but has not been exercised here. WSL uses the Linux path; native Windows is rejected before launch.
+Requires the Node.js runtime declared in `engines.node`. See the [supported and tested baseline](https://github.com/paleo/alignfirst/blob/main/docs/pi-extensions.md#supported-and-tested-baseline) for Pi compatibility and checks not rerun after the dependency upgrade. macOS support uses the Unix process-table implementation but has not been exercised here. WSL uses the Linux path; native Windows is rejected before launch.
 
 If an existing local extension already registers `subagent`, disable it explicitly with `pi config` before installing this replacement. This includes a local `~/.pi/agent/extensions/subagent` example or symlink. Keep your profiles; this package does not overwrite them. Do not load both implementations.
 
@@ -88,7 +88,7 @@ Per-call abort stops synchronous children and awaits every running parallel sibl
 
 Managed launches use an owned Unix process group without `unref()`. Cleanup takes process-table snapshots (from `/proc` on Linux, `ps` on macOS), retains discovered descendant identities/groups across leader exit, sends TERM, refreshes descendants at escalation, and force-kills survivors after a shared five-second graceful deadline. Direct-child exit and drained pipes are awaited separately with bounded failure reporting. Linux checks `/proc` start times before later signals; macOS snapshots compare `ps` start times. Zombies are terminal, and the direct child is reaped. Pi's own print-mode signal handling can force-kill its tracked bash groups during grace, so descendants are not each promised five seconds.
 
-Process-query failures and unconfirmed survivors are cleanup errors. Unresolved ownership remains in the active extension runtime for a fresh cleanup attempt. These guarantees cover ordinary attached work observable at cleanup boundaries and retained process groups; they do not provide crash recovery or supervision of deliberately escaped daemons. Strict cleanup after `kill -9`, machine failure, or runtime crashes is outside this version.
+Process-query failures and unconfirmed survivors are cleanup errors. Unresolved ownership remains in the active extension runtime for a fresh cleanup attempt. These guarantees cover ordinary attached work observable at cleanup boundaries and retained process groups; they do not provide crash recovery or supervision of deliberately escaped daemons. Strict cleanup after `kill -9`, machine failure, or runtime crashes is outside the guarantee.
 
 ## Development
 

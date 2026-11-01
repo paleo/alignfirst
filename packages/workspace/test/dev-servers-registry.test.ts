@@ -50,18 +50,19 @@ function entry(
 describe("pruneDeadServers", () => {
   const isAlive = (pid: number) => pid % 2 === 0; // even = alive, odd = dead
 
-  it("prunes entries where every PID is dead", () => {
+  it("prunes all-dead groups and retains any-live groups in their original order", () => {
+    const mixed = entry("z", { main: 1, helper: 2 });
+    const live = entry("a", { main: 4 });
     const data = {
-      servers: [entry("a", { main: 1, helper: 3 }), entry("b", { main: 4 })],
+      servers: [
+        entry("dead-first", { main: 1, helper: 3 }),
+        mixed,
+        entry("dead-middle", { main: 5 }),
+        live,
+        entry("dead-last", { main: 7, helper: 9 }),
+      ],
     };
-    const out = pruneDeadServers(data, isAlive);
-    expect(out.servers).toHaveLength(1);
-    expect(out.servers[0].name).toBe("b");
-  });
-
-  it("keeps entries with any live PID", () => {
-    const data = { servers: [entry("a", { main: 1, helper: 2 })] };
-    expect(pruneDeadServers(data, isAlive).servers).toHaveLength(1);
+    expect(pruneDeadServers(data, isAlive).servers).toEqual([mixed, live]);
   });
 
   it("retains dead cleanup targets without counting them as live", () => {
@@ -71,14 +72,6 @@ describe("pruneDeadServers", () => {
     expect(pruneDeadServers(data, isAlive).servers).toEqual([dead, live]);
     expect(liveDevServers(data, isAlive)).toEqual([live]);
     expect(liveWorktrees(data, isAlive)).toEqual(new Set([live.worktree]));
-  });
-
-  it("preserves order", () => {
-    const data = {
-      servers: [entry("b", { main: 2 }), entry("a", { main: 4 }), entry("c", { main: 1 })],
-    };
-    const out = pruneDeadServers(data, isAlive).servers.map((e) => e.name);
-    expect(out).toEqual(["b", "a"]);
   });
 });
 

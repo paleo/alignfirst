@@ -42,9 +42,12 @@ function namesFile(command: string, workdir: string | undefined, fileName: strin
   return inDir && command.includes(base);
 }
 
-export function readsDeveloperInstructions(call: AgentToolCall, projectPath?: string): boolean {
+export function readsAssistantInstructions(call: AgentToolCall, projectPath?: string): boolean {
   const command = execCommandOf(call);
-  if (command === undefined || !/\balignfirst\s+developer-instructions\b/.test(command))
+  if (
+    command === undefined ||
+    !/\balignfirst\s+(?:assistant|developer)-instructions\b/.test(command)
+  )
     return false;
   if (projectPath === undefined) return true;
   const workdir = inputOf(call).workdir;

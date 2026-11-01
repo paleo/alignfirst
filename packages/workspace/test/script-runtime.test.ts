@@ -1,5 +1,4 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: Manifest expressions are literal fixtures.
-import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -34,7 +33,6 @@ let base: SetupContextBase & ScriptStorageContext;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "script-runtime-"));
-  execFileSync("git", ["init", "-q", root]);
   base = {
     name: "registered-suffix",
     currentWorktree: root,
@@ -424,7 +422,7 @@ describe("manifest adapters", () => {
     },
   );
 
-  it("awaits transforms twice, preserves local edits and rejects canonical aliases across file lists", async () => {
+  it("awaits transform content, preserves local edits and rejects canonical aliases across file lists", async () => {
     const manifest: WorkspaceManifest = {
       workspace: {
         gitignoredFiles: [

@@ -1,7 +1,6 @@
-# Upgrade from AlignFirst v1
+# Migrate Legacy `_docs/` Instructions
 
-This migration removes the v1 `_docs/` system while preserving project knowledge. Continue with the
-v3 upgrade reference after these steps.
+Remove the legacy `_docs/` system while preserving project knowledge. Continue with the CLI migration after these steps.
 
 > **Note**: Commands shown are Unix-style. Adapt to your OS if needed (e.g., PowerShell on Windows).
 
@@ -91,15 +90,15 @@ Check if any `.md` files remain in `_docs/`.
 
 ## Finish the Upgrade
 
-Continue with [alignfirst-upgrade-from-v3.md](alignfirst-upgrade-from-v3.md) for the CLI installation,
+Continue with [the CLI migration](alignfirst-upgrade-from-v3.md) for the CLI installation,
 project config, stub skills, and current commands.
 
 Summarize:
 
-- AlignFirst/Vibe Flow/AI Workflow v1 files removed
+- Legacy AlignFirst/Vibe Flow/AI Workflow files removed
 - Command files removed (list which agent directories were cleaned)
 - `_plans` renamed to `.plans`
 - `.gitignore` updated
 - `AGENTS.md` cleaned
 - Whether documentation was migrated to `docs/` via docmap, or no remaining docs were found
-- The scope and agents that received the v4 AlignFirst skills
+- The scope and agents that received the CLI-backed AlignFirst skills

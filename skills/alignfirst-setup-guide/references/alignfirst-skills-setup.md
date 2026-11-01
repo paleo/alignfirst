@@ -52,7 +52,7 @@ npx -y skills add https://github.com/paleo/alignfirst --global --yes \
   --skill alcatchupaad --skill alcatchupspec </dev/null
 ```
 
-For Pi (verified with `skills@1.7.2`, target `pi`):
+For Pi (target `pi`):
 
 ```sh
 npx -y skills add https://github.com/paleo/alignfirst --global --yes \
@@ -84,7 +84,7 @@ Restart the target agent after installation. Update the skills with `npx -y skil
 
 For a direct AlignFirst user who requests isolated plan/review delegation, offer `pi install npm:@alignfirst/pi-subagent` as a separate executable capability. The protocols retain their host-neutral fallback when no subagent tool exists. A skills-only request installs no extensions; the generic background package is unnecessary for synchronous delegation.
 
-Before replacing an existing local `subagent` extension, obtain approval and disable it explicitly with `pi config`; keep its profiles and do not load both tools. `/reload` cancels active subagents and background jobs. The package targets Pi 1.3.0 and requires Node.js 22.19 or later. It preserves normal Pi project-trust discovery without forced approval. See [the package README](https://github.com/paleo/alignfirst/blob/main/packages/pi-subagent/README.md).
+Before replacing an existing local `subagent` extension, obtain approval and disable it explicitly with `pi config`; keep its profiles and do not load both tools. `/reload` cancels active subagents and background jobs. Install the current stable package and inspect its declared Pi peer and Node runtime compatibility. It preserves normal Pi project-trust discovery without forced approval. See [the package README](https://github.com/paleo/alignfirst/blob/main/packages/pi-subagent/README.md).
 
 ## Configure the Project
 
@@ -138,13 +138,13 @@ Keep `plans.autoArchive: true`, including in local mode; the user can remove it 
 
 When `.local/` exists and is gitignored, include it explicitly in `workspace.sharedDirs`, preserving other entries. Verify it contains no tracked or staged files before sharing it. See [workspace setup](workspace-setup.md#required-baseline-and-defaults).
 
-For README and developer-guide content, follow [Project documentation defaults](../SKILL.md#project-documentation-defaults).
+For README and assistant-guide content, follow [Project documentation defaults](../SKILL.md#project-documentation-defaults).
 
 ### Local installation
 
-By default a project declares no `alignfirst` dependency. Add one only when the user asks for a pinned CLI, or when the repository gates installation on publication age or provenance and so cannot accept an on-demand fetch.
+By default a project declares no `alignfirst` dependency. Add one only when the user requests a local CLI or the repository's publication-age/provenance gates require a local dependency.
 
-Add the exact current `alignfirst` version as a dev dependency with the project package manager, and install dependencies before invoking it. The instruction file keeps `npx -y alignfirst context`, which then resolves the pinned binary. No npm script is required.
+Install current stable `alignfirst` as a dev dependency with the project package manager, honoring its dependency policy. Install dependencies before invoking it. Keep `npx -y alignfirst context` in the instruction file; it resolves the local binary. No npm script is required.
 
 The CLI includes the Docmap and workspace kernel dependencies. Apply installation gates to its complete dependency tree.
 

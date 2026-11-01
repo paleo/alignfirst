@@ -14,7 +14,7 @@ read_when:
 [09-dev-server-gateway.md](09-dev-server-gateway.md) also runs before this runbook.
 <!-- DEV_SERVER_GATEWAY_SECTION -->
 
-> **Note:** Commands shown are for Ubuntu 24.04. Adapt package, firewall, filesystem, and service-manager commands for another Linux server when needed.
+> **Note:** Commands shown are for Ubuntu. Adapt package, firewall, filesystem, and service-manager commands for another Linux server when needed.
 
 `{{SERVICE_USER}}` has no sudo, so filesystem permissions are a guarantee, not an instruction. Two mechanisms: `chattr +i` (the owner can neither modify nor delete the file; only root removes the flag), and ownership handoff to `root` or `{{SERVER_ADMIN_USER}}` with the write bits stripped. Each locked directory root that sits in a service-writable parent is flagged as well; otherwise the tree could be renamed and recreated writable.
 
@@ -114,7 +114,7 @@ sudo /usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-policy.mjs harden \
 
 For Claude/Codex, this protects inventoried instructions and skills; it does not certify every native configuration surface. For Pi, it protects settings/models/MCP/keybindings declarations, saved trust, alternate context names, system/appended prompts, extensions, skills, prompts/themes, native `bin`, `agents`, npm/git package trees, and declared local resource roots. Existing executables retain executable modes. Install declared npm packages into the native managed npm directory before hardening; legacy global fallback, escaping manifest resources and discovery globs are refused.
 
-The helper reserves absent context alternatives, including `AGENTS.override.md`, as immutable directory sentinels. The pinned context loader skips them. Empty `SYSTEM.md` and `APPEND_SYSTEM.md` preserve the normal prompt; an empty override instruction file would mask other instructions and is not equivalent. Do not replace sentinels manually.
+The helper reserves absent context alternatives, including `AGENTS.override.md`, as immutable directory sentinels. Pi's context loader skips them. Empty `SYSTEM.md` and `APPEND_SYSTEM.md` preserve the normal prompt; an empty override instruction file would mask other instructions and is not equivalent. Do not replace sentinels manually.
 
 The helper makes native roots and their ancestors up to the service home root-owned, service-group writable and sticky (`1770`). Root-owned protected children cannot be renamed through these anchors, while the service account can create ordinary files, replace its `auth.json`, and create adjacent locks. It removes immutable flags from these writable anchors. Never recursively freeze the entire Pi directory or home, recursively hand ownership back to the service user, or apply a blanket file mode to executable package trees. Managed anchors and non-package resources reject symlinks and hardlinks. Package-tree links are allowed only when every resolved target remains inside the same package tree; escapes, cycles and dangling links fail closed. Padded native paths, `file:` URLs, unsafe overlaps and mutable-state declarations are rejected before privileged changes.
 
@@ -245,7 +245,7 @@ sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm ls -g --d
 # Expected: the reviewed deployment inventory, including any explicit quota CLI
 sudo -H -u {{SERVICE_USER}} bash -lc '
 PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell \
-DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> \
+DEFAULT_NODE="$(fnm default)" PINNED_NODE=<project-node-version> \
 CODING_AGENT=<claude|codex|pi> \
   /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh
 '

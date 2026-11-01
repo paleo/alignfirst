@@ -136,7 +136,7 @@ export async function runLightweightApprovalCase(
     const worktree=selected.path;
     const config=JSON.parse(cp.execFileSync('alignfirst',['config','--json'],{cwd:worktree,encoding:'utf8'}));
     if(config.workspace.hasDevServer || config.config.workspace || config.config.devServer) throw Error('lightweight recipe was retained');
-    if(config.config.conventions?.ticketIdPattern!=='^ABC-\\\\d+$' || config.config.developerInstructions!=='DEVELOPERS.md') throw Error('lightweight configuration lost');
+    if(config.config.conventions?.ticketIdPattern!=='^ABC-\\\\d+$' || config.config.assistantInstructionsFile!=='DEVELOPERS.md') throw Error('lightweight configuration lost');
     if(selected.recipe!=='defaults' || selected.preparation!=='ready') throw Error('not protocol-ready defaults');
     const plans=config.locations['.plans'].path;
     const registry=JSON.parse(fs.readFileSync(process.env.HOME+'/.alignfirst/companions/registry.json','utf8'));

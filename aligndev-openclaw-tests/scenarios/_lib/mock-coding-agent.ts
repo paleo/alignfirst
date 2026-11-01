@@ -154,7 +154,7 @@ const CODEX_MODEL_CATALOG = {
     { slug: "gpt-6-astra" },
     { slug: "gpt-6.1-sol" },
     { slug: "gpt-6-sol" },
-    { slug: "gpt-5.6-terra" },
+    { slug: "gpt-6.1-terra" },
     { slug: "gpt-6-luna" },
   ],
 };

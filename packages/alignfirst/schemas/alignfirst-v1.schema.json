@@ -25,6 +25,14 @@
         }
       }
     },
+    "assistantInstructionsFile": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "developerInstructions": {
+      "deprecated": true,
+      "description": "Deprecated alias for assistantInstructionsFile. The new name takes precedence."
+    },
     "conventions": {
       "type": "object",
       "additionalProperties": false,
@@ -61,10 +69,6 @@
           }
         }
       }
-    },
-    "developerInstructions": {
-      "type": "string",
-      "pattern": "\\S"
     },
     "workspace": {
       "type": "object",
@@ -155,6 +159,19 @@
         "summary": {
           "$ref": "#/definitions/text"
         }
+      }
+    }
+  },
+  "if": {
+    "not": {
+      "required": ["assistantInstructionsFile"]
+    }
+  },
+  "then": {
+    "properties": {
+      "developerInstructions": {
+        "type": "string",
+        "pattern": "\\S"
       }
     }
   },

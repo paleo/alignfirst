@@ -4,8 +4,7 @@ import type {
 } from "openclaw/plugin-sdk/plugin-entry";
 import { describe, expect, it, vi } from "vitest";
 import { registerThreadHandoff } from "../src/thread-handoff/index.js";
-import { createHandoffStore } from "../src/thread-handoff/state.js";
-import { handoff, temporaryStateDir } from "./helpers.js";
+import { createTestHandoffStore, handoff, ownStateResource, temporaryStateDir } from "./helpers.js";
 
 const SOURCE_CONTEXT: OpenClawPluginToolContext = {
   agentId: "main",
@@ -51,14 +50,14 @@ describe("thread handoff across two registrations in one process", () => {
       { sessionKey: SOURCE_CONTEXT.sessionKey, sessionId: SOURCE_CONTEXT.sessionId },
     );
 
-    const store = createHandoffStore(stateDir);
+    const store = createTestHandoffStore(stateDir);
     expect(store.listReceipts(Date.now())).toMatchObject([{ threadId: "100.200" }]);
     store.close();
   });
 
   it("claims with the run ID remembered by a hook of the other registration", async () => {
     const stateDir = temporaryStateDir();
-    const store = createHandoffStore(stateDir);
+    const store = createTestHandoffStore(stateDir);
     store.insertHandoff(handoff());
     const toolOwner = register(stateDir);
     const hookOwner = register(stateDir);
@@ -91,11 +90,18 @@ interface ToolFactoryResult {
 function register(stateDir: string) {
   let toolFactory: ((context: OpenClawPluginToolContext) => ToolFactoryResult) | undefined;
   const hooks = new Map<string, HookHandler>();
+  let service: { stop(): void | Promise<void> } | undefined;
+  ownStateResource(stateDir, async () => {
+    await service?.stop();
+  });
   const api = {
     pluginConfig: { channelSurfaces: { slack: "slack" } },
     runtime: { state: { resolveStateDir: () => stateDir } },
     logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-    registrationMode: "discovery",
+    registrationMode: "full",
+    registerService: (registered: { stop(): void | Promise<void> }) => {
+      service = registered;
+    },
     registerTool: (factory: (context: OpenClawPluginToolContext) => ToolFactoryResult) => {
       toolFactory = factory;
     },

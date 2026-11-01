@@ -5,7 +5,7 @@ import type { PortRange } from "./markers.js";
 export type ItemName =
   | "alignfirst"
   | ".alignfirst-instructions"
-  | "developerInstructions"
+  | "assistantInstructionsFile"
   | "workspaceRuntime"
   | "docs"
   | ".plans"
@@ -24,8 +24,11 @@ export interface ProjectReport {
 }
 
 export type SelectionOrigin = "item" | "defaultLocation" | "builtin";
-export type ProjectLocations = Record<Exclude<ItemName, "developerInstructions">, ItemLocation> & {
-  developerInstructions: ItemLocation | null;
+export type ProjectLocations = Record<
+  Exclude<ItemName, "assistantInstructionsFile">,
+  ItemLocation
+> & {
+  assistantInstructionsFile: ItemLocation | null;
 };
 
 export interface AligndevProjectSettings {
@@ -45,7 +48,7 @@ export interface WorkspaceConfigReport {
 
 export interface ProjectConfigView {
   conventions?: { ticketIdPattern?: string };
-  developerInstructions?: string;
+  assistantInstructionsFile?: string;
   plans?: { repositoryFolder?: string };
 }
 
@@ -111,7 +114,7 @@ function isOutdatedReport(value: unknown): boolean {
         isRecord(value.locations) &&
         "alignfirst" in value.locations &&
         ".alignfirst-instructions" in value.locations &&
-        "developerInstructions" in value.locations &&
+        "assistantInstructionsFile" in value.locations &&
         "workspaceRuntime" in value.locations &&
         isRecord(value.workspace) &&
         "registryDir" in value.workspace &&
@@ -123,7 +126,7 @@ function isOutdatedReport(value: unknown): boolean {
 function outdatedAlignfirst(path: string): string {
   return (
     `The alignfirst CLI used in ${path} is too old: aligndev requires the workspace-aware ` +
-    "alignfirst config --json contract (merged configuration, developerInstructions, workspaceRuntime and selectionOrigins). Upgrade alignfirst."
+    "alignfirst config --json contract (merged configuration, assistantInstructionsFile, workspaceRuntime and selectionOrigins). Upgrade alignfirst."
   );
 }
 
@@ -195,15 +198,15 @@ function parseConfig(value: unknown, path: string): ProjectConfigView | null {
     throw invalidReport(path);
   if (value.conventions !== undefined && !isRecord(value.conventions)) throw invalidReport(path);
   const ticketIdPattern = value.conventions?.ticketIdPattern;
-  const developerInstructions = value.developerInstructions;
-  if (developerInstructions !== undefined && typeof developerInstructions !== "string")
+  const assistantInstructionsFile = value.assistantInstructionsFile;
+  if (assistantInstructionsFile !== undefined && typeof assistantInstructionsFile !== "string")
     throw invalidReport(path);
   const plans = parsePlans(value.plans, path);
   if (ticketIdPattern !== undefined && typeof ticketIdPattern !== "string")
     throw invalidReport(path);
   return {
     ...(ticketIdPattern === undefined ? {} : { conventions: { ticketIdPattern } }),
-    ...(developerInstructions === undefined ? {} : { developerInstructions }),
+    ...(assistantInstructionsFile === undefined ? {} : { assistantInstructionsFile }),
     ...(plans === undefined ? {} : { plans }),
   };
 }
@@ -246,8 +249,8 @@ function parseLocations(value: unknown, path: string): ProjectLocations {
   return {
     alignfirst: location("alignfirst"),
     ".alignfirst-instructions": location(".alignfirst-instructions"),
-    developerInstructions:
-      value.developerInstructions === null ? null : location("developerInstructions"),
+    assistantInstructionsFile:
+      value.assistantInstructionsFile === null ? null : location("assistantInstructionsFile"),
     workspaceRuntime: location("workspaceRuntime"),
     docs: location("docs"),
     ".plans": location(".plans"),
@@ -272,7 +275,7 @@ function parseItemRecord<T>(
   return {
     alignfirst: parse(value.alignfirst),
     ".alignfirst-instructions": parse(value[".alignfirst-instructions"]),
-    developerInstructions: parse(value.developerInstructions),
+    assistantInstructionsFile: parse(value.assistantInstructionsFile),
     workspaceRuntime: parse(value.workspaceRuntime),
     docs: parse(value.docs),
     ".plans": parse(value[".plans"]),
