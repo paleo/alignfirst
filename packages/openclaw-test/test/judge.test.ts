@@ -29,16 +29,25 @@ afterEach(() => {
 });
 
 describe("judge SDK compatibility", () => {
-  it("uses default Haiku and accounts for text and usage", async () => {
+  it("uses default Haiku with required verdict reasoning and accounts for text and usage", async () => {
     vi.stubEnv("OPENCLAW_TEST_JUDGE_MODEL", undefined);
     respond({
-      choices: [{ message: { content: "first" } }, { message: { content: " second" } }],
+      choices: [
+        { message: { content: '<result-json>{"verdict":"pass",' } },
+        { message: { content: '"reasoning":"Meets the rubric"}</result-json>' } },
+      ],
       usage: { prompt_tokens: 17, completion_tokens: 4 },
     });
     const judge = await freshJudge();
-    const result = await judge.judgeLLMRaw("Evaluate this", { maxTokens: 256 });
+    const result = await judge.judgeLLM({
+      message: "Evaluate this",
+      rubric: "Meets the requirement",
+      maxTokens: 256,
+    });
     expect(result).toEqual({
-      raw: "first second",
+      verdict: "pass",
+      reasoning: "Meets the rubric",
+      raw: '<result-json>{"verdict":"pass","reasoning":"Meets the rubric"}</result-json>',
       usage: {
         model: "openrouter/anthropic/claude-haiku-5.5",
         inputTokens: 17,
@@ -52,7 +61,7 @@ describe("judge SDK compatibility", () => {
       model: "anthropic/claude-haiku-5.5",
       max_tokens: 256,
       reasoning_effort: "low",
-      messages: [{ role: "user", content: "Evaluate this" }],
+      messages: [{ role: "user", content: expect.stringMatching(/\breasoning:\s*string\s*;/) }],
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

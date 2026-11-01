@@ -101,20 +101,9 @@ function main() {
     matches(command, ["up", "-d", "--force-recreate", "--wait", "bus", "gateway"]) ||
     matches(command, ["up", "-d", "--wait", "--remove-orphans", "bus", "gateway"]);
   const down = matches(command, ["down"]);
-  const runFlags = [
-    "--scenario",
-    "--channel",
-    "--model-id",
-    "--model-ref",
-    "--iteration-index",
-    "--iteration-width",
-    "--base-stamp",
-    "--results-dir",
-  ];
   const run =
-    command.length === 4 + runFlags.length * 2 &&
     matches(command.slice(0, 4), ["run", "--rm", "--use-aliases", "runner"]) &&
-    runFlags.every((flag, index) => command[4 + index * 2] === flag);
+    validRunOptions(command.slice(4));
   if (!up && !down && !run) unexpected();
   if (up) {
     writeFileSync(
@@ -150,6 +139,32 @@ function matches(actual, expected) {
   return (
     actual.length === expected.length && actual.every((value, index) => value === expected[index])
   );
+}
+
+function validRunOptions(options) {
+  const remaining = new Set([
+    "--scenario",
+    "--channel",
+    "--model-id",
+    "--model-ref",
+    "--iteration-index",
+    "--iteration-width",
+    "--base-stamp",
+    "--results-dir",
+  ]);
+  if (options.length !== remaining.size * 2) return false;
+  for (let i = 0; i < options.length; i += 2) {
+    const flag = options[i];
+    const value = options[i + 1];
+    if (!remaining.delete(flag) || value === undefined || value === "" || value.startsWith("--"))
+      return false;
+    if (flag === "--iteration-index" || flag === "--iteration-width") {
+      const min = flag === "--iteration-index" ? 1 : 0;
+      const number = Number(value);
+      if (!/^-?\d+$/.test(value) || !Number.isInteger(number) || number < min) return false;
+    }
+  }
+  return remaining.size === 0;
 }
 
 function containers() {

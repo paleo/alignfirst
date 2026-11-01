@@ -98,7 +98,7 @@ Here is the return type we expect:
 
 <return-type>
 interface JudgeResult {
-  reasoning?: string; // concise, <=20 words
+  reasoning: string; // concise, <=20 words
   verdict: "pass" | "fail";
 }
 </return-type>
