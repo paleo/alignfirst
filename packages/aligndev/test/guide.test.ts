@@ -461,7 +461,7 @@ describe("aligndev guide playbook", () => {
     }
   });
 
-  it("uses the explicit developer-instructions command on every active assistant route", async () => {
+  it("uses the explicit assistant-instructions command on every active assistant route", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, OPENCLAW_CONFIG);
     for (const topic of PLAYBOOK_TOPICS.thread) {
@@ -476,7 +476,7 @@ describe("aligndev guide playbook", () => {
       "project-lifecycle",
     ]) {
       const result = await runGuide(fixture, ["--channel", "slack", topic]);
-      expect(result.stdout, topic).toContain("`alignfirst developer-instructions`");
+      expect(result.stdout, topic).toContain("`alignfirst assistant-instructions`");
     }
     const session = await runGuide(fixture, ["--channel", "slack", "working-session"]);
     expect(session.stdout).toContain("Write `{TICKET_DIR}A1-request.md`");
@@ -495,7 +495,7 @@ describe("aligndev guide playbook", () => {
     const lifecycle = (await runGuide(fixture, ["--channel", "slack", "project-lifecycle"])).stdout;
     expect(lifecycle).toContain("The workspace manifest is optional");
     expect(lifecycle).toContain(
-      "The project is prepared when the explicitly configured `locations.developerInstructions` exists",
+      "The project is prepared when the explicitly configured `locations.assistantInstructionsFile` exists",
     );
     expect(lifecycle).toContain("Wait for explicit confirmation of those exact paths");
     expect(lifecycle).toContain("Stop immediately if any removal fails");
@@ -967,8 +967,8 @@ describe("work-files and unified workspace runbooks", () => {
         preparation.indexOf(`${forms.alignfirst} companion register`),
       );
       const working = guides["working-session"];
-      expect(working).toContain("nullable `locations.developerInstructions`");
-      expect(working).toContain("in the resolved configured developer-instructions file");
+      expect(working).toContain("nullable `locations.assistantInstructionsFile`");
+      expect(working).toContain("in the resolved configured assistant-instructions file");
       expect(working).toContain("obtain approval before creating either");
       expect(working).toContain("do not copy entire documents between them");
       expect(working).not.toContain("created at the repository root");
@@ -1164,7 +1164,7 @@ describe("codingAgent guides", () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, CODING_AGENT_CONFIG);
     const main = makeRepository(fixture.root, "project", {
-      developerInstructions: "handbook.md",
+      assistantInstructionsFile: "handbook.md",
     });
     writeFileSync(join(main, "handbook.md"), "Main guide\n");
     const linked = join(fixture.root, "linked");
@@ -1180,9 +1180,9 @@ describe("codingAgent guides", () => {
         expect(result.code, `${topic}: ${result.stderr}`).toBe(0);
         expect(result.stdout).not.toMatch(/DEVELOPERS_PATH|{{|Main guide/);
         if (["working-session", "consultation", "project-workspace-setup"].includes(topic)) {
-          expect(result.stdout).toContain("`alignfirst developer-instructions`");
+          expect(result.stdout).toContain("`alignfirst assistant-instructions`");
           expect(result.stdout).toContain("selected work");
-          expect(result.stdout).toContain("locations.developerInstructions");
+          expect(result.stdout).toContain("locations.assistantInstructionsFile");
         }
       }
     }

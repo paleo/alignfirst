@@ -22,6 +22,7 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
+import { normalizeAssistantInstructionsFile } from "./assistant-instructions-setting.js";
 import { CliError } from "./cli-error.js";
 import type { CommandContext } from "./context.js";
 import { errorMessage } from "./errors.js";
@@ -43,7 +44,7 @@ import type { ResolvedProjectConfig } from "./project-config-types.js";
 export const ITEM_NAMES = [
   "alignfirst",
   ".alignfirst-instructions",
-  "developerInstructions",
+  "assistantInstructionsFile",
   "workspaceRuntime",
   "docs",
   ".plans",
@@ -67,20 +68,19 @@ const registryProjectShape = object<RegistryProject>(
     aligndev: optional(
       object<AligndevProjectSettings>({ profile: profileValue }, warnUnknownRegistrySetting),
     ),
-    items: optional(
-      object<RegistryItems>(
-        {
-          alignfirst: optional(itemSetting),
-          ".alignfirst-instructions": optional(itemSetting),
-          developerInstructions: optional(itemSetting),
-          workspaceRuntime: optional(itemSetting),
-          docs: optional(itemSetting),
-          ".plans": optional(itemSetting),
-          _aligndev: optional(literal("companion", "auto")),
-        },
-        warnUnknownRegistrySetting,
-      ),
-    ),
+    items: optional(registryItemsValue),
+  },
+  warnUnknownRegistrySetting,
+);
+const registryItemsShape = object<RegistryItems>(
+  {
+    alignfirst: optional(itemSetting),
+    ".alignfirst-instructions": optional(itemSetting),
+    assistantInstructionsFile: optional(itemSetting),
+    workspaceRuntime: optional(itemSetting),
+    docs: optional(itemSetting),
+    ".plans": optional(itemSetting),
+    _aligndev: optional(literal("companion", "auto")),
   },
   warnUnknownRegistrySetting,
 );
@@ -101,8 +101,11 @@ export interface ProjectLayout {
 }
 
 export type SelectionOrigin = "item" | "defaultLocation" | "builtin";
-export type ProjectLocations = Record<Exclude<ItemName, "developerInstructions">, ItemLocation> & {
-  developerInstructions: ItemLocation | null;
+export type ProjectLocations = Record<
+  Exclude<ItemName, "assistantInstructionsFile">,
+  ItemLocation
+> & {
+  assistantInstructionsFile: ItemLocation | null;
 };
 
 export interface AligndevProjectSettings {
@@ -133,7 +136,7 @@ export interface ItemLocation {
 
 type FileItemName = Exclude<
   ItemName,
-  "alignfirst" | "_aligndev" | "workspaceRuntime" | "developerInstructions"
+  "alignfirst" | "_aligndev" | "workspaceRuntime" | "assistantInstructionsFile"
 >;
 
 interface RegistryFile {
@@ -157,7 +160,7 @@ interface RemovalClaim {
 interface RegistryItems {
   alignfirst?: ItemSetting;
   ".alignfirst-instructions"?: ItemSetting;
-  developerInstructions?: ItemSetting;
+  assistantInstructionsFile?: ItemSetting;
   workspaceRuntime?: ItemSetting;
   docs?: ItemSetting;
   ".plans"?: ItemSetting;
@@ -225,7 +228,7 @@ export function resolveProjectLayout(cwd: string, home: string): ProjectLayout {
       root,
       companion,
       alignfirst,
-      projectConfig?.config.developerInstructions,
+      projectConfig?.config.assistantInstructionsFile,
       storage,
     ),
   };
@@ -275,6 +278,14 @@ function registryProjectValue(value: unknown, path: string, warningPath = path):
   if (project.dir === undefined && project.aligndev === undefined)
     throw shapeError(path, 'define "dir" or "aligndev"');
   return project;
+}
+
+function registryItemsValue(value: unknown, path: string, warningPath = path): RegistryItems {
+  return registryItemsShape(
+    normalizeAssistantInstructionsFile(value, `companion registry ${warningPath}`),
+    path,
+    warningPath,
+  );
 }
 
 function profileValue(value: unknown, path: string): string {
@@ -381,7 +392,7 @@ function effectiveItems({ items = {}, defaultLocation = "auto" }: RegistryProjec
   return {
     alignfirst: items.alignfirst ?? defaultLocation,
     ".alignfirst-instructions": items[".alignfirst-instructions"] ?? defaultLocation,
-    developerInstructions: items.developerInstructions ?? defaultLocation,
+    assistantInstructionsFile: items.assistantInstructionsFile ?? defaultLocation,
     workspaceRuntime: items.workspaceRuntime ?? defaultLocation,
     docs: items.docs ?? defaultLocation,
     ".plans": items[".plans"] ?? defaultLocation,
@@ -409,7 +420,7 @@ function resolveLocations(
   return {
     alignfirst,
     ".alignfirst-instructions": locate(".alignfirst-instructions"),
-    developerInstructions: locateInstructions(cwd, companion, instructions),
+    assistantInstructionsFile: locateInstructions(cwd, companion, instructions),
     workspaceRuntime: {
       path: storage.runtimeDir,
       in: storage.in,
@@ -469,8 +480,8 @@ function locateInstructions(
 ): ItemLocation | null {
   if (name === undefined) return null;
   if (name.trim().length === 0 || name.includes("\u0000") || isAbsolute(name))
-    throw new CliError("developerInstructions must be a nonblank relative file path.");
-  const setting = companion?.items.developerInstructions;
+    throw new CliError("assistantInstructionsFile must be a nonblank relative file path.");
+  const setting = companion?.items.assistantInstructionsFile;
   const useCompanion =
     companion !== null &&
     setting !== "project" &&
@@ -494,7 +505,7 @@ function instructionCopy(
     !isSameOrInside(path, resolve(root)) ||
     !isSameOrInside(canonicalInstructionPath(path), canonicalPath(root))
   )
-    throw new CliError("developerInstructions must remain within its selected root.");
+    throw new CliError("assistantInstructionsFile must remain within its selected root.");
   return { path, in: placement, exists: pathExists(path) };
 }
 
@@ -502,7 +513,7 @@ function canonicalInstructionPath(path: string, links = new Set<string>()): stri
   const entry = lstatSync(path, { throwIfNoEntry: false });
   if (entry?.isSymbolicLink()) {
     if (links.has(path))
-      throw new CliError("developerInstructions contains a symbolic link cycle.");
+      throw new CliError("assistantInstructionsFile contains a symbolic link cycle.");
     links.add(path);
     return canonicalInstructionPath(resolve(dirname(path), readlinkSync(path)), links);
   }

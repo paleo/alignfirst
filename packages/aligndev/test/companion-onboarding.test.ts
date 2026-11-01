@@ -80,7 +80,7 @@ describe("explicit companion-only onboarding", () => {
       expect(route).toContain("every item to write resolve inside `companion.dir`");
       expect(route).toContain("Missing `locations.alignfirst` must have a companion destination");
       expect(route).toContain(
-        "`locations.developerInstructions` is null until a reference is configured",
+        "`locations.assistantInstructionsFile` is null until a reference is configured",
       );
       expect(route).toContain("stop and resolve that selection with the user");
       expect(route).toContain("without copying them");
@@ -161,10 +161,10 @@ describe("explicit companion-only onboarding", () => {
       const before = readReport(fixture, repo);
       expect(before.companion === null).toBe(state !== "registered");
       expect(before.config).toBeNull();
-      expect(before.locations.developerInstructions).toBeNull();
-      const conventionsOnly = runFirst(fixture, repo, ["developer-instructions"]);
+      expect(before.locations.assistantInstructionsFile).toBeNull();
+      const conventionsOnly = runFirst(fixture, repo, ["assistant-instructions"]);
       expect(conventionsOnly).toContain("# Project Conventions");
-      expect(conventionsOnly).not.toContain("# Developer Instructions");
+      expect(conventionsOnly).not.toContain("# Assistant Instructions");
       expect(before.locations[".plans"].path).toBe(join(repo, ".plans"));
       expect(execGit(repo, "ls-files", "--", ".plans")).toBe("");
       expect(execGit(repo, "check-ignore", ".plans/side-7/A1-request.md")).toBe(
@@ -220,24 +220,24 @@ describe("explicit companion-only onboarding", () => {
       }
       writeFileSync(
         selected.locations.alignfirst.path,
-        '{"schemaVersion":1,"developerInstructions":"handbook/workflow.md"}\n',
+        '{"schemaVersion":1,"assistantInstructionsFile":"handbook/workflow.md"}\n',
       );
-      const instructions = readReport(fixture, repo).locations.developerInstructions;
-      if (instructions === null) throw new Error("Missing configured developer instructions");
+      const instructions = readReport(fixture, repo).locations.assistantInstructionsFile;
+      if (instructions === null) throw new Error("Missing configured assistant instructions");
       expect(instructions).toMatchObject({
         in: "companion",
         path: join(dir, "handbook", "workflow.md"),
         exists: false,
       });
       mkdirSync(join(dir, "handbook"));
-      writeFileSync(instructions.path, "# Developer guide\n\nSee [details](./details.md).\n");
-      const developerInstructions = runFirst(fixture, repo, ["developer-instructions"]);
-      expect(developerInstructions).toContain(
-        `Source: ${instructions.path}\n\n# Developer guide\n\nSee [details](./details.md).\n`,
+      writeFileSync(instructions.path, "# Assistant guide\n\nSee [details](./details.md).\n");
+      const assistantInstructions = runFirst(fixture, repo, ["assistant-instructions"]);
+      expect(assistantInstructions).toContain(
+        `Source: ${instructions.path}\n\n# Assistant guide\n\nSee [details](./details.md).\n`,
       );
       const prepared = readReport(fixture, repo);
       expect(prepared.source).toBe("companion");
-      expect(prepared.locations.developerInstructions?.exists).toBe(true);
+      expect(prepared.locations.assistantInstructionsFile?.exists).toBe(true);
       expect(prepared.aligndev).toEqual(state === "missing" ? null : { profile: "kept-profile" });
       const finalRegistry: Registry = JSON.parse(readFileSync(registryPath, "utf8"));
       expect(finalRegistry).toEqual(registeredRegistry);

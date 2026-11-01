@@ -69,7 +69,7 @@ describe("command forms", () => {
       { platform: "codingAgent" },
       forms,
     );
-    expect(working).toContain(`\`${forms.alignfirst} developer-instructions\``);
+    expect(working).toContain(`\`${forms.alignfirst} assistant-instructions\``);
     expect(working).toContain(`\`${forms.alignfirst} config --json\``);
   });
 

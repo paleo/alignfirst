@@ -161,7 +161,7 @@ describe("project layout", () => {
           items: {
             alignfirst: "project",
             ".alignfirst-instructions": "auto",
-            developerInstructions: "companion",
+            assistantInstructionsFile: "companion",
             workspaceRuntime: "auto",
             docs: "project",
             ".plans": "project",
@@ -174,6 +174,47 @@ describe("project layout", () => {
     expect(resolveProjectLayout(project, home).companion).not.toBeNull();
     expect(warn).not.toHaveBeenCalled();
   });
+
+  it("warns when resolving the legacy registry item even when the canonical item wins", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { home, project } = makeHome();
+    writeRegistry(home, {
+      projects: {
+        "~/projects/app": {
+          dir: "app",
+          items: { developerInstructions: "companion", assistantInstructionsFile: "project" },
+        },
+      },
+    });
+    const layout = resolveProjectLayout(project, home);
+    expect(layout.companion?.items.assistantInstructionsFile).toBe("project");
+    expect(layout.companion?.items).not.toHaveProperty("developerInstructions");
+    const warnings = warn.mock.calls.flat().join("\n");
+    expect(warnings).toContain("developerInstructions");
+    expect(warnings).toContain("assistantInstructionsFile");
+  });
+
+  it.each([null, false, "", "invalid"])(
+    "rejects an invalid canonical registry selection without using the legacy item %#",
+    (assistantInstructionsFile) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const { home, project } = makeHome();
+      writeRegistry(home, {
+        projects: {
+          "~/projects/app": {
+            dir: "app",
+            items: { assistantInstructionsFile, developerInstructions: "companion" },
+          },
+        },
+      });
+      const before = readFileSync(registryPath(home), "utf8");
+      expect(() => resolveProjectLayout(project, home)).toThrow("assistantInstructionsFile");
+      const warnings = warn.mock.calls.flat().join("\n");
+      expect(warnings).toContain("developerInstructions");
+      expect(warnings).toContain("assistantInstructionsFile");
+      expect(readFileSync(registryPath(home), "utf8")).toBe(before);
+    },
+  );
 
   it("still validates known values and semantics when unknown settings are present", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -273,7 +314,7 @@ describe("project layout", () => {
       items: {
         alignfirst: "auto",
         ".alignfirst-instructions": "auto",
-        developerInstructions: "auto",
+        assistantInstructionsFile: "auto",
         workspaceRuntime: "auto",
         docs: "auto",
         ".plans": "auto",
@@ -376,7 +417,7 @@ describe("project layout", () => {
           items: {
             alignfirst: "companion",
             ".alignfirst-instructions": "project",
-            developerInstructions: "auto",
+            assistantInstructionsFile: "auto",
           },
         },
       },
@@ -385,7 +426,7 @@ describe("project layout", () => {
     mkdirSync(join(companion, ".alignfirst-instructions"));
     writeFileSync(
       join(companion, "alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, developerInstructions: "DEVELOPERS.md" }),
+      JSON.stringify({ schemaVersion: 1, assistantInstructionsFile: "DEVELOPERS.md" }),
     );
     writeFileSync(join(companion, "DEVELOPERS.md"), "companion\n");
     writeFileSync(join(project, "DEVELOPERS.md"), "project\n");
@@ -401,7 +442,7 @@ describe("project layout", () => {
       in: "project",
       exists: false,
     });
-    expect(locations.developerInstructions).toEqual({
+    expect(locations.assistantInstructionsFile).toEqual({
       path: join(companion, "DEVELOPERS.md"),
       in: "companion",
       exists: true,
@@ -504,7 +545,7 @@ describe("project layout", () => {
     expect(automatic.selectionOrigins.workspaceRuntime).toBe("item");
     mkdirSync(join(companion, ".local-wt"), { recursive: true });
     expect(resolveProjectLayout(project, home).locations.workspaceRuntime.in).toBe("project");
-    expect(automatic.locations.developerInstructions).toBeNull();
+    expect(automatic.locations.assistantInstructionsFile).toBeNull();
     writeRegistry(home, {
       projects: {
         "~/projects/app": { defaultLocation: "companion", aligndev: { profile: "work" } },
@@ -518,19 +559,19 @@ describe("project layout", () => {
     const companion = join(home, ".alignfirst", "companions", "app");
     mkdirSync(companion, { recursive: true });
     const config = join(project, "alignfirst.json");
-    const set = (developerInstructions: string) =>
-      writeFileSync(config, JSON.stringify({ schemaVersion: 1, developerInstructions }));
+    const set = (assistantInstructionsFile: string) =>
+      writeFileSync(config, JSON.stringify({ schemaVersion: 1, assistantInstructionsFile }));
     writeFileSync(join(project, "DEVELOPERS.md"), "not discovered");
-    expect(resolveProjectLayout(project, home).locations.developerInstructions).toBeNull();
+    expect(resolveProjectLayout(project, home).locations.assistantInstructionsFile).toBeNull();
     set("guides/development.md");
-    expect(resolveProjectLayout(project, home).locations.developerInstructions).toEqual({
+    expect(resolveProjectLayout(project, home).locations.assistantInstructionsFile).toEqual({
       path: join(project, "guides/development.md"),
       in: "project",
       exists: false,
     });
     for (const path of ["../outside.md", join(root, "absolute.md"), "  "]) {
       set(path);
-      expect(() => resolveProjectLayout(project, home)).toThrow("developerInstructions");
+      expect(() => resolveProjectLayout(project, home)).toThrow("assistantInstructionsFile");
     }
     symlinkSync(root, join(project, "escape"));
     symlinkSync(join(root, "missing-directory"), join(project, "broken-escape"));
@@ -543,11 +584,11 @@ describe("project layout", () => {
       projects: {
         "~/projects/app": {
           dir: "app",
-          items: { alignfirst: "project", developerInstructions: "companion" },
+          items: { alignfirst: "project", assistantInstructionsFile: "companion" },
         },
       },
     });
-    expect(resolveProjectLayout(project, home).locations.developerInstructions).toEqual({
+    expect(resolveProjectLayout(project, home).locations.assistantInstructionsFile).toEqual({
       path: join(companion, "escape/guide.md"),
       in: "companion",
       exists: false,

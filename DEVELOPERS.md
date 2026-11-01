@@ -1,4 +1,4 @@
-# Developer Guide
+# Developer Reference
 
 The everyday workflow of this repository. Run `npm run docmap` for the design documentation.
 
@@ -8,7 +8,7 @@ An npm-workspaces monorepo of TypeScript packages (ESM only, `strict: true`), pu
 
 ## Workspaces
 
-A workspace is a Git worktree plus its setup. `alignfirst.json` holds nested conventions, the explicit `developerInstructions: "DEVELOPERS.md"` reference and the recipe. Setup shares effective plans, usable untracked `.local` and harness artifacts, optionally seeds editor/harness settings, then finalizes with named `npm install` and `npm run build` steps. Runtime placement follows the companion registry; this checkout's retained state remains pending the upgrade below. This repository has no dev server or `dev` script.
+A workspace is a Git worktree plus its setup. `alignfirst.json` holds nested conventions, the explicit `assistantInstructionsFile: "DEVELOPERS.md"` reference and the recipe. Setup shares effective plans, usable untracked `.local` and harness artifacts, optionally seeds editor/harness settings, then finalizes with named `npm install` and `npm run build` steps. Runtime placement follows the companion registry; this checkout's retained state remains pending the upgrade below. This repository has no dev server or `dev` script.
 
 Prepare ignored effective plans separately before workspace setup. From a fresh clone or linked worktree, run the published CLI without requiring local dependencies or build output:
 

@@ -127,7 +127,7 @@ export function writeProjectConfig(
     portRange?: { first: number; last: number };
     ticketIdPattern?: string;
     git?: object;
-    developerInstructions?: string;
+    assistantInstructionsFile?: string;
   },
 ): void {
   const { portRange, ticketIdPattern, git, ...config } = settings;
@@ -149,7 +149,7 @@ export function writeProjectConfig(
     join(directory, "alignfirst.json"),
     JSON.stringify({
       schemaVersion: 1,
-      developerInstructions: "DEVELOPERS.md",
+      assistantInstructionsFile: "DEVELOPERS.md",
       ...config,
       conventions: { ticketIdPattern, git },
       ...(devServer === undefined ? {} : { devServer }),

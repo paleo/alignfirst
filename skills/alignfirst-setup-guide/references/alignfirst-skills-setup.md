@@ -138,7 +138,7 @@ Keep `plans.autoArchive: true`, including in local mode; the user can remove it 
 
 When `.local/` exists and is gitignored, include it explicitly in `workspace.sharedDirs`, preserving other entries. Verify it contains no tracked or staged files before sharing it. See [workspace setup](workspace-setup.md#required-baseline-and-defaults).
 
-For README and developer-guide content, follow [Project documentation defaults](../SKILL.md#project-documentation-defaults).
+For README and assistant-guide content, follow [Project documentation defaults](../SKILL.md#project-documentation-defaults).
 
 ### Local installation
 

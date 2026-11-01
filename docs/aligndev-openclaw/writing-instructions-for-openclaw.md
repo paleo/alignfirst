@@ -33,7 +33,7 @@ Text only for a coding agent.
 {{/codingAgent}}
 ```
 
-Project instructions are read at execution time through `{{ALIGNFIRST}} developer-instructions` from the selected workplace. The command prints conventions and explicitly configured content; without a reference it prints conventions only. Use nullable `locations.developerInstructions` from `config --json` to locate edits. Guide rendering does not inspect project filenames or offer project-file condition blocks.
+Assistant instructions are read at execution time through `{{ALIGNFIRST}} assistant-instructions` from the selected workplace. The command prints conventions and explicitly configured content; without a reference it prints conventions only. Use nullable `locations.assistantInstructionsFile` from `config --json` to locate edits. Guide rendering does not inspect project filenames or offer project-file condition blocks.
 
 A platform block sits at the top level. A surface block and `{{#thread}}` never sit inside a `{{#codingAgent}}` block, and `{{#conversation}}` sits anywhere. An unknown name, a misplaced block, an unclosed block or a stray closing marker fails the render, naming the template and the line.
 

@@ -151,9 +151,12 @@ function verifyCompanion(options) {
     assert.equal(report.source, "companion");
     assert.equal(report.companion.defaultLocation, "companion");
     assert.equal(report.selectionOrigins.workspaceRuntime, "defaultLocation");
-    assert.equal(report.locations.developerInstructions.path, join(companion, "team-notes.txt"));
+    assert.equal(
+      report.locations.assistantInstructionsFile.path,
+      join(companion, "team-notes.txt"),
+    );
     assert.equal(report.locations.workspaceRuntime.in, "companion");
-    const instructions = run(nested, ["developer-instructions"]);
+    const instructions = run(nested, ["assistant-instructions"]);
     assert.match(instructions, /Ticket IDs: `\^PACK-\\d\+\$`/);
     assert(instructions.includes(`Source: ${join(companion, "team-notes.txt")}`));
     assert(instructions.endsWith("Companion instructions sentinel.\n"));
@@ -360,7 +363,7 @@ if(process.argv[2]==="serve") {
   const config = {
     schemaVersion: 1,
     conventions: { ticketIdPattern: "^PACK-\\d+$", git: { defaultBranch: "main" } },
-    developerInstructions: "team-notes.txt",
+    assistantInstructionsFile: "team-notes.txt",
     workspace: {
       finalize: [{ name: "companion finalize", ...command("finalize") }],
       purge: [{ name: "companion purge", ...command("purge") }],

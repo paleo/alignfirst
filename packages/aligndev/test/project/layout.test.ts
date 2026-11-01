@@ -8,6 +8,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { readProjectReport } from "../../src/project/layout.js";
 
 const dirs: string[] = [];
+const warnings = [
+  "Warning: ignoring unknown companion registry setting projects[<entry>].aligndev.extra. Remove it or check its spelling.",
+  "Warning: developerInstructions is deprecated in /project/alignfirst.json; use assistantInstructionsFile instead. assistantInstructionsFile takes precedence when both are set.",
+  "Warning: developerInstructions is deprecated in companion registry projects[<entry>].items; use assistantInstructionsFile instead. assistantInstructionsFile takes precedence when both are set.",
+  "Warning: developer-instructions is deprecated; use assistant-instructions instead.",
+];
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -16,7 +22,7 @@ afterEach(() => {
 
 describe("readProjectReport", () => {
   const cwd = tmpdir();
-  const tooOld = `The alignfirst CLI used in ${cwd} is too old: aligndev requires the workspace-aware alignfirst config --json contract (merged configuration, developerInstructions, workspaceRuntime and selectionOrigins). Upgrade alignfirst.`;
+  const tooOld = `The alignfirst CLI used in ${cwd} is too old: aligndev requires the workspace-aware alignfirst config --json contract (merged configuration, assistantInstructionsFile, workspaceRuntime and selectionOrigins). Upgrade alignfirst.`;
 
   it.each([
     { source: "root", cli: null, config: null },
@@ -92,26 +98,21 @@ describe("readProjectReport", () => {
   });
 
   it("forwards settings warnings without leaking arbitrary successful report stderr", () => {
-    const warning =
-      "Warning: ignoring unknown companion registry setting projects[<entry>].aligndev.extra. Remove it or check its spelling.";
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const f = executableFixture(
       "alignfirst",
       report(cwd),
       "0.21.0\n",
-      `${warning}\nWarning: private-child-value\nprivate-child-value\n`,
+      [...warnings, "Warning: private-child-value", "private-child-value", ""].join("\n"),
     );
     expect(readProjectReport(["alignfirst"], cwd, { PATH: f.dir })).toEqual(report(cwd));
-    expect(warn).toHaveBeenCalledExactlyOnceWith(warning);
+    expect(warn.mock.calls).toEqual(warnings.map((line) => [line]));
     expect(f.invocations()).toEqual([["config", "--json"]]);
   });
 
   it.each(["\n", "\r\n"])(
     "separates settings warnings from the first failure diagnostic with %j line endings",
     (newline) => {
-      const warnings = [
-        "Warning: ignoring unknown companion registry setting projects[<entry>].aligndev.extra. Remove it or check its spelling.",
-      ];
       const error = "Invalid alignfirst.json: git.commit.style must be conventionalCommit";
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const log = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -231,7 +232,7 @@ function report(cwd: string) {
   const names = [
     "alignfirst",
     ".alignfirst-instructions",
-    "developerInstructions",
+    "assistantInstructionsFile",
     "workspaceRuntime",
     "docs",
     ".plans",
@@ -251,7 +252,7 @@ function report(cwd: string) {
     companion: null,
     aligndev: null,
     locations: Object.fromEntries(
-      names.map((name) => [name, name === "developerInstructions" ? null : location]),
+      names.map((name) => [name, name === "assistantInstructionsFile" ? null : location]),
     ),
     selectionOrigins: Object.fromEntries(names.map((name) => [name, "builtin"])),
   };

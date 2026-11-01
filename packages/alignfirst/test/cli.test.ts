@@ -14,21 +14,21 @@ describe("alignfirst CLI", () => {
     const cwd = temp();
     const help = await runMain([], { cwd });
     expect(help).toMatchObject({ code: 0, stderr: "" });
-    for (const command of ["guide", "conventions", "context", "developer-instructions", "doctor"])
+    for (const command of ["guide", "conventions", "context", "assistant-instructions", "doctor"])
       expect(help.stdout).toContain(`alignfirst ${command}`);
     expect((await runMain(["--version"], { cwd })).stdout).toBe(`${packageVersion}\n`);
   });
 
-  it("supports developer-instructions help and rejects arguments", async () => {
+  it("supports assistant-instructions help and rejects arguments", async () => {
     const cwd = temp();
-    expect((await runMain(["developer-instructions", "--help"], { cwd })).stdout).toBe(
-      "Usage: alignfirst developer-instructions\n",
+    expect((await runMain(["assistant-instructions", "--help"], { cwd })).stdout).toBe(
+      "Usage: alignfirst assistant-instructions\n",
     );
     for (const argument of ["extra", "--unknown"]) {
-      const result = await runMain(["developer-instructions", argument], { cwd });
+      const result = await runMain(["assistant-instructions", argument], { cwd });
       expect(result.code).toBe(1);
       expect(result.stdout).toBe("");
-      expect(result.stderr).toContain("Usage: alignfirst developer-instructions");
+      expect(result.stderr).toContain("Usage: alignfirst assistant-instructions");
     }
   });
 

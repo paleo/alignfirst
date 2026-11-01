@@ -69,6 +69,7 @@ function smokeTestRelease() {
     assert.equal(installedSchema.type, "object");
     assert.deepEqual(Object.keys(installedSchema.properties).sort(), [
       "$schema",
+      "assistantInstructionsFile",
       "conventions",
       "devServer",
       "developerInstructions",

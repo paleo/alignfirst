@@ -16,6 +16,9 @@ import { resolveCommandForms } from "../src/command-form.js";
 
 const warnings = [
   "Warning: ignoring unknown companion registry setting projects[<entry>].aligndev.extra. Remove it or check its spelling.",
+  "Warning: developerInstructions is deprecated in /project/alignfirst.json; use assistantInstructionsFile instead. assistantInstructionsFile takes precedence when both are set.",
+  "Warning: developerInstructions is deprecated in companion registry projects[<entry>].items; use assistantInstructionsFile instead. assistantInstructionsFile takes precedence when both are set.",
+  "Warning: developer-instructions is deprecated; use assistant-instructions instead.",
 ];
 const privateMessages = [
   "Warning: ignoring unknown .alignfirst.json setting plans.extra. Remove it or check its spelling.",
@@ -25,6 +28,13 @@ const privateMessages = [
   "Error: private-child-error-value",
   "Warning: ignoring unknown unrelated setting private-value",
   "Warning: ignoring unknown .alignfirst.json setting bad\u001b[31m. private-value",
+  "Warning: developerInstructions is deprecated in /project/alignfirst.json; private-child-value",
+  "Warning: developer-instructions is deprecated; private-child-value",
+  ...["\u001b", "\u200b", "\u2028", "\u2029"].flatMap((control) =>
+    warnings.map((warning) =>
+      warning.replace(/setting |deprecated in |deprecated; /u, `$&${control}`),
+    ),
+  ),
 ];
 
 afterEach(() => vi.restoreAllMocks());

@@ -976,7 +976,7 @@ function reportWithCompanion(items: ItemName[]): ProjectReport {
       items: {
         alignfirst: "auto",
         ".alignfirst-instructions": "auto",
-        developerInstructions: "auto",
+        assistantInstructionsFile: "auto",
         workspaceRuntime: "auto",
         docs: "auto",
         ".plans": "auto",
@@ -986,7 +986,7 @@ function reportWithCompanion(items: ItemName[]): ProjectReport {
     selectionOrigins: {
       alignfirst: "builtin",
       ".alignfirst-instructions": "builtin",
-      developerInstructions: "builtin",
+      assistantInstructionsFile: "builtin",
       workspaceRuntime: "builtin",
       docs: "builtin",
       ".plans": "builtin",
@@ -996,7 +996,7 @@ function reportWithCompanion(items: ItemName[]): ProjectReport {
     locations: {
       alignfirst: location("alignfirst.json", "alignfirst"),
       ".alignfirst-instructions": location(".alignfirst-instructions", ".alignfirst-instructions"),
-      developerInstructions: location("DEVELOPERS.md", "developerInstructions"),
+      assistantInstructionsFile: location("DEVELOPERS.md", "assistantInstructionsFile"),
       workspaceRuntime: location(".local-wt", "workspaceRuntime"),
       docs: location("docs", "docs"),
       ".plans": location(".plans", ".plans"),

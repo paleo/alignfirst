@@ -104,12 +104,12 @@ for (const overlay of Object.keys(agents)) {
             assert.equal(report.workspace.hasDevServer, false);
             assert.equal(config.schemaVersion, 1);
             assert.equal(config.conventions.git.defaultBranch, "main");
-            assert.equal(config.developerInstructions, "DEVELOPERS.md");
+            assert.equal(config.assistantInstructionsFile, "DEVELOPERS.md");
             assert.equal(
-              report.locations.developerInstructions.path,
+              report.locations.assistantInstructionsFile.path,
               join(fixture.rendered, "DEVELOPERS.md"),
             );
-            assert.equal(report.locations.developerInstructions.exists, true);
+            assert.equal(report.locations.assistantInstructionsFile.exists, true);
             assert.equal(report.workspace.location.path, report.locations.alignfirst.path);
             assert.equal(
               report.workspace.registryDir,

@@ -154,7 +154,11 @@ function patchFixture(dst, name, basePort) {
   // read distinctly — the app itself stays the "Comparables" product.
   const capitalized = name.charAt(0).toUpperCase() + name.slice(1);
   patchHeading(`${dst}/README.md`, /^# Comparables$/m, `# ${capitalized}`);
-  patchHeading(`${dst}/DEVELOPERS.md`, /^# Developer Guide$/m, `# ${capitalized} Developer Guide`);
+  patchHeading(
+    `${dst}/DEVELOPERS.md`,
+    /^# Developer Reference$/m,
+    `# ${capitalized} Developer Reference`,
+  );
 
   patchPortRange(dst, basePort);
 }

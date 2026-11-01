@@ -36,14 +36,6 @@ This repository is on *GitHub*.
 - `@alignfirst/openclaw-test` — Dockerised regression-test harness (bus, scenario driver, judge, Compose stack)
 - `@alignfirst/workspace` — run multiple git-worktree dev environments side by side
 
-## Workspaces
-
-A **workspace** is a git worktree (with its branch) plus its own dev setup: symlinked shared directories and seeded config files. Workspaces are isolated, so you can work on several branches in parallel. This repository has no dev server, so the system runs portless: nothing to start, no `dev` script.
-
-The selected `alignfirst.json` holds nested conventions, the explicit developer-instructions reference and the workspace recipe. Run `npx -y alignfirst workspace --guide` for lifecycle procedures. A fresh linked worktree can run `npx -y alignfirst workspace setup` before dependencies or build output exist. See `DEVELOPERS.md` for project preparation.
-
-The side-32 implementation workspace's live runtime state is intentionally pending the coordinated upgrade in `docs/upgrading-multi-stack-workspaces.md`. Do not run the new lifecycle against old registries. Configuration/context reads and work-file sync are safe independently of runtime adoption.
-
 ## Skills to read before editing
 
 - TypeScript or JavaScript file: read the `top-down-typescript` skill first (`.agents/skills/top-down-typescript/SKILL.md`).

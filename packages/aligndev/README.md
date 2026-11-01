@@ -35,7 +35,7 @@ For a coding-agent assistant, parent host and delegated child are independent: a
 
 ## Configuration boundary
 
-AlignDev requires the workspace-aware `alignfirst config --json` report: top-level `workspace` metadata with absolute registry/runtime paths, `selectionOrigins`, logical locations and independent `aligndev` selection. One selected `alignfirst.json`/`.jsonc` with `schemaVersion: 1` holds nested conventions, plans, explicit developer instructions and optional recipes. Project configuration rejects unknown properties. Companion/global settings retain tolerant warnings. Inventory ranges come only from workspace `devServer.ports`; `project free-ports` looks up a free block without reserving it.
+AlignDev requires the workspace-aware `alignfirst config --json` report: top-level `workspace` metadata with absolute registry/runtime paths, `selectionOrigins`, logical locations and independent `aligndev` selection. One selected `alignfirst.json`/`.jsonc` with `schemaVersion: 1` holds nested conventions, plans, explicit assistant instructions and optional recipes. Project configuration rejects unknown properties. Companion/global settings retain tolerant warnings. Inventory ranges come only from workspace `devServer.ports`; `project free-ports` looks up a free block without reserving it.
 
 ## Start in Claude Code, Codex or Pi
 
@@ -192,7 +192,7 @@ npx -y skills add https://github.com/paleo/alignfirst --global --skill alignfirs
 
 Deployments require null or a string for every coding profile and enabled explicit quota source; omission is invalid there. Generated service defaults use null. Inventory still records absolute filesystem paths, while native commands unset the directory variable for null or set its resolved value for a string.
 
-Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code, Codex or Pi variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the preparation contract: project context, usable work files, docmap, runtime procedures and an explicitly referenced developer guide, in the repository or its companion. `alignfirst developer-instructions` prints conventions and that content without filename discovery. The workspace recipe is optional; default preparation is protocol-ready.
+Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code, Codex or Pi variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the preparation contract: project context, usable work files, docmap, runtime procedures and an explicitly referenced assistant guide, in the repository or its companion. `alignfirst assistant-instructions` prints conventions and that content without filename discovery. The workspace recipe is optional; default preparation is protocol-ready.
 
 ## Under the Hood
 

@@ -290,11 +290,11 @@ test("reset recovers externally deleted running workspaces and retains failed cl
         command(repo, process.execPath, [alignfirst, "config", "--json"], env),
       );
       assert.equal(report.config.conventions.ticketIdPattern, "^ABC-\\d+$");
-      assert.equal(report.config.developerInstructions, "DEVELOPERS.md");
+      assert.equal(report.config.assistantInstructionsFile, "DEVELOPERS.md");
       assert.equal(report.workspace.hasDevServer, true);
       assert.match(
-        command(repo, process.execPath, [alignfirst, "developer-instructions"], env),
-        /Developer Guide/,
+        command(repo, process.execPath, [alignfirst, "assistant-instructions"], env),
+        /Developer Reference/,
       );
     }
     assert(existsSync(join(lifecycle, ".alignfirst-projects.json")));

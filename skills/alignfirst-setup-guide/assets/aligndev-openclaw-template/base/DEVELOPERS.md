@@ -1,4 +1,4 @@
-# Developer Guide
+# Developer Reference
 
 This repository holds the configuration of `{{SERVER_HOST}}`: runbooks under `docs/installations/`, operations under `docs/operations/`, and the OpenClaw seed, workspace files and scripts under `infra/openclaw/`. No application code, no build, no test suite.
 
@@ -6,7 +6,7 @@ This repository holds the configuration of `{{SERVER_HOST}}`: runbooks under `do
 
 - `docs/` — runbooks and notes, listed by `npx -y alignfirst docmap`.
 - `infra/openclaw/` — `seed.sh` and its modules, `environment.d/`, `bin/`, `projects/`, `workspace/`, `coding-agent/`. `.env` is gitignored.
-- `alignfirst.jsonc` — nested conventions, explicit developer-instructions reference and setup-only workspace recipe.
+- `alignfirst.jsonc` — nested conventions, explicit assistant-instructions reference and setup-only workspace recipe.
 - `.reports/` — one journal per operator task, committed.
 <!-- TEAM_PLANS_SECTION -->
 - `.plans/` — work files. Symlinked across worktrees, and into a clone of the work-files repository so the team shares them. Run `npx -y alignfirst sync` after changing anything under it.

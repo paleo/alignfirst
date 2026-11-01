@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   configureGit,
@@ -15,6 +15,7 @@ import {
 const dirs: string[] = [];
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -143,7 +144,27 @@ describe("context command", () => {
   });
 });
 
-describe("developer-instructions command", () => {
+describe("assistant-instructions command", () => {
+  it("keeps the legacy command as a warning alias with identical output", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const cwd = temp();
+    writeFileSync(
+      join(cwd, "alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, assistantInstructionsFile: "workflow.md" }),
+    );
+    writeFileSync(join(cwd, "workflow.md"), "Use the project workflow.\n");
+    const canonical = await runMain(["assistant-instructions"], { cwd });
+    expect(canonical).toMatchObject({ code: 0, stderr: "" });
+    expect(canonical.stdout).toContain("# Assistant Instructions");
+    expect(canonical.stdout).toContain("Use the project workflow.");
+    expect(warn).not.toHaveBeenCalled();
+    const legacy = await runMain(["developer-instructions"], { cwd });
+    expect(legacy).toEqual(canonical);
+    const warnings = warn.mock.calls.flat().join("\n");
+    expect(warnings).toContain("developer-instructions");
+    expect(warnings).toContain("assistant-instructions");
+  });
+
   it("shares conventions without discovering filenames or printing agent context and guides", async () => {
     const cwd = temp();
     mkdirSync(join(cwd, "docs"));
@@ -165,7 +186,7 @@ describe("developer-instructions command", () => {
         },
       }),
     );
-    const result = await runMain(["developer-instructions"], { cwd });
+    const result = await runMain(["assistant-instructions"], { cwd });
     const context = await runMain(["context"], { cwd });
     expect(result).toMatchObject({ code: 0, stderr: "" });
     expect(result.stdout).toBe(context.stdout.split("\n# Project Instructions")[0]);
@@ -174,7 +195,7 @@ describe("developer-instructions command", () => {
     expect(result.stdout).toContain("`type: [TICKET_ID] summary`");
     expect(result.stdout).toContain("Work files: use `.plans`");
     expect(result.stdout).not.toMatch(
-      /Ignored|Agent-only|Docmap|Protocols|# Developer Instructions/,
+      /Ignored|Agent-only|Docmap|Protocols|# Assistant Instructions/,
     );
   });
 
@@ -186,14 +207,14 @@ describe("developer-instructions command", () => {
       join(cwd, "alignfirst.json"),
       JSON.stringify({
         schemaVersion: 1,
-        developerInstructions: "handbook/workflow.md",
+        assistantInstructionsFile: "handbook/workflow.md",
       }),
     );
     const content = "\n# Workflow\r\n\nSee [setup](./setup.md). {{LITERAL}} $HOME\n  ";
     writeFileSync(path, content);
-    const result = await runMain(["developer-instructions"], { cwd });
+    const result = await runMain(["assistant-instructions"], { cwd });
     expect(result).toMatchObject({ code: 0, stderr: "" });
-    expect(result.stdout).toContain(`Source: ${path}\n\n${content}`);
+    expect(result.stdout).toContain(`# Assistant Instructions\n\nSource: ${path}\n\n${content}`);
     expect(result.stdout.endsWith(content)).toBe(true);
   });
 
@@ -206,11 +227,11 @@ describe("developer-instructions command", () => {
         join(cwd, "alignfirst.json"),
         JSON.stringify({
           schemaVersion: 1,
-          developerInstructions: "guide.md",
+          assistantInstructionsFile: "guide.md",
         }),
       );
       if (kind === "directory") mkdirSync(path);
-      const result = await runMain(["developer-instructions"], { cwd });
+      const result = await runMain(["assistant-instructions"], { cwd });
       expect(result.code).toBe(1);
       expect(result.stdout).toBe("");
       expect(result.stderr).toContain(`Cannot read ${path}:`);
@@ -227,7 +248,7 @@ describe("developer-instructions command", () => {
       join(main, "alignfirst.json"),
       JSON.stringify({
         schemaVersion: 1,
-        developerInstructions: "main.md",
+        assistantInstructionsFile: "main.md",
       }),
     );
     writeFileSync(join(main, "main.md"), "Main instructions\n");
@@ -239,17 +260,17 @@ describe("developer-instructions command", () => {
       join(linked, "alignfirst.json"),
       JSON.stringify({
         schemaVersion: 1,
-        developerInstructions: "branch.md",
+        assistantInstructionsFile: "branch.md",
       }),
     );
     writeFileSync(join(linked, "branch.md"), "Branch instructions\n");
     const nested = join(linked, "src", "nested");
     mkdirSync(nested, { recursive: true });
-    const result = await runMain(["developer-instructions"], { cwd: nested });
+    const result = await runMain(["assistant-instructions"], { cwd: nested });
     expect(result).toMatchObject({ code: 0, stderr: "" });
     expect(result.stdout).toContain(`Source: ${join(linked, "branch.md")}\n\nBranch instructions`);
     expect(result.stdout).not.toContain("Main instructions");
-    expect((await runMain(["developer-instructions"], { cwd: main })).stdout).toContain(
+    expect((await runMain(["assistant-instructions"], { cwd: main })).stdout).toContain(
       "Main instructions",
     );
   });
@@ -257,7 +278,7 @@ describe("developer-instructions command", () => {
   it("uses the logical companion override independently of the selected configuration", async () => {
     const { root, home, project, companion } = makeCompanionProject({
       alignfirst: "project",
-      developerInstructions: "companion",
+      assistantInstructionsFile: "companion",
     });
     dirs.push(root);
     mkdirSync(companion, { recursive: true });
@@ -265,12 +286,12 @@ describe("developer-instructions command", () => {
       join(project, "alignfirst.json"),
       JSON.stringify({
         schemaVersion: 1,
-        developerInstructions: "workflow.md",
+        assistantInstructionsFile: "workflow.md",
       }),
     );
     writeFileSync(join(project, "workflow.md"), "Wrong project guide\n");
     writeFileSync(join(companion, "workflow.md"), "Selected companion guide\n");
-    const result = await runMain(["developer-instructions"], { cwd: project, home });
+    const result = await runMain(["assistant-instructions"], { cwd: project, home });
     expect(result).toMatchObject({ code: 0, stderr: "" });
     expect(result.stdout).toContain(
       `Source: ${join(companion, "workflow.md")}\n\nSelected companion guide`,

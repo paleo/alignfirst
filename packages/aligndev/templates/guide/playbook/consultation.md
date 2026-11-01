@@ -43,7 +43,7 @@ Retain `git rev-parse --short HEAD`, the revision the answer comes from. Report 
 
 ## Step 3 — Delegate
 
-Run `{{ALIGNFIRST}} developer-instructions` from the selected worktree after any refresh. It prints that worktree's conventions and configured guide, with its source path. Use `{{ALIGNFIRST}} config --json` there when you need the nullable `locations.developerInstructions`; do not substitute main's file or a filename fallback.
+Run `{{ALIGNFIRST}} assistant-instructions` from the selected worktree after any refresh. It prints that worktree's conventions and configured guide, with its source path. Use `{{ALIGNFIRST}} config --json` there when you need the nullable `locations.assistantInstructionsFile`; do not substitute main's file or a filename fallback.
 
 Delegation creates session files under the work files, so complete `{{GUIDE}} work-files-setup` from PROJECT_PATH first.
 

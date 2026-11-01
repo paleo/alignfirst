@@ -1,16 +1,79 @@
+import { validateConfigSchema } from "@alignfirst/workspace/config";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { readProjectConfig, validateProjectConfig } from "../src/project-config.js";
 import { makeTempDir } from "./helpers.js";
 
+const projectSchema: Record<string, unknown> = JSON.parse(
+  readFileSync(new URL("../schemas/alignfirst-v1.schema.json", import.meta.url), "utf8"),
+);
 const dirs: string[] = [];
+// Avoid colliding with the runtime's separately loaded schema in the shared Ajv instance.
+delete projectSchema.$id;
+
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
 describe("project config", () => {
+  it.each([
+    { assistantInstructionsFile: undefined, expected: "guides/legacy.md" },
+    { assistantInstructionsFile: "guides/canonical.md", expected: "guides/canonical.md" },
+  ])("normalizes the legacy instructions reference and warns %#", (settings) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const input = {
+      schemaVersion: 1,
+      assistantInstructionsFile: settings.assistantInstructionsFile,
+      developerInstructions: "guides/legacy.md",
+    };
+    expect(() => validateConfigSchema(input, projectSchema, "config")).not.toThrow();
+    const config = validateProjectConfig(input, "config");
+    expect(config).toEqual({
+      schemaVersion: 1,
+      assistantInstructionsFile: settings.expected,
+    });
+    const warnings = warn.mock.calls.flat().join("\n");
+    expect(warnings).toContain("developerInstructions");
+    expect(warnings).toContain("assistantInstructionsFile");
+  });
+
+  it.each([null, false, "", "   "])(
+    "rejects an invalid canonical instructions reference without using the legacy value %#",
+    (assistantInstructionsFile) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const input = {
+        schemaVersion: 1,
+        assistantInstructionsFile,
+        developerInstructions: "valid.md",
+      };
+      expect(() => validateConfigSchema(input, projectSchema, "config")).toThrow(
+        "assistantInstructionsFile",
+      );
+      expect(() => validateProjectConfig(input, "config")).toThrow("assistantInstructionsFile");
+      expect(warn.mock.calls.flat().join("\n")).toContain("developerInstructions");
+    },
+  );
+
+  it.each([null, false, "", "   "])(
+    "validates the deprecated instructions reference only when the canonical one is absent %#",
+    (developerInstructions) => {
+      const legacyOnly = { schemaVersion: 1, developerInstructions };
+      expect(() => validateConfigSchema(legacyOnly, projectSchema, "config")).toThrow(
+        "developerInstructions",
+      );
+      expect(() =>
+        validateConfigSchema(
+          { ...legacyOnly, assistantInstructionsFile: "valid.md" },
+          projectSchema,
+          "config",
+        ),
+      ).not.toThrow();
+    },
+  );
+
   it("accepts the retained fields and minimal settings", () => {
     const full = {
       schemaVersion: 1,
@@ -112,7 +175,7 @@ describe("project config", () => {
         ],
       },
     },
-    { developerInstructions: "   " },
+    { assistantInstructionsFile: "   " },
     {
       devServer: {
         servers: [
