@@ -1,6 +1,6 @@
-import { createServer, type Server } from "node:http";
+import { createServer } from "node:http";
 import { createBus } from "@alignfirst/openclaw-channel-mock-core";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 import { slackMockPlugin } from "../src/plugin.js";
 
 const CHANNEL_ID = "slack-mock";
@@ -15,8 +15,7 @@ const describeMessageTool: NonNullable<typeof actions.describeMessageTool> =
 const prepareSendPayload: NonNullable<typeof actions.prepareSendPayload> =
   actions.prepareSendPayload;
 
-let server: Server;
-let baseUrl: string;
+let baseUrl = "http://unused.invalid";
 let bus: ReturnType<typeof createBus>;
 
 function cfg() {
@@ -32,26 +31,34 @@ function cfg() {
   };
 }
 
-beforeEach(async () => {
-  bus = createBus();
-  server = createServer(async (req, res) => {
-    if (!(await bus.handler(req, res))) {
+async function startBus() {
+  const ownedBus = createBus();
+  bus = ownedBus;
+  const server = createServer(async (req, res) => {
+    if (!(await ownedBus.handler(req, res))) {
       res.statusCode = 404;
       res.end("not found");
     }
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  onTestFinished(async () => {
+    if (!server.listening) return;
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+      server.closeAllConnections?.();
+    });
+    baseUrl = "http://unused.invalid";
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("failed to bind test bus");
   baseUrl = `http://127.0.0.1:${address.port}`;
-});
-
-afterEach(async () => {
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => (error ? reject(error) : resolve()));
-    server.closeAllConnections?.();
-  });
-});
+}
 
 async function run(action: string, params: Record<string, unknown>) {
   return await handleAction({
@@ -96,6 +103,7 @@ describe("slack-mock action surface", () => {
   });
 
   it("returns the bus-resolved target and thread from the message adapter", async () => {
+    await startBus();
     const sendText = slackMockPlugin.message?.send?.text;
     if (!sendText) throw new Error("slack-mock message adapter missing send.text");
     const result = await sendText({

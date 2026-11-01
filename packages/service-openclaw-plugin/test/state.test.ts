@@ -1,18 +1,25 @@
 import { chmodSync, statSync } from "node:fs";
+import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { createHandoffStore, resolveDatabasePath } from "../src/thread-handoff/state.js";
-import { handoff, receipt, temporaryStateDir } from "./helpers.js";
+import { resolveDatabasePath } from "../src/thread-handoff/state.js";
+import {
+  createTestHandoffStore,
+  handoff,
+  ownStateResource,
+  receipt,
+  temporaryStateDir,
+} from "./helpers.js";
 
 describe("handoff SQLite state", () => {
   it("persists records across opens with protected filesystem modes", () => {
     const stateDir = temporaryStateDir();
-    const first = createHandoffStore(stateDir);
+    const first = createTestHandoffStore(stateDir);
     first.insertReceipt(receipt(), 1_000);
     first.insertHandoff(handoff());
     first.close();
 
-    const second = createHandoffStore(stateDir);
+    const second = createTestHandoffStore(stateDir);
     expect(
       second.findReceipt(
         {
@@ -29,29 +36,16 @@ describe("handoff SQLite state", () => {
     second.close();
   });
 
-  it("prunes expired receipts without removing handoffs", () => {
-    const store = createHandoffStore(temporaryStateDir());
-    store.insertReceipt(receipt({ expiresAt: 2_000 }), 1_000);
-    store.insertHandoff(handoff());
-    expect(
-      store.findReceipt(
-        {
-          sourceSessionKey: receipt().sessionKey,
-          sourceSessionId: "source-uuid",
-          threadId: "100.200",
-        },
-        2_000,
-      ),
-    ).toBeUndefined();
-    expect(store.findHandoffByRoute("route-1")).toBeDefined();
-    store.close();
-  });
-
   it("lists active receipts in insertion order and prunes expired rows", () => {
-    const store = createHandoffStore(temporaryStateDir());
-    store.insertReceipt(receipt({ receiptKey: "first", expiresAt: 3_000 }), 1_000);
+    const store = createTestHandoffStore(temporaryStateDir());
+    store.insertHandoff(handoff());
+    store.insertReceipt(receipt({ receiptKey: "first", expiresAt: 4_000 }), 1_000);
     store.insertReceipt(
-      receipt({ receiptKey: "expired", threadId: "expired", expiresAt: 2_000 }),
+      receipt({ receiptKey: "lookup-expired", threadId: "lookup-expired", expiresAt: 2_000 }),
+      1_000,
+    );
+    store.insertReceipt(
+      receipt({ receiptKey: "expired", threadId: "expired", expiresAt: 3_000 }),
       1_000,
     );
     store.insertReceipt(
@@ -59,17 +53,28 @@ describe("handoff SQLite state", () => {
       1_000,
     );
 
-    expect(store.listReceipts(2_000).map((record) => record.receiptKey)).toEqual([
+    expect(
+      store.findReceipt(
+        {
+          sourceSessionKey: receipt().sessionKey,
+          sourceSessionId: "source-uuid",
+          threadId: "lookup-expired",
+        },
+        2_000,
+      ),
+    ).toBeUndefined();
+    expect(store.listReceipts(3_000).map((record) => record.receiptKey)).toEqual([
       "first",
       "second",
     ]);
+    expect(store.findHandoffByRoute("route-1")).toBeDefined();
     store.close();
   });
 
   it("rejects another run's claim made through an independent connection", () => {
     const stateDir = temporaryStateDir();
-    const first = createHandoffStore(stateDir);
-    const second = createHandoffStore(stateDir);
+    const first = createTestHandoffStore(stateDir);
+    const second = createTestHandoffStore(stateDir);
     first.insertHandoff(handoff());
     expect(first.claimHandoff(claimIdentity({ runId: "run-1" }), 2_000).status).toBe("claimed");
     expect(second.claimHandoff(claimIdentity({ runId: "run-2" }), 2_001).status).toBe(
@@ -80,7 +85,7 @@ describe("handoff SQLite state", () => {
   });
 
   it("makes a claim idempotent for its run and rejects another run", () => {
-    const store = createHandoffStore(temporaryStateDir());
+    const store = createTestHandoffStore(temporaryStateDir());
     store.insertHandoff(handoff());
     const first = store.claimHandoff(claimIdentity({ runId: "run-1" }), 2_000);
     const repeated = store.claimHandoff(claimIdentity({ runId: "run-1" }), 3_000);
@@ -93,7 +98,7 @@ describe("handoff SQLite state", () => {
   });
 
   it("falls back to session identity only when both claims omit a run id", () => {
-    const store = createHandoffStore(temporaryStateDir());
+    const store = createTestHandoffStore(temporaryStateDir());
     store.insertHandoff(handoff());
 
     expect(store.claimHandoff(claimIdentity(), 2_000).status).toBe("claimed");
@@ -105,7 +110,7 @@ describe("handoff SQLite state", () => {
   });
 
   it("treats a claimed record without claimer identity as owned by another run", () => {
-    const store = createHandoffStore(temporaryStateDir());
+    const store = createTestHandoffStore(temporaryStateDir());
     store.insertHandoff(handoff({ state: "claimed", claimedAt: 1_500 }));
     expect(store.claimHandoff(claimIdentity({ runId: "run-1" }), 2_000)).toMatchObject({
       status: "alreadyClaimed",
@@ -116,7 +121,7 @@ describe("handoff SQLite state", () => {
 
   it("migrates schema 1 handoffs and keeps attempts writable", () => {
     const stateDir = temporaryStateDir();
-    const store = createHandoffStore(stateDir);
+    const store = createTestHandoffStore(stateDir);
     store.insertHandoff(handoff());
     store.recordAttempt("route-1", 1_000);
     store.recordAttempt("route-1", 2_000);
@@ -131,7 +136,7 @@ describe("handoff SQLite state", () => {
     store.close();
     downgradeToSchema1(resolveDatabasePath(stateDir));
 
-    const migrated = createHandoffStore(stateDir);
+    const migrated = createTestHandoffStore(stateDir);
     expect(migrated.findHandoffByRoute("route-1")).toMatchObject({
       schemaVersion: 2,
       attemptCount: 3,
@@ -150,7 +155,7 @@ describe("handoff SQLite state", () => {
   });
 
   it("rejects mismatched claim identities and unforced pending retirement", () => {
-    const store = createHandoffStore(temporaryStateDir());
+    const store = createTestHandoffStore(temporaryStateDir());
     store.insertHandoff(handoff());
     expect(() =>
       store.claimHandoff(
@@ -170,7 +175,7 @@ describe("handoff SQLite state", () => {
   });
 
   it("lists pending handoffs due for an attempt and below the attempt cap", () => {
-    const store = createHandoffStore(temporaryStateDir());
+    const store = createTestHandoffStore(temporaryStateDir());
     store.insertHandoff(handoff());
     store.insertHandoff(
       handoff({ routeKey: "route-2", handoffId: "handoff-2", targetSessionKey: "t2" }),
@@ -192,23 +197,23 @@ describe("handoff SQLite state", () => {
   it("rejects unknown schemas and unavailable files", () => {
     const stateDir = temporaryStateDir();
     const path = resolveDatabasePath(stateDir);
-    const initialized = createHandoffStore(stateDir);
+    const initialized = createTestHandoffStore(stateDir);
     initialized.close();
-    const database = new DatabaseSync(path);
+    const database = ownedDatabase(path);
     database.exec("PRAGMA user_version = 3;");
     database.close();
-    expect(() => createHandoffStore(stateDir)).toThrow(/Unsupported/);
+    expect(() => createTestHandoffStore(stateDir)).toThrow(/Unsupported/);
 
     const denied = temporaryStateDir();
     chmodSync(denied, 0o500);
-    if (process.getuid?.() !== 0) expect(() => createHandoffStore(denied)).toThrow();
+    if (process.getuid?.() !== 0) expect(() => createTestHandoffStore(denied)).toThrow();
   });
 
   it.each(["receipts", "handoffs"] as const)("rejects %s overflow without eviction", (table) => {
     const stateDir = temporaryStateDir();
-    createHandoffStore(stateDir).close();
+    createTestHandoffStore(stateDir).close();
     fillToCapacity(resolveDatabasePath(stateDir), table);
-    const store = createHandoffStore(stateDir);
+    const store = createTestHandoffStore(stateDir);
     const operation =
       table === "receipts"
         ? () => store.insertReceipt(receipt({ receiptKey: "overflow" }), 0)
@@ -220,20 +225,28 @@ describe("handoff SQLite state", () => {
 
   it("surfaces corrupt stored JSON without resetting the database", () => {
     const stateDir = temporaryStateDir();
-    const store = createHandoffStore(stateDir);
+    const store = createTestHandoffStore(stateDir);
     store.insertHandoff(handoff());
     store.close();
-    const database = new DatabaseSync(resolveDatabasePath(stateDir));
+    const database = ownedDatabase(resolveDatabasePath(stateDir));
     database.prepare("UPDATE handoffs SET record_json = ? WHERE route_key = ?").run("{", "route-1");
     database.close();
-    const reopened = createHandoffStore(stateDir);
+    const reopened = createTestHandoffStore(stateDir);
     expect(() => reopened.findHandoffByRoute("route-1")).toThrow(/Corrupt handoff JSON/);
     reopened.close();
   });
 });
 
-function fillToCapacity(path: string, table: "receipts" | "handoffs"): void {
+function ownedDatabase(path: string): DatabaseSync {
   const database = new DatabaseSync(path);
+  ownStateResource(dirname(dirname(path)), () => {
+    if (database.isOpen) database.close();
+  });
+  return database;
+}
+
+function fillToCapacity(path: string, table: "receipts" | "handoffs"): void {
+  const database = ownedDatabase(path);
   database.exec("BEGIN IMMEDIATE;");
   const statement =
     table === "receipts"
@@ -277,7 +290,7 @@ function claimIdentity(
 }
 
 function downgradeToSchema1(path: string): void {
-  const database = new DatabaseSync(path);
+  const database = ownedDatabase(path);
   database.exec("ALTER TABLE handoffs RENAME COLUMN attempt_count TO enqueue_count;");
   database.exec("ALTER TABLE handoffs RENAME COLUMN last_attempted_at TO last_enqueued_at;");
   const rows = database

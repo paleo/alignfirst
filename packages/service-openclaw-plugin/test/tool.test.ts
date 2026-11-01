@@ -3,10 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { ReceiptCoordinator } from "../src/thread-handoff/receipts.js";
 import { createRunIdCache } from "../src/thread-handoff/run-ids.js";
 import type { HandoffService } from "../src/thread-handoff/service.js";
-import { createHandoffStore, type HandoffStore } from "../src/thread-handoff/state.js";
+import type { HandoffStore } from "../src/thread-handoff/state.js";
 import { createThreadHandoffTool } from "../src/thread-handoff/tool.js";
 import type { DeliveryReceipt, HandoffRecord } from "../src/thread-handoff/types.js";
-import { handoff, receipt, temporaryStateDir } from "./helpers.js";
+import { createTestHandoffStore, handoff, receipt, temporaryStateDir } from "./helpers.js";
 
 describe("thread_handoff tool", () => {
   it("starts once and remains idempotent after the receipt disappears", async () => {
@@ -132,7 +132,7 @@ function toolFixture(
   providedStore?: HandoffStore,
   runId = "run-1",
 ) {
-  const store = providedStore ?? createHandoffStore(temporaryStateDir());
+  const store = providedStore ?? createTestHandoffStore(temporaryStateDir());
   const waitForReceipt = vi.fn().mockResolvedValue(availableReceipt);
   const receipts = {
     captureContext: vi.fn(),

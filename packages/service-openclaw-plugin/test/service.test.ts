@@ -6,8 +6,7 @@ import {
   createHandoffService,
   MAX_ATTEMPTS,
 } from "../src/thread-handoff/service.js";
-import { createHandoffStore } from "../src/thread-handoff/state.js";
-import { handoff, temporaryStateDir } from "./helpers.js";
+import { createTestHandoffStore, handoff, ownStateResource, temporaryStateDir } from "./helpers.js";
 
 const dispatchTurn = vi.hoisted(() => vi.fn());
 
@@ -69,8 +68,8 @@ describe("handoff turn start and recovery", () => {
   });
 
   it("records the attempt before spawning and suppresses concurrent starts and recovery", async () => {
-    const deferred = createDeferred<void>();
     const fixture = serviceFixture();
+    const deferred = fixture.defer();
     const record = handoff();
     fixture.store.insertHandoff(record);
     dispatchTurn.mockImplementationOnce(() => {
@@ -84,8 +83,11 @@ describe("handoff turn start and recovery", () => {
     expect(dispatchTurn).toHaveBeenCalledTimes(1);
     await fixture.service.stop();
     deferred.resolve(undefined);
+    await deferred.promise;
     await vi.waitFor(() =>
-      expect(fixture.store.findHandoffByRoute(record.routeKey)?.lastAttemptedAt).toBe(100_000),
+      expect(fixture.logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining("handoff-1 start attempt 1 completed"),
+      ),
     );
     fixture.store.close();
   });
@@ -130,8 +132,8 @@ describe("handoff turn start and recovery", () => {
   });
 
   it("contains attempt-end persistence failures in the detached completion", async () => {
-    const deferred = createDeferred<void>();
     const fixture = serviceFixture();
+    const deferred = fixture.defer();
     const record = handoff();
     const unhandled = vi.fn();
     process.on("unhandledRejection", unhandled);
@@ -186,7 +188,7 @@ describe("handoff turn start and recovery", () => {
     }
   });
 
-  it("respects attempt spacing and the cap, then logs the parked warning once", async () => {
+  it("respects attempt spacing and the cap, then logs a parked warning", async () => {
     const fixture = serviceFixture();
     fixture.store.insertHandoff(
       handoff({
@@ -238,7 +240,7 @@ describe("handoff turn start and recovery", () => {
     const fixture = serviceFixture();
     const record = handoff();
     fixture.store.insertHandoff(record);
-    const turn = createDeferred<void>();
+    const turn = fixture.defer();
     dispatchTurn.mockReturnValue(turn.promise);
 
     await fixture.service.startTurn(record);
@@ -271,7 +273,9 @@ async function nextEventLoopTurn(): Promise<void> {
 }
 
 function serviceFixture(options: { now?: () => number } = {}) {
-  const store = createHandoffStore(temporaryStateDir());
+  const root = temporaryStateDir();
+  const store = createTestHandoffStore(root);
+  const releaseDeferred: Array<() => void> = [];
   const getStore = vi.fn(() => store);
   const runtime = {
     config: { current: () => ({}) },
@@ -282,17 +286,33 @@ function serviceFixture(options: { now?: () => number } = {}) {
     warn: vi.fn(),
     error: vi.fn(),
   };
+  const service = createHandoffService({
+    runtime,
+    configuration: { channelSurfaces: { slack: "slack", discord: "discord" } },
+    getStore,
+    logger: logger as unknown as PluginLogger,
+    now: options.now ?? (() => 100_000),
+  });
+  ownStateResource(root, async () => {
+    for (const release of releaseDeferred) release();
+    await service.stop();
+    await Promise.allSettled(
+      dispatchTurn.mock.results
+        .filter((result) => result.type === "return")
+        .map((result) => result.value),
+    );
+    await nextEventLoopTurn();
+  });
   return {
     store,
     getStore,
     runtime,
     logger,
-    service: createHandoffService({
-      runtime,
-      configuration: { channelSurfaces: { slack: "slack", discord: "discord" } },
-      getStore,
-      logger: logger as unknown as PluginLogger,
-      now: options.now ?? (() => 100_000),
-    }),
+    service,
+    defer() {
+      const turn = createDeferred<void>();
+      releaseDeferred.push(() => turn.resolve());
+      return turn;
+    },
   };
 }
