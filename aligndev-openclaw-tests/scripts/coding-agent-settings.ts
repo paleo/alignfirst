@@ -1,5 +1,5 @@
 export const HARNESS_PROFILE = "harness";
-export const PI_CONTRACT_MODEL = "openai/gpt-5.6-terra";
+export const PI_CONTRACT_MODEL = "openai/gpt-6.1-terra";
 
 export type CodingAgent = "claude" | "codex" | "pi";
 

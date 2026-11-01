@@ -1179,7 +1179,7 @@ describe("launch guards", () => {
   it("rejects a cross-agent resume before discovery or session creation", async () => {
     seedRecord("codex.md", { status: "succeeded", sessionId: "abc", agent: "codex" });
     const before = listSessionRecords(plans, readMachineId(home)).length;
-    const modelResolver = vi.fn(async () => "gpt-5.6-terra");
+    const modelResolver = vi.fn(async () => "gpt-6.1-terra");
     const stderr = makeSink();
     const otherHome = makeHome({
       platform: "codingAgent",

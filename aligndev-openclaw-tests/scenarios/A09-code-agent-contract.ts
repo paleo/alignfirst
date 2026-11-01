@@ -162,7 +162,7 @@ function assertSelectedNewCall(mock: CodingAgentMockHandle, agent: CodingAgent):
     agent === "pi"
       ? ["--mode", "json", "--model", PI_CONTRACT_MODEL]
       : agent === "codex"
-        ? ["exec", "--json", "--sandbox", "workspace-write", "--model", "gpt-5.6-terra", "-"]
+        ? ["exec", "--json", "--sandbox", "workspace-write", "--model", "gpt-6.1-terra", "-"]
         : [
             "-p",
             "--output-format",
@@ -202,7 +202,7 @@ function assertSelectedResumeCall(
             "--sandbox",
             "workspace-write",
             "--model",
-            "gpt-5.6-terra",
+            "gpt-6.1-terra",
             "resume",
             sessionId,
             "-",

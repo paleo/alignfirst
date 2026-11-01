@@ -151,7 +151,7 @@ for (const [agent, args] of [
 for (const command of [
   "aligndev code new --message 'Inspect the files'",
   "(aligndev code resume session-id; openclaw system event --mode now)",
-  "npx -y aligndev code new --model openai/gpt-5.6-terra",
+  "npx -y aligndev code new --model openai/gpt-6.1-terra",
   "aligndev code new --profile pi --message 'Compare claude codex pi behavior'",
   "aligndev code new --message 'Inspect pi configuration'",
 ]) {

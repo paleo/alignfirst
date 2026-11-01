@@ -34,7 +34,7 @@ npm run build --prefix ..
 # Build and pack local packages, install them, then build the harness image.
 npm run env:build
 npm run env:up
-npm run e2e -- --model gpt-5.6-terra --channel slack-mock A03-question
+npm run e2e -- --model gpt-6.1-terra --channel slack-mock A03-question
 npm run env:down
 ```
 
@@ -71,7 +71,7 @@ The stock CLI writes the version-only base tag `paleo/openclaw-test-base:<packag
    ```
 
    Here `default` is the Docker-driver builder on the default context. A container-driver builder cannot resolve a local-only base tag. Set absolute `OPENCLAW_TEST_PROJECT_DIR`, `OPENCLAW_TEST_PACKAGE_DIR`, workspace/config/scenarios/output paths and `ALIGNFIRST_REPO_DIR` before Compose. Pre-create writable bind-mount directories as the caller. Keep the dedicated Codex home outside the build context and mount it read-only.
-3. Securely render a private runtime config using the runner's environment expansion, empty-key provider dropping and selected `agents.entries.main.model`. Keep expanded secrets outside artifacts/build contexts, with mode `0600`. For authorized Terra acceptance, select `openai/gpt-5.6-terra`, use the Haiku/OpenRouter judge and clear Anthropic/Z.AI keys. Forward the same private environment, config and worker paths on every Compose command.
+3. Securely render a private runtime config using the runner's environment expansion, empty-key provider dropping and selected `agents.entries.main.model`. Keep expanded secrets outside artifacts/build contexts, with mode `0600`. For authorized Terra acceptance, select `openai/gpt-6.1-terra`, use the Haiku/OpenRouter judge and clear Anthropic/Z.AI keys. Forward the same private environment, config and worker paths on every Compose command.
 4. Refresh a private worker workspace before each cell. Start only the owned bus/gateway with `up -d --no-build --pull never --force-recreate --wait bus gateway`. Invoke `run --rm --no-deps --pull never --use-aliases runner` with the scenario, channel, model ID/ref, iteration index/width, base stamp and results-directory arguments from `packages/openclaw-test/src/loop.ts`. Check both the runner exit and its cell JSON. Recreate between cells; do not use stack reuse.
 5. Wait for every runner and tear down only the explicit owned project with the same Compose files and environment. Remove only its owned volumes/networks when needed. Preserve timestamped results and sanitized build/gateway logs. Inspect exact project/service labels and sanitized load errors; expanded Compose configuration can expose secrets.
 
@@ -79,10 +79,10 @@ Unique tags isolate names, not CPU, RAM, disk or build cache. Agree on a resourc
 
 ## Configuration
 
-Use only Terra (`openai/gpt-5.6-terra`) for conversation-model tests. The judge runs `openrouter/anthropic/claude-haiku-4.5` on `OPENROUTER_API_KEY`. The Anthropic, Qwen and GLM providers in `openclaw.json` stay as examples at their latest model versions; the runner drops a provider whose key is empty.
+Use only Terra (`openai/gpt-6.1-terra`) for conversation-model tests. This version has not yet been validated by live scenarios; the dated acceptance records below describe earlier runs. The judge runs `openrouter/anthropic/claude-haiku-4.5` on `OPENROUTER_API_KEY`. The Anthropic, Qwen and GLM providers in `openclaw.json` stay as examples at their latest model versions; the runner drops a provider whose key is empty.
 
 - `OPENCLAW_WORKSPACE_DIR=./workspace` — the `myassistant` workspace, bind-mounted into the gateway. Workspace edits iterate live.
-- `OPENCLAW_CODEX_HOME` — absolute path to a file-backed Codex home. Required for `openai/gpt-5.6-terra`. The gateway mounts it read-only and imports its ChatGPT/Codex credential into the disposable `main` agent's OpenClaw auth store at startup; no OpenAI Platform API key is required. Create a dedicated login so test authentication is isolated from the main Codex session:
+- `OPENCLAW_CODEX_HOME` — absolute path to a file-backed Codex home. Required for `openai/gpt-6.1-terra`. The gateway mounts it read-only and imports its ChatGPT/Codex credential into the disposable `main` agent's OpenClaw auth store at startup; no OpenAI Platform API key is required. Create a dedicated login so test authentication is isolated from the main Codex session:
 
   ```sh
   mkdir -p .codex-home
@@ -98,7 +98,7 @@ Use only Terra (`openai/gpt-5.6-terra`) for conversation-model tests. The judge 
 
   The plugin installs, the repair and Doctor share one image layer, which then drops the plugin captures they left. Since 2026.10, loading a plugin with native binaries (Codex) hardlinks its files and checks the link's inode. Overlayfs gives a new inode to a lower-layer file with several links when the link copies it up, so a split layer or a leftover capture makes Codex fail to load: `Native plugin artifact changed during admission`.
 - `ALIGNFIRST_REPO_DIR` — host path to the monorepo root (build it first). Live-mounted read-only at `/opt/alignfirst`; the `aligndev` and `alignfirst` wrappers run both CLIs from the checkout. `aligndev code` runs for real, while `claude`, `codex` and `pi` resolve to the mock through PATH. `aligndev guide` reads its templates at runtime, so edits iterate live: the playbook comes from `packages/aligndev/templates/guide/playbook/`, and the delegation instructions (`aligndev guide code`) from `packages/aligndev/templates/guide/code.md`.
-- `CODING_AGENT=codex|claude|pi` — required mocked-child selector, independent of the OpenClaw conversation model. `CODING_AGENT_MODELS`, a comma-separated list, optionally replaces accepted model names or pins a full Codex slug/Pi-native selector. Both reach the gateway and runner. The pure `scripts/coding-agent-settings.ts` helper generates `code.profile: "harness"` and `code.profiles.harness: { agent, models? }`, with `platform: "openclaw"` and `projectsRoot: "/home/assistant/projects"`. The thin writer saves it to `/home/assistant/.alignfirst/aligndev.settings.json`; missing/invalid selectors fail startup. Empty model lists add no override or default model. A09 explicitly selects `terra` for Codex, `sonnet` for Claude or `openai/gpt-5.6-terra` for Pi; model-list overrides must allow that selection. Pi mocks need neither a real Pi CLI nor Pi credentials. Terra/OpenClaw's Codex credential import remains independent, including with a mocked Pi child.
+- `CODING_AGENT=codex|claude|pi` — required mocked-child selector, independent of the OpenClaw conversation model. `CODING_AGENT_MODELS`, a comma-separated list, optionally replaces accepted model names or pins a full Codex slug/Pi-native selector. Both reach the gateway and runner. The pure `scripts/coding-agent-settings.ts` helper generates `code.profile: "harness"` and `code.profiles.harness: { agent, models? }`, with `platform: "openclaw"` and `projectsRoot: "/home/assistant/projects"`. The thin writer saves it to `/home/assistant/.alignfirst/aligndev.settings.json`; missing/invalid selectors fail startup. Empty model lists add no override or default model. A09 explicitly selects `terra` for Codex, `sonnet` for Claude or `openai/gpt-6.1-terra` for Pi; model-list overrides must allow that selection. Pi mocks need neither a real Pi CLI nor Pi credentials. Terra/OpenClaw's Codex credential import remains independent, including with a mocked Pi child.
 - [`docker-compose.yml`](../../aligndev-openclaw-tests/docker-compose.yml) — one shared fixture volume on gateway and runner at `/home/assistant/projects`; the monorepo bind mount on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL` defaults to `openrouter/anthropic/claude-haiku-4.5` on `runner` and accepts a host override.
 
 ## Fixtures
@@ -174,7 +174,7 @@ For authorized acceptance, rebuild the CLIs and harness image from `aligndev-ope
 ```bash
 npm run build --prefix ..
 npm run env:build
-CODING_AGENT=codex npm run e2e -- --model gpt-5.6-terra --channel slack-mock --iterations 1 \
+CODING_AGENT=codex npm run e2e -- --model gpt-6.1-terra --channel slack-mock --iterations 1 \
   A01-new-work-to-be-done A08-go-ahead-delegation
 ```
 
@@ -183,7 +183,7 @@ Inspect the cell results, transcripts and gateway logs. Investigate and fix unex
 The app scenarios run on `webchat` only:
 
 ```bash
-CODING_AGENT=codex npm run e2e -- --model gpt-5.6-terra --channel webchat \
+CODING_AGENT=codex npm run e2e -- --model gpt-6.1-terra --channel webchat \
   A26-app-conversation-from-home A27-managed-worktree-conversation
 ```
 

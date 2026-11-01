@@ -46,7 +46,7 @@ Both packages target **Pi 1.3.0**, require **Node.js 22.19.0 or later**, and cur
 
 The deterministic matrices cover public tools, bounded results, ownership races, real descendants, headless subagents, native idle/busy delivery and lifecycle replacement. Release smoke additionally installs each packed extension independently and together against Pi 1.3.0. Cross-product tests launch the real AlignDev CLI through a packed background extension, with controlled child streams and companion-backed worktrees.
 
-Live acceptance has exercised **openai/gpt-5.6-terra**, including headless single/parallel delegation, idle and busy completion without further human input, quiet AlignDev Pi children, exact result retrieval and dependent verification, out-of-order worktrees, question relay, authentication failure and explicit cancellation without coding retry. Real terminal quit and `/reload` checks verify cleanup after a model-launched job. These observations establish the tested workflow, not general model obedience. Pi work does not certify or migrate the outstanding Claude/Codex/OpenClaw completion paths.
+Historical live acceptance with Terra exercised headless single/parallel delegation, idle and busy completion without further human input, quiet AlignDev Pi children, exact result retrieval and dependent verification, out-of-order worktrees, question relay, authentication failure and explicit cancellation without coding retry. Real terminal quit and `/reload` checks verify cleanup after a model-launched job. These observations establish the tested workflow, not general model obedience. Pi work does not certify or migrate the outstanding Claude/Codex/OpenClaw completion paths.
 
 ## Archived headless feasibility research
 

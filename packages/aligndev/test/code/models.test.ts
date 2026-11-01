@@ -100,16 +100,16 @@ describe("Codex executable model resolution", () => {
       " provider/model:high ",
     );
     await expect(resolve("pi", undefined, CONTEXT)).resolves.toBeUndefined();
-    await expect(resolve("codex", "gpt-5.6-terra", CONTEXT)).resolves.toBe("gpt-5.6-terra");
+    await expect(resolve("codex", "gpt-6.1-terra", CONTEXT)).resolves.toBe("gpt-6.1-terra");
     expect(runner).not.toHaveBeenCalled();
   });
 
   it("reuses one successfully parsed catalog without requiring other aliases", async () => {
     const runner = vi.fn(async () =>
-      JSON.stringify({ models: [{ slug: "gpt-5.6-terra" }, { slug: "gpt-5.7-luna" }] }),
+      JSON.stringify({ models: [{ slug: "gpt-6.1-terra" }, { slug: "gpt-5.7-luna" }] }),
     );
     const resolve = createExecutableModelResolver(runner);
-    await expect(resolve("codex", "terra", CONTEXT)).resolves.toBe("gpt-5.6-terra");
+    await expect(resolve("codex", "terra", CONTEXT)).resolves.toBe("gpt-6.1-terra");
     await expect(resolve("codex", "luna", CONTEXT)).resolves.toBe("gpt-5.7-luna");
     expect(runner).toHaveBeenCalledTimes(1);
   });

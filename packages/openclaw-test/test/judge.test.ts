@@ -5,7 +5,7 @@ const fetchMock = vi.fn<typeof fetch>();
 beforeEach(() => {
   vi.resetModules();
   vi.stubGlobal("fetch", fetchMock);
-  vi.stubEnv("OPENCLAW_TEST_JUDGE_MODEL", "openrouter/anthropic/claude-haiku-4.5");
+  vi.stubEnv("OPENCLAW_TEST_JUDGE_MODEL", "openrouter/anthropic/claude-haiku-5.5");
   vi.stubEnv("OPENROUTER_API_KEY", "offline-test-key");
   vi.stubEnv("ANTHROPIC_API_KEY", "offline-test-key");
 });
@@ -17,7 +17,8 @@ afterEach(() => {
 });
 
 describe("judge SDK compatibility", () => {
-  it("sends the OpenRouter Haiku request and accounts for text and usage", async () => {
+  it("uses default Haiku and accounts for text and usage", async () => {
+    vi.stubEnv("OPENCLAW_TEST_JUDGE_MODEL", undefined);
     respond({
       choices: [{ message: { content: "first" } }, { message: { content: " second" } }],
       usage: { prompt_tokens: 17, completion_tokens: 4 },
@@ -27,7 +28,7 @@ describe("judge SDK compatibility", () => {
     expect(result).toEqual({
       raw: "first second",
       usage: {
-        model: "openrouter/anthropic/claude-haiku-4.5",
+        model: "openrouter/anthropic/claude-haiku-5.5",
         inputTokens: 17,
         outputTokens: 4,
       },
@@ -36,16 +37,16 @@ describe("judge SDK compatibility", () => {
     expect(request.url).toBe("https://openrouter.ai/api/v1/chat/completions");
     expect(request.headers.get("authorization")).toBe("Bearer offline-test-key");
     expect(await request.json()).toEqual({
-      model: "anthropic/claude-haiku-4.5",
+      model: "anthropic/claude-haiku-5.5",
       max_tokens: 256,
-      temperature: 0,
+      reasoning_effort: "medium",
       messages: [{ role: "user", content: "Evaluate this" }],
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("retains Anthropic content-block and token accounting", async () => {
-    vi.stubEnv("OPENCLAW_TEST_JUDGE_MODEL", "anthropic/claude-haiku-4-5");
+    vi.stubEnv("OPENCLAW_TEST_JUDGE_MODEL", "anthropic/claude-haiku-5-5");
     respond({
       content: [
         { type: "text", text: "answer" },
@@ -57,19 +58,19 @@ describe("judge SDK compatibility", () => {
     const judge = await freshJudge();
     expect(await judge.judgeLLMRaw("Evaluate this")).toEqual({
       raw: "answer text",
-      usage: { model: "anthropic/claude-haiku-4-5", inputTokens: 11, outputTokens: 3 },
+      usage: { model: "anthropic/claude-haiku-5-5", inputTokens: 11, outputTokens: 3 },
     });
     const request = recordedRequest();
     expect(request.url).toBe("https://api.anthropic.com/v1/messages");
     expect(await request.json()).toEqual({
-      model: "claude-haiku-4-5",
-      max_tokens: 1024,
-      temperature: 0,
+      model: "claude-haiku-5-5",
+      max_tokens: 4096,
+      output_config: { effort: "low" },
       messages: [{ role: "user", content: "Evaluate this" }],
     });
   });
 
-  it.each(["openrouter/anthropic/claude-haiku-4.5", "anthropic/claude-haiku-4-5"])(
+  it.each(["openrouter/anthropic/claude-haiku-5.5", "anthropic/claude-haiku-5-5"])(
     "rejects missing usage from %s without retrying",
     async (model) => {
       vi.stubEnv("OPENCLAW_TEST_JUDGE_MODEL", model);
@@ -128,7 +129,7 @@ function recordedRequest(): Request {
 }
 
 describe("judge model references", () => {
-  it.each(["claude-haiku-4-5", "openai/gpt-5.6-terra", "openrouter/"])(
+  it.each(["claude-haiku-5-5", "openai/gpt-6.1-terra", "openrouter/"])(
     "rejects unsupported or incomplete reference %s before any request",
     async (reference) => {
       vi.stubEnv("OPENCLAW_TEST_JUDGE_MODEL", reference);
