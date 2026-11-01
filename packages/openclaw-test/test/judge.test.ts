@@ -39,7 +39,7 @@ describe("judge SDK compatibility", () => {
     expect(await request.json()).toEqual({
       model: "anthropic/claude-haiku-5.5",
       max_tokens: 256,
-      reasoning_effort: "medium",
+      reasoning_effort: "low",
       messages: [{ role: "user", content: "Evaluate this" }],
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -69,6 +69,26 @@ describe("judge SDK compatibility", () => {
       messages: [{ role: "user", content: "Evaluate this" }],
     });
   });
+
+  it.each(["openrouter/other/model", "anthropic/other-model"])(
+    "preserves sampling and explicit caps without forcing effort on override %s",
+    async (model) => {
+      vi.stubEnv("OPENCLAW_TEST_JUDGE_MODEL", model);
+      respond({
+        choices: [{ message: { content: "answer" } }],
+        content: [{ type: "text", text: "answer" }],
+        usage: { prompt_tokens: 1, completion_tokens: 2, input_tokens: 1, output_tokens: 2 },
+      });
+      const judge = await freshJudge();
+      await judge.judgeLLMRaw("test", { maxTokens: 128 });
+      expect(await recordedRequest().json()).toEqual({
+        model: model.slice(model.indexOf("/") + 1),
+        max_tokens: 128,
+        temperature: 0,
+        messages: [{ role: "user", content: "test" }],
+      });
+    },
+  );
 
   it.each(["openrouter/anthropic/claude-haiku-5.5", "anthropic/claude-haiku-5-5"])(
     "rejects missing usage from %s without retrying",

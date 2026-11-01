@@ -2,8 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { extractTaggedBlock } from "./parse-tagged-json.js";
 
-const DEFAULT_JUDGE_MODEL = "openrouter/anthropic/claude-haiku-4.5";
-const DEFAULT_MAX_TOKENS = 1024;
+const DEFAULT_JUDGE_MODEL = "openrouter/anthropic/claude-haiku-5.5";
+const DEFAULT_MAX_TOKENS = 4096;
 const RESULT_TAG = "result-json";
 
 type JudgeClient =
@@ -162,7 +162,9 @@ async function callJudgeOnce(
   const resp = await judge.client.messages.create({
     model: judge.bareModel,
     max_tokens: maxTokens,
-    temperature: 0,
+    ...(judge.bareModel === "claude-haiku-5-5"
+      ? { output_config: { effort: "low" as const } }
+      : { temperature: 0 }),
     messages: [{ role: "user", content: prompt }],
   });
   const raw = resp.content.map((b) => (b.type === "text" ? b.text : "")).join("");
@@ -183,7 +185,9 @@ async function callOpenRouterOnce(
   const response = await judge.client.chat.completions.create({
     model: judge.bareModel,
     max_tokens: maxTokens,
-    temperature: 0,
+    ...(judge.bareModel === "anthropic/claude-haiku-5.5"
+      ? { reasoning_effort: "low" as const }
+      : { temperature: 0 }),
     messages: [{ role: "user", content: prompt }],
   });
   const raw = response.choices.map((choice) => choice.message.content ?? "").join("");
@@ -238,7 +242,7 @@ function parseJudgeModelRef(ref: string): {
   const slash = ref.indexOf("/");
   if (slash < 0) {
     throw new Error(
-      `OPENCLAW_TEST_JUDGE_MODEL must be a LiteLLM-style "provider/model" reference (for example, "anthropic/claude-haiku-4-5" or "openrouter/anthropic/claude-haiku-4.5"); got ${JSON.stringify(ref)}`,
+      `OPENCLAW_TEST_JUDGE_MODEL must be a LiteLLM-style "provider/model" reference (for example, "anthropic/claude-haiku-5-5" or "openrouter/anthropic/claude-haiku-5.5"); got ${JSON.stringify(ref)}`,
     );
   }
   const provider = ref.slice(0, slash);

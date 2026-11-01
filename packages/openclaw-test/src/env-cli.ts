@@ -41,7 +41,7 @@ const RUN_USAGE = `usage: openclaw-test run --channel <id|id,id,…|all> [<scena
                       surfaces its "export const surfaces" lists, by default on every channel
                       except webchat; unsupported pairs are skipped.
   --model <id|id,id,…|all>
-                      select the agent model(s): a bare id (e.g. claude-sonnet-5), a
+                      select the agent model(s): a bare id (e.g. claude-sonnet-5-5), a
                       comma list of bare ids, or "all". Defaults to OPENCLAW_DEFAULT_TEST_MODEL.
                       The catalog is OPENCLAW_TEST_MODELS (.env.local), a comma list of full
                       provider/model refs; the bare id is the suffix after the last "/".
