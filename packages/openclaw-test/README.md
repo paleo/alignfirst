@@ -12,7 +12,7 @@ For internals (topology, Dockerfile pair, mocked-CLI shim, channel plugin mechan
 npm i -D @alignfirst/openclaw-test @alignfirst/openclaw-channel-mock-core @alignfirst/openclaw-discord-mock @alignfirst/openclaw-slack-mock openclaw
 ```
 
-Requires Docker Compose. The host CLI supports the Node versions in `engines.node` or Bun 1.4.4, the tested Bun baseline. Its eager OpenClaw dependency graph uses APIs absent from older Bun releases; Bun 1.3.3 is incompatible.
+Requires Docker Compose. The host CLI supports the Node versions in `engines.node` or Bun 1.4.4, the tested Bun baseline. The container-only `bus` and `runner` commands load the OpenClaw dependency graph on demand. That graph uses APIs absent from older Bun releases; Bun 1.3.3 is incompatible.
 
 Published bins retain Node shebangs, so ordinary `bunx @alignfirst/openclaw-test` normally runs Node when it is installed. Bun-only hosts should use `bunx --bun @alignfirst/openclaw-test` (`bun x --bun` is equivalent). Direct `bun <installed-entry.mjs>` and project scripts launched with `bun --bun run <script>` also preserve Bun. This covers the host CLI, not Docker, OpenClaw or native coding agents running under Bun. Containers retain Node 26 and npm.
 

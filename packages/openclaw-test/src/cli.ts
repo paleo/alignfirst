@@ -7,9 +7,7 @@ import {
 } from "@alignfirst/docmap/invocation";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { startBus } from "./bus.js";
 import { envCommand, runCommand } from "./env-cli.js";
-import { main as runnerMain } from "./runner.js";
 import { cliCommand, resolveCliInvocation } from "./invocation.js";
 
 // `dist/cli.js` ships under `<package>/dist/`; one level up from its dir is the package root.
@@ -37,12 +35,17 @@ export async function dispatch(
     case "run":
       await runCommand(PACKAGE_DIR, rest, invocation);
       return;
-    case "bus":
+    // Keep the OpenClaw SDK graph off lightweight host-command startup.
+    case "bus": {
+      const { startBus } = await import("./bus.js");
       startBus();
       return;
-    case "runner":
-      await runnerMain(rest);
+    }
+    case "runner": {
+      const { main } = await import("./runner.js");
+      await main(rest);
       return;
+    }
     default:
       usage(invocation);
   }
