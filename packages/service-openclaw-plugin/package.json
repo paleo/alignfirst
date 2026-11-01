@@ -1,6 +1,6 @@
 {
   "name": "@alignfirst/service-openclaw-plugin",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "OpenClaw capabilities for AlignDev.",
   "keywords": [
     "alignfirst",
@@ -51,7 +51,7 @@
     "typebox": "~1.4.3"
   },
   "devDependencies": {
-    "@alignfirst/openclaw-channel-mock-core": "0.11.2",
+    "@alignfirst/openclaw-channel-mock-core": "0.11.3",
     "@types/node": "~26.6.6",
     "openclaw": "~2026.10.9",
     "rimraf": "~6.1.3",

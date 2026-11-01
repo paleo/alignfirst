@@ -1,5 +1,17 @@
 # @alignfirst/openclaw-test
 
+## 0.24.1
+
+### Patch Changes
+
+- 55705b8: Updated the default judge to Haiku 5.5, including low-effort requests, a larger default output budget and prompt-length pricing.
+- 55705b8: Made host CLI startup lighter by loading bus and runner implementations only for their commands.
+- 55705b8: Updated OpenClaw compatibility to 2026.10.9 and schema dependencies. Node now requires 24.22.1+ on the 24.x line or 26.12.1+. Updated the judge SDKs and removed sampling parameters from direct Anthropic requests.
+- Updated dependencies [55705b8]
+  - @alignfirst/openclaw-channel-mock-core@0.11.3
+  - @alignfirst/openclaw-discord-mock@0.6.7
+  - @alignfirst/openclaw-slack-mock@0.6.7
+
 ## 0.24.0
 
 ### Minor Changes

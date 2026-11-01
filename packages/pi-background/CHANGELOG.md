@@ -1,5 +1,11 @@
 # @alignfirst/pi-background
 
+## 0.1.3
+
+### Patch Changes
+
+- 55705b8: Updated Pi compatibility to 1.4.0.
+
 ## 0.1.2
 
 ### Patch Changes
