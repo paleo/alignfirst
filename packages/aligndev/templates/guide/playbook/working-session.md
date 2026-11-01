@@ -452,8 +452,8 @@ For an active development branch that needs to catch up with its base, follow th
 
 Every time a branch refresh brings in new commits (`git pull`, `git merge`, fast-forward, base-branch merge, …):
 
-1. Reinstall dependencies with the project's package manager.
-2. Rebuild, if the project needs it.
+1. Install dependencies if the incoming changes invalidate the installed dependencies.
+2. Rebuild affected outputs if needed for the next task.
 3. Run the database migrations, if the new commits added some.
 
 Delegate the sequence to the agent.
@@ -468,13 +468,13 @@ Before non-trivial code changes, like executing a plan, stop declared services w
 
 ### Tests, lint, build
 
-The project's checks are routine hygiene. The agent usually runs them on its own; have it run the checks only when they were forgotten.
+The project's checks are routine hygiene. The agent usually runs them on its own; request only missing, relevant checks. Scope automated checks and other development tooling to the task's needs, reusing valid results and skipping unnecessary work. Broaden for uncertain impact or project requirements. Pass this rule to the agent and report material omissions.
 
 ### Always test the work manually
 
 Manual testing is what ends a code change: beyond the automated checks, the change gets exercised before any MR/PR and before telling the user it's finished. On the completion turn, verify first, then report, one consolidated message that ends the turn:
 
-1. Confirm the checks passed (see "Tests, lint, build").
+1. Confirm the applicable checks passed (see "Tests, lint, build").
 2. Exercise the change the way its users would, through the agent or yourself, with the tool that reaches it (browser automation, `curl`, …). On a project with a dev-server, start it and drive the change in the UI. Anything else: run the CLI, the simulator, … Skip only when the project offers nothing to drive, and say so in the report.
 {{#thread}}
 3. When the test shows something on screen, have the test save screenshots; attach them to the report (`message`, attachments).
@@ -593,7 +593,7 @@ The author of a branch you reviewed pushes fixes and asks you to check them, or 
 
 You are the judge of when the ticket's scope is done — a ticket can span several coding sessions, so no single run completion decides it. When you judge it done, create the MR/PR without asking.
 
-Before creating it: the code compiles, lint and tests pass, and you exercised the change manually (see "Always test the work manually"). Then run the review workflow with its fix step (see "Code review" above) — automatic, part of creating any MR/PR.
+Before creating it: the applicable checks pass (see "Tests, lint, build"), and you exercised the change manually (see "Always test the work manually"). Then run the review workflow with its fix step (see "Code review" above) — automatic, part of creating any MR/PR.
 
 After creating the MR/PR (via `{{ALIGNDEV}} code`):
 
@@ -603,7 +603,7 @@ After creating the MR/PR (via `{{ALIGNDEV}} code`):
 Whenever you observe that a PR/MR is merged:
 
 1. Remove the source branch's linked workspace as "Cleanup requests" describes. A branch worked on in place stays checked out: the user decides when to leave it.
-2. Delegate the refresh of the merge target without a protocol: in the main worktree, clean and on its base branch, fetch and fast-forward it, then reinstall dependencies, rebuild, and run new migrations when required.
+2. Delegate the refresh of the merge target without a protocol: in the main worktree, clean and on its base branch, fetch and fast-forward it, then apply "Refreshing the workspace after a branch refresh".
 3. Report the removed workspace and refreshed branch. When unsuitable plans block the refresh delegation, the removal still happens; report the blocked refresh.
 {{#app}}
 
@@ -641,7 +641,7 @@ When the user asks to clean the workspaces, from PROJECT_PATH:
 
 1. List the worktrees through `{{ALIGNFIRST}} workspace list --json`.
 2. For each linked workspace, find its branch's PR/MR through the configured code-hosting tool. Remove the workspace as in "Cleanup requests", only when that PR/MR is merged. Leave the others intact: in-place work, no PR/MR, or an unmerged PR/MR. Stop on the first failed removal.
-3. When a workspace was removed, delegate the merge target's refresh as after a merge above, installing from the committed lockfile without rewriting it (`npm ci` with npm).
+3. When a workspace was removed, delegate the merge target's refresh as after a merge above. Any needed installation uses the committed lockfile without rewriting it (`npm ci` with npm).
 4. Report every decision, any blocked refresh, and the final base-branch state.
 
 {{#thread}}

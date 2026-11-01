@@ -43,14 +43,14 @@ The direct main-worktree bootstrap is the creation exception. It ends with the i
 
 The user hands you a repository URL to clone instead of asking for a new project. Onboarding is bootstrap work like creation. Before the project is prepared, every delegation to the agent uses a fresh session with a plain message, never a protocol.
 
-### Step 1 — Clone and build
+### Step 1 — Clone and prepare
 
 Before any discussion:
 
 1. Select a parent directory allowed by `{{ALIGNDEV}} guide project`. Ask the user when several qualify.
 2. Clone the repository into that parent. PROJECT is the clone's directory name; PROJECT_PATH is its canonical path.
 3. Retain the canonical path as PROJECT_PATH. Run `{{ALIGNFIRST}} assistant-instructions` there. When the project's selected configuration declares ports, run `{{ALIGNDEV}} project free-ports --root <selected parent directory> --size <port names × concurrent workspaces> [--range <code>]` and retain the block; preparation through the setup guide writes it into `devServer.ports` in the selected `alignfirst.json` or `.jsonc`.
-4. Install dependencies and build, following the repository's own README.
+4. Install dependencies and build as needed, following the repository's own README.
 
 ### Step 2 — Check the AlignDev contract
 
@@ -79,7 +79,7 @@ On approval:
 When the user reports the merge, or you observe it while checking the PR:
 
 1. In the main worktree, switch back to the default branch, pull, and delete the local setup branch.
-2. Install dependencies and build.
+2. Install dependencies and rebuild only where the incoming changes require it.
 3. When the user chose the work-files repository, clone it under `{{PROJECTS_ROOT}}` when no clone exists there (the projects guide names the repository), then run `{{ALIGNFIRST}} plans setup {{PROJECTS_ROOT}}/<clone>` from PROJECT_PATH. Otherwise keep the prepared plans. Then verify with `{{GUIDE}} work-files-setup`.
 4. Run `{{ALIGNDEV}} project doctor`. Stop when the inventory is unhealthy.
 5. Prepare effective plans and selected runtime storage (ignored/untracked `.local-wt/` only for project runtime), then run `{{ALIGNFIRST}} workspace setup` on main. Delegate any separately required install/build/test work.
