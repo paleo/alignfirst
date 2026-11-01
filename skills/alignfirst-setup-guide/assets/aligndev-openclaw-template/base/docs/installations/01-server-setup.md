@@ -137,7 +137,7 @@ echo 'fs.inotify.max_user_instances=1024'   | sudo tee -a /etc/sysctl.conf
 
 ## 6. Node
 
-Install the newest Node 26 from NodeSource. OpenClaw supports `>=24.16.0 <25 || >=26.1.0`; this deployment keeps the admin account, OpenClaw and its companion CLIs on the pinned system runtime. The admin account uses no version manager. Pi 1.3.0 and the optional `pi-subagent` package require Node >=22.19.0; this deployment's system Node also satisfies OpenClaw's higher requirement. Pi's service launcher uses `/usr/bin/node` while preserving the project PATH.
+Install the newest Node 26 from NodeSource. OpenClaw supports `>=24.22.1 <25 || >=26.12.1`; this deployment keeps the admin account, OpenClaw and its companion CLIs on the pinned system runtime. The admin account uses no version manager. Pi 1.4.0 and the optional `pi-subagent` package require Node >=22.19.0; this deployment's system Node also satisfies OpenClaw's higher requirement. Pi's service launcher uses `/usr/bin/node` while preserving the project PATH.
 
 ```sh
 curl -fsSL https://deb.nodesource.com/setup_26.x | sudo -E bash -

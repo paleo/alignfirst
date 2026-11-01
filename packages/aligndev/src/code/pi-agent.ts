@@ -142,7 +142,7 @@ function captureHeader(event: Record<string, unknown>, state: PiState): string {
     typeof event.timestamp !== "string" ||
     !Number.isFinite(Date.parse(event.timestamp))
   ) {
-    return invalidProtocol(state, "invalid or unsupported session header (requires pi 1.3.0)");
+    return invalidProtocol(state, "invalid or unsupported session header (requires pi 1.4.0)");
   }
   state.headerSeen = true;
   if (state.expectedSessionId !== undefined && event.id !== state.expectedSessionId) {

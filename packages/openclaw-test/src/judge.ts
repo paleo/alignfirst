@@ -164,7 +164,7 @@ async function callJudgeOnce(
     max_tokens: maxTokens,
     ...(judge.bareModel === "claude-haiku-5-5"
       ? { output_config: { effort: "low" as const } }
-      : { temperature: 0 }),
+      : {}),
     messages: [{ role: "user", content: prompt }],
   });
   const raw = resp.content.map((b) => (b.type === "text" ? b.text : "")).join("");

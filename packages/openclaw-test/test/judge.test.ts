@@ -62,6 +62,8 @@ describe("judge SDK compatibility", () => {
     });
     const request = recordedRequest();
     expect(request.url).toBe("https://api.anthropic.com/v1/messages");
+    expect(request.headers.get("authorization")).toBe("Bearer offline-test-key");
+    expect(request.headers.get("anthropic-version")).toBe("2026-10-21");
     expect(await request.json()).toEqual({
       model: "claude-haiku-5-5",
       max_tokens: 4096,
@@ -71,7 +73,7 @@ describe("judge SDK compatibility", () => {
   });
 
   it.each(["openrouter/other/model", "anthropic/other-model"])(
-    "preserves sampling and explicit caps without forcing effort on override %s",
+    "preserves explicit caps without forcing effort on override %s",
     async (model) => {
       vi.stubEnv("OPENCLAW_TEST_JUDGE_MODEL", model);
       respond({
@@ -84,7 +86,7 @@ describe("judge SDK compatibility", () => {
       expect(await recordedRequest().json()).toEqual({
         model: model.slice(model.indexOf("/") + 1),
         max_tokens: 128,
-        temperature: 0,
+        ...(model.startsWith("openrouter/") ? { temperature: 0 } : {}),
         messages: [{ role: "user", content: "test" }],
       });
     },

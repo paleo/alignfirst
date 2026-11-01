@@ -76,7 +76,7 @@ function run() {
       "--omit=peer",
       "--no-audit",
       "--no-fund",
-      "@earendil-works/pi-coding-agent@1.3.0",
+      "@earendil-works/pi-coding-agent@1.4.0",
       ...tarballs,
     ],
     { cwd: root, stdio: "pipe" },

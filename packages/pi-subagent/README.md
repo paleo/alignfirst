@@ -4,7 +4,7 @@ Run synchronous Pi subagents with separate contexts. The package registers one t
 
 ## Install
 
-Requires Pi 1.3.0 and Node.js 22.19 or newer. Linux is exercised by this package's subprocess tests on Node 26.8.1 and 22.23.3. The exact Node 22.19.0 floor has not been exercised. macOS support uses the Unix process-table implementation but has not been exercised here. WSL uses the Linux path; native Windows is rejected before launch.
+Targets Pi 1.4.0 and requires Node.js 22.19 or newer. Linux unit suites pass on Pi 1.4.0 with Node 26.13.0. Earlier subprocess tests exercised Pi 1.3.0 on Node 26.8.1 and 22.23.3. Packed and live acceptance have not been rerun for Pi 1.4.0. The exact Node 22.19.0 floor has not been exercised. macOS support uses the Unix process-table implementation but has not been exercised here. WSL uses the Linux path; native Windows is rejected before launch.
 
 If an existing local extension already registers `subagent`, disable it explicitly with `pi config` before installing this replacement. This includes a local `~/.pi/agent/extensions/subagent` example or symlink. Keep your profiles; this package does not overwrite them. Do not load both implementations.
 

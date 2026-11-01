@@ -4,7 +4,7 @@ An assistant is a dedicated Linux service account. It receives work through Slac
 
 ## Deployment gate
 
-The three overlays use explicit named profiles on both surfaces. Pi targets 1.3.0 and Node.js 22.19.0 or later. Its protected launcher executes the verified npm CLI with `/usr/bin/node`, preserving cwd, arguments, environment and project PATH. Packaged subagents reuse that Node through `process.execPath`. AlignDev's own minimum Node requirement remains separate.
+The three overlays use explicit named profiles on both surfaces. Pi targets 1.4.0 and Node.js 22.19.0 or later. Native deployment acceptance for this upgrade remains pending. Its protected launcher executes the verified npm CLI with `/usr/bin/node`, preserving cwd, arguments, environment and project PATH. Packaged subagents reuse that Node through `process.execPath`. AlignDev's own minimum Node requirement remains separate.
 
 **Approved Pi authentication exception:** `<agent-dir>/auth.json` stays private, service-owned and writable/replaceable, with adjacent locking, for normal native OAuth login and automatic credential/refresh-token renewal. It can also contain executable API-key commands. Any process under that account can persist such commands for later Pi execution. This is account-level persistence, not administrator privilege escalation; filesystem permissions cannot distinguish a refresh from another same-UID write. The entire service `~/.alignfirst/` tree also stays service-owned and writable, without immutable or append-only flags. All other managed instructions, executable resources, settings/declarations, trust and launchers outside that tree retain controlled-maintenance protection. Project trust is not a sandbox.
 

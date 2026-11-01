@@ -150,7 +150,7 @@ function smokeTestRelease() {
     );
   }
   console.log(
-    `Release smoke passed: alignfirst@${alignfirst.version}, aligndev@${aligndev.version}, Pi 1.3.0, both extensions independently/together.`,
+    `Release smoke passed: alignfirst@${alignfirst.version}, aligndev@${aligndev.version}, Pi 1.4.0, both extensions independently/together.`,
   );
 }
 
@@ -252,7 +252,7 @@ function disposableInstall(name, packages, host = false) {
       "--no-audit",
       "--no-fund",
       ...packages.map((p) => p.tarball),
-      ...(host ? ["@earendil-works/pi-coding-agent@1.3.0"] : []),
+      ...(host ? ["@earendil-works/pi-coding-agent@1.4.0"] : []),
     ],
     root,
   );

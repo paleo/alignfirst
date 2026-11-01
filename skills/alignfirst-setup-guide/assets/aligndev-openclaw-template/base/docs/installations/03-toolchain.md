@@ -98,14 +98,14 @@ The `environment.d` bridge stays before `init.bash`; the runtime initialization 
 
 ## 4. npm prefix and global CLIs
 
-The protected CLIs live in `~/.npm-system-global/`, but no `.npmrc` selects that prefix. `admin-npm` fixes both the system interpreter and the destination. The common CLIs use `@latest`; the update runbook records the installed versions. Pi uses an exact reviewed release, initially 1.3.0.
+The protected CLIs live in `~/.npm-system-global/`, but no `.npmrc` selects that prefix. `admin-npm` fixes both the system interpreter and the destination. The common CLIs use `@latest`; the update runbook records the installed versions. Pi uses an exact reviewed release, currently 1.4.0.
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm install -g \
   openclaw alignfirst aligndev ctx7
 ```
 
-Install the selected coding agent under the same prefix: [08-coding-agent.md § Install](08-coding-agent.md#install). Complete every protected-prefix install, including any optional quota CLI, before locking the prefix. For Pi, restore root ownership and `go-w`, lock the prefix anchor, then run `/opt/{{SERVICE_USER}}/libexec/install-pi-launcher.sh 1.3.0` as shown in `08`. Regeneration must follow hardening, not run inside the writable package window. The seed in `04` requires the protected launcher.
+Install the selected coding agent under the same prefix: [08-coding-agent.md § Install](08-coding-agent.md#install). Complete every protected-prefix install, including any optional quota CLI, before locking the prefix. For Pi, restore root ownership and `go-w`, lock the prefix anchor, then run `/opt/{{SERVICE_USER}}/libexec/install-pi-launcher.sh 1.4.0` as shown in `08`. Regeneration must follow hardening, not run inside the writable package window. The seed in `04` requires the protected launcher.
 
 The root-owned deployment helpers support maintenance and backup; the seed snapshot also carries them for unprivileged setup. Updating the snapshot alone never updates `/opt/{{SERVICE_USER}}/libexec/`.
 

@@ -127,7 +127,7 @@ function parseLine(line: string, state: State): void {
           typeof event.timestamp !== "string" ||
           !Number.isFinite(Date.parse(event.timestamp))
         ) {
-          throw new Error("Invalid Pi 1.3.0 session header.");
+          throw new Error("Invalid Pi 1.4.0 session header.");
         }
         state.header = true;
         return;

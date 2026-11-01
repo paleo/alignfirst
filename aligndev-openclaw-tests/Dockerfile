@@ -84,11 +84,11 @@ COPY --chown=assistant:assistant openclaw.json /home/assistant/.openclaw/opencla
 RUN npm ci --include=dev && \
     export OPENCLAW_CONFIG_PATH=/home/assistant/.openclaw/openclaw.json && \
     npx openclaw plugins install --force --accept-capabilities \
-      npm:@openclaw/codex@2026.10.5 && \
+      npm:@openclaw/codex@2026.10.9 && \
     npx openclaw plugins install --force --accept-capabilities \
-      npm:@openclaw/zai-provider@2026.10.5 && \
+      npm:@openclaw/zai-provider@2026.10.9 && \
     npx openclaw plugins install --force --accept-capabilities \
-      npm:@openclaw/perplexity-plugin@2026.10.5 && \
+      npm:@openclaw/perplexity-plugin@2026.10.9 && \
     npx openclaw plugins registry --refresh && \
     npx openclaw update repair --yes && \
     for attempt in 1 2 3; do \

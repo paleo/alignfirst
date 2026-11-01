@@ -19,7 +19,7 @@ Install the reviewed npm release using an admin-account Node satisfying Pi's min
 
 ```sh
 node --version
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.3.0
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.4.0
 pi --version
 ```
 
@@ -35,7 +35,7 @@ Start Pi in the admin repository to continue the installation. Pi discovers proj
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm install -g \
-  --ignore-scripts @earendil-works/pi-coding-agent@1.3.0
+  --ignore-scripts @earendil-works/pi-coding-agent@1.4.0
 sudo install -o root -g root -m 755 infra/openclaw/node-runtime/pi-launcher.mjs \
   /opt/{{SERVICE_USER}}/libexec/pi-launcher.mjs
 sudo install -o root -g root -m 755 infra/openclaw/node-runtime/install-pi-launcher.sh \
@@ -44,7 +44,7 @@ sudo install -o root -g root -m 755 infra/openclaw/node-runtime/install-pi-launc
 sudo chown -R root:root /home/{{SERVICE_USER}}/.npm-system-global
 sudo chmod -R go-w /home/{{SERVICE_USER}}/.npm-system-global
 sudo chattr +i /home/{{SERVICE_USER}}/.npm-system-global
-sudo /opt/{{SERVICE_USER}}/libexec/install-pi-launcher.sh 1.3.0
+sudo /opt/{{SERVICE_USER}}/libexec/install-pi-launcher.sh 1.4.0
 set -o pipefail
 settings=infra/openclaw/aligndev.settings.json
 store=$(sudo /usr/bin/node infra/openclaw/deployment-profiles.mjs "$settings" \
@@ -57,7 +57,7 @@ sudo -H -u {{SERVICE_USER}} bash -lc '
 # Expected executable: /opt/{{SERVICE_USER}}/bin/pi
 ```
 
-The installer verifies the exact package name/version and its declared `bin.pi`; Pi 1.3.0 declares `dist/bundle/cli.js`. It rejects missing, escaping or symlinked CLI paths, unsupported system Node, and an unprotected package prefix. The generated root-owned launcher uses `exec /usr/bin/node <verified-entry> "$@"`. It preserves arguments, cwd, environment and PATH. It does not invoke fnm, reset PATH or install another Node.
+The installer verifies the exact package name/version and its declared `bin.pi`; Pi 1.4.0 declares `dist/bundle/cli.js`. It rejects missing, escaping or symlinked CLI paths, unsupported system Node, and an unprotected package prefix. The generated root-owned launcher uses `exec /usr/bin/node <verified-entry> "$@"`. It preserves arguments, cwd, environment and PATH. It does not invoke fnm, reset PATH or install another Node.
 
 Pi's native shell helper prepends `<agent-dir>/bin` for tools. That directory is a protected executable resource; do not put a Node override there. Provision approved `rg`/`fd` binaries there or on system PATH before hardening, since Pi otherwise downloads missing tools into that bin. Later replacements use `agent-config` maintenance. With it protected, project commands retain the project-selected Node while Pi and packaged subagents use the launcher's Node through `process.execPath`.
 

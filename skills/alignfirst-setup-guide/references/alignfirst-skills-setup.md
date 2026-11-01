@@ -84,7 +84,7 @@ Restart the target agent after installation. Update the skills with `npx -y skil
 
 For a direct AlignFirst user who requests isolated plan/review delegation, offer `pi install npm:@alignfirst/pi-subagent` as a separate executable capability. The protocols retain their host-neutral fallback when no subagent tool exists. A skills-only request installs no extensions; the generic background package is unnecessary for synchronous delegation.
 
-Before replacing an existing local `subagent` extension, obtain approval and disable it explicitly with `pi config`; keep its profiles and do not load both tools. `/reload` cancels active subagents and background jobs. The package targets Pi 1.3.0 and requires Node.js 22.19 or later. It preserves normal Pi project-trust discovery without forced approval. See [the package README](https://github.com/paleo/alignfirst/blob/main/packages/pi-subagent/README.md).
+Before replacing an existing local `subagent` extension, obtain approval and disable it explicitly with `pi config`; keep its profiles and do not load both tools. `/reload` cancels active subagents and background jobs. The package targets Pi 1.4.0 and requires Node.js 22.19 or later. It preserves normal Pi project-trust discovery without forced approval. See [the package README](https://github.com/paleo/alignfirst/blob/main/packages/pi-subagent/README.md).
 
 ## Configure the Project
 

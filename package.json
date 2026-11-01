@@ -29,7 +29,7 @@
     "@google/genai": false,
     "esbuild@0.28.2": true,
     "koffi@3.3.2": true,
-    "openclaw@2026.10.5": true,
+    "openclaw@2026.10.9": true,
     "protobufjs": false
   },
   "devDependencies": {
