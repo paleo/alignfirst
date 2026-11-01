@@ -9,9 +9,9 @@ read_when:
 
 ## Identity
 
-- **Host:** `{{SERVER_HOST}}`, Ubuntu 24.04, time zone `{{TIME_ZONE}}`.
+- **Host:** `{{SERVER_HOST}}`, Ubuntu, time zone `{{TIME_ZONE}}`.
 - **Admin account:** `{{SERVER_ADMIN_USER}}` (sudo, key-only SSH). Holds this repository at `~/{{ADMIN_REPOSITORY_NAME}}`.
-- **Service account:** `{{SERVICE_USER}}` (no sudo, no inbound SSH, lingering, rootless podman). Runs OpenClaw as `{{ASSISTANT_NAME}}` on system Node 26 through `/opt/{{SERVICE_USER}}/bin/openclaw`; project work uses fnm. Runs the delegated coding agent, `alignfirst`, `aligndev`, and the managed projects under `~/projects`.
+- **Service account:** `{{SERVICE_USER}}` (no sudo, no inbound SSH, lingering, rootless podman). Runs OpenClaw as `{{ASSISTANT_NAME}}` on system Node through `/opt/{{SERVICE_USER}}/bin/openclaw`; project work uses fnm. Runs the delegated coding agent, `alignfirst`, `aligndev`, and the managed projects under `~/projects`.
 - **Public IP:** deployment-specific, written `<vps-ip>` throughout the docs. Never substitute it from a guess.
 
 ## Request flow
@@ -45,7 +45,7 @@ The runtime model and the coding agent are independent choices: OpenClaw authent
 - `~{{SERVICE_USER}}/.openclaw/`: `openclaw.json` (written by the seed through `openclaw config set`), `workspace/` (applied from the snapshot), `secrets/secrets.json` (every credential, referenced from `openclaw.json` as file SecretRefs), `.env` (the gateway env file, `CONTEXT7_API_KEY` only), and `thread-handoff/state.sqlite` (the plugin's durable handoff state).
 - The gateway unit is written by `openclaw gateway install`; the environment comes from `~/.config/environment.d/`, installed by the seed.
 - `~{{SERVICE_USER}}/.alignfirst/aligndev.settings.json` holds the aligndev settings, installed by the seed. The seed also creates `companions/`, where the projects' companion directories and their registry live. The assistant registers a project there with `alignfirst companion register`.
-- `/opt/{{SERVICE_USER}}/` holds root-owned launchers, runtime files and the paired `deployment-profiles.mjs` / `deployment-policy.mjs` helpers for maintenance and backup. Pi's launcher verifies its pinned package entry point and executes `/usr/bin/node` without changing project PATH; packaged subagents reuse `process.execPath`. The gateway's persistent PATH and shell drop-in is service-owned.
+- `/opt/{{SERVICE_USER}}/` holds root-owned launchers, runtime files and the paired `deployment-profiles.mjs` / `deployment-policy.mjs` helpers for maintenance and backup. Pi's launcher verifies its installed package entry point and executes `/usr/bin/node` without changing project PATH; packaged subagents reuse `process.execPath`. The gateway's persistent PATH and shell drop-in is service-owned.
 - Configuration, workspace files, skills, managed native instructions/resources and the npm prefix are protected once [06](installations/06-security-hardening.md) has run. The policy makes native roots and ancestors root-owned sticky writable anchors rather than freezing whole Pi stores. Pi's sole approved executable-declaration exception is private, service-owned and replaceable `<agent-dir>/auth.json`, including adjacent locks for OAuth renewal. Same-UID processes can persist executable API-key commands there; this is account-level persistence, not administrator escalation.
 - Pi project discovery inherits manually saved trust from an approved project/worktree parent. The nearest saved decision wins; trust is not a sandbox. Backups include all native stores and external resources with original-destination and executable-mode mappings.
 

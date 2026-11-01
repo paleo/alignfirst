@@ -12,16 +12,15 @@ Use this form when the project already requires the AlignFirst CLI. It adds no p
 3. Add the **Agent Instructions** below, using `npx -y alignfirst docmap` as the Docmap command.
 4. Read the authoring guide with `npx alignfirst docmap --guide`.
 
-CI can pin a version range while validating the documentation:
+Validate documentation in CI with:
 
 ```sh
-npx -y alignfirst@<range> docmap --check
+npx -y alignfirst docmap --check
 ```
 
 ## Through `@alignfirst/docmap`
 
-Use the standalone package when the project wants docmap pinned in its lockfile or does not adopt
-AlignFirst.
+Use the standalone package when the project wants a local Docmap dependency or does not adopt AlignFirst.
 
 1. Add the root script:
 

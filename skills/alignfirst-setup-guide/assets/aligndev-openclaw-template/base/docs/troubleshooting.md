@@ -82,7 +82,7 @@ EOS
 /usr/bin/node --version
 ```
 
-Expect `/opt/{{SERVICE_USER}}/bin/pi`. A package/version/Node mismatch needs the reviewed package update followed by launcher regeneration after prefix hardening ([update-assistant.md](operations/update-assistant.md)). Do not invoke a second installer, fnm wrapper or unprotected package entry point as a workaround.
+Expect `/opt/{{SERVICE_USER}}/bin/pi`. A package identity, entry-point or Node compatibility failure needs a reviewed package update followed by launcher regeneration after prefix hardening ([update-assistant.md](operations/update-assistant.md)). Do not invoke a second installer, fnm wrapper or unprotected package entry point as a workaround.
 
 - **`auth_required` or refresh failure:** repeat the service-account routing in `08-coding-agent.md`: after login-shell initialization, unset `PI_CODING_AGENT_DIR` for null or set the resolved explicit path for a string. Reproduce the selected environment and cwd. Check its private `auth.json` ownership and adjacent lock permissions. The root/ancestor anchors should be root-owned, service-group writable and sticky (`1770`), not immutable. Preserve the approved same-UID auth exception; never thaw all native resources.
 - **Trust prompt in a new worktree:** check the recorded approved parent, canonical worktree path and nearest saved decision in `<agent-dir>/trust.json`. Use `agent-config` maintenance for `/trust`, then restart Pi. Do not broaden trust silently or add `--approve`.

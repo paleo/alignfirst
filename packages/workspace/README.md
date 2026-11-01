@@ -35,6 +35,6 @@ Existing targets use their current recipe. Missing manifest-backed targets requi
 
 Workspace storage is version 4 with storage ownership, required merged-family recipe provenance and external runtime owners; dev/startup storage remains version 1. Old/unknown state is rejected before mutation. Existing wrappers, settings or slot registries require [the clean-break upgrade runbook](https://github.com/paleo/alignfirst/blob/main/docs/upgrading-multi-stack-workspaces.md), including all-worktree resource accounting. Never delete registry files instead of cleaning resources.
 
-The complete editor schema ships with AlignFirst. Future breaking majors use sequential in-memory conversion retained through the CLI major, without rewriting committed files. This initial release supplies no converter for retired wrappers/settings.
+The complete editor schema ships with AlignFirst. Future breaking majors use sequential in-memory conversion retained through the CLI major, without rewriting committed files.
 
 For kernel internals and accepted limitations, see [Workspace Architecture](https://github.com/paleo/alignfirst/blob/main/docs/workspace-architecture.md).

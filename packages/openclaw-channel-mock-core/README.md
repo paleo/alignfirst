@@ -22,7 +22,7 @@ consumes it before side effects, so a retry can prove that only one native start
 `threadOnly: true`, an `outbound-message` fault waits for a send that carries a thread target and
 lets root posts through.
 
-`zod` is a peer dependency pinned to OpenClaw's own version: the config schema composes OpenClaw's zod objects with locally built ones, so both must resolve to the same zod instance. OpenClaw 2026.10.9 pins `4.6.5`, so both the peer and development dependency retain that version even though standalone Zod latest is `4.6.7`. When upgrading OpenClaw, move both pins to its Zod version and verify the public plugin schema, tool-policy composition and JSON Schema export.
+`zod` is a peer dependency pinned to OpenClaw's own version: the config schema composes OpenClaw's zod objects with locally built ones, so both must resolve to the same zod instance. OpenClaw 2026.10.9 pins `4.6.5`, so both the peer and development dependency retain that version even when standalone Zod is newer. When upgrading OpenClaw, move both pins to its Zod version and verify the public plugin schema, tool-policy composition and JSON Schema export.
 
 ## Attribution
 

@@ -1,7 +1,6 @@
-# Upgrade from AlignFirst v2
+# Migrate the Standalone Project Skill
 
-Remove the v2 agent-skills installation while preserving project-specific instructions and custom
-skills. Continue with the v3 upgrade reference after these steps.
+Remove the legacy standalone agent-skill installation while preserving project instructions and custom skills. Continue with the CLI migration after these steps.
 
 Commands are Unix-style. Adapt them for another shell.
 
@@ -36,7 +35,7 @@ These paths are legacy cleanup targets, not current installation locations.
 3. Remove `_plans` ignore rules. Replace the old shared-file block (`.plans/**`, `!.plans/**/`, and
    `!.plans/**/*.shared.md`) with `.plans`. Untrack committed `*.shared.md` files and report them.
 4. In `AGENTS.md` or `CLAUDE.md`, preserve project conventions while removing references to deleted
-   v2 skills and legacy paths. Remove sections that become empty.
+   legacy skills and paths. Remove sections that become empty.
 
 ## Preserve Remaining Custom Skills
 
@@ -46,8 +45,8 @@ otherwise leave them untouched.
 
 ## Finish the Upgrade
 
-Continue with [alignfirst-upgrade-from-v3.md](alignfirst-upgrade-from-v3.md) for the CLI installation,
+Continue with [the CLI migration](alignfirst-upgrade-from-v3.md) for the CLI installation,
 project config, stub skills, and current commands.
 
 Summarize the removed legacy files, plan migration, preserved custom skills, and the scope and agents
-that received the v4 AlignFirst skills.
+that received the CLI-backed AlignFirst skills.

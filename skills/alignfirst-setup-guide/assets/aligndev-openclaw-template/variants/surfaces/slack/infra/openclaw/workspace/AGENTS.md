@@ -75,7 +75,7 @@ The `alignfirst` CLI is installed globally. From a project root, `alignfirst con
 
 ### Node
 
-Your shells initialize **fnm**: it picks Node from `.nvmrc`, `.node-version` or `engines.node` on entry and on every `cd`, its LTS default elsewhere. `fnm use <version>` switches the current shell, and children inherit it, but each exec call is a fresh shell, so keep a switch and the commands needing it in the same call. A declared version that isn't installed stops the command: ask an administrator. **OpenClaw** always runs on system Node 26. `gcc`/`g++`/`make` are available for packages with native bindings.
+Your shells initialize **fnm**: it picks Node from `.nvmrc`, `.node-version` or `engines.node` on entry and on every `cd`, its LTS default elsewhere. `fnm use <version>` switches the current shell, and children inherit it, but each exec call is a fresh shell, so keep a switch and the commands needing it in the same call. A declared version that isn't installed stops the command: ask an administrator. **OpenClaw** always runs on system Node. `gcc`/`g++`/`make` are available for packages with native bindings.
 
 ### Adding dependencies
 

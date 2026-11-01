@@ -9,11 +9,11 @@ read_when:
 
 **Operator**, after [03-toolchain.md](03-toolchain.md), before the platform part of [07-channel.md](07-channel.md) and [04-openclaw.md](04-openclaw.md). The service account has no sudo, so every OS-level package a tool needs is installed here, with `sudo`. One section per tool group; add a section whenever a new tool is wired up.
 
-> **Note:** Commands shown are for Ubuntu 24.04. Adapt package, firewall, filesystem, and service-manager commands for another Linux server when needed.
+> **Note:** Commands shown are for Ubuntu. Adapt package, firewall, filesystem, and service-manager commands for another Linux server when needed.
 
 ## Playwright (Chromium)
 
-OpenClaw's browser tool uses `playwright-core`. Playwright downloads Chromium into `~/.cache/ms-playwright/`, but Chromium links against shared libraries that come from apt. `playwright install-deps` shells out to `apt-get`, which the service account cannot run, so install them directly (the `t64` suffix is noble's time_t transition):
+OpenClaw's browser tool uses `playwright-core`. Playwright downloads Chromium into `~/.cache/ms-playwright/`, but Chromium links against shared libraries that come from apt. `playwright install-deps` shells out to `apt-get`, which the service account cannot run, so install them directly. Package names vary by distribution; check the installed Playwright dependency list when adapting them:
 
 ```sh
 sudo apt update && sudo apt install -y \
@@ -31,7 +31,7 @@ sudo -i -u {{SERVICE_USER}} -- bash -lc 'openclaw_entry=$(readlink -f "$(command
 
 ### AppArmor: let Chromium's sandbox create user namespaces
 
-Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor, and Chromium needs one for its process sandbox. Without this profile, the OpenClaw browser aborts with `No usable sandbox!`. [`infra/openclaw/apparmor/playwright-chromium`](../../infra/openclaw/apparmor/playwright-chromium) grants `userns` to every Playwright Chromium revision while preserving the browser sandbox. Prefer it to `browser.noSandbox: true`.
+Ubuntu restricts unprivileged user namespaces through AppArmor, and Chromium needs one for its process sandbox. Without this profile, the OpenClaw browser aborts with `No usable sandbox!`. [`infra/openclaw/apparmor/playwright-chromium`](../../infra/openclaw/apparmor/playwright-chromium) grants `userns` to every Playwright Chromium revision while preserving the browser sandbox. Prefer it to `browser.noSandbox: true`.
 
 ```sh
 sudo install -m 644 infra/openclaw/apparmor/playwright-chromium /etc/apparmor.d/playwright-chromium

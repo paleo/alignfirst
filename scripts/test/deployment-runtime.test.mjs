@@ -28,7 +28,7 @@ const guard = join(repository, "scripts/test/fixtures/deployment-deny-network.mj
 
 // /usr/bin/node is absent on some developer machines. Only fixture launchers substitute this
 // executable; production always uses the absolute system path and fails if it is unavailable.
-test("launcher verifies the installed pin and declared bin, and preserves cwd/env/PATH/arguments", () => {
+test("launcher verifies the declared bin and preserves cwd/env/PATH/arguments", () => {
   withFixture((fixture) => {
     const root = fakePackage(fixture);
     const output = join(fixture.root, "record.json");
@@ -60,15 +60,8 @@ writeFileSync(process.env.RECORD, JSON.stringify({
 
 for (const [label, refusal, mutate] of [
   [
-    "wrong version",
-    /differs from the reviewed pin/u,
-    (value) => {
-      value.version = "1.3.1";
-    },
-  ],
-  [
     "wrong package",
-    /differs from the reviewed pin/u,
+    /differs from the expected identity/u,
     (value) => {
       value.name = "other-package";
     },
@@ -108,6 +101,41 @@ for (const [label, refusal, mutate] of [
       value.engines.node = "^22 || ^24";
     },
   ],
+  [
+    "missing engine range",
+    /Cannot verify Pi's Node requirement/u,
+    (value) => {
+      delete value.engines;
+    },
+  ],
+  [
+    "malformed engine range",
+    /Cannot verify Pi's Node requirement/u,
+    (value) => {
+      value.engines.node = { toString: ">=1.0.0" };
+    },
+  ],
+  [
+    "noncanonical engine range",
+    /Cannot verify Pi's Node requirement/u,
+    (value) => {
+      value.engines.node = ">=022.19.0";
+    },
+  ],
+  [
+    "unsafe engine version components",
+    /Cannot verify Pi's Node requirement/u,
+    (value) => {
+      value.engines.node = ">=9007199254740993.0.0";
+    },
+  ],
+  [
+    "non-file entry",
+    /not a regular file/u,
+    (value) => {
+      value.bin.pi = "dist/bundle";
+    },
+  ],
 ]) {
   test(`launcher refuses ${label} before installation`, () => {
     withFixture((fixture) => {
@@ -115,7 +143,7 @@ for (const [label, refusal, mutate] of [
       const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
       mutate(manifest);
       writeFileSync(join(root, "package.json"), JSON.stringify(manifest));
-      assert.throws(() => renderPiLauncher(root, "1.3.0", "26.0.0"), refusal);
+      assert.throws(() => renderPiLauncher(root, "26.0.0"), refusal);
     });
   });
 }
@@ -126,7 +154,7 @@ test("production generator refuses unprotected or out-of-prefix packages without
     chmodSync(fixture.root, 0o777);
     const result = spawnSync(
       process.execPath,
-      [join(runtime, "pi-launcher.mjs"), root, "1.3.0", fixture.root],
+      [join(runtime, "pi-launcher.mjs"), root, fixture.root],
       options(fixture),
     );
     assert.notEqual(result.status, 0);
@@ -134,7 +162,7 @@ test("production generator refuses unprotected or out-of-prefix packages without
     assert.match(result.stderr, /not root-owned\/protected/u);
     const outside = spawnSync(
       process.execPath,
-      [join(runtime, "pi-launcher.mjs"), host, "1.3.0", fixture.root],
+      [join(runtime, "pi-launcher.mjs"), host, fixture.root],
       options(fixture),
     );
     assert.notEqual(outside.status, 0);
@@ -142,20 +170,24 @@ test("production generator refuses unprotected or out-of-prefix packages without
   });
 });
 
-test("launcher checks both Pi and extension Node floors, including a newer package requirement", () => {
+test("launcher checks the installed package Node requirement without an independent floor", () => {
   withFixture((fixture) => {
     const root = fakePackage(fixture);
     for (const version of ["20.19.0", "22.18.9"])
-      assert.throws(() => renderPiLauncher(root, "1.3.0", version), /unsupported/u);
-    assert.throws(() => renderPiLauncher(root, "1.3.0", "22.19.0-rc.1"), /Cannot verify/u);
+      assert.throws(() => renderPiLauncher(root, version), /unsupported/u);
+    assert.throws(() => renderPiLauncher(root, "22.19.0-rc.1"), /Cannot verify/u);
     for (const version of ["22.19.0", "24.0.0", "26.0.0"])
-      assert.match(renderPiLauncher(root, "1.3.0", version), /exec \/usr\/bin\/node /u);
+      assert.match(renderPiLauncher(root, version), /exec \/usr\/bin\/node /u);
     const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
     manifest.engines.node = ">=26.1.0";
     writeFileSync(join(root, "package.json"), JSON.stringify(manifest));
-    assert.throws(() => renderPiLauncher(root, "1.3.0", "26.0.0"), /unsupported/u);
-    assert.doesNotThrow(() => renderPiLauncher(root, "1.3.0", "26.1.0"));
-    assert.throws(() => renderPiLauncher(root, "latest"), /exact reviewed/u);
+    assert.throws(() => renderPiLauncher(root, "26.0.0"), /unsupported/u);
+    assert.doesNotThrow(() => renderPiLauncher(root, "26.1.0"));
+    manifest.engines.node = ">=20.0.0";
+    manifest.version = "999.0.0";
+    writeFileSync(join(root, "package.json"), JSON.stringify(manifest));
+    assert.doesNotThrow(() => renderPiLauncher(root, "20.0.0"));
+    assert.throws(() => renderPiLauncher(root, "latest"), /Cannot verify/u);
   });
 });
 
@@ -164,15 +196,15 @@ test("launcher rejects symlinked source/entry paths and follows a changed declar
     const root = fakePackage(fixture);
     const link = join(fixture.root, "package-link");
     symlinkSync(root, link);
-    assert.throws(() => renderPiLauncher(link, "1.3.0"), /Symlinked/u);
+    assert.throws(() => renderPiLauncher(link), /Symlinked/u);
     rmSync(join(root, "dist/bundle/cli.js"));
     symlinkSync(join(root, "package.json"), join(root, "dist/bundle/cli.js"));
-    assert.throws(() => renderPiLauncher(root, "1.3.0"), /Symlinked/u);
+    assert.throws(() => renderPiLauncher(root), /Symlinked/u);
     const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
     manifest.bin.pi = "next cli.js";
     writeFileSync(join(root, "package.json"), JSON.stringify(manifest));
     writeFileSync(join(root, "next cli.js"), "");
-    assert.match(renderPiLauncher(root, "1.3.0"), /next cli\.js/u);
+    assert.match(renderPiLauncher(root), /next cli\.js/u);
   });
 });
 
@@ -358,7 +390,7 @@ function fakePackage(fixture) {
 }
 
 function installFixtureLauncher(fixture, packageRoot) {
-  const text = renderPiLauncher(packageRoot, "1.3.0");
+  const text = renderPiLauncher(packageRoot);
   assert.match(text, /^#!\/bin\/sh\nexec \/usr\/bin\/node /u);
   const file = join(fixture.root, "pi");
   writeFileSync(file, text.replace("/usr/bin/node", quote(process.execPath)), { mode: 0o755 });

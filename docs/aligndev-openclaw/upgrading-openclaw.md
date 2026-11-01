@@ -17,7 +17,7 @@ Target the release under the npm `latest` tag; skip `beta` and `extended-stable`
 npm view openclaw dist-tags
 ```
 
-The current version is the exact `"openclaw"` pin in [`aligndev-openclaw-tests/package.json`](../../aligndev-openclaw-tests/package.json).
+The harness version is the exact `"openclaw"` pin in [`aligndev-openclaw-tests/package.json`](../../aligndev-openclaw-tests/package.json).
 
 ## Refresh the read-only clone
 
@@ -38,28 +38,28 @@ git clone --quiet --depth=1 --branch v<version> https://github.com/openclaw/open
 
 ## Review the upstream changes
 
-- Read the new release's changelog, `CHANGELOG/<version>.md` in the clone. It runs to thousands of lines; grep it. Grep `by default` too: a channel default set in the extension's code appears there and not in the config help. 2026.9.7 made Discord and Slack accept messages from other bots (`allowBots`) this way.
+- Search the new release's changelog, `CHANGELOG/<version>.md` in the clone, including `by default`. Channel defaults such as `allowBots` can appear there without a config-help change.
 - Diff the surfaces our documentation describes: `git -C .local/openclaw diff v<old> v<new> --stat -- src/agents src/commands`, then the files behind any suspicious stat line.
-- Re-verify the claims of [openclaw-context-engineering.md](./openclaw-context-engineering.md) against the new tag; the document names its source files. Doctor does not flag silent behavior shifts (the 2026.8 subagent bootstrap narrowing, for example) — only this re-reading catches them.
-- Compare the deployment template's workspace files (`skills/alignfirst-setup-guide/assets/aligndev-openclaw-template/base/infra/openclaw/workspace/`) with `WORKSPACE_BOOTSTRAP_FILENAMES` in `src/agents/workspace-bootstrap-policy.ts`. A file the runtime stopped reading must leave the template and its `chattr` lists; 2026.8.1 retired `HEARTBEAT.md` this way and the check above did not catch it.
-- Diff the config help between the tags: `git -C .local/openclaw diff v<old> v<new> -- 'src/config/schema.help.*.ts'`. A default that turns on a background behavior (a scheduled model run, a memory feature, a telemetry ping) or hides tool schemas from the model (2026.9.6 Tool Search and Code Mode) appears there and nowhere doctor looks; see [Propagate](#propagate-to-the-deployment-template). The changelog omitted the Code Mode change; only this diff showed it.
+- Re-verify the claims of [openclaw-context-engineering.md](./openclaw-context-engineering.md) against the new tag; the document names its source files and verification baselines. Doctor does not flag silent behavior shifts such as a narrowed subagent bootstrap.
+- Compare the deployment template's workspace files (`skills/alignfirst-setup-guide/assets/aligndev-openclaw-template/base/infra/openclaw/workspace/`) with `WORKSPACE_BOOTSTRAP_FILENAMES` in `src/agents/workspace-bootstrap-policy.ts`. Remove retired files from the template and its `chattr` lists.
+- Diff the config help between the tags: `git -C .local/openclaw diff v<old> v<new> -- 'src/config/schema.help.*.ts'`. Look for defaults that enable background work, telemetry or hidden tool schemas; see [Propagate](#propagate-to-the-deployment-template). The changelog and doctor can miss these changes.
 - Recheck the public plugin tool/hook context, routing helpers, state-root resolver, and session-binding APIs required by `@alignfirst/service-openclaw-plugin`. Load it from an ordinary external path; an allowlist is not an official-plugin trust grant.
-- Recheck which plugin registration supplies a turn's tool factories and which runs its tool hooks (`src/agents/runtime-plugins.ts`). Since 2026.9.8 they differ in the harness gateway, while the deterministic suite still runs a single registration and missed the split.
+- Recheck which plugin registration supplies a turn's tool factories and which runs its tool hooks (`src/agents/runtime-plugins.ts`). Cover the split documented in [the plugin's state-sharing contract](./openclaw-plugin.md#what-the-plugin-does); a single-registration test missed it.
 - Recheck `PluginRuntimeChannel.inbound.dispatchReply` in `src/plugins/runtime/types-channel.ts` and the `AssembledChannelTurn` delivery adapter's `durable` option in `src/channels/turn/types.ts` and `durable-delivery.ts`, including `to`, `threadId`, and `replyToId` resolution. Also recheck `reply.finalizeInboundContext`, `session.recordInboundSession`, the core gateway `wake` method used by `openclaw system event`, and the heartbeat exec-completion prompt.
-- Recheck `HEARTBEAT_OK` on heartbeat turns and plugin-dispatched reply runs, and the `silentReply` defaults in `src/shared/silent-reply-policy.ts`. Use the deterministic gateway suite as the judge. The 2026.9.6 flip of `silentReply.group` to `"disallow"` appeared in neither the changelog nor the config help.
-- Recheck the `transcript_events` schema in `src/state/openclaw-agent-schema.sql` against the harness readers (`packages/openclaw-test/src/transcript-store.ts`, `aligndev-openclaw-tests/scripts/inspect-thread.ts`). 2026.9.6 moved larger events to a compressed column, which the readers would have turned into empty transcripts without an error.
+- Recheck `HEARTBEAT_OK` on heartbeat turns and plugin-dispatched reply runs, and the `silentReply` defaults in `src/shared/silent-reply-policy.ts`. Use the deterministic gateway suite as the judge; a default change can escape both the changelog and config help.
+- Recheck the `transcript_events` schema in `src/state/openclaw-agent-schema.sql` against the harness readers (`packages/openclaw-test/src/transcript-store.ts`, `aligndev-openclaw-tests/scripts/inspect-thread.ts`), including compressed events. Schema drift can silently produce empty transcripts.
 - Recheck the credential import and version-specific build repair described in [Running the OpenClaw Tests](./running-openclaw-tests.md#configuration). Remove a workaround only after the subscription-backed Terra scenario passes without it.
 
-## Bump the pins
+## Bump the harness pins
 
 - [`aligndev-openclaw-tests/package.json`](../../aligndev-openclaw-tests/package.json) — the exact `"openclaw"` pin.
 - [`aligndev-openclaw-tests/Dockerfile`](../../aligndev-openclaw-tests/Dockerfile) — the three `npm:@openclaw/<plugin>@<version>` installs.
 - `packages/openclaw-{test,channel-mock-core,discord-mock,slack-mock}/package.json` and `packages/service-openclaw-plugin/package.json` — the `~`-ranged dev dependencies. Raise their floor to the new version, then run `npm install` at the root: the root `package-lock.json` pins the executable the deterministic suite runs, and a range that still matches keeps the old one.
-- The `peerDependencies` ranges of `service-openclaw-plugin` and `openclaw-channel-mock-core` cap the month (currently `<2026.11.0`). Move the cap when the release starts a new month; a peer range change needs a changeset.
+- The `peerDependencies` ranges of `service-openclaw-plugin` and `openclaw-channel-mock-core` cap the month. Read the manifests and move the cap when the release starts a new month; a peer range change needs a changeset.
 
 The official plugins require the OpenClaw version they ship with, so the Dockerfile installs and the `openclaw` pin move together.
 
-OpenClaw 2026.10.9 still pins Zod `4.6.5`. Keep mock-core's exact development and peer pins there: ncu's standalone latest `4.6.7` would break the shared-host composition contract. Test the public plugin config schema and inspect `npm ls zod typebox --all`; TypeBox `1.4.3` passes the ordinary source unit suites without overriding OpenClaw's `1.3.34` or Pi's `1.3.27` copies. Packed acceptance remains unrun for this upgrade.
+Match mock-core's exact Zod development and peer pins to the host, even when standalone latest is newer; see its [compatibility contract](../../packages/openclaw-channel-mock-core/README.md). Test the public plugin config schema and inspect `npm ls zod typebox --all` without overriding host-owned copies. The OpenClaw 2026.10.9 upgrade passed ordinary source unit suites with TypeBox `1.4.3`; packed acceptance was not run.
 
 Then rebuild the harness image: `npm run env:build` in `aligndev-openclaw-tests/` when its shared base tag is exclusively owned. On a shared Docker daemon, the [manual isolation procedure](./running-openclaw-tests.md#shared-daemon-isolation) builds the unchanged base Dockerfile under a nonce-qualified tag and the consumer under a unique image tag. Use raw Compose with an explicit unique `-p` and per-command Docker-driver builder selection. The stock CLI overwrites the base-tag override, so do not use its build/up/run commands for this route. Carry the private absolute path/config overrides through doctor, inspection and each recreated acceptance cell, then tear down only that project.
 
@@ -119,7 +119,7 @@ npm run env:down
 
 ## Propagate to the deployment template
 
-The seed targets the current release. When the release retires a config key the seed sets, delete or replace the line. When it retires a workspace file or changes operator-visible behavior, update the setup-guide template: it describes a fresh install on the current release, so retired files and keys leave it, and the consumers' own runbooks carry the migration. When it turns on a background behavior or hides a tool the playbook calls, add the opt-out to `base/infra/openclaw/seed/common.sh` and to `aligndev-openclaw-tests/openclaw.json`, which carry the same opt-outs. Bump the `version` in the skill's `SKILL.md`.
+The deployment guide installs the latest stable release without deployment version pins. Derive launcher prerequisites from installed metadata. When the release retires a config key the seed sets, delete or replace the line. When it retires a workspace file or changes operator-visible behavior, update the setup-guide template: it describes a fresh install on the current release, so retired files and keys leave it, and the consumers' own runbooks carry the migration. When it turns on a background behavior or hides a tool the playbook calls, add the opt-out to `base/infra/openclaw/seed/common.sh` and to `aligndev-openclaw-tests/openclaw.json`, which carry the same opt-outs. Bump the `version` in the skill's `SKILL.md`.
 
 Every other changed default stays out of the seed. The rendered repository states the rule in [`docs/configuration.md`](../../skills/alignfirst-setup-guide/assets/aligndev-openclaw-template/base/docs/configuration.md): a pin needs a stated policy, and preserving previous behavior is not one. The opt-outs above hold their policies: no autonomous model spend, no telemetry ping, and a handoff and reply contract visible on every turn.
 

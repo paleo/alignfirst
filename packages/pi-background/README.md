@@ -10,7 +10,7 @@ This package works independently of any project tooling and of the subagent exte
 pi install npm:@alignfirst/pi-background
 ```
 
-Targets **Pi 1.4.0** and requires Node.js 22.19.0 or later. Linux unit suites pass with **Node 26.13.0**. Earlier tests used **Pi 1.3.0** with **Node 26.8.1 / 22.23.3**. Packed, CLI integration and live acceptance have not been rerun for Pi 1.4.0. The exact Node 22.19.0 floor has not been exercised. macOS and Windows through WSL are supported targets but have not been exercised here. Native Windows is refused before process launch. Host peer ranges are `*` under Pi's package rules; they do not certify future Pi versions.
+Requires the Node.js runtime declared in `engines.node`. See the [supported and tested baseline](https://github.com/paleo/alignfirst/blob/main/docs/pi-extensions.md#supported-and-tested-baseline) for Pi compatibility and checks not rerun after the dependency upgrade. macOS and Windows through WSL are supported targets but have not been exercised here. Native Windows is refused before process launch. Host peer ranges are `*` under Pi's package rules; they do not certify future Pi versions.
 
 The package declares root `index.js` as its sole Pi extension entry. It forwards the default factory from compiled `dist/index.js`, so Pi displays the npm package label without `:dist`. Loading starts no process or timer. Installation and loading do not install profiles, skills, or the other extension.
 

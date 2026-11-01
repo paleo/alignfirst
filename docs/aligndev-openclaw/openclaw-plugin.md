@@ -30,7 +30,7 @@ Everything that follows belongs to the playbook: the claim, the thread-history r
 
 ### No heartbeat wake
 
-The heartbeat is OpenClaw's periodic poll, and a heartbeat turn has limited rights: a 600-second budget, no message-action capability, and a scheduler that skips it while another turn runs. The plugin does not use it to start a thread session: no system event, no heartbeat request, no dependency on the heartbeat prompt. Plugin 0.2.0 started threads that way; that design is retired.
+The heartbeat is OpenClaw's periodic poll, and a heartbeat turn has limited rights: a 600-second budget, no message-action capability, and a scheduler that skips it while another turn runs. The plugin does not use it to start a thread session: no system event, no heartbeat request, no dependency on the heartbeat prompt.
 
 ### No hack around OpenClaw's handling of long commands
 

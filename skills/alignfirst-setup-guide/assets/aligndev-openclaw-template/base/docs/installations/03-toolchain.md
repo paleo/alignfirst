@@ -9,7 +9,7 @@ read_when:
 
 **Operator**, after [02-admin-repository.md](02-admin-repository.md), before [05-openclaw-dependencies.md](05-openclaw-dependencies.md). Creates `{{SERVICE_USER}}`, then installs its CLIs and git access. Service-account commands are written as `sudo -i -u {{SERVICE_USER}} -- <command>`, to paste from the operator's shell.
 
-> **Note:** Commands shown are for Ubuntu 24.04. Adapt package, firewall, filesystem, and service-manager commands for another Linux server when needed.
+> **Note:** Commands shown are for Ubuntu. Adapt package, firewall, filesystem, and service-manager commands for another Linux server when needed.
 
 ## 1. Service account
 
@@ -25,26 +25,28 @@ grep {{SERVICE_USER}} /etc/subuid /etc/subgid
 
 ## 2. Project runtimes
 
-Install a pinned fnm release as a root-owned system tool:
+Install current stable fnm as a root-owned system tool:
 
 ```sh
 runtime_tmp=$(mktemp -d)
-curl -fsSL "https://github.com/Schniz/fnm/releases/download/v<fnm-version>/fnm-linux.zip" -o "$runtime_tmp/fnm.zip"
+curl -fsSL "https://github.com/Schniz/fnm/releases/latest/download/fnm-linux.zip" -o "$runtime_tmp/fnm.zip"
 unzip "$runtime_tmp/fnm.zip" -d "$runtime_tmp"
 sudo install -m 755 -o root -g root "$runtime_tmp/fnm" /usr/local/bin/fnm
 rm -rf "$runtime_tmp"
 ```
 
-Create fnm's state directory, install the latest patch of the current Node LTS as the default (at least 24.16.0 for the assistant's CLIs), then install every version declared by a managed project. Provision without loading profiles so an unavailable default cannot block this step:
+Create fnm's state directory and select current Node LTS as the default. Check the assistant CLIs' declared compatibility, then install every runtime required by a managed project. Provision without loading profiles so an unavailable default cannot block this step:
 
 ```sh
 sudo install -d -m 755 -o {{SERVICE_USER}} -g {{SERVICE_USER}} /home/{{SERVICE_USER}}/.local/share/fnm
 sudo -H -u {{SERVICE_USER}} bash --noprofile --norc -c '
-set -e
+set -eo pipefail
 export FNM_DIR="$HOME/.local/share/fnm"
 eval "$(/usr/local/bin/fnm env --shell bash)"
-fnm install --lts
-fnm default <default-node-version>
+default_node=$(fnm list-remote --lts --latest | cut -d " " -f 1)
+[ -n "$default_node" ]
+fnm install "$default_node"
+fnm default "$default_node"
 fnm install <project-node-version>
 '
 ```
@@ -98,14 +100,14 @@ The `environment.d` bridge stays before `init.bash`; the runtime initialization 
 
 ## 4. npm prefix and global CLIs
 
-The protected CLIs live in `~/.npm-system-global/`, but no `.npmrc` selects that prefix. `admin-npm` fixes both the system interpreter and the destination. The common CLIs use `@latest`; the update runbook records the installed versions. Pi uses an exact reviewed release, currently 1.4.0.
+The protected CLIs live in `~/.npm-system-global/`, but no `.npmrc` selects that prefix. `admin-npm` fixes both the system interpreter and the destination. Install current stable CLIs and inspect their declared runtime compatibility. The update runbook records the installed versions.
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm install -g \
   openclaw alignfirst aligndev ctx7
 ```
 
-Install the selected coding agent under the same prefix: [08-coding-agent.md § Install](08-coding-agent.md#install). Complete every protected-prefix install, including any optional quota CLI, before locking the prefix. For Pi, restore root ownership and `go-w`, lock the prefix anchor, then run `/opt/{{SERVICE_USER}}/libexec/install-pi-launcher.sh 1.4.0` as shown in `08`. Regeneration must follow hardening, not run inside the writable package window. The seed in `04` requires the protected launcher.
+Install the selected coding agent under the same prefix: [08-coding-agent.md § Install](08-coding-agent.md#install). Complete every protected-prefix install, including any optional quota CLI, before locking the prefix. For Pi, restore root ownership and `go-w`, lock the prefix anchor, then run `/opt/{{SERVICE_USER}}/libexec/install-pi-launcher.sh` as shown in `08`. Regeneration must follow hardening, not run inside the writable package window. The seed in `04` requires the protected launcher.
 
 The root-owned deployment helpers support maintenance and backup; the seed snapshot also carries them for unprivileged setup. Updating the snapshot alone never updates `/opt/{{SERVICE_USER}}/libexec/`.
 
@@ -116,7 +118,7 @@ sudo -i -u {{SERVICE_USER}} -- bash -lc 'which node npm openclaw alignfirst alig
 # Expected: node and npm under $FNM_MULTISHELL_PATH/bin; openclaw under /opt/{{SERVICE_USER}}/bin; the rest under /home/{{SERVICE_USER}}/.npm-system-global/bin
 sudo -H -u {{SERVICE_USER}} bash -lc '
 PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell \
-DEFAULT_NODE=<default-node-version> \
+DEFAULT_NODE="$(fnm default)" \
 PINNED_NODE=<project-node-version> \
 CODING_AGENT=<claude|codex|pi> \
   /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh

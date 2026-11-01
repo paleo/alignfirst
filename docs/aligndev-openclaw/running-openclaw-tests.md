@@ -44,9 +44,9 @@ See the upstream README for all flags. `--parallel K` (or `OPENCLAW_TEST_PARALLE
 
 > ⚠️ **Never `rm -rf artifacts` (or `.gateway-logs`).** Each run lands in its own **timestamped** subdir, so runs accumulate without colliding — deleting the directory throws away prior runs you may still need. These are bind-mount outputs; leave them in place.
 
-The reviewed toolchain is Node 26, npm `12.2.0`, Corepack `0.36.0` and pnpm `12.14.0`. Run local npm 12 commands without a global install, for example `npx --yes --package=npm@12.2.0 npm run env:build --prefix aligndev-openclaw-tests` from the repository root. npm 12 blocks dependency lifecycle scripts by default; the root and standalone manifests approve only the reviewed OpenClaw, esbuild and koffi versions. GenAI's no-op and protobufjs's warning-only scripts stay disabled. Re-review these policies when their versions change.
+Use the repository's Node 26 runtime and the reviewed npm CLI and local invocation in [Releasing](../releasing.md#flow). The harness Dockerfile and fixture `packageManager` declare the build tools. npm 12 blocks dependency lifecycle scripts by default; the root and standalone manifests approve only the reviewed OpenClaw, esbuild and koffi versions. GenAI's no-op and protobufjs's warning-only scripts stay disabled. Re-review these policies when their versions change.
 
-The generic host CLI can alternatively run on Bun 1.4.4 via `bunx --bun @alignfirst/openclaw-test` or explicitly Bun-owned scripts. This does not change the reviewed npm build/vendor/lockfile workflow above or the Node container toolchain. For a new Bun consumer, follow init's Docker Node/npm lockfile-preparation instructions before image builds; see the [package README](../../packages/openclaw-test/README.md#init). Docker, OpenClaw and native coding agents retain their own prerequisites.
+The generic host CLI can alternatively run on Bun via `bunx --bun @alignfirst/openclaw-test` or explicitly Bun-owned scripts. This does not change the reviewed npm build/vendor/lockfile workflow above or the Node container toolchain. For a new Bun consumer, follow init's Docker Node/npm lockfile-preparation instructions before image builds; see the [package README](../../packages/openclaw-test/README.md#init). Docker, OpenClaw and native coding agents retain their own prerequisites.
 
 ## Shared-daemon isolation
 
@@ -54,15 +54,15 @@ Use a disposable consumer copy with a unique basename for concurrent work. Copy 
 
 The stock CLI writes the version-only base tag `paleo/openclaw-test-base:<package-version>` and derives worker project names from the consumer basename. Exporting `OPENCLAW_TEST_BASE_TAG` or `COMPOSE_PROJECT_NAME` does not override those decisions. For concurrent acceptance, bypass `env build`, `env up` and `run` with manual builds and raw Compose:
 
-1. Choose a nonce-qualified base tag, a unique consumer image and an explicit unique Compose project. For example, use `0.23.3-side-27-<nonce>`, `side-27-openclaw-<nonce>:acceptance` and `side-27-openclaw-<nonce>-w1`. Keep package versions unchanged.
+1. Choose a nonce-qualified base tag, a unique consumer image and an explicit unique Compose project. For example, use `acceptance-<nonce>`, `openclaw-<nonce>:acceptance` and `openclaw-<nonce>-w1`. Keep package versions unchanged.
 2. Build the installed package's unchanged `Dockerfile.base` with the caller's UID/GID. Build only Compose's `bus` target; all services share its image. Select the local-image-store builder per command, without changing the global builder:
 
    ```sh
    # HARNESS_RUN and all path overrides below must be absolute.
    package_dir="$HARNESS_RUN/node_modules/@alignfirst/openclaw-test"
-   export OPENCLAW_TEST_BASE_TAG="0.23.3-side-27-$nonce"
-   export OPENCLAW_TEST_CONSUMER_IMAGE="side-27-openclaw-$nonce:acceptance"
-   project="side-27-openclaw-$nonce-w1"
+   export OPENCLAW_TEST_BASE_TAG="acceptance-$nonce"
+   export OPENCLAW_TEST_CONSUMER_IMAGE="openclaw-$nonce:acceptance"
+   project="openclaw-$nonce-w1"
    BUILDX_BUILDER=default docker build -f "$package_dir/Dockerfile.base" \
      --build-arg ASSISTANT_UID="$(id -u)" --build-arg ASSISTANT_GID="$(id -g)" \
      -t "paleo/openclaw-test-base:$OPENCLAW_TEST_BASE_TAG" "$package_dir"

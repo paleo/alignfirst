@@ -94,7 +94,7 @@ Contain the account before replacing runtime files. The gateway stays stopped th
 sudo /usr/local/sbin/alignfirst-assistant-kill
 ```
 
-For the first upgrade from a shared system/project runtime, provision system Node using [01-server-setup.md](../installations/01-server-setup.md), then run the fnm installation and version-provisioning blocks in [03 § 2](../installations/03-toolchain.md#2-project-runtimes). Use Node 24.16.0 or newer as the fnm default for the assistant's CLIs. Complete provisioning before adding the profile hooks below; an unavailable default prevents login-shell startup. Existing hosts keep their installed project versions.
+For the first upgrade from a shared system/project runtime, provision system Node using [01-server-setup.md](../installations/01-server-setup.md), then run the fnm installation and version-provisioning blocks in [03 § 2](../installations/03-toolchain.md#2-project-runtimes). Select current Node LTS as the fnm default and inspect the assistant CLIs' declared compatibility. Complete provisioning before adding the profile hooks below; an unavailable default prevents login-shell startup. Existing hosts keep their installed project versions.
 
 Refresh these root-owned files from the operator's checkout on every update, including the first migration. Refreshing `~/seed` alone does not deploy them:
 
@@ -114,7 +114,7 @@ sudo install -m 755 -o root -g root \
   /opt/{{SERVICE_USER}}/libexec/
 ```
 
-For an installed Pi child, regenerate `/opt/{{SERVICE_USER}}/bin/pi` using its exact reviewed version after the package maintenance window has restored root ownership, write restrictions and the immutable prefix anchor. The installer verifies the package's declared `bin.pi` and system Node. Never regenerate while the prefix is service-writable.
+For an installed Pi child, regenerate `/opt/{{SERVICE_USER}}/bin/pi` from the installed package after the package maintenance window has restored root ownership, write restrictions and the immutable prefix anchor. The installer verifies the package's declared `bin.pi` and system Node. Never regenerate while the prefix is service-writable.
 
 Remove only the legacy npm prefix setting and add missing profile hooks. Keep the existing login profile's environment bridge and custom settings. This shell bypasses the profiles while migrating them:
 
@@ -225,8 +225,8 @@ Update the coding agent through its package-scoped command: [08-coding-agent.md 
 Verify the listing against the reviewed deployment inventory (`openclaw`, coding agents, `alignfirst`, `aligndev`, `ctx7`, and any explicit quota CLI). Remove unexplained packages through another `packages` maintenance window. After a Pi package update, regenerate its launcher first:
 
 ```sh
-# Pi deployments only; match the exact version approved and installed through 08.
-sudo /opt/{{SERVICE_USER}}/libexec/install-pi-launcher.sh <reviewed-version>
+# Pi deployments only; regenerate from the package installed through 08 after prefix hardening.
+sudo /opt/{{SERVICE_USER}}/libexec/install-pi-launcher.sh
 ```
 
 Then verify:
@@ -236,7 +236,7 @@ sudo -i -u {{SERVICE_USER}} -- bash -lc 'openclaw --version && alignfirst --vers
 sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm ls -g --depth=0
 sudo -H -u {{SERVICE_USER}} bash -lc '
 PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell \
-DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> \
+DEFAULT_NODE="$(fnm default)" PINNED_NODE=<project-node-version> \
 CODING_AGENT=<claude|codex|pi> \
   /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh
 '
@@ -328,7 +328,7 @@ sudo -i -u {{SERVICE_USER}} -- openclaw doctor --non-interactive
 sudo -i -u {{SERVICE_USER}} -- openclaw cron list --all
 sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/apply-heartbeat-scratch.sh
 sudo -H -u {{SERVICE_USER}} bash <<'EOF'
-runtime_prompt='Run this read-only command with exec: PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell DEFAULT_NODE=<default-node-version> PINNED_NODE=<project-node-version> CODING_AGENT=<claude|codex|pi> /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh. Reply exactly RUNTIME_OK when it passes. Otherwise reply RUNTIME_CHECK_FAILED and include the failure output.'
+runtime_prompt='Run this read-only command with exec: PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell DEFAULT_NODE="$(fnm default)" PINNED_NODE=<project-node-version> CODING_AGENT=<claude|codex|pi> /opt/{{SERVICE_USER}}/libexec/check-project-runtimes.sh. Reply exactly RUNTIME_OK when it passes. Otherwise reply RUNTIME_CHECK_FAILED and include the failure output.'
 /opt/{{SERVICE_USER}}/bin/openclaw agent --agent main \
   --session-id "$(cat /proc/sys/kernel/random/uuid)" \
   --message "$runtime_prompt" --json

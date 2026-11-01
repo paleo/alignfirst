@@ -1,9 +1,8 @@
-# Upgrade AlignFirst to v4
+# Upgrade AlignFirst
 
-Migrate an existing AlignFirst v1, v2, or v3 project to the CLI-backed v4 skills. This workflow does
-not install standalone docmap or workspace unless the user separately requests them.
+Migrate legacy instructions, full-content skills and `plans-share` to CLI-backed skills. This workflow installs standalone Docmap or workspace only when separately requested.
 
-The sections after [Route the Upgrade](#route-the-upgrade) are one-time migrations to later releases. Apply each one whose condition holds on the machine or in the project.
+The sections after [Route the Upgrade](#route-the-upgrade) are one-time migrations. Apply each one whose detected files or settings match.
 
 Commands are Unix-style. Adapt them for another shell.
 
@@ -15,35 +14,27 @@ For `.alignfirst.json`, workspace wrappers, old port slots or `aligndev worktree
 2. Use the existing `AGENTS.md` or `CLAUDE.md`; create `AGENTS.md` when neither exists.
 3. Preserve the project's commit, default-branch, and other local conventions.
 
-## Detect the Installed Version
+## Detect the Installed Layout
 
-- **v4:** the `alignfirst` skill has `metadata.version` beginning with `4.` or is a stub that runs
-  `alignfirst guide`. This signal wins even when legacy npm script names remain. A script that runs
-  `alignfirst` is not evidence of v3.
-- **v3:** the eight skills contain their full protocol content. Detect a `references/` directory
-  under the `alignfirst` skill or `metadata.version` beginning with `3.`. When v4 is absent, also
-  detect v3 from `@paleo/plans-share` or an active command that invokes `plans-share`.
-- **v2:** `alignfirst/SKILL.md` exists under a canonical project skill root, but the skill has no
-  `references/` directory and its metadata predates v3.
-- **v1:** `_docs/alignfirst/`, `_docs/vibe-flow/`, or `_docs/ai-workflow/` exists.
+- **CLI-backed skills:** the `alignfirst` skill is a stub that runs `alignfirst guide`. This signal wins even when legacy npm script names remain. A script that runs `alignfirst` is not evidence of full-content skills.
+- **Full-content protocol skills:** the protocol skills contain their full instructions, with a `references/` directory under `alignfirst`. Without CLI-backed stubs, `@paleo/plans-share` or an active `plans-share` command also selects this cleanup route.
+- **Standalone project skill:** `alignfirst/SKILL.md` exists under a canonical project skill root without CLI-backed routing or a `references/` directory.
+- **Legacy documentation:** `_docs/alignfirst/`, `_docs/vibe-flow/`, or `_docs/ai-workflow/` exists.
 
-Apply explicit skill-version and stub signals before legacy file or command footprints.
+Inspect actual skill content before relying on legacy command footprints.
 
 Inspect `skills-lock.json` through the current skills CLI when present. Ignore dependencies and
 generated output.
 
 ## Route the Upgrade
 
-- v1: follow [alignfirst-upgrade-from-v1.md](alignfirst-upgrade-from-v1.md).
-- v2: follow [alignfirst-upgrade-from-v2.md](alignfirst-upgrade-from-v2.md).
-- v3: follow [alignfirst-upgrade-from-v3.md](alignfirst-upgrade-from-v3.md).
-- v4: keep the current skills. Set `plans.autoArchive: true` in the selected `alignfirst.json`/`alignfirst.jsonc`; the
-  user can remove it after the upgrade to opt out. When legacy `plans-share` artifacts remain, apply
-  the cleanup, command sweep, and verification sections of the v3 upgrade.
+- Legacy documentation: follow [the `_docs/` migration](alignfirst-upgrade-from-v1.md).
+- Standalone project skill: follow [the project-skill migration](alignfirst-upgrade-from-v2.md).
+- Full-content protocol skills or `plans-share`: follow [the CLI migration](alignfirst-upgrade-from-v3.md).
+- CLI-backed skills: keep the current skills. Set `plans.autoArchive: true` in the selected `alignfirst.json`/`alignfirst.jsonc`; the user can remove it after the upgrade to opt out. If `plans-share` artifacts remain, apply the CLI migration's cleanup, command sweep and verification.
 - No detected installation: use [alignfirst-skills-setup.md](alignfirst-skills-setup.md).
 
-The v1 and v2 migrations preserve project knowledge and remove their legacy layouts. After either
-one, continue with the v3 migration for the CLI installation and project config.
+The documentation and standalone-skill migrations preserve project knowledge before removing legacy layouts. Continue with the CLI migration after either one.
 
 ## Keep the Service AlignFirst Home Writable
 
@@ -51,7 +42,7 @@ On an AlignDev OpenClaw host, the entire service `~/.alignfirst/` tree must stay
 
 ## Move the Home Directory
 
-`alignfirst` 0.6.0 and `aligndev` 0.20.0 read their files from `~/.alignfirst/` only. `alignfirst` 0.7.0 reads the companion registry from `~/.alignfirst/companions/registry.json`. When `~/.config/alignfirst/` or a `companions.json` exists on the machine, migrate once:
+Current CLIs read their home files from `~/.alignfirst/` and the companion registry from `~/.alignfirst/companions/registry.json`. When `~/.config/alignfirst/` or a `companions.json` exists on the machine, migrate once:
 
 1. Move `aligndev.config.json` from `~/.config/alignfirst/` to `~/.alignfirst/`. A relative `projectsRoot` now resolves against `~/.alignfirst/`.
 2. When `companions.json` has a `root`, move the companion directories it held to `~/.alignfirst/companions/`, or make `~/.alignfirst/companions` a symlink to that directory.
@@ -62,10 +53,10 @@ On an AlignDev OpenClaw host, first apply [Keep the Service AlignFirst Home Writ
 
 ## Rename the AlignDev Settings
 
-`aligndev` 0.23.0 reads its settings from `~/.alignfirst/aligndev.settings.json` only, and fails when only the old file exists. When `~/.alignfirst/aligndev.config.json` exists on the machine, migrate once:
+AlignDev reads `~/.alignfirst/aligndev.settings.json` and fails when only the old `~/.alignfirst/aligndev.config.json` exists. When that old file is present, migrate once:
 
 1. Move it to `~/.alignfirst/aligndev.settings.json`. The schema is unchanged.
-2. Run `aligndev guide code`, version 0.23.0 or later. It fails on an invalid file.
+2. Run current `aligndev guide code`. It fails on an invalid file.
 
 On an AlignDev OpenClaw host, the operator migrates during `update-assistant.md`, in this order:
 
@@ -179,14 +170,14 @@ On an OpenClaw host, update the private admin repository and deployed settings t
 
 ## Rename the AlignDev Message-Tool Topics
 
-`aligndev` 0.29.0 replaces the `slack-message-tool` and `discord-message-tool` guide topics with `message-tool`, read through `aligndev guide --channel <slack|discord> message-tool`. The old topics fail. On an AlignDev OpenClaw host whose workspace `AGENTS.md` still names an old topic, migrate once during `update-assistant.md`:
+The retired `slack-message-tool` and `discord-message-tool` guide topics are replaced by `message-tool`, read through `aligndev guide --channel <slack|discord> message-tool`. The old topics fail. On an AlignDev OpenClaw host whose workspace `AGENTS.md` still names an old topic, migrate once during `update-assistant.md`:
 
 1. In the admin repository, bring `infra/openclaw/workspace/AGENTS.md` to the current template. On a Discord deployment, also bring `infra/openclaw/seed/surface.sh`: it sets `session.dmScope` to `per-channel-peer`, so a DM no longer shares the session of the apps' Home conversation. Commit and pull on the host.
-2. Install `aligndev` 0.29.0 through the npm packages section of `update-assistant.md`, then re-seed through the `config instructions` command in `configure-assistant.md`.
+2. Install current stable `aligndev` through the npm packages section of `update-assistant.md`, then re-seed through the `config instructions` command in `configure-assistant.md`.
 
 ## Convert the Companion Registry
 
-`alignfirst` 0.11.0 reads the companion registry as `{ "projects": … }`, and each entry names its companion directory. When `~/.alignfirst/companions/registry.json` has a top-level `paths`, every command fails with an error pointing here. Convert it once:
+AlignFirst reads the companion registry as `{ "projects": … }`, and each entry names its companion directory. When `~/.alignfirst/companions/registry.json` has a top-level `paths`, every command fails with an error pointing here. Convert it once:
 
 1. Rename `paths` to `projects`. The keys stay.
 2. Give each entry a `dir`: the companion's current directory name under `~/.alignfirst/companions/`, so the companion stays put. The old versions derived that name from the real path of the project's main worktree: relative to the home directory, or the absolute path without its leading `/` outside it, with every `/` replaced by `_`.
@@ -212,21 +203,21 @@ becomes:
 }
 ```
 
-An older `alignfirst` fails on the new shape: update every copy that reads the registry, such as an `npx` cache or another project's pinned dependency.
+An older `alignfirst` fails on the new shape: update every copy that reads the registry, such as an `npx` cache or another project's local dependency.
 
-On an AlignDev OpenClaw host, the registry stays service-owned. Convert it as the service account, once `update-assistant.md` has installed `alignfirst` 0.11.0.
+On an AlignDev OpenClaw host, the registry stays service-owned. Convert it as the service account, after `update-assistant.md` installs current stable `alignfirst`.
 
 ## Historical: Rename the Work-Files Folder Setting
 
 The clean-break runbook supersedes this old-file transition on the current CLI; `plans.folder` is now rejected.
 
-`alignfirst` 0.12.0 reads the project's folder in the work-files repository from `plans.repositoryFolder` in `.alignfirst.json`. It still reads the deprecated `plans.folder`, with a warning pointing here, and fails when both keys are present. Rename the key; the value stays. An older `alignfirst` rejects `plans.repositoryFolder`: rename it once every copy that reads the file runs 0.12.0. On an AlignDev OpenClaw host, the file lives in the admin repository: rename it there and re-seed.
+When legacy `.alignfirst.json` contains `plans.folder`, preserve its value as `plans.repositoryFolder` during the clean-break conversion. Update every CLI copy that reads the configuration before using the converted file. On an AlignDev OpenClaw host, convert the admin repository's file and re-seed.
 
 ## Historical: Move Workspace Ports to the Dev-Server
 
-This describes the pre-manifest release transition. Do not execute it on the current CLI; use the clean-break runbook above.
+This describes legacy wrapper fields before manifest conversion. Do not execute it on the current CLI; use the clean-break runbook above.
 
-`@alignfirst/workspace` 0.37.0 allocates the ports in the dev-server, at each workspace's first `dev setup`, and provisions infrastructure there. Migrate a project once when its `workspace.mjs` declares `ports` or `setupProfiles`, or when its `finalizeWorkspace` provisions infrastructure. The old wrapper assets are retired. The current [workspace blueprint](workspace-setup.md) documents manifests and project-owned commands.
+Ports and infrastructure belong to the dev-server's first `dev setup`. Migrate a project once when its `workspace.mjs` declares `ports` or `setupProfiles`, or when its `finalizeWorkspace` provisions infrastructure. The old wrapper assets are retired. The current [workspace blueprint](workspace-setup.md) documents manifests and project-owned commands.
 
 1. Move `ports` to `dev-server.mjs` as a range. `first` is the old `base`, and `last` the old range end, `base + maxWorkspaces × perWorkspace − 1`, so `portRange` in `.alignfirst.json` stays valid. `perWorkspace` defaulted to the number of names. Rename `names` to `declare`; a `compute` function becomes the names it returned.
 2. Move the files that carry ports from `gitignoredFiles` to `runFiles` in `dev-server.mjs`. Their `patch` receives `ports` as before.
@@ -241,7 +232,7 @@ On an AlignDev OpenClaw host with the dev-server gateway, `REMOTE_DEV_DOMAIN` al
 
 ## Historical: Declare Workspace Ports
 
-`@alignfirst/workspace` 0.38.0 refuses `ports.names` and `ports.mainWorktree` in `dev-server.mjs`. Migrate the `ports` group once:
+When legacy `dev-server.mjs` contains `ports.names` or a `ports.mainWorktree` map, convert its `ports` group during the clean-break migration:
 
 1. Rename `names` to `declare`.
 2. Turn each pin of `mainWorktree` into an entry `{ name, mainWorktree }` in `declare`, then remove the `mainWorktree` map.
@@ -256,8 +247,8 @@ ports: { first: 8100, last: 8199, declare: ["server", { name: "frontend", mainWo
 
 ## Historical: Declare the Run-File Inputs
 
-`@alignfirst/workspace` 0.39.0 rewrites an existing run file at a start only when the ports or the run-file inputs changed since its last write. An explicit `dev setup` still rewrites them all. Migrate once when a run-file patch or `content` function reads a value besides `ports`, such as `REMOTE_DEV_DOMAIN` or `REMOTE_DEV_HOST`. Return those values from `runFilesInputs` in `dev-server.mjs`, as the former wrapper asset did. Without it, a start keeps the values of the last write.
+Run-file rewrites at startup depend on changed ports or declared inputs. An explicit `dev setup` still rewrites them all. Migrate once when a run-file patch or `content` function reads a value besides `ports`, such as `REMOTE_DEV_DOMAIN` or `REMOTE_DEV_HOST`. Return those values from `runFilesInputs` in `dev-server.mjs`, as the former wrapper asset did. Without it, a start keeps the values of the last write.
 
 ## Update the Docmap Snippet
 
-Version 0.48.0 of this guide asks for docmap once per session. When an `AGENTS.md` or `CLAUDE.md` has a `Docmap - Seek Documentation` section whose body says "Mandatory for every task", replace that body with the one in [Agent Instructions](docmap-setup.md#agent-instructions). Keep the heading and the project's docmap command.
+When an `AGENTS.md` or `CLAUDE.md` has a `Docmap - Seek Documentation` section whose body says "Mandatory for every task", replace that body with the one in [Agent Instructions](docmap-setup.md#agent-instructions). Keep the heading and the project's docmap command.

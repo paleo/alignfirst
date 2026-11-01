@@ -15,11 +15,11 @@ OpenClaw is the persistent parent. The `service-pi` profile selects Pi explicitl
 
 **Role: human**, in the `{{SERVER_ADMIN_USER}}` shell, at the end of `01-server-setup.md`.
 
-Install the reviewed npm release using an admin-account Node satisfying Pi's minimum, **22.19.0**. The independent `pi-subagent` package has the same minimum. AlignDev's own Node requirement is separate; continue to satisfy the toolchain runbook too.
+Install current stable Pi on current Node LTS. Inspect Pi's declared `engines.node` and any extensions' runtime and peer requirements before use. AlignDev's compatibility is separate; follow the toolchain runbook too.
 
 ```sh
 node --version
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.4.0
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest
 pi --version
 ```
 
@@ -35,7 +35,7 @@ Start Pi in the admin repository to continue the installation. Pi discovers proj
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm install -g \
-  --ignore-scripts @earendil-works/pi-coding-agent@1.4.0
+  --ignore-scripts @earendil-works/pi-coding-agent@latest
 sudo install -o root -g root -m 755 infra/openclaw/node-runtime/pi-launcher.mjs \
   /opt/{{SERVICE_USER}}/libexec/pi-launcher.mjs
 sudo install -o root -g root -m 755 infra/openclaw/node-runtime/install-pi-launcher.sh \
@@ -44,7 +44,7 @@ sudo install -o root -g root -m 755 infra/openclaw/node-runtime/install-pi-launc
 sudo chown -R root:root /home/{{SERVICE_USER}}/.npm-system-global
 sudo chmod -R go-w /home/{{SERVICE_USER}}/.npm-system-global
 sudo chattr +i /home/{{SERVICE_USER}}/.npm-system-global
-sudo /opt/{{SERVICE_USER}}/libexec/install-pi-launcher.sh 1.4.0
+sudo /opt/{{SERVICE_USER}}/libexec/install-pi-launcher.sh
 set -o pipefail
 settings=infra/openclaw/aligndev.settings.json
 store=$(sudo /usr/bin/node infra/openclaw/deployment-profiles.mjs "$settings" \
@@ -57,7 +57,7 @@ sudo -H -u {{SERVICE_USER}} bash -lc '
 # Expected executable: /opt/{{SERVICE_USER}}/bin/pi
 ```
 
-The installer verifies the exact package name/version and its declared `bin.pi`; Pi 1.4.0 declares `dist/bundle/cli.js`. It rejects missing, escaping or symlinked CLI paths, unsupported system Node, and an unprotected package prefix. The generated root-owned launcher uses `exec /usr/bin/node <verified-entry> "$@"`. It preserves arguments, cwd, environment and PATH. It does not invoke fnm, reset PATH or install another Node.
+The installer verifies the installed package identity, its relative declared `bin.pi` and its `engines.node` requirement. It rejects missing, escaping or symlinked CLI paths, unsupported system Node, and an unprotected package prefix. The generated root-owned launcher uses `exec /usr/bin/node <verified-entry> "$@"`. It preserves arguments, cwd, environment and PATH. It does not invoke fnm, reset PATH or install another Node.
 
 Pi's native shell helper prepends `<agent-dir>/bin` for tools. That directory is a protected executable resource; do not put a Node override there. Provision approved `rg`/`fd` binaries there or on system PATH before hardening, since Pi otherwise downloads missing tools into that bin. Later replacements use `agent-config` maintenance. With it protected, project commands retain the project-selected Node while Pi and packaged subagents use the launcher's Node through `process.execPath`.
 
@@ -149,7 +149,7 @@ sudo -i -u {{SERVICE_USER}} -- bash -lc '
 '
 ```
 
-Offer `@alignfirst/pi-subagent` only after explicit approval. Repeat the [Authenticate](#authenticate) shell and null/string routing, then review existing packages/extensions and `agents/` profiles under its absolute `$store` path. In that same routed shell, install one reviewed, version-pinned npm package using `pi install npm:@alignfirst/pi-subagent@<approved-version>`. Preserve user subagent profiles and remove no existing declaration without approval. Verify exactly one `subagent` tool and the package identity `@alignfirst/pi-subagent`, without a `:dist` suffix. The settings declaration and package/resource trees become protected. OpenClaw does not require `pi-background` to delegate to Pi.
+Offer `@alignfirst/pi-subagent` only after explicit approval. Repeat the [Authenticate](#authenticate) shell and null/string routing, then review existing packages/extensions and `agents/` profiles under its absolute `$store` path. In that same routed shell, review the current stable package's source and declared compatibility, then install it with `pi install npm:@alignfirst/pi-subagent`. Keep the declaration unversioned. Preserve user subagent profiles and remove no existing declaration without approval. Verify exactly one `subagent` tool and the package identity `@alignfirst/pi-subagent`, without a `:dist` suffix. The settings declaration and package/resource trees become protected. OpenClaw does not require `pi-background` to delegate to Pi.
 
 After hardening, use the `agent-config` maintenance scope for approved package/declaration changes; use `agent-skills` for native skills and `instructions` for managed instructions. A package that also installs skills needs both scopes. Keep the gateway stopped until policy restoration succeeds.
 
@@ -169,16 +169,16 @@ Follow `06-security-hardening.md` for the shared resource policy. Managed contex
 
 ### Update
 
-**Role: operator**, during `docs/operations/update-assistant.md`. Review an exact release before changing the pin. Run its npm update through the package maintenance window, then regenerate the launcher after hardening is restored:
+**Role: operator**, during `docs/operations/update-assistant.md`. Review current stable Pi's source, security changes and declared compatibility. Install it through the package maintenance window, then regenerate the launcher after hardening is restored:
 
 ```sh
 sudo /usr/local/sbin/alignfirst-assistant-maintenance packages -- \
   /opt/{{SERVICE_USER}}/libexec/admin-npm install -g --ignore-scripts \
-  @earendil-works/pi-coding-agent@<reviewed-version>
-sudo /opt/{{SERVICE_USER}}/libexec/install-pi-launcher.sh <reviewed-version>
+  @earendil-works/pi-coding-agent@latest
+sudo /opt/{{SERVICE_USER}}/libexec/install-pi-launcher.sh
 ```
 
-A changed or unrecognized `engines.node` range requires review rather than an automatic fallback. Do not use Pi's self-updater or a second managed installer for this protected npm installation.
+The launcher accepts a simple `>=major.minor.patch` `engines.node` range from the installed package. Missing, malformed or other range forms fail closed and require parser review before installation. Check optional extensions' declared compatibility separately. Do not use Pi's self-updater or a second managed installer for this protected npm installation.
 
 ### Deployment Acceptance
 

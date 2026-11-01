@@ -26,7 +26,7 @@ A desktop app reaches the loopback gateway through the SSH tunnel of [04 § 11](
 
 Each app connects to `ws://127.0.0.1:18789` with the gateway token (`platforms/*.md` lists the downloads):
 
-- **macOS**: `OpenClaw-<version>.dmg` from the OpenClaw GitHub releases. **Connection…** → **OpenClaw runs** → **Remote (another host)**, then the address and the token (`platforms/mac/remote.md`). The app's own **SSH tunnel** mode runs `openclaw` commands on the server and needs the CLI on the SSH account's `PATH`; the manual tunnel needs nothing there.
+- **macOS**: the current stable disk image from the OpenClaw GitHub releases. **Connection…** → **OpenClaw runs** → **Remote (another host)**, then the address and the token (`platforms/mac/remote.md`). The app's own **SSH tunnel** mode runs `openclaw` commands on the server and needs the CLI on the SSH account's `PATH`; the manual tunnel needs nothing there.
 - **Linux**: the desktop companion. **Gateways** → **Manage Gateways…** → **Add Gateway**, with a direct URL and token authentication (`platforms/linux.md`).
 - **Windows**: Windows Hub. **Advanced setup**, a remote gateway by URL and token (`platforms/windows.md`).
 
@@ -54,9 +54,11 @@ Opt-in, for later. The mobile apps need a `wss://` route: they refuse plain `ws:
 Install Tailscale on the server:
 
 ```sh
-curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg \
+. /etc/os-release
+ubuntu_codename=${UBUNTU_CODENAME:-$VERSION_CODENAME}
+curl -fsSL "https://pkgs.tailscale.com/stable/ubuntu/${ubuntu_codename}.noarmor.gpg" \
   | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
-curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list \
+curl -fsSL "https://pkgs.tailscale.com/stable/ubuntu/${ubuntu_codename}.tailscale-keyring.list" \
   | sudo tee /etc/apt/sources.list.d/tailscale.list
 sudo apt update && sudo apt install -y tailscale
 ```

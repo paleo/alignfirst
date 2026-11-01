@@ -85,7 +85,7 @@ Then ask your session to work with aligndev.
 ### Requirements
 
 - Node.js 22.11 or later with `npx -y aligndev`, or Bun with `bunx --bun aligndev` (`bun x --bun` is equivalent). Bun 1.4.4 is the tested CLI baseline; compatibility with every older release is not promised.
-- The selected child installed and authenticated under the same effective environment and cwd as the child. Apply the profile's `unset/env/configDir`, including HOME, PATH and credential routing, before using `claude` then `/login`, `codex login`, or `pi` then `/login <provider>` (or configured provider credentials). A bare login in another shell may select another account. Pi requires Node.js 22.19 or later; the Pi adapter and extensions target Pi 1.4.0.
+- The selected child installed and authenticated under the same effective environment and cwd as the child. Apply the profile's `unset/env/configDir`, including HOME, PATH and credential routing, before using `claude` then `/login`, `codex login`, or `pi` then `/login <provider>` (or configured provider credentials). A bare login in another shell may select another account. Pi keeps its own runtime requirements; see the [extension compatibility baseline](https://github.com/paleo/alignfirst/blob/main/docs/pi-extensions.md#supported-and-tested-baseline).
 - For Pi, select a usable native model, preferably `provider/model` (optional thinking suffix). Authenticate in the same account/configuration used by the child; never expose credential values in diagnostics.
 - Linux or macOS, or Windows through WSL.
 
