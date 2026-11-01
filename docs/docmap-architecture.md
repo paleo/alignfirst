@@ -102,7 +102,7 @@ Warnings (⚠) appear inline for name issues or frontmatter errors.
 | `npm -w @alignfirst/docmap test` | Run tests with Vitest |
 | `npm run lint` | Biome linter (root) |
 
-Tests live in `packages/docmap/test/docmap.test.ts` and use fixture directories under `packages/docmap/test/fixtures/` (basic, errors, empty, nested, bad-names, subdirs-only, classify, no-frontmatter, large, listable, search). Each fixture is a self-contained `docs/`-like tree passed via `--root`. The `large` fixture (≥20 `.md` files) exercises the top-level listing kept above the recursive-default threshold.
+Tests live in `packages/docmap/test/docmap.test.ts` and use fixture directories under `packages/docmap/test/fixtures/` (basic, errors, empty, nested, bad-names, classify, no-frontmatter, large, listable, search). Each fixture is a self-contained `docs/`-like tree passed via `--root`. The `large` fixture (≥20 `.md` files) exercises the top-level listing kept above the recursive-default threshold.
 
 ## Authoring Guide and Setup
 

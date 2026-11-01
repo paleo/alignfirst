@@ -162,8 +162,9 @@ setInterval(() => {}, 1000);\n`,
         throw new Error("unexpected spawn");
       },
     });
-    await expect(reader("claude", context)).rejects.toThrow(/Claude Code quota command failed/);
-    await expect(reader("claude", context)).rejects.not.toThrow("fixture-secret");
+    const attempt = reader("claude", context);
+    await expect(attempt).rejects.toThrow(/Claude Code quota command failed/);
+    await expect(attempt).rejects.not.toThrow("fixture-secret");
   });
 });
 

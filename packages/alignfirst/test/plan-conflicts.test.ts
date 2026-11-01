@@ -6,6 +6,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -616,9 +617,16 @@ it("gives up when work files keep changing", async () => {
 });
 
 it.each(["-1", "NaN", "Infinity"])("rejects an invalid retry budget: %s", async (budget) => {
-  const fixture = await makeFixture();
+  const root = makeTempDir("alignfirst-budget-");
+  dirs.push(root);
+  configureGit(root);
+  const product = join(root, "product");
+  const plans = join(root, "plans");
+  mkdirSync(product);
+  git(root, "init", "--quiet", plans);
+  symlinkSync(plans, join(product, ".plans"), "dir");
   const result = await runMain(["sync"], {
-    cwd: fixture.product,
+    cwd: product,
     env: { ALIGNFIRST_SYNC_RETRY_MS: budget },
   });
   expect(result.code).toBe(1);

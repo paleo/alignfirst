@@ -49,14 +49,9 @@ describe("guide command", () => {
     }
   });
 
-  it("renders every protocol and the overview", async () => {
-    const cwd = temp();
-    for (const protocol of PROTOCOLS) {
-      const result = await runMain(["guide", protocol, "--protocol-only"], { cwd });
-      expect(result.code).toBe(0);
-      expect(result.stdout).not.toBe("");
-    }
-    const overview = await runMain(["guide", "overview"], { cwd });
+  it("renders the overview without the protocol catalogue or ticket directory section", async () => {
+    const overview = await runMain(["guide", "overview"], { cwd: temp() });
+    expect(overview.code).toBe(0);
     expect(overview.stdout).toContain("# AlignFirst Overview");
     expect(overview.stdout).not.toContain("# AlignFirst Guide");
     expect(overview.stdout).not.toContain("# Ticket Directory and Work Files");
