@@ -17,6 +17,9 @@ describe("addInitScripts", () => {
     const pkg: PackageJsonScripts = {};
     const added = addInitScripts(pkg);
     expect(added).toEqual(["env:build", "env:up", "env:down", "e2e"]);
+    const scripts = { ...pkg.scripts };
+    expect(addInitScripts(pkg)).toEqual([]);
+    expect(pkg.scripts).toEqual(scripts);
     expect(pkg.scripts).toEqual({
       "env:build": "openclaw-test env build",
       "env:up": "openclaw-test env up",
@@ -30,11 +33,5 @@ describe("addInitScripts", () => {
     const added = addInitScripts(pkg);
     expect(added).toEqual(["env:build", "env:up", "env:down"]);
     expect(pkg.scripts?.e2e).toBe("custom command");
-  });
-
-  it("returns an empty list when every script is already present", () => {
-    const pkg: PackageJsonScripts = {};
-    addInitScripts(pkg);
-    expect(addInitScripts(pkg)).toEqual([]);
   });
 });

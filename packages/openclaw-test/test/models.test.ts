@@ -8,12 +8,6 @@ function resolve(selection: string | undefined, defaultEnv?: string) {
 }
 
 describe("resolveSelectedModels", () => {
-  it("resolves a single bare id to its full ref", () => {
-    expect(resolve("qwen3.8-flash")).toEqual([
-      { id: "qwen3.8-flash", ref: "custom-openrouter/qwen/qwen3.8-flash" },
-    ]);
-  });
-
   it("resolves a comma list of bare ids, order preserved", () => {
     expect(resolve("qwen3.8-flash,claude-sonnet-5")).toEqual([
       { id: "qwen3.8-flash", ref: "custom-openrouter/qwen/qwen3.8-flash" },

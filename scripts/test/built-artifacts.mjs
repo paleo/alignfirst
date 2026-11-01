@@ -12,6 +12,10 @@ export const sharedCliArtifacts = [
   "packages/alignfirst/dist/cli.js",
 ];
 
+/**
+ * @param {string[]} entries
+ * @param {string} [remedy]
+ */
 export function requireBuiltArtifacts(entries, remedy) {
   const missing = entries.map((entry) => resolve(repositoryRoot, entry)).filter(isMissingFile);
   if (missing.length === 0) return;

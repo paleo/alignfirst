@@ -17,12 +17,15 @@ test("integration preflight accepts built files and reports all missing entries 
     const missing = join(root, "missing.js");
     const directory = join(root, "not-a-file.js");
     mkdirSync(directory);
-    assert.throws(() => requireBuiltArtifacts([built, missing, directory]), (error) => {
-      assert.match(error.message, /npm run build.*repository root/);
-      assert.ok(error.message.includes(missing));
-      assert.ok(error.message.includes(directory));
-      return true;
-    });
+    assert.throws(
+      () => requireBuiltArtifacts([built, missing, directory]),
+      (error) => {
+        assert.match(error.message, /npm run build.*repository root/);
+        assert.ok(error.message.includes(missing));
+        assert.ok(error.message.includes(directory));
+        return true;
+      },
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -1,10 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fixtureEnvironment } from "./environment.js";
 
 const fetchMock = vi.fn<typeof fetch>();
+const responses: unknown[] = [];
+const unexpectedRequests: string[] = [];
 
 beforeEach(() => {
   vi.resetModules();
   vi.stubGlobal("fetch", fetchMock);
+  fetchMock.mockImplementation(strictFetch);
+  const clean = fixtureEnvironment();
+  for (const key of Object.keys(process.env)) {
+    if (!(key in clean)) vi.stubEnv(key, undefined);
+  }
   vi.stubEnv("OPENCLAW_TEST_JUDGE_MODEL", "openrouter/anthropic/claude-haiku-5.5");
   vi.stubEnv("OPENROUTER_API_KEY", "offline-test-key");
   vi.stubEnv("ANTHROPIC_API_KEY", "offline-test-key");
@@ -14,6 +22,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   fetchMock.mockReset();
+  const failures = unexpectedRequests.splice(0);
+  const remaining = responses.splice(0);
+  expect(failures, "Unexpected judge requests (not retried by the fake)").toEqual([]);
+  expect(remaining, "Unused judge responses").toEqual([]);
 });
 
 describe("judge SDK compatibility", () => {
@@ -134,9 +146,44 @@ describe("judge SDK compatibility", () => {
 });
 
 function respond(body: unknown): void {
-  fetchMock.mockResolvedValueOnce(
-    new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } }),
-  );
+  responses.push(body);
+}
+
+async function strictFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+  try {
+    const request = new Request(input, init);
+    const anthropic = process.env.OPENCLAW_TEST_JUDGE_MODEL?.startsWith("anthropic/") === true;
+    expect(request.url).toBe(
+      anthropic
+        ? "https://api.anthropic.com/v1/messages"
+        : "https://openrouter.ai/api/v1/chat/completions",
+    );
+    expect(request.method).toBe("POST");
+    expect(request.headers.get("content-type")).toContain("application/json");
+    expect(request.headers.get("authorization")).toBe("Bearer offline-test-key");
+    const body = await request.json();
+    expect(typeof body.model).toBe("string");
+    expect(Number.isInteger(body.max_tokens) && body.max_tokens > 0).toBe(true);
+    expect(body.messages).toEqual([{ role: "user", content: expect.any(String) }]);
+    const allowed = anthropic
+      ? ["model", "max_tokens", "messages", "output_config"]
+      : ["model", "max_tokens", "messages", "reasoning_effort", "temperature"];
+    expect(Object.keys(body).filter((key) => !allowed.includes(key))).toEqual([]);
+    if (responses.length === 0) throw new Error("Judge response queue exhausted");
+    return new Response(JSON.stringify(responses.shift()), {
+      headers: { "content-type": "application/json" },
+    });
+  } catch (error) {
+    unexpectedRequests.push(error instanceof Error ? error.message : String(error));
+    // A non-retryable SDK response exposes a bad fake request immediately; teardown also fails.
+    return new Response(
+      JSON.stringify({ error: { message: "Unexpected offline judge request" } }),
+      {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      },
+    );
+  }
 }
 
 async function freshJudge() {
