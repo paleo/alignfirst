@@ -194,6 +194,10 @@ Deployments require null or a string for every coding profile and enabled explic
 
 Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code, Codex or Pi variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the preparation contract: project context, usable work files, docmap, runtime procedures and an explicitly referenced assistant guide, in the repository or its companion. `alignfirst assistant-instructions` prints conventions and that content without filename discovery. The workspace recipe is optional; default preparation is protocol-ready.
 
+## Maintainer checks
+
+From the repository root, run the complete `npm run build`, then `npm run test:integration --workspace aligndev`. Filtered integration files require the same build. Preflight checks provisioning only; rebuild after source changes.
+
 ## Under the Hood
 
 `aligndev` documents itself for the assistant: `aligndev --help`, then `aligndev guide`, print everything it needs. Maintainers: see [aligndev Architecture](https://github.com/paleo/alignfirst/blob/main/docs/aligndev-architecture.md) and the [AlignDev for OpenClaw map](https://github.com/paleo/alignfirst/blob/main/docs/aligndev-openclaw/aligndev-openclaw.md).

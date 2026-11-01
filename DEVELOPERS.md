@@ -29,12 +29,13 @@ Existing participating worktrees with old runtime registries, including the side
 
 ## Everyday commands
 
-The tooling runs through the `alignfirst` CLI built in this workspace, so run `npm run build` first.
+Run the complete `npm run build` from the repository root before checks. Integration tests, including filtered files, use those artifacts and never rebuild. Their preflight checks required files only; rebuild after source changes.
 
 | Command | Purpose |
 |---------|---------|
 | `npm run build` | Build every package |
 | `npm test` | Test every package (`npm test --workspace <name>` for one) |
+| `npm run test:integration --workspace <name>` | Run a package's integration suite after the root build |
 | `npm run lint` / `npm run lint:fix` | Check / fix with Biome |
 | `npm run docmap` | Browse the project documentation |
 | `npm run workspace -- <command>` | Manage worktree workspaces (`--guide` for the procedures) |

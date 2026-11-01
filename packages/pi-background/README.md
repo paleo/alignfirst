@@ -115,11 +115,13 @@ Linux cleanup verifies process-start identities before signalling. macOS uses pr
 
 ## Maintainer checks
 
+From the repository root, complete `npm run build` before integration, including filtered files. Preflight checks provisioning only; rebuild after source changes.
+
 ```sh
+npm run build
 npm test --workspace @alignfirst/pi-background
 npm run test:integration --workspace @alignfirst/pi-background
 npm run typecheck --workspace @alignfirst/pi-background
-npm run build --workspace @alignfirst/pi-background
 npm run lint --workspace @alignfirst/pi-background
 npm pack --workspace @alignfirst/pi-background --dry-run --json
 ```

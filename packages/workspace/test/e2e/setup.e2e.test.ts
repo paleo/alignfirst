@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import type { WorkspaceEntry } from "../../src/workspaces.js";
 import {
@@ -10,7 +10,6 @@ import {
   DEV_PORTS,
   type FixtureOptions,
   type FixtureRepo,
-  packageRoot,
   readWorkspaces,
   runCli,
   runDev,
@@ -21,10 +20,6 @@ import {
 const TEST_TIMEOUT_MS = 60_000;
 
 const createdRoots: string[] = [];
-
-beforeAll(() => {
-  buildIfStale();
-}, 120_000);
 
 afterEach(async () => {
   for (const root of createdRoots.splice(0)) {
@@ -736,27 +731,4 @@ function setupLog(repo: string, worktreeDir: string): string {
     join(repo, "..", worktreeDir, ".local-wt", "logs", "workspace-setup.log"),
     "utf-8",
   );
-}
-
-// Rebuild `dist/` only when it is missing or older than the newest `src/` file, so a second `vitest`
-// run in a row skips the rebuild.
-function buildIfStale(): void {
-  const distIndex = join(packageRoot, "dist", "index.js");
-  if (existsSync(distIndex) && statSync(distIndex).mtimeMs >= newestSrcMtime()) {
-    console.log("[e2e] dist is up to date; skipping build.");
-    return;
-  }
-  console.log("[e2e] building @alignfirst/workspace…");
-  execFileSync("npm", ["run", "build"], { cwd: packageRoot, stdio: "inherit" });
-}
-
-function newestSrcMtime(): number {
-  const srcDir = join(packageRoot, "src");
-  let newest = 0;
-  for (const rel of readdirSync(srcDir, { recursive: true })) {
-    const full = join(srcDir, rel.toString());
-    const stat = statSync(full);
-    if (stat.isFile()) newest = Math.max(newest, stat.mtimeMs);
-  }
-  return newest;
 }

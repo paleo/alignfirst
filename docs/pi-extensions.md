@@ -59,18 +59,17 @@ B7 remains blocked and unshipped; production waiting is unchanged. Removing thes
 From the repository root:
 
 ```sh
+npm run build
 npm test --workspace @alignfirst/pi-subagent
 npm test --workspace @alignfirst/pi-background
 npm run test:integration --workspace @alignfirst/pi-background
 npm run typecheck --workspace @alignfirst/pi-subagent
 npm run typecheck --workspace @alignfirst/pi-background
-npm run build --workspace @alignfirst/pi-subagent
-npm run build --workspace @alignfirst/pi-background
 npm run lint --workspace @alignfirst/pi-subagent
 npm run lint --workspace @alignfirst/pi-background
 ```
 
-`packages/pi-background/test/integration/aligndev-integration.test.ts` runs through `test:integration`, builds its CLI prerequisites and packs the background extension. It exercises quiet/result identity, out-of-order worktrees, failure/authentication, cancellation and runtime new/resume/fork/reload/quit. Fixture-local executables reject accidental npx/registry fallback.
+`packages/pi-background/test/integration/aligndev-integration.test.ts` runs through `test:integration` and packs the prebuilt background extension. Complete the root `npm run build` first, including for filtered files. Integration preflight checks provisioning only; rebuild after source changes. It exercises quiet/result identity, out-of-order worktrees, failure/authentication, cancellation and runtime new/resume/fork/reload/quit. Fixture-local executables reject accidental npx/registry fallback.
 
 After builds, run the packed-distribution gate:
 

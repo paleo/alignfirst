@@ -13,7 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, delimiter } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { writeConfig, writeRegistry } from "../helpers.js";
 
@@ -37,17 +37,6 @@ interface Fixture {
   sessions: string;
   env: NodeJS.ProcessEnv;
 }
-
-beforeAll(() => {
-  for (const workspace of [
-    "@alignfirst/docmap",
-    "@alignfirst/workspace",
-    "alignfirst",
-    "aligndev",
-  ]) {
-    execFileSync("npm", ["run", "build", "--workspace", workspace], { cwd: root, stdio: "pipe" });
-  }
-}, 60_000);
 
 afterEach(() => {
   for (const dir of temporary.splice(0)) rmSync(dir, { recursive: true, force: true });

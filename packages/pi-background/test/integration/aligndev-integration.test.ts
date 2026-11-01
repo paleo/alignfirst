@@ -12,22 +12,6 @@ const background = join(packedRoot, "package");
 const codingAgent = fileURLToPath(new URL("../fixtures/coding-agent.mjs", import.meta.url));
 
 beforeAll(() => {
-  execFileSync(
-    "npm",
-    [
-      "run",
-      "build",
-      "--workspace",
-      "@alignfirst/docmap",
-      "--workspace",
-      "alignfirst",
-      "--workspace",
-      "aligndev",
-      "--workspace",
-      "@alignfirst/pi-background",
-    ],
-    { cwd: root, stdio: "pipe" },
-  );
   const packed = JSON.parse(
     execFileSync("npm", ["pack", "--json", "--pack-destination", packedRoot], {
       cwd: join(root, "packages/pi-background"),
