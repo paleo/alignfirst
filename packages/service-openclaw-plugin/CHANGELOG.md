@@ -1,5 +1,11 @@
 # @alignfirst/service-openclaw-plugin
 
+## 0.5.4
+
+### Patch Changes
+
+- 55705b8: Updated OpenClaw compatibility to 2026.10.9 and schema dependencies. Node now requires 24.22.1+ on the 24.x line or 26.12.1+. Updated the judge SDKs and removed sampling parameters from direct Anthropic requests.
+
 ## 0.5.3
 
 ### Patch Changes

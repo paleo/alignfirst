@@ -1,5 +1,17 @@
 # aligndev
 
+## 0.31.0
+
+### Minor Changes
+
+- 55705b8: Renamed `developerInstructions` to `assistantInstructionsFile` and `developer-instructions` to `assistant-instructions`. Deprecated inputs remain supported with stderr warnings; JSON reports use the new names. Upgrade AlignFirst and AlignDev together. Configuration `schemaVersion` remains 1.
+
+### Patch Changes
+
+- 55705b8: Scoped automated checks and development tooling to the task's needs, reusing valid results and skipping unnecessary work.
+- 55705b8: Recommended returning to the original review session after fixes, with the assistant deciding how to handle further feedback.
+- 55705b8: Updated Pi compatibility to 1.4.0.
+
 ## 0.30.1
 
 ### Patch Changes

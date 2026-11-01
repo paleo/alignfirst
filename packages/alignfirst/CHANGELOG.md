@@ -1,5 +1,11 @@
 # alignfirst
 
+## 0.17.0
+
+### Minor Changes
+
+- 55705b8: Renamed `developerInstructions` to `assistantInstructionsFile` and `developer-instructions` to `assistant-instructions`. Deprecated inputs remain supported with stderr warnings; JSON reports use the new names. Upgrade AlignFirst and AlignDev together. Configuration `schemaVersion` remains 1.
+
 ## 0.16.0
 
 ### Minor Changes

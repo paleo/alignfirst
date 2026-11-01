@@ -1,5 +1,13 @@
 # @alignfirst/openclaw-discord-mock
 
+## 0.6.7
+
+### Patch Changes
+
+- 55705b8: Updated OpenClaw compatibility to 2026.10.9 and schema dependencies. Node now requires 24.22.1+ on the 24.x line or 26.12.1+. Updated the judge SDKs and removed sampling parameters from direct Anthropic requests.
+- Updated dependencies [55705b8]
+  - @alignfirst/openclaw-channel-mock-core@0.11.3
+
 ## 0.6.6
 
 ### Patch Changes
