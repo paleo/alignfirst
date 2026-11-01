@@ -115,19 +115,34 @@ describe("public background actions", () => {
     }
   });
 
-  it("refuses invalid cwd and OS spawn errors without retaining a job", async () => {
+  it("refuses invalid cwd before launch and OS spawn errors without retaining a job", async () => {
+    let launches = 0;
+    let missingExecutable = false;
     const h = await host({
       background: {
         launch(options) {
-          return importLaunch({ ...options, command: "/missing/shell" });
+          ++launches;
+          return importLaunch(
+            missingExecutable ? { ...options, command: "/missing/shell" } : options,
+          );
         },
       },
     });
     try {
-      await expect(h.call({ action: "start", command: "true", cwd: "missing" })).rejects.toThrow(
-        "ENOENT",
-      );
+      const cwdError = await h
+        .call({ action: "start", command: "true", cwd: "missing" })
+        .catch((error: unknown) => error);
+      expect(launches, "invalid cwd must be rejected before the launcher is reached").toBe(0);
+      expect(cwdError).toMatchObject({
+        code: "ENOENT",
+        syscall: "stat",
+        path: join(h.cwd, "missing"),
+      });
+      expect(await h.call({ action: "list" })).toEqual({ action: "list", jobs: [] });
+      expect(h.requests).toHaveLength(0);
+      missingExecutable = true;
       await expect(h.call({ action: "start", command: "true" })).rejects.toThrow("ENOENT");
+      expect(launches).toBe(1);
       expect(await h.call({ action: "list" })).toEqual({ action: "list", jobs: [] });
       expect(h.requests).toHaveLength(0);
     } finally {

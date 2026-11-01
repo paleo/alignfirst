@@ -32,7 +32,7 @@ beforeAll(() => {
 afterAll(() => rmSync(packedRoot, { recursive: true, force: true }));
 
 describe("real AlignDev CLI through manifest-loaded background in public Pi runtime", () => {
-  it("retains exact companion files for out-of-order worktrees, quiet results and questions", async () => {
+  it("retains exact companion files and quiet deterministic results for out-of-order worktrees", async () => {
     const h = await fixture();
     try {
       const first = await h.launch("slow", h.project);
@@ -78,7 +78,7 @@ describe("real AlignDev CLI through manifest-loaded background in public Pi runt
     }
   });
 
-  it.each(["failure", "auth"])("reports %s once without a coding retry", async (mode) => {
+  it.each(["failure", "auth"])("retains a failed job and the %s result", async (mode) => {
     const h = await fixture();
     try {
       const job = await h.launch(mode, h.project);

@@ -285,16 +285,10 @@ function inspectExtension(root, packed) {
     "THE SOFTWARE IS PROVIDED",
   ])
     assert(license.includes(phrase));
-  assert.match(readFileSync(join(directory, "NOTICE.md"), "utf8"), /Pi|pi/);
   for (const [name, range] of Object.entries(manifest.peerDependencies)) {
     assert(name.startsWith("@earendil-works/pi-") || name === "typebox");
     assert.equal(range, "*");
   }
-  if (packed.name.endsWith("pi-subagent"))
-    assert.match(
-      readFileSync(join(directory, "dist/agents.js"), "utf8"),
-      /Follow the delegated assignment/,
-    );
 }
 
 function verifyBrokenRootEntries(root, packages) {

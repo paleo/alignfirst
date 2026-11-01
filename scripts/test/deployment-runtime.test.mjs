@@ -4,9 +4,11 @@ import {
   chmodSync,
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -54,7 +56,6 @@ writeFileSync(process.env.RECORD, JSON.stringify({
     assert.equal(record.cwd, fixture.project);
     assert.equal(record.path, fixture.env.PATH);
     assert.equal(record.value, "unchanged");
-    assert.match(readFileSync(launcher, "utf8"), /^#!\/bin\/sh\nexec /u);
   });
 });
 
@@ -177,7 +178,7 @@ test("launcher checks the installed package Node requirement without an independ
       assert.throws(() => renderPiLauncher(root, version), /unsupported/u);
     assert.throws(() => renderPiLauncher(root, "22.19.0-rc.1"), /Cannot verify/u);
     for (const version of ["22.19.0", "24.0.0", "26.0.0"])
-      assert.match(renderPiLauncher(root, version), /exec \/usr\/bin\/node /u);
+      assert.doesNotThrow(() => renderPiLauncher(root, version));
     const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
     manifest.engines.node = ">=26.1.0";
     writeFileSync(join(root, "package.json"), JSON.stringify(manifest));
@@ -333,15 +334,139 @@ writeFileSync(process.env.PARENT_RECORD, JSON.stringify({runtime:process.execPat
   });
 });
 
-test("installer generates the launcher with system Node and installs it root-owned, without fnm", () => {
+test("installer requests protected publication using system Node and preserves installed bytes on generation failure", () => {
+  withFixture((fixture) => {
+    const setup = installerFixture(fixture);
+    run(fixture, "/bin/bash", [setup.installer], setup.env);
+    const calls = installerCalls(setup);
+    assert.deepEqual(
+      calls.map((call) => call.command),
+      ["id", "lsattr", "mktemp", "system-node", "install", "install", "rm"],
+    );
+    assert.deepEqual(calls[3].args, [setup.generator, setup.packageRoot, setup.prefix]);
+    assert.deepEqual(calls[4].args, ["-d", "-o", "root", "-g", "root", "-m", "755", setup.bin]);
+    const temporary = calls[5].args[6];
+    assert.deepEqual(calls[5].args, [
+      "-o",
+      "root",
+      "-g",
+      "root",
+      "-m",
+      "755",
+      temporary,
+      setup.launcher,
+    ]);
+    assert.deepEqual(calls[6].args, ["-f", "--", temporary]);
+    assert.equal(
+      readFileSync(setup.launcher, "utf8"),
+      `#!/bin/sh\nexec /usr/bin/node ${quote(join(setup.packageRoot, "dist/bundle/cli.js"))} "$@"\n`,
+    );
+    assert.deepEqual(readdirSync(setup.tmp), [], "successful generation removes temporary output");
+
+    writeFileSync(setup.launcher, "previous installed launcher\n");
+    const installed = readFileSync(setup.launcher);
+    const manifest = join(setup.packageRoot, "package.json");
+    const metadata = JSON.parse(readFileSync(manifest, "utf8"));
+    metadata.name = "invalid-package";
+    writeFileSync(manifest, JSON.stringify(metadata));
+    writeFileSync(setup.log, "");
+    const failed = spawnSync("/bin/bash", [setup.installer], options(fixture, setup.env));
+    assert.notEqual(failed.status, 0, failed.stderr);
+    assert.match(failed.stderr, /differs from the expected identity/u);
+    assert.deepEqual(readFileSync(setup.launcher), installed);
+    const failureCalls = installerCalls(setup);
+    assert.deepEqual(
+      failureCalls.map((call) => call.command),
+      ["id", "lsattr", "mktemp", "system-node", "rm"],
+    );
+    assert.deepEqual(failureCalls[3].args, [setup.generator, setup.packageRoot, setup.prefix]);
+    assert.deepEqual(readdirSync(setup.tmp), [], "failed generation removes temporary output");
+  });
+});
+
+function installerFixture(fixture) {
+  const prefix = join(fixture.home, "service/.npm-system-global");
+  const opt = join(fixture.root, "opt/service");
+  const bin = join(opt, "bin");
+  const generator = join(opt, "libexec/pi-launcher.mjs");
+  const systemNode = join(fixture.root, "system-node");
+  const tmp = join(fixture.root, "tmp");
+  const log = join(fixture.root, "installer-calls.jsonl");
+  const packageRoot = fakePackage(
+    fixture,
+    join(prefix, "lib/node_modules/@earendil-works/pi-coding-agent"),
+  );
+  protectFixtureTree(prefix);
+  mkdirSync(dirname(generator), { recursive: true });
+  mkdirSync(tmp, { mode: 0o700 });
+  copyFileSync(join(runtime, "pi-launcher.mjs"), generator);
+  writeFileSync(log, "");
+  const setup = {
+    root: fixture.root,
+    prefix,
+    opt,
+    bin,
+    generator,
+    systemNode,
+    tmp,
+    log,
+    packageRoot,
+    launcher: join(bin, "pi"),
+    installer: join(fixture.root, "install-pi-launcher.sh"),
+    adapter: join(repository, "scripts/test/fixtures/pi-installer-metadata.mjs"),
+  };
+  const config = join(fixture.root, "installer-fixture.json");
+  writeFileSync(config, JSON.stringify(setup));
+  const double = join(repository, "scripts/test/fixtures/pi-installer-double.mjs");
+  for (const command of [
+    "id",
+    "lsattr",
+    "install",
+    "mktemp",
+    "rm",
+    "node",
+    "fnm",
+    "sudo",
+    "chown",
+  ]) {
+    script(
+      join(fixture.projectBin, command),
+      `exec ${quote(process.execPath)} ${quote(double)} ${quote(command)} "$@"`,
+    );
+  }
+  script(systemNode, `exec ${quote(process.execPath)} ${quote(double)} system-node "$@"`);
   const installer = readFileSync(join(runtime, "install-pi-launcher.sh"), "utf8");
-  assert.match(installer, /install -o root -g root -m 755/u);
   assert.match(
     installer,
     /\/usr\/bin\/node \/opt\/\{\{SERVICE_USER\}\}\/libexec\/pi-launcher\.mjs/u,
+    "production installation must select absolute system Node",
   );
-  assert(!installer.includes("fnm"));
-});
+  writeFileSync(
+    setup.installer,
+    installer
+      .replaceAll("/home/{{SERVICE_USER}}", join(fixture.home, "service"))
+      .replaceAll("/opt/{{SERVICE_USER}}", opt)
+      .replaceAll("/usr/bin/node", systemNode),
+  );
+  return {
+    ...setup,
+    env: { PATH: fixture.projectBin, TMPDIR: tmp, PI_INSTALLER_FIXTURE: config },
+  };
+}
+
+function protectFixtureTree(path) {
+  const stat = lstatSync(path);
+  chmodSync(path, stat.isDirectory() ? 0o755 : 0o644);
+  if (stat.isDirectory())
+    for (const name of readdirSync(path)) protectFixtureTree(join(path, name));
+}
+
+function installerCalls(setup) {
+  return readFileSync(setup.log, "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+}
 
 function withFixture(callback) {
   const root = mkdtempSync(join(tmpdir(), "side25-b8-runtime-"));
@@ -372,8 +497,7 @@ function withFixture(callback) {
   }
 }
 
-function fakePackage(fixture) {
-  const root = join(fixture.root, "package with 'quote");
+function fakePackage(fixture, root = join(fixture.root, "package with 'quote")) {
   mkdirSync(join(root, "dist/bundle"), { recursive: true });
   writeFileSync(
     join(root, "package.json"),

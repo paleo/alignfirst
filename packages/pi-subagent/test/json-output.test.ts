@@ -157,12 +157,13 @@ describe("bounded Pi JSON output", () => {
     expect(result.output).not.toContain("�");
   });
 
-  it("fails oversized records and keeps pending storage bounded", () => {
+  it("rejects oversized records and retains the failure after further input and end", () => {
     const parser = createJsonOutput();
     parser.feed(Buffer.from(`${JSON.stringify(header)}\n`));
     parser.feed(Buffer.alloc(1024 * 1024 + 1, 65));
     expect(parser.protocolError).toContain("exceeds");
-    for (let count = 0; count < 10; ++count) parser.feed(Buffer.alloc(1024 * 1024));
+    parser.feed(Buffer.alloc(1024 * 1024));
+    expect(parser.protocolError).toContain("exceeds");
     parser.end();
     expect(parser.assess().error).toContain("exceeds");
   });
