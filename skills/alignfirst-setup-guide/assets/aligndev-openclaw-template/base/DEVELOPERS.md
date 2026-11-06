@@ -23,7 +23,7 @@ Run `npm run workspace -- --guide` for the procedures. Project-local runtime req
 
 | Command | Purpose |
 | --- | --- |
-| `npx -y alignfirst context` | Conventions, documentation index and protocols; read it first |
+| `npx -y alignfirst context` | Conventions, workspace guidance, configured dev commands, documentation index and protocols; read it first |
 | `npx -y alignfirst docmap` | Browse the documentation |
 | `npm run workspace -- <command>` | Manage worktree workspaces (`--guide` for the procedures) |
 | `npm run validate` | Check configuration and Docmap |

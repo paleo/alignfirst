@@ -162,7 +162,7 @@ When the repository adopts AlignFirst skills or protocols, read the existing `AG
 ```markdown
 ## Start every session with the project context
 
-Run `npx -y alignfirst context` from the repository root once, as your first command in the session, whatever the task. It prints the project conventions (ticket IDs, branch names, commits), the documentation map, and the AlignFirst protocols.
+Run `npx -y alignfirst context` from the repository root once, as your first command in the session, whatever the task. It prints the project conventions, workspace guidance, development-server commands when configured, the documentation map, and the AlignFirst protocols.
 ```
 
 Replace any `Docmap - Seek Documentation` section and redundant protocol instructions. Remove generic workspace-readiness text, workspace-guide pointers and search exclusions already supplied by the AlignFirst CLI. The context bootstrap is sufficient for default AlignFirst guidance. Preserve essential-documentation lists and project-specific rules or conventions that are not represented in `alignfirst.json` or `alignfirst.jsonc`.
