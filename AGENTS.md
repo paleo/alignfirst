@@ -2,7 +2,7 @@
 
 ## Start every session with the project context
 
-Run `npx -y alignfirst context` from the repository root as your first command in the session. It prints the project conventions, workspace guidance, development-server commands when configured, the documentation map, and the AlignFirst protocols.
+Run `npx -y alignfirst context` from the repository root as your first command in the session. It prints the project conventions, the documentation map, and the AlignFirst protocols.
 
 ## Tooling
 
