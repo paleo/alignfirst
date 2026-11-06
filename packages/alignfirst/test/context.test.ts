@@ -183,7 +183,10 @@ describe("context command", () => {
     const result = await runMain(["context"], { cwd: project, home });
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("# Project Instructions\n\nCompanion instructions.\n");
-    for (const output of [result, await runMain(["assistant-instructions"], { cwd: project, home })]) {
+    for (const output of [
+      result,
+      await runMain(["assistant-instructions"], { cwd: project, home }),
+    ]) {
       expect(output).toMatchObject({ code: 0, stderr: "" });
       expect(output.stdout).toContain(configuredWorkspace);
       expect(output.stdout).not.toContain("# Development Server");
