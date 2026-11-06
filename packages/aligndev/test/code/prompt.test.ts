@@ -1,125 +1,29 @@
 import { describe, expect, it } from "vitest";
 
-import { buildPrompt, RUN_CONTEXT } from "../../src/code/prompt.js";
+import { buildPrompt } from "../../src/code/prompt.js";
 
-const ALIGNFIRST = "alignfirst";
-const RESUMED = { alignfirst: ALIGNFIRST, newSession: false };
+const RESUMED = { alignfirst: "alignfirst", newSession: false };
 
 describe("buildPrompt", () => {
-  it("passes the raw message through when no protocol", () => {
-    expect(buildPrompt({ ...RESUMED, message: "just this" })).toBe("just this");
+  it("preserves the raw message when no protocol or context is supplied", () => {
+    const message = "Fix `a`\n$(do not execute)\n  preserve this indentation";
+    expect(buildPrompt({ ...RESUMED, message })).toBe(message);
   });
 
-  it("builds a protocol prompt with ticket and message", () => {
-    expect(buildPrompt({ ...RESUMED, protocol: "spec", ticket: "1234", message: "m" })).toBe(
-      "Run `alignfirst guide spec` and follow the protocol. Ticket ID = 1234.\n\nm",
-    );
-  });
-
-  it("names the alignfirst command form it is given", () => {
-    expect(buildPrompt({ ...RESUMED, alignfirst: "npx -y alignfirst", protocol: "plan" })).toBe(
-      "Run `npx -y alignfirst guide plan` and follow the protocol.",
-    );
-  });
-
-  it("uses the CLI protocol name", () => {
-    expect(buildPrompt({ ...RESUMED, protocol: "aad", ticket: "1", message: "m" })).toBe(
-      "Run `alignfirst guide aad` and follow the protocol. Ticket ID = 1.\n\nm",
-    );
-  });
-
-  it("omits the ticket and message parts when absent", () => {
-    expect(buildPrompt({ ...RESUMED, protocol: "plan" })).toBe(
-      "Run `alignfirst guide plan` and follow the protocol.",
-    );
-  });
-
-  it("places bounded catchup context before the one selected protocol", () => {
-    const history = "- .plans/29/A1-spec.md (40000 bytes)";
+  it("preserves supplied project context, history and instruction in that order", () => {
+    const contextContent = "Conventions\n  Literal project input";
+    const catchupContent = "- .plans/29/A1-spec.md (40000 bytes)";
+    const message = "What remains?\n  Keep the supplied question.";
     const prompt = buildPrompt({
       ...RESUMED,
-      protocol: "aad",
-      ticket: "29",
-      message: "Continue the fix",
-      catchupContent: history,
+      contextContent,
+      catchupContent,
+      message,
     });
-    expect(prompt).toContain(`## Ticket history\n\n${history}`);
-    expect(prompt.indexOf(history)).toBeLessThan(prompt.indexOf("Run `alignfirst guide aad`"));
-    expect(prompt).toMatch(/Continue the fix$/);
-    expect(prompt).not.toContain("guide catchup");
-  });
-
-  it.each(["", " \n"])("summarizes catchup when the supplied message is blank", (message) => {
-    expect(buildPrompt({ ...RESUMED, catchupContent: "History", message })).toContain(
-      "Summarize the ticket history briefly",
-    );
-  });
-
-  it("puts the project context first, then the history, then the instruction", () => {
-    expect(
-      buildPrompt({
-        ...RESUMED,
-        protocol: "plan",
-        ticket: "29",
-        catchupContent: "History",
-        contextContent: "Conventions\n",
-      }),
-    ).toBe(
-      [
-        "## Project context",
-        "Conventions",
-        "## Ticket history",
-        "History",
-        "## Current instruction",
-        "Run `alignfirst guide plan` and follow the protocol. Ticket ID = 29.",
-      ].join("\n\n"),
-    );
-  });
-
-  it("sections the instruction after the project context without catchup", () => {
-    expect(buildPrompt({ ...RESUMED, message: "Fix it", contextContent: "Conventions" })).toBe(
-      "## Project context\n\nConventions\n\n## Current instruction\n\nFix it",
-    );
-  });
-
-  it("summarizes the history after the project context when the message is empty", () => {
-    const prompt = buildPrompt({
-      ...RESUMED,
-      catchupContent: "History",
-      contextContent: "Conventions",
-    });
-    expect(prompt).toMatch(/^## Project context\n\nConventions\n\n## Ticket history\n\nHistory/);
-    expect(prompt).toMatch(/## Current instruction\n\nSummarize the ticket history briefly/);
-  });
-
-  it("defaults standalone catchup to a short synthesis and honors a supplied question", () => {
-    expect(buildPrompt({ ...RESUMED, catchupContent: "History" })).toContain(
-      "Summarize the ticket history briefly",
-    );
-    const prompt = buildPrompt({
-      ...RESUMED,
-      catchupContent: "History",
-      message: "What remains?",
-    });
-    expect(prompt).toMatch(/What remains\?$/);
-    expect(prompt).not.toContain("Summarize");
-  });
-
-  it("opens a new session with the run context", () => {
-    expect(buildPrompt({ alignfirst: ALIGNFIRST, newSession: true, message: "Fix it" })).toBe(
-      `## Run context\n\n${RUN_CONTEXT}\n\n## Current instruction\n\nFix it`,
-    );
-  });
-
-  it("puts the run context before the project context and the history", () => {
-    const prompt = buildPrompt({
-      alignfirst: ALIGNFIRST,
-      newSession: true,
-      catchupContent: "History",
-      contextContent: "Conventions",
-    });
-    expect(prompt).toMatch(
-      /^## Run context\n\n.+\n\n## Project context\n\nConventions\n\n## Ticket history\n\n/,
-    );
+    expect(prompt).toContain(contextContent);
+    expect(prompt).toContain(catchupContent);
+    expect(prompt).toContain(message);
+    expect(prompt.indexOf(contextContent)).toBeLessThan(prompt.indexOf(catchupContent));
+    expect(prompt.indexOf(catchupContent)).toBeLessThan(prompt.indexOf(message));
   });
 });

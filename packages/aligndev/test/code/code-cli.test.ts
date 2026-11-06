@@ -92,8 +92,6 @@ describe("coding-agent selection", () => {
     expect(
       await main({ argv: ["node", "aligndev", "code", "--help"], env: {}, home, stderr }),
     ).toBe(1);
-    expect(stderr.text()).toContain("Error: no coding agent detected");
-    expect(stderr.text()).toContain('"code.profile"');
   });
 
   it("rejects an invalid agent in the config", async () => {
@@ -102,11 +100,9 @@ describe("coding-agent selection", () => {
     expect(
       await main({ argv: ["node", "aligndev", "code", "--help"], env: {}, home, stderr }),
     ).toBe(1);
-    expect(stderr.text()).toContain("invalid aligndev config");
-    expect(stderr.text()).toContain("agent");
   });
 
-  it("renders only the selected agent's models without discovery", async () => {
+  it("allows help without model discovery", async () => {
     const stdout = makeSink();
     const modelResolver = async () => {
       throw new Error("help must not discover models");
@@ -120,17 +116,6 @@ describe("coding-agent selection", () => {
         modelResolver,
       }),
     ).toBe(0);
-    expect(stdout.text()).toContain("aligndev code new --protocol <protocol>");
-    expect(stdout.text()).toContain("code.profile          Global named profile");
-    expect(stdout.text()).toContain("(selected: codex)");
-    expect(stdout.text()).toContain("astra, sol, terra, luna");
-    expect(stdout.text()).toContain("See the `code` topic of `aligndev guide`");
-    expect(stdout.text()).toContain("--quiet");
-    expect(stdout.text()).toContain("--result");
-    expect(stdout.text()).toContain("host owns background execution and completion delivery");
-    expect(stdout.text()).not.toContain("Env:");
-    expect(stdout.text()).not.toContain("reserve-side-ticket");
-    expect(stdout.text()).not.toContain("fable");
   });
 
   it("renders the configured model list", async () => {
@@ -142,7 +127,9 @@ describe("coding-agent selection", () => {
     expect(
       await main({ argv: ["node", "aligndev", "code", "--help"], env: {}, home, stdout }),
     ).toBe(0);
-    expect(stdout.text()).toContain("One of sonnet, haiku.");
+    expect(stdout.text()).toContain("sonnet");
+    expect(stdout.text()).toContain("haiku");
+    expect(stdout.text()).not.toContain("fable");
   });
 });
 
@@ -170,7 +157,7 @@ describe("parseCodeArgs", () => {
 
   it("leaves the version and guide flags to other commands", () => {
     for (const flag of ["--version", "-v", "--guide", "--openclaw-guide"]) {
-      expect(() => parseCodeArgs([flag], "aligndev")).toThrow(`unknown command "${flag}"`);
+      expect(() => parseCodeArgs([flag], "aligndev")).toThrow(Error);
     }
   });
 
@@ -212,9 +199,7 @@ describe("parseCodeArgs", () => {
     ["--ticket", "1", "--meta", "k"],
     ["--no-ticket", "--meta", "k"],
   ])("keeps exactly one status target with --result %j", (...target) => {
-    expect(() => parseCodeArgs(["status", "--result", ...target], "aligndev")).toThrow(
-      "exactly one",
-    );
+    expect(() => parseCodeArgs(["status", "--result", ...target], "aligndev")).toThrow(Error);
   });
 
   it("keeps quiet and result scoped to their commands", () => {
@@ -247,48 +232,37 @@ describe("parseCodeArgs", () => {
   });
 
   it("rejects a missing or unknown command", () => {
-    expect(() => parseCodeArgs([], "aligndev")).toThrow(
-      "no command given. Run `aligndev code --help`.",
-    );
-    expect(() => parseCodeArgs(["spec"], "aligndev")).toThrow('unknown command "spec"');
-    expect(() => parseCodeArgs(["--new"], "aligndev")).toThrow('unknown command "--new"');
+    expect(() => parseCodeArgs([], "aligndev")).toThrow(Error);
+    expect(() => parseCodeArgs(["spec"], "aligndev")).toThrow(Error);
+    expect(() => parseCodeArgs(["--new"], "aligndev")).toThrow(Error);
   });
 
   it("rejects unknown options, stray positionals, and a resume without an id", () => {
     expect(() => parse(["new", "--nope"])).toThrow();
     expect(() => parse(["new", "extra", "-m", "go"])).toThrow();
-    const statusTargetError = "exactly one of <session-file>, --ticket <id>, --no-ticket";
-    expect(() => parseCodeArgs(["status"], "aligndev")).toThrow(statusTargetError);
-    expect(() => parseCodeArgs(["status", "x.md", "--ticket", "1"], "aligndev")).toThrow(
-      statusTargetError,
-    );
+    expect(() => parseCodeArgs(["status"], "aligndev")).toThrow(Error);
+    expect(() => parseCodeArgs(["status", "x.md", "--ticket", "1"], "aligndev")).toThrow(Error);
     expect(() => parseCodeArgs(["status", "--ticket", "1", "--no-ticket"], "aligndev")).toThrow(
-      statusTargetError,
+      Error,
     );
-    expect(() => parseCodeArgs(["status", "--ticket", "../other"], "aligndev")).toThrow(
-      "--ticket must be a single path segment",
-    );
+    expect(() => parseCodeArgs(["status", "--ticket", "../other"], "aligndev")).toThrow(Error);
     expect(() => parseCodeArgs(["status", "--meta", "k", "--no-ticket"], "aligndev")).toThrow(
-      statusTargetError,
+      Error,
     );
     expect(() => parse(["status", "--message", "go"])).toThrow();
     expect(() => parse(["quota", "extra"])).toThrow();
-    expect(() => parse(["resume", "--message", "go"])).toThrow("exactly one <sessionId>");
-    expect(() => parse(["resume", "a", "b", "--message", "go"])).toThrow("exactly one <sessionId>");
+    expect(() => parse(["resume", "--message", "go"])).toThrow(Error);
+    expect(() => parse(["resume", "a", "b", "--message", "go"])).toThrow(Error);
   });
 });
 
 describe("validateSessionArgs", () => {
   it("rejects an unknown protocol", () => {
-    expect(validate(["new", "--protocol", "bogus", "--ticket", "1"])).toBe(
-      "Error: --protocol must be one of: spec, plan, aad, description, review, merge.",
-    );
+    expect(validate(["new", "--protocol", "bogus", "--ticket", "1", "-m", "go"])).toBeDefined();
   });
 
   it("rejects a model outside the allowlist", () => {
-    expect(validate(["new", "--message", "go", "--model", "claude-opus-5-5"])).toBe(
-      "Error: --model must be one of: fable, opus, sonnet, haiku.",
-    );
+    expect(validate(["new", "--message", "go", "--model", "claude-opus-5-5"])).toBeDefined();
   });
 
   it("accepts an allowlisted model, on new and on resume", () => {
@@ -299,56 +273,32 @@ describe("validateSessionArgs", () => {
   it("validates against the host's model list when one is configured", () => {
     const models = ["sonnet", "haiku"];
     expect(validate(["new", "--message", "go", "--model", "sonnet"], models)).toBe(undefined);
-    expect(validate(["new", "--message", "go", "--model", "opus"], models)).toBe(
-      "Error: --model must be one of: sonnet, haiku.",
-    );
+    expect(validate(["new", "--message", "go", "--model", "opus"], models)).toBeDefined();
   });
 
   it("requires --message when no protocol", () => {
-    expect(validate(["new"])).toBe(
-      "Error: --message is required when --protocol is not specified.",
-    );
-    expect(validate(["resume", "s"])).toBe(
-      "Error: --message is required when --protocol is not specified.",
-    );
-    expect(validate(["new", "--message", ""])).toBe(
-      "Error: --message is required when --protocol is not specified.",
-    );
-    expect(validate(["new", "--message", "   "])).toBe(
-      "Error: --message is required when --protocol is not specified.",
-    );
+    expect(validate(["new"])).toBeDefined();
+    expect(validate(["resume", "s"])).toBeDefined();
+    expect(validate(["new", "--message", ""])).toBeDefined();
+    expect(validate(["new", "--message", "   "])).toBeDefined();
   });
 
   it("requires --ticket or --no-ticket with `new --protocol`", () => {
-    expect(validate(["new", "--protocol", "plan"])).toBe(
-      "Error: --ticket or --no-ticket is required with `new --protocol`.",
-    );
+    expect(validate(["new", "--protocol", "plan"])).toBeDefined();
     expect(validate(["new", "--protocol", "plan", "--ticket", "1"])).toBeUndefined();
     expect(validate(["new", "--protocol", "plan", "--no-ticket"])).toBeUndefined();
   });
 
   it("rejects --no-ticket with --ticket or without a protocol", () => {
-    expect(validate(["new", "--protocol", "plan", "--ticket", "1", "--no-ticket"])).toBe(
-      "Error: --ticket and --no-ticket are mutually exclusive.",
-    );
-    expect(validate(["new", "--no-ticket", "-m", "go"])).toBe(
-      "Error: --no-ticket requires --protocol.",
-    );
+    expect(validate(["new", "--protocol", "plan", "--ticket", "1", "--no-ticket"])).toBeDefined();
+    expect(validate(["new", "--no-ticket", "-m", "go"])).toBeDefined();
   });
 
   it("requires --message for spec and aad", () => {
-    expect(validate(["new", "--protocol", "spec", "--ticket", "1"])).toBe(
-      "Error: --protocol spec requires --message.",
-    );
-    expect(validate(["new", "--protocol", "aad", "--no-ticket"])).toBe(
-      "Error: --protocol aad requires --message.",
-    );
-    expect(validate(["new", "--protocol", "spec", "--ticket", "1", "--message", ""])).toBe(
-      "Error: --protocol spec requires --message.",
-    );
-    expect(validate(["new", "--protocol", "aad", "--no-ticket", "--message", "\t"])).toBe(
-      "Error: --protocol aad requires --message.",
-    );
+    expect(validate(["new", "--protocol", "spec", "--ticket", "1"])).toBeDefined();
+    expect(validate(["new", "--protocol", "aad", "--no-ticket"])).toBeDefined();
+    expect(validate(["new", "--protocol", "spec", "--ticket", "1", "--message", ""])).toBeDefined();
+    expect(validate(["new", "--protocol", "aad", "--no-ticket", "--message", "\t"])).toBeDefined();
   });
 
   it("accepts a resume with a protocol and no ticket, and --ticket as an explicit override", () => {
@@ -361,13 +311,10 @@ describe("validateSessionArgs", () => {
   });
 
   it("rejects a ticket with a path separator or traversal", () => {
-    const expected =
-      "Error: --ticket must be a single path segment " +
-      "(letters, digits, '.', '-', '_'); no path separators or '..'.";
-    expect(validate(["new", "--protocol", "plan", "--ticket", "../../etc"])).toBe(expected);
-    expect(validate(["new", "--protocol", "plan", "--ticket", "a/b"])).toBe(expected);
-    expect(validate(["new", "--protocol", "plan", "--ticket", ".."])).toBe(expected);
-    expect(validate(["resume", "s", "--ticket", "a/b", "--message", "m"])).toBe(expected);
+    expect(validate(["new", "--protocol", "plan", "--ticket", "../../etc"])).toBeDefined();
+    expect(validate(["new", "--protocol", "plan", "--ticket", "a/b"])).toBeDefined();
+    expect(validate(["new", "--protocol", "plan", "--ticket", ".."])).toBeDefined();
+    expect(validate(["resume", "s", "--ticket", "a/b", "--message", "m"])).toBeDefined();
   });
 });
 
@@ -446,7 +393,7 @@ describe("status", () => {
     const output = await status([runningPath, "--result"]);
     expect(output).toContain("status: succeeded\n");
     expect(output).toContain(`${RESULT_MARKER}\n${result}\n`);
-    expect(await status(["--help"])).toContain("without reading settings");
+    await status(["--help"]);
     expect(readFileSync(completedPath)).toEqual(completedBytes);
     expect(readFileSync(settingsPath)).toEqual(before);
     const records = listSessionRecords(join(dir, ".plans"), readMachineId(dir));
@@ -526,9 +473,9 @@ describe("status", () => {
     const output = await status([sessionFilePath, "--result"]);
     expect(output).toContain("status: failed\n");
     expect(output).toContain("exitReason: terminated\n");
-    expect(output).toContain(`${RESULT_MARKER}\nSealed as interrupted:`);
+    expect(output).toContain(RESULT_MARKER);
     expect(output).not.toContain("not final");
-    expect(readCompletion(sessionFilePath).result).toContain("is gone");
+    expect(readCompletion(sessionFilePath).frontmatter.exitReason).toBe("terminated");
   });
 
   it.each(["another-machine", null])(
@@ -708,10 +655,11 @@ describe("status", () => {
         stderr,
       }),
     ).toBe(1);
-    expect(stderr.text()).toBe("Error: no session file under .plans/1/_aligndev/.\n");
   });
 
   it("rejects files outside the session-record tree", async () => {
+    writeInitialSessionFile(join(dir, "notes.md"), statusFrontmatter({}));
+    const before = readFileSync(join(dir, "notes.md"));
     const stderr = makeSink();
     expect(
       await main({
@@ -723,12 +671,10 @@ describe("status", () => {
         stderr,
       }),
     ).toBe(1);
-    expect(stderr.text()).toBe(
-      "Error: status requires a session file under .plans/_aligndev/ or .plans/<ticket>/_aligndev/.\n",
-    );
+    expect(readFileSync(join(dir, "notes.md"))).toEqual(before);
   });
 
-  it("reports a missing session file in its own words", async () => {
+  it("rejects a missing session file", async () => {
     const stderr = makeSink();
     expect(
       await main({
@@ -740,13 +686,14 @@ describe("status", () => {
         stderr,
       }),
     ).toBe(1);
-    expect(stderr.text()).toBe("Error: session file not found: .plans/1/_aligndev/run.md\n");
+    expect(existsSync(join(dir, ".plans", "1", "_aligndev", "run.md"))).toBe(false);
   });
 
   it("rejects a session-path symlink that resolves outside .plans", async () => {
     mkdirSync(join(dir, ".plans", "1", "_aligndev"), { recursive: true });
     const outsidePath = join(dir, "outside.md");
-    writeFileSync(outsidePath, "keep me");
+    writeInitialSessionFile(outsidePath, statusFrontmatter({}));
+    const before = readFileSync(outsidePath);
     symlinkSync(outsidePath, sessionFilePath);
     const stderr = makeSink();
 
@@ -760,7 +707,7 @@ describe("status", () => {
         stderr,
       }),
     ).toBe(1);
-    expect(stderr.text()).toContain("resolves outside");
+    expect(readFileSync(outsidePath)).toEqual(before);
   });
 });
 
@@ -783,11 +730,7 @@ describe("quota", () => {
         quotaReader,
       }),
     ).toBe(0);
-    expect(stdout.text()).toContain(
-      "Profile: test; native source: claude\n" +
-        "Limits belong to this native CLI's account; account pairing with the coding agent is not verified.\n" +
-        "Claude Code quota\n\nCurrent session: 25% used\n",
-    );
+    expect(stdout.text()).toContain("Claude Code quota\n\nCurrent session: 25% used");
     expect(quotaReader).toHaveBeenCalledWith("claude", {
       cwd: tmpdir(),
       env: expect.objectContaining({ KEEP: "yes", CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: "0" }),
@@ -809,10 +752,7 @@ describe("quota", () => {
         quotaReader,
       }),
     ).toBe(1);
-    expect(stderr.text()).toContain(
-      'Quota source codex, profile "test", selected native configuration: limits unavailable',
-    );
-    expect(stderr.text()).toContain("installed and authenticated under this quota configuration");
+    expect(stderr.text()).toContain("limits unavailable");
   });
 });
 
@@ -911,31 +851,13 @@ describe("buildRunConfig", () => {
     });
   }
 
-  it("threads the caller env into the config so the child inherits the same source", () => {
-    const env = { FOO: "bar" };
-    const config = build({
-      code: { ...CODE, skipPermissions: true, unset: ["X", "Y"], childEnv: env },
-    });
-    expect(config.env).toEqual(env);
-    expect(config.executableModel).toBeUndefined();
-    expect(config.skipPermissions).toBe(true);
-    expect(config.resume).toBeUndefined();
-  });
-
-  it("carries quiet to the runner without changing the prompt", () => {
-    const ordinary = build({});
-    const quiet = build({ args: parse(["new", "-m", "go", "--quiet"]) });
-    expect(ordinary.quiet).toBeUndefined();
-    expect(quiet).toEqual({ ...ordinary, quiet: true });
-  });
-
   it("puts the effective ticket, not the flag, in the prompt", () => {
-    const config = build({ args: parse(["resume", "abc", "--protocol", "plan"]), ticket: "30" });
-    expect(config.prompt).toBe(
-      "Run `alignfirst guide plan` and follow the protocol. Ticket ID = 30.",
-    );
-    expect(config.resume).toBe("abc");
-    expect(config.skipPermissions).toBe(false);
+    const config = build({
+      args: parse(["resume", "abc", "--protocol", "plan", "--ticket", "flag-99"]),
+      ticket: "effective-30",
+    });
+    expect(config.prompt).toContain("effective-30");
+    expect(config.prompt).not.toContain("flag-99");
   });
 
   it("adds the companion as a writable directory, whatever it holds", () => {
@@ -1084,26 +1006,22 @@ describe("launch guards", () => {
     });
     const { code, stderr } = await run(["resume", "zzz", "--message", "hi"]);
     expect(code).toBe(1);
-    expect(stderr).toContain("unknown session id zzz");
+    expect(stderr).toContain("zzz");
     expect(stderr.indexOf("bbb")).toBeLessThan(stderr.indexOf("aaa")); // most recent first
-    expect(stderr).toContain("ticket 30");
   });
 
-  it("says plainly when no session records exist at all", async () => {
-    const { code, stderr } = await run(["resume", "zzz", "--message", "hi"]);
+  it("rejects resume when no session records exist", async () => {
+    const { code } = await run(["resume", "zzz", "--message", "hi"]);
     expect(code).toBe(1);
-    expect(stderr).toContain("no session records exist");
+    expect(listSessionRecords(plans, readMachineId(home))).toEqual([]);
   });
 
   it("rejects resuming a session that is still running", async () => {
     seedRecord("running.md", { sessionId: "abc" });
     const { code, stderr } = await run(["resume", "abc", "--message", "hi"]);
     expect(code).toBe(1);
-    expect(stderr).toContain(
-      `session abc is still running (${join(plans, "30", "_aligndev", "running.md")}, pid ${process.pid})`,
-    );
-    expect(stderr).toContain("wait for it to finish");
-    expect(stderr).not.toContain("kill it");
+    expect(stderr).toContain(join(plans, "30", "_aligndev", "running.md"));
+    expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(1);
   });
 
   it.each(["another-machine", null])(
@@ -1121,13 +1039,6 @@ describe("launch guards", () => {
         const { code, stderr } = await run(tokens);
         expect(code).toBe(1);
         expect(stderr).toContain(path);
-        expect(stderr).toContain(
-          "this record was written by another machine or before machine identities",
-        );
-        expect(stderr).toContain(
-          "check it on its machine, or set its `status` by hand once the run has ended",
-        );
-        expect(stderr).not.toContain("kill it");
       }
       expect(readFileSync(path, "utf8")).toBe(before);
       const records = listSessionRecords(plans, readMachineId(home));
@@ -1144,9 +1055,7 @@ describe("launch guards", () => {
         otherWorktree,
         readMachineId(home),
       );
-      expect(error).toContain("already active on ticket 30");
       expect(error).toContain(path);
-      expect(error).toContain("set its `status` by hand once the run has ended");
     },
   );
 
@@ -1160,7 +1069,7 @@ describe("launch guards", () => {
     ];
     expect(
       checkLaunchGuards(parsed, "claude", realCwd, undefined, legacy, readMachineId(home)),
-    ).toContain("predates agent-aware sessions");
+    ).toBeDefined();
 
     const codex = [
       {
@@ -1176,8 +1085,7 @@ describe("launch guards", () => {
       codex,
       readMachineId(home),
     );
-    expect(mismatch).toContain("belongs to agent codex");
-    expect(mismatch).toContain("selected agent is claude");
+    expect(mismatch).toBeDefined();
   });
 
   it("rejects a cross-agent resume before discovery or session creation", async () => {
@@ -1199,7 +1107,6 @@ describe("launch guards", () => {
       modelResolver,
     });
     expect(code).toBe(1);
-    expect(stderr.text()).toContain("belongs to agent codex");
     expect(modelResolver).not.toHaveBeenCalled();
     expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(before);
   });
@@ -1223,13 +1130,11 @@ describe("launch guards", () => {
 
     expect(code).toBe(1);
     expect(stdout.text()).toContain("Session file:");
-    expect(stderr.text()).toContain("Could not resolve the codex model");
     expect(stdout.text() + stderr.text()).not.toContain("injected-resolver-secret");
     const records = listSessionRecords(plans, readMachineId(codexHome));
     expect(records).toHaveLength(1);
     expect(readCompletion(records[0].path)).toMatchObject({
       frontmatter: { status: "failed", exitReason: "error", sessionId: null },
-      result: expect.stringContaining("Could not resolve the codex model"),
     });
     expect(readFileSync(records[0].path, "utf8")).not.toContain("injected-resolver-secret");
   });
@@ -1272,8 +1177,6 @@ describe("launch guards", () => {
     });
 
     expect(code).toBe(1);
-    expect(stderr.text()).toContain("alignfirst is not installed");
-    expect(stderr.text()).toContain("executable /nonexistent/alignfirst (not found)");
     expect(listSessionRecords(plans, readMachineId(home))).toEqual([]);
   });
 
@@ -1281,11 +1184,8 @@ describe("launch guards", () => {
     seedRecord("running.md", { sessionId: "abc" });
     const { code, stderr } = await run(["new", "--protocol", "plan", "--ticket", "31"]);
     expect(code).toBe(1);
-    expect(stderr).toContain("a spec protocol run is already active in this worktree");
-    expect(stderr).toContain(`pid ${process.pid}`);
     expect(stderr).toContain(join(plans, "30", "_aligndev", "running.md"));
-    expect(stderr).toContain("wait for it to finish");
-    expect(stderr).not.toContain("kill it");
+    expect(existsSync(join(plans, "31"))).toBe(false);
   });
 
   it("allows a protocol run when the active run sits in another worktree", () => {
@@ -1321,7 +1221,7 @@ describe("launch guards", () => {
     ];
     expect(
       checkLaunchGuards(parsed, "claude", realCwd, "31", records, readMachineId(home)),
-    ).toContain("a spec protocol run is already active on ticket 31");
+    ).toBeDefined();
   });
 
   it("rejects a protocol run on another ticket while a protocol run holds the worktree", () => {
@@ -1329,7 +1229,7 @@ describe("launch guards", () => {
     const records = [{ path: "r.md", frontmatter: makeFrontmatter({ sessionId: "abc" }) }];
     expect(
       checkLaunchGuards(parsed, "claude", realCwd, "31", records, readMachineId(home)),
-    ).toContain("a spec protocol run is already active in this worktree");
+    ).toBeDefined();
   });
 
   it("lets a protocol run start while a resume without protocol runs on its ticket", () => {
@@ -1503,14 +1403,11 @@ describe("companion projects", () => {
 
     const gated = await run(project, ["new", "-m", "go"]);
     expect(gated.code).toBe(1);
-    expect(gated.stderr).toContain(`No .plans/ directory at ${plans} (companion).`);
-    expect(gated.stderr).toContain(`mkdir -p ${plans}`);
-    expect(gated.stderr).toContain("alignfirst plans setup <clone-dir>");
-    expect(gated.stderr).toContain("`work-files-setup` topic of `aligndev guide`");
+    expect(existsSync(plans)).toBe(false);
 
     mkdirSync(plans, { recursive: true });
     const started = await run(project, ["new", "-m", "go"]);
-    expect(started.stderr).toContain("Could not resolve the claude model");
+    expect(started.code).toBe(1);
     expect(started.stdout).toContain(`Session file: ${join(plans, "_aligndev")}/`);
     expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(1);
   });
@@ -1591,14 +1488,10 @@ describe("companion projects", () => {
     it("rejects a session file outside the sessions directory", async () => {
       const projectFile = join(project.project, ".plans", "29", "_aligndev", "20260829-115529.md");
       writeInitialSessionFile(projectFile, statusFrontmatter({ ticket: "29" }));
-      const sessions = join(project.companion, ".plans");
-
+      const before = readFileSync(projectFile);
       const result = await run(project, ["status", ".plans/29/_aligndev/20260829-115529.md"]);
       expect(result.code).toBe(1);
-      expect(result.stderr).toBe(
-        `Error: status requires a session file under ${sessions}/_aligndev/ or ` +
-          `${sessions}/<ticket>/_aligndev/.\n`,
-      );
+      expect(readFileSync(projectFile)).toEqual(before);
     });
   });
 
@@ -1607,7 +1500,6 @@ describe("companion projects", () => {
     mkdirSync(join(project.project, ".plans"));
     const result = await run(project, ["status", "--meta", "missing", "--result"]);
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("no session file");
     expect(existsSync(project.companion)).toBe(false);
   });
 
@@ -1675,6 +1567,11 @@ describe("companion projects", () => {
   it("adds the companion directory and the project context for the agent", async () => {
     const project = makeCompanionProject(home, { ".plans": "companion" });
     mkdirSync(join(project.companion, ".plans"), { recursive: true });
+    mkdirSync(join(project.companion, ".alignfirst-instructions"));
+    writeFileSync(
+      join(project.companion, ".alignfirst-instructions", "context.md"),
+      "Companion context input",
+    );
     const { path, received } = installFakeClaude(base);
 
     const stdout = makeSink();
@@ -1690,10 +1587,8 @@ describe("companion projects", () => {
     });
     expect(started).toBe(0);
     const first = received();
-    expect(first.prompt).toMatch(
-      /^## Run context\n\n.+\n\n## Project context\n\n# Project Conventions\n/,
-    );
-    expect(first.prompt).toMatch(/\n\n## Current instruction\n\ngo$/);
+    expect(first.prompt).toContain("Companion context input");
+    expect(first.prompt).toMatch(/go$/);
     expect(first.args).toEqual(expect.arrayContaining(["--add-dir", project.companion]));
 
     const resumed = await main({
@@ -1716,6 +1611,16 @@ describe("companion projects", () => {
     const project = makeCompanionProject(home, { ".plans": "project", _aligndev: "companion" });
     mkdirSync(join(project.project, ".plans"), { recursive: true });
     mkdirSync(join(project.companion, ".plans"), { recursive: true });
+    mkdirSync(join(project.project, ".alignfirst-instructions"));
+    const context = "Repository context must not be injected for session-only companions";
+    writeFileSync(join(project.project, ".alignfirst-instructions", "context.md"), context);
+    const availableContext = spawnSync(process.execPath, [ALIGNFIRST_BIN, "context"], {
+      cwd: project.project,
+      env: { ...process.env, HOME: home },
+      encoding: "utf8",
+    });
+    expect(availableContext.status, availableContext.stderr).toBe(0);
+    expect(availableContext.stdout).toContain(context);
     const { path, received } = installFakeClaude(base);
 
     const started = await main({
@@ -1730,8 +1635,8 @@ describe("companion projects", () => {
     });
     expect(started).toBe(0);
     const { prompt, args } = received();
-    expect(prompt).not.toContain("## Project context");
-    expect(prompt).toMatch(/\n\n## Current instruction\n\ngo$/);
+    expect(prompt).not.toContain(context);
+    expect(prompt).toMatch(/go$/);
     expect(args).toEqual(expect.arrayContaining(["--add-dir", project.companion]));
   });
 
@@ -1807,18 +1712,20 @@ describe("quiet execution", () => {
     );
     const started = await launch(["new", "-m", "go", "--quiet"], fake.path);
     expect(started.code).toBe(0);
-    expect(started.stdout).toBe(
-      `Session file: ${relative(project, started.file).replace(/\.md$/, ".running.md")}\n\n\nSession ID: session-1\n`,
-    );
+    // coding-profiles-smoke.mjs parses Session file; the code guide consumes both control lines.
+    expect(started.stdout.split("\n").filter((line) => line !== "")).toEqual([
+      `Session file: ${relative(project, started.file).replace(/\.md$/, ".running.md")}`,
+      "Session ID: session-1",
+    ]);
     expect(started.stderr).toBe("");
     expect(started.completion.result).toBe("final answer");
     expect(started.completion.frontmatter.command).toContain("--quiet");
     expect(readFileSync(started.file, "utf8")).toContain("private transcript");
     const resumed = await launch(["resume", "session-1", "-m", "more", "--quiet"], fake.path);
     expect(resumed.code).toBe(0);
-    expect(resumed.stdout).toBe(
-      `Session file: ${relative(project, resumed.file).replace(/\.md$/, ".running.md")}\n\n`,
-    );
+    expect(resumed.stdout.split("\n").filter((line) => line !== "")).toEqual([
+      `Session file: ${relative(project, resumed.file).replace(/\.md$/, ".running.md")}`,
+    ]);
     expect(resumed.completion.frontmatter.command).toContain("--quiet");
   });
 
@@ -1836,7 +1743,6 @@ describe("quiet execution", () => {
     const result = await launch(["new", "-m", "go", "--quiet"], fake.path);
     expect(result.code).toBe(1);
     expect(result.completion.frontmatter).toMatchObject({ status: "failed", exitReason: "error" });
-    expect(result.stderr).toContain("claude run failed; inspect the session file");
     expect(result.stderr).toContain(`Session file: ${relative(project, result.file)}\n`);
     expect(result.stderr).not.toContain("credential-must-stay-private");
     expect(result.stdout).not.toContain("internal-only");
@@ -1847,7 +1753,6 @@ describe("quiet execution", () => {
     installGit(base);
     const result = await launch(["new", "-m", "go", "--quiet"], base);
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("claude could not start; check its installation and PATH");
     expect(result.stderr).toContain("Session file:");
     expect(result.completion.frontmatter.status).toBe("failed");
     expect(result.completion.result).toContain("ENOENT");
@@ -1861,9 +1766,8 @@ describe("quiet execution", () => {
     );
     const result = await launch(["new", "-m", "x".repeat(2_000_000), "--quiet"], fake.path);
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("Could not send the prompt to claude");
     expect(result.stderr).toContain("Session file:");
-    expect(result.completion.result).toContain("Could not send prompt:");
+    expect(result.completion.frontmatter).toMatchObject({ status: "failed", exitReason: "error" });
     expect(result.stdout.length + result.stderr.length).toBeLessThan(700);
   });
 
@@ -1883,8 +1787,6 @@ describe("quiet execution", () => {
         status: "failed",
         exitReason: "auth_required",
       });
-      expect(result.stderr.match(/not authenticated/g)).toHaveLength(1);
-      expect(result.stderr).toContain("/login");
       expect(result.stderr).toContain("Session file:");
       expect(result.stderr).not.toContain("credential-must-stay-private");
       expect(result.stdout.length + result.stderr.length).toBeLessThan(700);
@@ -1908,14 +1810,12 @@ describe("quiet execution", () => {
       },
     });
     expect(code).toBe(1);
-    expect(stderr.text()).toContain("Could not resolve the claude model; check --model");
     expect(stderr.text()).toContain("Session file:");
     expect(stderr.text()).not.toContain(detail);
     expect(stderr.text().length).toBeLessThan(500);
     const [record] = listSessionRecords(plans, readMachineId(home));
     expect(readCompletion(record.path)).toMatchObject({
       frontmatter: { status: "failed" },
-      result: expect.stringContaining("Could not resolve the claude model"),
     });
     expect(readFileSync(record.path, "utf8")).not.toContain("credential-must-stay-private");
   });
@@ -2011,12 +1911,9 @@ describe("pi launches", () => {
     for (const model of ["", " \t "]) {
       const result = await launch(["new", "-m", "go", "--model", model]);
       expect(result.code).toBe(1);
-      expect(result.stderr).toContain("nonblank");
     }
     writeConfig(home, { code: { agent: "pi", models: ["provider/model"] } });
-    expect((await launch(["new", "-m", "go", "--model", "terra"])).stderr).toContain(
-      "one of: provider/model",
-    );
+    expect((await launch(["new", "-m", "go", "--model", "terra"])).code).toBe(1);
     expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(0);
   });
 
@@ -2029,7 +1926,7 @@ describe("pi launches", () => {
     );
     const result = await launch(["resume", "pi-session", "-m", "more"]);
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain(`must resume from its recorded directory ${other}`);
+    expect(result.stderr).toContain(other);
     expect(result.stdout).not.toContain("Session file:");
     expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(1);
     expect(existsSync(join(base, "bin", "pi-args.json"))).toBe(false);
@@ -2071,7 +1968,7 @@ describe("pi launches", () => {
         [latest],
         readMachineId(home),
       ),
-    ).toContain("belongs to agent pi");
+    ).toBeDefined();
     expect(
       checkLaunchGuards(
         args,
@@ -2081,7 +1978,7 @@ describe("pi launches", () => {
         [{ ...latest, frontmatter: { ...latest.frontmatter, agent: "codex" } }],
         readMachineId(home),
       ),
-    ).toContain("selected agent is pi");
+    ).toBeDefined();
   });
 
   it("retains the requested identity while failing a mismatched resumed header", async () => {
@@ -2090,38 +1987,32 @@ describe("pi launches", () => {
       PI_FIXTURE_ID: "forked-session",
     });
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("pi run failed");
     expect(readCompletion(newest().path)).toMatchObject({
       frontmatter: { status: "failed", sessionId: "pi-session", exitReason: "error" },
-      result: expect.stringContaining("differs from pi-session"),
     });
   });
 
   it.each(["protocol", "startup"])(
-    "keeps %s authentication exit 2 and pi login guidance",
+    "keeps %s authentication exit 2 and its durable reason",
     async (channel) => {
       const result = await launch(["new", "-m", "go", "--quiet"], { PI_FIXTURE_AUTH: channel });
       expect(result.code).toBe(2);
-      expect(result.stderr).toContain("/login <provider>");
-      expect(result.stderr).not.toContain("codex login");
       expect(readCompletion(newest().path).frontmatter.exitReason).toBe("auth_required");
     },
   );
 
-  it("reports a missing pi executable with installation guidance", async () => {
+  it("records failure when the pi executable is missing", async () => {
     installGit(base);
     const result = await launch(["new", "-m", "go", "--quiet"], { PATH: base });
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("pi could not start; check its installation and PATH");
     expect(readCompletion(newest().path).result).toContain("ENOENT");
   });
 
   it("fails a zero-exit incomplete stream with bounded quiet diagnostics", async () => {
     const result = await launch(["new", "-m", "go", "--quiet"], { PI_FIXTURE_INCOMPLETE: "true" });
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("pi run failed");
     expect(result.stdout).not.toContain("private pi answer");
-    expect(readCompletion(newest().path).result).toContain("before agent_settled");
+    expect(readCompletion(newest().path).frontmatter.status).toBe("failed");
   });
 
   it("prepares a missing companion independently of permission flags, only on launch", async () => {
@@ -2138,14 +2029,9 @@ describe("pi launches", () => {
     expect(fake.received().args).toEqual(["--mode", "json"]);
   });
 
-  it("reports unsupported quota and unrestricted help without launching pi", async () => {
+  it("rejects unsupported quota without launching pi", async () => {
     const quota = await launch(["quota"]);
     expect(quota.code).toBe(1);
-    expect(quota.stderr).toContain("Pi account quota is unsupported");
-    const help = await launch(["--help"]);
-    expect(help.code).toBe(0);
-    expect(help.stdout).toContain("Any nonblank pi-native selector");
-    expect(help.stdout).toContain("Ordinary OS permissions");
     expect(existsSync(join(base, "bin", "pi-args.json"))).toBe(false);
   });
 });

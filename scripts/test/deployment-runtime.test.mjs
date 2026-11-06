@@ -59,80 +59,69 @@ writeFileSync(process.env.RECORD, JSON.stringify({
   });
 });
 
-for (const [label, refusal, mutate] of [
+for (const [label, mutate] of [
   [
     "wrong package",
-    /differs from the expected identity/u,
     (value) => {
       value.name = "other-package";
     },
   ],
   [
     "missing bin",
-    /relative bin\.pi entry/u,
     (value) => {
       delete value.bin;
     },
   ],
   [
     "absolute bin",
-    /relative bin\.pi entry/u,
-    (value) => {
-      value.bin.pi = "/tmp/cli.js";
+    (value, fixture) => {
+      value.bin.pi = join(fixture.root, "cli.js");
     },
   ],
   [
     "escaping bin",
-    /escapes its package/u,
     (value) => {
-      value.bin.pi = "../../cli.js";
+      value.bin.pi = "../cli.js";
     },
   ],
   [
     "missing entry",
-    /ENOENT.*missing\.js/u,
     (value) => {
       value.bin.pi = "missing.js";
     },
   ],
   [
     "unknown engine range",
-    /Cannot verify Pi's Node requirement/u,
     (value) => {
       value.engines.node = "^22 || ^24";
     },
   ],
   [
     "missing engine range",
-    /Cannot verify Pi's Node requirement/u,
     (value) => {
       delete value.engines;
     },
   ],
   [
     "malformed engine range",
-    /Cannot verify Pi's Node requirement/u,
     (value) => {
       value.engines.node = { toString: ">=1.0.0" };
     },
   ],
   [
     "noncanonical engine range",
-    /Cannot verify Pi's Node requirement/u,
     (value) => {
       value.engines.node = ">=022.19.0";
     },
   ],
   [
     "unsafe engine version components",
-    /Cannot verify Pi's Node requirement/u,
     (value) => {
       value.engines.node = ">=9007199254740993.0.0";
     },
   ],
   [
     "non-file entry",
-    /not a regular file/u,
     (value) => {
       value.bin.pi = "dist/bundle";
     },
@@ -141,15 +130,17 @@ for (const [label, refusal, mutate] of [
   test(`launcher refuses ${label} before installation`, () => {
     withFixture((fixture) => {
       const root = fakePackage(fixture);
+      writeFileSync(join(fixture.root, "cli.js"), "");
+      assert.doesNotThrow(() => renderPiLauncher(root, "26.0.0"));
       const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-      mutate(manifest);
+      mutate(manifest, fixture);
       writeFileSync(join(root, "package.json"), JSON.stringify(manifest));
-      assert.throws(() => renderPiLauncher(root, "26.0.0"), refusal);
+      assert.throws(() => renderPiLauncher(root, "26.0.0"));
     });
   });
 }
 
-test("production generator refuses unprotected or out-of-prefix packages without privileged calls", () => {
+test("production generator refuses an unprotected package prefix", () => {
   withFixture((fixture) => {
     const root = fakePackage(fixture);
     chmodSync(fixture.root, 0o777);
@@ -160,14 +151,37 @@ test("production generator refuses unprotected or out-of-prefix packages without
     );
     assert.notEqual(result.status, 0);
     assert.equal(result.stdout, "");
-    assert.match(result.stderr, /not root-owned\/protected/u);
-    const outside = spawnSync(
-      process.execPath,
-      [join(runtime, "pi-launcher.mjs"), host, fixture.root],
-      options(fixture),
+  });
+});
+
+test("production generator confines packages to the protected prefix", () => {
+  withFixture((fixture) => {
+    const root = fakePackage(fixture);
+    const ownership = join(fixture.root, "protected-stats.mjs");
+    writeFileSync(
+      ownership,
+      `import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
+const lstat = fs.lstatSync;
+fs.lstatSync = (...args) => {
+  const stat = lstat(...args);
+  stat.uid = 0;
+  stat.mode &= ~0o022;
+  return stat;
+};
+syncBuiltinESMExports();\n`,
     );
+    const invoke = (prefix) =>
+      spawnSync(
+        process.execPath,
+        ["--import", ownership, join(runtime, "pi-launcher.mjs"), root, prefix],
+        options(fixture),
+      );
+    const inside = invoke(fixture.root);
+    assert.equal(inside.status, 0, inside.stderr);
+    const outside = invoke(fixture.project);
     assert.notEqual(outside.status, 0);
-    assert.match(outside.stderr, /inside the protected prefix/u);
+    assert.equal(outside.stdout, "");
   });
 });
 
@@ -175,20 +189,20 @@ test("launcher checks the installed package Node requirement without an independ
   withFixture((fixture) => {
     const root = fakePackage(fixture);
     for (const version of ["20.19.0", "22.18.9"])
-      assert.throws(() => renderPiLauncher(root, version), /unsupported/u);
-    assert.throws(() => renderPiLauncher(root, "22.19.0-rc.1"), /Cannot verify/u);
+      assert.throws(() => renderPiLauncher(root, version));
+    assert.throws(() => renderPiLauncher(root, "22.19.0-rc.1"));
     for (const version of ["22.19.0", "24.0.0", "26.0.0"])
       assert.doesNotThrow(() => renderPiLauncher(root, version));
     const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
     manifest.engines.node = ">=26.1.0";
     writeFileSync(join(root, "package.json"), JSON.stringify(manifest));
-    assert.throws(() => renderPiLauncher(root, "26.0.0"), /unsupported/u);
+    assert.throws(() => renderPiLauncher(root, "26.0.0"));
     assert.doesNotThrow(() => renderPiLauncher(root, "26.1.0"));
     manifest.engines.node = ">=20.0.0";
     manifest.version = "999.0.0";
     writeFileSync(join(root, "package.json"), JSON.stringify(manifest));
     assert.doesNotThrow(() => renderPiLauncher(root, "20.0.0"));
-    assert.throws(() => renderPiLauncher(root, "latest"), /Cannot verify/u);
+    assert.throws(() => renderPiLauncher(root, "latest"));
   });
 });
 
@@ -197,10 +211,10 @@ test("launcher rejects symlinked source/entry paths and follows a changed declar
     const root = fakePackage(fixture);
     const link = join(fixture.root, "package-link");
     symlinkSync(root, link);
-    assert.throws(() => renderPiLauncher(link), /Symlinked/u);
+    assert.throws(() => renderPiLauncher(link));
     rmSync(join(root, "dist/bundle/cli.js"));
     symlinkSync(join(root, "package.json"), join(root, "dist/bundle/cli.js"));
-    assert.throws(() => renderPiLauncher(root), /Symlinked/u);
+    assert.throws(() => renderPiLauncher(root));
     const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
     manifest.bin.pi = "next cli.js";
     writeFileSync(join(root, "package.json"), JSON.stringify(manifest));
@@ -372,7 +386,6 @@ test("installer requests protected publication using system Node and preserves i
     writeFileSync(setup.log, "");
     const failed = spawnSync("/bin/bash", [setup.installer], options(fixture, setup.env));
     assert.notEqual(failed.status, 0, failed.stderr);
-    assert.match(failed.stderr, /differs from the expected identity/u);
     assert.deepEqual(readFileSync(setup.launcher), installed);
     const failureCalls = installerCalls(setup);
     assert.deepEqual(

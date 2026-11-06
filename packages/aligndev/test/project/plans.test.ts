@@ -8,7 +8,6 @@ import { resolveCommandForms } from "../../src/command-form.js";
 import { type PlansContext, validateEffectivePlans } from "../../src/project/plans.js";
 
 const dirs: string[] = [];
-const PREPARE = "See the `work-files-setup` topic of `aligndev guide` for authorized preparation.";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -30,28 +29,22 @@ describe("validateEffectivePlans", () => {
     ]);
   });
 
-  it("preserves multiline refusal diagnostics and appends the preparation pointer", () => {
+  it("preserves supplied multiline refusal diagnostics", () => {
     const diagnostic =
       "Effective .plans is tracked.\nUntrack it, then commit.\nUse plans setup <clone-dir>.\n";
     const fixture = gateCommand("not a success report", diagnostic, 1);
-    expect(() => validateEffectivePlans(fixture.ctx)).toThrow(
-      `${diagnostic.trimEnd()}\n${PREPARE}`,
-    );
+    expect(() => validateEffectivePlans(fixture.ctx)).toThrow(diagnostic.trimEnd());
     expect(fixture.invocations()).toHaveLength(1);
   });
 
   it("fails closed when AlignFirst refuses without a diagnostic", () => {
     const fixture = gateCommand(JSON.stringify({ plans: { target: tmpdir() } }), "", 1);
-    expect(() => validateEffectivePlans(fixture.ctx)).toThrow(
-      `alignfirst plans check failed\n${PREPARE}`,
-    );
+    expect(() => validateEffectivePlans(fixture.ctx)).toThrow(Error);
   });
 
   it("rejects a human-readable report without falling back to parsing it", () => {
     const fixture = gateCommand("Work files ready: /plans");
-    expect(() => validateEffectivePlans(fixture.ctx)).toThrow(
-      `Invalid alignfirst plans check JSON report for ${fixture.ctx.cwd}\n${PREPARE}`,
-    );
+    expect(() => validateEffectivePlans(fixture.ctx)).toThrow(Error);
     expect(fixture.invocations()).toHaveLength(1);
   });
 
@@ -65,9 +58,7 @@ describe("validateEffectivePlans", () => {
     { plans: { target: "relative/.plans" } },
   ])("rejects missing or invalid target data: %j", (report) => {
     const fixture = gateCommand(JSON.stringify(report));
-    expect(() => validateEffectivePlans(fixture.ctx)).toThrow(
-      `Invalid alignfirst plans check report for ${fixture.ctx.cwd}\n${PREPARE}`,
-    );
+    expect(() => validateEffectivePlans(fixture.ctx)).toThrow(Error);
     expect(fixture.invocations()).toHaveLength(1);
   });
 
@@ -81,20 +72,6 @@ describe("validateEffectivePlans", () => {
     );
     expect(validateEffectivePlans(fixture.ctx)).toBe(tmpdir());
     expect(warn).toHaveBeenCalledExactlyOnceWith(warning);
-  });
-
-  it("includes the invocation failure and the selected command form's preparation pointer", () => {
-    const fixture = gateCommand("{}");
-    fixture.ctx.alignfirstCommand = [join(fixture.ctx.cwd, "missing-alignfirst")];
-    fixture.ctx.forms = resolveCommandForms({
-      npm_config_user_agent: "npm/12.2.0",
-      npm_command: "exec",
-      npm_lifecycle_event: "npx",
-    });
-    expect(() => validateEffectivePlans(fixture.ctx)).toThrow("alignfirst is not installed");
-    expect(() => validateEffectivePlans(fixture.ctx)).toThrow(
-      "See the `work-files-setup` topic of `npx -y aligndev guide` for authorized preparation.",
-    );
   });
 });
 

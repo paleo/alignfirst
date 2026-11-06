@@ -7,6 +7,21 @@ import { main } from "../src/cli.js";
 import { renderCommandForm } from "../src/command-form.js";
 import { makeSink, makeTempDir } from "./helpers.js";
 
+const devConfig = {
+  schemaVersion: 1,
+  devServer: {
+    ports: { first: 28100, last: 28199, declare: ["app"] },
+    servers: [
+      {
+        kind: "spawn",
+        name: "app",
+        exec: { run: ["false"] },
+        ready: { log: "ready" },
+      },
+    ],
+  },
+};
+
 describe("command form", () => {
   it.each([
     ["node", {}, "alignfirst"],
@@ -47,6 +62,7 @@ describe("command form", () => {
       const script = `node ${entryPoint}`;
       writeFileSync(entryPoint, "");
       writeFileSync(manifest, JSON.stringify({ scripts: { af: script } }));
+      writeFileSync(join(cwd, "alignfirst.json"), JSON.stringify(devConfig));
       const env = {
         npm_config_user_agent: "npm/11",
         npm_command: "run",
@@ -54,16 +70,23 @@ describe("command form", () => {
         npm_lifecycle_script: script,
         npm_package_json: manifest,
       };
-      const { code, output } = await runWithEvidence(["guide"], {
+      const evidence: LaunchEvidence = {
         runtime: "node",
         env,
         cwd,
         entryPoint,
         executable: "/runtime",
         parentArgv: ["/bin/sh", "-c", script],
-      });
-      expect(code).toBe(0);
-      expect(output).toContain("npm run af -- guide spec");
+      };
+      const guide = await runWithEvidence(["guide"], evidence);
+      expect(guide.code).toBe(0);
+      expect(guide.output).toContain("npm run af -- guide spec");
+      for (const command of ["context", "assistant-instructions"]) {
+        const { code, output } = await runWithEvidence([command], evidence);
+        expect(code).toBe(0);
+        expect(output).toContain("npm run af -- workspace --guide");
+        expect(output).toContain("npm run af -- dev status");
+      }
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

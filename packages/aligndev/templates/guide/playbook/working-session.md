@@ -401,7 +401,7 @@ After writing or editing any file under `.plans/` yourself, run `{{ALIGNFIRST}} 
 A project has up to three entry points:
 
 - `README.md` — presentation, getting-started procedure…
-- The explicitly configured assistant instructions — the agent's user, human or AI: you. Run `{{ALIGNFIRST}} assistant-instructions` from the selected worktree. It reports the absolute source path for interpreting relative links. Without a configured reference, it prints conventions only; there is no filename fallback.
+- The explicitly configured assistant instructions — the agent's user, human or AI: you. Run `{{ALIGNFIRST}} assistant-instructions` from the selected worktree. It reports the absolute source path for interpreting relative links. Without a configured reference, it prints project guidance; there is no filename fallback.
 - `AGENTS.md` — the agent. When the project's instructions come from its companion, the companion's `.alignfirst-instructions/context.md` replaces it for the agent, and `{{ALIGNFIRST}} context` prints it.
 
 The rest of the documentation (`docs/`, …) addresses everybody.

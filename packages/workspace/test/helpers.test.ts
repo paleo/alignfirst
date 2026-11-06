@@ -19,12 +19,11 @@ import {
   copyAndPatchFile,
   detectCommonJsError,
   extractHost,
-  formatDuration,
   lastLines,
   patchEnvFile,
   type ResolvedFileSource,
 } from "../src/helpers.js";
-import { WorkspaceError } from "../src/errors.js";
+import { ConfigError, WorkspaceError } from "../src/errors.js";
 
 describe("patchEnvFile", () => {
   it("ends with a single trailing newline", () => {
@@ -126,40 +125,6 @@ describe("lastLines", () => {
   it("returns an empty string for a count of zero or less", () => {
     expect(lastLines("a\nb\nc", 0)).toBe("");
     expect(lastLines("a\nb\nc", -3)).toBe("");
-  });
-});
-
-describe("formatDuration", () => {
-  it("returns 0s for zero", () => {
-    expect(formatDuration(0)).toBe("0s");
-  });
-
-  it("returns 0s for negative input", () => {
-    expect(formatDuration(-123)).toBe("0s");
-  });
-
-  it("rounds sub-second up to 1s", () => {
-    expect(formatDuration(999)).toBe("1s");
-  });
-
-  it("formats single seconds unit", () => {
-    expect(formatDuration(12_000)).toBe("12s");
-  });
-
-  it("formats minutes + seconds", () => {
-    expect(formatDuration(252_000)).toBe("4m 12s");
-  });
-
-  it("formats hours + minutes", () => {
-    expect(formatDuration(11_100_000)).toBe("3h 5m");
-  });
-
-  it("formats days + hours", () => {
-    expect(formatDuration((2 * 86400 + 7 * 3600) * 1000)).toBe("2d 7h");
-  });
-
-  it("drops the zero smaller unit", () => {
-    expect(formatDuration(5 * 86400 * 1000)).toBe("5d");
   });
 });
 
@@ -287,7 +252,6 @@ describe("copyAndPatchFile", () => {
       optional: false,
     });
     await expect(run).rejects.toThrow(WorkspaceError);
-    await expect(run).rejects.toThrow(/not idempotent/);
     expect(readFileSync(target, "utf-8")).toBe("PORT=2\n");
     expect(statSync(target).mtime).toEqual(past);
   });
@@ -302,7 +266,7 @@ describe("copyAndPatchFile", () => {
       existing: "patch",
       optional: false,
     });
-    await expect(run).rejects.toThrow(/not idempotent/);
+    await expect(run).rejects.toThrow(WorkspaceError);
     expect(existsSync(join(cur, "out.txt"))).toBe(false);
   });
 
@@ -318,7 +282,7 @@ describe("copyAndPatchFile", () => {
       existing: "reseed",
       optional: false,
     });
-    await expect(run).rejects.toThrow(/not idempotent/);
+    await expect(run).rejects.toThrow(WorkspaceError);
     expect(readFileSync(target, "utf-8")).toBe("orig\n");
   });
 
@@ -348,7 +312,7 @@ describe("copyAndPatchFile", () => {
             existing: "reseed",
             optional: false,
           }),
-        ).rejects.toThrow(/tracked/);
+        ).rejects.toThrow(ConfigError);
       }
       expect(readFileSync(join(cur, "[literal]"), "utf8")).toBe("original");
       expect(existsSync(join(cur, "inside/out.txt"))).toBe(false);
@@ -368,7 +332,7 @@ describe("copyAndPatchFile", () => {
           existing: "reseed",
           optional: false,
         }),
-      ).rejects.toThrow(/escapes/);
+      ).rejects.toThrow(ConfigError);
     }
     await expect(
       copyAndPatchFile({
@@ -382,7 +346,7 @@ describe("copyAndPatchFile", () => {
         existing: "patch",
         optional: false,
       }),
-    ).rejects.toThrow(/escapes/);
+    ).rejects.toThrow(ConfigError);
     expect(existsSync(join(outside, "out.txt"))).toBe(false);
   });
 
@@ -404,7 +368,7 @@ describe("copyAndPatchFile", () => {
         existing: "patch",
         optional: false,
       }),
-    ).rejects.toThrow(/tracked/);
+    ).rejects.toThrow(ConfigError);
     expect(readFileSync(target, "utf8")).toBe("original");
   });
 

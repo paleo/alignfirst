@@ -4,7 +4,7 @@ This repository documents and operates `{{SERVER_HOST}}`, the server that runs *
 
 ## Start every session with the project context
 
-Run `npx -y alignfirst context` from the repository root once, as your first command in the session, whatever the task. It prints the project conventions (ticket IDs, branch names, commits), the documentation map, and the AlignFirst protocols.
+Run `npx -y alignfirst context` from the repository root once, as your first command in the session, whatever the task. It prints the project conventions, the documentation map, and the AlignFirst protocols.
 
 ## Sysadmin workflow
 

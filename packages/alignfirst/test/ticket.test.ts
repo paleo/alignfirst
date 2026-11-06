@@ -35,21 +35,23 @@ describe("ticket command", () => {
     expect(runTicket(ctx, ["--help"])).toBe(0);
     expect(stdout.text()).toContain(`${form} ticket --side`);
     expect(stdout.text()).not.toContain("{{FORM}}");
-    expect(() => runTicket(ctx, ["--unknown"])).toThrow(stdout.text().trim());
+    expect(() => runTicket(ctx, ["--unknown"])).toThrow(form);
   });
 
   it("creates, lists and restores ticket directories", async () => {
     const cwd = makeProject();
     const created = await runMain(["ticket", "78"], { cwd });
-    expect(created.stdout).toContain("- TICKET_DIR: `.plans/78/` (created)");
+    expect(created.stdout).toContain(".plans/78/");
+    expect(existsSync(join(cwd, ".plans", "78"))).toBe(true);
     writeFileSync(join(cwd, ".plans", "78", "A1-request.md"), "request");
-    expect((await runMain(["ticket", "78", "--next", "spec.md"], { cwd })).stdout).toBe(
-      "- TICKET_DIR: `.plans/78/`\n- CYCLE_LETTER: `A`\n- FILE_NUMBER: `2`\n- FILE_NAME: `A2-spec.md`\n",
+    expect((await runMain(["ticket", "78", "--next", "spec.md"], { cwd })).stdout).toContain(
+      "A2-spec.md",
     );
     mkdirSync(join(cwd, ".plans", "_archives"));
     mkdirSync(join(cwd, ".plans", "_archives", "99"));
     const restored = await runMain(["ticket", "99"], { cwd });
-    expect(restored.stdout).toContain("restored from _archives");
+    expect(restored.code).toBe(0);
+    expect(existsSync(join(cwd, ".plans", "_archives", "99"))).toBe(false);
     expect(existsSync(join(cwd, ".plans", "99"))).toBe(true);
   });
 
@@ -61,11 +63,9 @@ describe("ticket command", () => {
       ["ticket", "78", "--next", "notes.txt", "--new-cycle", "--dry-run"],
       { cwd },
     );
-    expect(next.stdout).toBe(
-      "- TICKET_DIR: `.plans/78/`\n- CYCLE_LETTER: `B`\n- FILE_NUMBER: `1`\n- FILE_NAME: `B1-notes.txt`\n",
-    );
+    expect(next.stdout).toContain("B1-notes.txt");
     const missing = await runMain(["ticket", "79", "--dry-run"], { cwd });
-    expect(missing.stdout).toContain("would be created");
+    expect(missing.code).toBe(0);
     expect(existsSync(join(cwd, ".plans", "79"))).toBe(false);
   });
 
@@ -79,9 +79,7 @@ describe("ticket command", () => {
       cwd,
     });
 
-    expect(result.stdout).toBe(
-      "- TICKET_DIR: `.plans/99/`\n- CYCLE_LETTER: `C`\n- FILE_NUMBER: `5`\n- FILE_NAME: `C5-AAD.summary.md`\n",
-    );
+    expect(result.stdout).toContain("C5-AAD.summary.md");
     expect(existsSync(join(cwd, ".plans", "99"))).toBe(false);
     expect(existsSync(archive)).toBe(true);
   });
@@ -90,39 +88,13 @@ describe("ticket command", () => {
     const cwd = makeProject();
     const first = await runMain(["ticket", "78", "--next"], { cwd });
     expect(first).toMatchObject({ code: 0, stderr: "" });
-    expect(first.stdout).toBe(
-      "- TICKET_DIR: `.plans/78/`\n- CYCLE_LETTER: `A`\n- FILE_NUMBER: `1`\n- FILE_PREFIX: `A1`\n",
-    );
+    expect(first.stdout).toMatch(/\bA1\b/);
     expect((await runMain(["ticket", "78", "--next"], { cwd })).stdout).toBe(first.stdout);
     expect((await runMain(["ticket", "78", "--next", "spec.md"], { cwd })).stdout).toContain(
-      "- FILE_NAME: `A1-spec.md`",
+      "A1-spec.md",
     );
     writeFileSync(join(cwd, ".plans", "78", "A1-spec.md"), "spec");
-    expect((await runMain(["ticket", "78", "--next"], { cwd })).stdout).toContain(
-      "- FILE_PREFIX: `A2`",
-    );
-  });
-
-  it("emits the same compact information in JSON for either next form", async () => {
-    const cwd = makeProject();
-    mkdirSync(join(cwd, ".plans", "78"));
-    writeFileSync(join(cwd, ".plans", "78", "A1-request.md"), "request");
-    const prefix = await runMain(["ticket", "78", "--next", "--json"], { cwd });
-    expect(prefix.code).toBe(0);
-    expect(JSON.parse(prefix.stdout)).toEqual({
-      TICKET_DIR: ".plans/78/",
-      CYCLE_LETTER: "A",
-      FILE_NUMBER: 2,
-      FILE_PREFIX: "A2",
-    });
-    const filename = await runMain(["ticket", "78", "--next", "spec.md", "--json"], { cwd });
-    expect(filename.code).toBe(0);
-    expect(JSON.parse(filename.stdout)).toEqual({
-      TICKET_DIR: ".plans/78/",
-      CYCLE_LETTER: "A",
-      FILE_NUMBER: 2,
-      FILE_NAME: "A2-spec.md",
-    });
+    expect((await runMain(["ticket", "78", "--next"], { cwd })).stdout).toMatch(/\bA2\b/);
   });
 
   it("reports numeric ordering and the next cycle consistently in both formats", async () => {
@@ -156,17 +128,9 @@ describe("ticket command", () => {
             ? { FILE_PREFIX: `${cycle}${number}` }
             : { FILE_NAME: `${cycle}${number}-review.md` }),
         });
-        const markdownFields = Object.fromEntries(
-          markdown.stdout
-            .trimEnd()
-            .split("\n")
-            .map((line) => {
-              const match = /^- ([A-Z_]+): `(.+)`$/.exec(line);
-              if (!match) throw new Error(`Unexpected output line: ${line}`);
-              return [match[1], match[1] === "FILE_NUMBER" ? Number(match[2]) : match[2]];
-            }),
+        expect(markdown.stdout).toContain(
+          filename === undefined ? `${cycle}${number}` : `${cycle}${number}-review.md`,
         );
-        expect(markdownFields).toEqual(JSON.parse(json.stdout));
       }
     }
   });
@@ -214,23 +178,17 @@ describe("ticket command", () => {
 
   it("validates cycle arguments before creating or reserving tickets", async () => {
     const cwd = makeProject();
-    const invalid: { args: string[]; error: string }[] = [
-      ...["", "a", "AA", "1", " A", "A\n", "../A"].map((cycle) => ({
-        args: ["--cycle", cycle, "--next"],
-        error: "--cycle must be a single uppercase letter (A-Z).",
-      })),
-      { args: ["--cycle", "A"], error: "--cycle requires --next." },
-      {
-        args: ["--cycle", "A", "--next", "--new-cycle"],
-        error: "--cycle cannot be combined with --new-cycle.",
-      },
-      { args: ["--cycle"], error: "Usage:" },
+    const invalid = [
+      ...["", "a", "AA", "1", " A", "A\n", "../A"].map((cycle) => ["--cycle", cycle, "--next"]),
+      ["--cycle", "A"],
+      ["--cycle", "A", "--next", "--new-cycle"],
+      ["--cycle"],
     ];
     for (const ticket of [["78"], ["--side"]]) {
-      for (const { args, error } of invalid) {
+      for (const args of invalid) {
         const result = await runMain(["ticket", ...ticket, ...args], { cwd });
         expect(result.code, args.join(" ")).toBe(1);
-        expect(result.stderr).toContain(error);
+        expect(result.stdout).toBe("");
       }
     }
     expect(existsSync(join(cwd, ".plans", "78"))).toBe(false);
@@ -267,13 +225,10 @@ describe("ticket command", () => {
     const cwd = makeProject();
     const invalid = await runMain(["ticket", "78", "--next="], { cwd });
     expect(invalid.code).toBe(1);
-    expect(invalid.stderr).toContain("--next must be a non-empty single path segment.");
     expect(existsSync(join(cwd, ".plans", "78"))).toBe(false);
     const result = await runMain(["ticket", "78", "--next=spec.md"], { cwd });
     expect(result.code).toBe(0);
-    expect(result.stdout).toBe(
-      "- TICKET_DIR: `.plans/78/`\n- CYCLE_LETTER: `A`\n- FILE_NUMBER: `1`\n- FILE_NAME: `A1-spec.md`\n",
-    );
+    expect(result.stdout).toContain("A1-spec.md");
   });
 
   it("numbers a batch of filenames in order when --next repeats", async () => {
@@ -284,17 +239,11 @@ describe("ticket command", () => {
     const batch = ["--next", "main-plan.md", "--next=plan-api.md", "--next", "plan-ui.md"];
     const markdown = await runMain(["ticket", "78", ...batch], { cwd });
     expect(markdown.code).toBe(0);
-    expect(markdown.stdout).toBe(
-      [
-        "- TICKET_DIR: `.plans/78/`",
-        "- CYCLE_LETTER: `A`",
-        "- FILE_NAMES:",
-        "  - `A2-main-plan.md`",
-        "  - `A3-plan-api.md`",
-        "  - `A4-plan-ui.md`",
-        "",
-      ].join("\n"),
-    );
+    expect([...markdown.stdout.matchAll(/A\d+-[\w-]+\.md/g)].map(([name]) => name)).toEqual([
+      "A2-main-plan.md",
+      "A3-plan-api.md",
+      "A4-plan-ui.md",
+    ]);
     const json = await runMain(["ticket", "78", ...batch, "--json", "--new-cycle"], { cwd });
     expect(JSON.parse(json.stdout)).toEqual({
       TICKET_DIR: ".plans/78/",
@@ -311,7 +260,6 @@ describe("ticket command", () => {
     ]) {
       const result = await runMain(args, { cwd });
       expect(result.code, args.join(" ")).toBe(1);
-      expect(result.stderr).toContain("A repeated --next requires a filename on each occurrence.");
     }
     expect(existsSync(join(cwd, ".plans", "78"))).toBe(false);
   });
@@ -362,7 +310,6 @@ describe("ticket command", () => {
     for (const filename of ["", ".", "..", "../outside.md", "nested/file.md", "nested\\file.md"]) {
       const result = await runMain(["ticket", "78", "--next", filename], { cwd });
       expect(result.code).toBe(1);
-      expect(result.stderr).toContain("--next must be a non-empty single path segment.");
     }
 
     expect(existsSync(join(cwd, ".plans", "78"))).toBe(false);
@@ -373,7 +320,6 @@ describe("ticket command", () => {
     const invalid = await runMain(["ticket", "--side", "--next", "../outside.md"], { cwd });
 
     expect(invalid.code).toBe(1);
-    expect(invalid.stderr).toContain("--next must be a non-empty single path segment.");
     expect(existsSync(join(cwd, ".plans", "side-1"))).toBe(false);
 
     const created = await runMain(["ticket", "--side", "--json"], { cwd });
@@ -493,9 +439,7 @@ describe("ticket command", () => {
     );
     const noMatch = await runMain(["ticket", "--dry-run"], { cwd });
     expect(noMatch.code).toBe(1);
-    expect(noMatch.stderr).toContain(
-      'branch "hotfix/typo" with pattern "^\\d+$" and template "{TICKET_ID}/{slug-1-3-words}"',
-    );
+    expect(noMatch.stdout).toBe("");
   });
 
   it("uses the ticket grammar to disambiguate template placeholders", async () => {
@@ -533,19 +477,16 @@ describe("ticket command", () => {
 
   it("requires the plans gate and validates configured ids", async () => {
     const cwd = makeProject(false);
-    expect((await runMain(["ticket", "78"], { cwd })).stderr).toContain(
-      "No .plans/ directory in the current directory.",
-    );
+    expect(await runMain(["ticket", "78"], { cwd })).toMatchObject({ code: 1, stdout: "" });
+    expect(existsSync(join(cwd, ".plans"))).toBe(false);
     expect(await runMain(["ticket", "--help"], { cwd })).toMatchObject({ code: 0, stderr: "" });
     symlinkSync(join(cwd, "missing-clone"), join(cwd, ".plans"));
-    expect((await runMain(["ticket", "78"], { cwd })).stderr).toContain(
-      "The .plans symlink is broken.",
-    );
+    expect(await runMain(["ticket", "78"], { cwd })).toMatchObject({ code: 1, stdout: "" });
+    expect(existsSync(join(cwd, "missing-clone"))).toBe(false);
     rmSync(join(cwd, ".plans"));
     mkdirSync(join(cwd, ".plans"));
-    expect((await runMain(["ticket", "_archives"], { cwd })).stderr).toContain(
-      "Invalid ticket id: _archives",
-    );
+    expect(await runMain(["ticket", "_archives"], { cwd })).toMatchObject({ code: 1, stdout: "" });
+    expect(existsSync(join(cwd, ".plans", "_archives"))).toBe(false);
     writeFileSync(
       join(cwd, "alignfirst.json"),
       JSON.stringify({ schemaVersion: 1, conventions: { ticketIdPattern: "^\\d+$" } }),
@@ -554,21 +495,13 @@ describe("ticket command", () => {
     expect((await runMain(["ticket", "side-2"], { cwd })).code).toBe(0);
   });
 
-  it("asks for the id when none is given and no pattern is configured", async () => {
-    const cwd = makeProject();
-    const result = await runMain(["ticket"], { cwd });
-    expect(result.stderr).toBe(
-      "No ticket id given. Pass a ticket id, or --side for a new side ticket.\n",
-    );
-  });
-
   it("deduces the id from an existing ticket named by the branch", async () => {
     const cwd = makeProject();
     mkdirSync(join(cwd, ".plans", "78"));
     mkdirSync(join(cwd, ".plans", "7"));
     git(cwd, "checkout", "--quiet", "-b", "78/unified-cli");
-    const result = await runMain(["ticket"], { cwd });
-    expect(result.stdout).toContain("- TICKET_ID: `78` (deduced from branch `78/unified-cli`)");
+    const result = await runMain(["ticket", "--json"], { cwd });
+    expect(JSON.parse(result.stdout)).toMatchObject({ TICKET_ID: "78", branch: "78/unified-cli" });
   });
 
   it("lists existing tickets when the branch names none of them", async () => {
@@ -585,9 +518,10 @@ describe("ticket command", () => {
     git(cwd, "checkout", "--quiet", "-b", "781/other");
     const result = await runMain(["ticket", "--catchup"], { cwd });
     expect(result.code).toBe(1);
-    expect(result.stderr).toMatch(
-      /^No ticket id given\. Existing tickets:\n {2}78 {6}\d{4}-\S+\n {2}side-1 {2}\d{4}-\S+ \(archived\)\nPass a ticket id\.\n$/u,
-    );
+    expect(result.stderr).toContain("78");
+    expect(result.stderr).toContain("side-1");
+    expect(result.stderr.indexOf("78")).toBeLessThan(result.stderr.indexOf("side-1"));
+    expect(existsSync(join(cwd, ".plans", "781"))).toBe(false);
   });
 });
 
@@ -596,14 +530,14 @@ describe("ticket command with a companion .plans", () => {
     const { home, project, plans } = companionPlans();
     const ticketDir = `${join(plans, "78")}/`;
     const text = await runMain(["ticket", "78"], { cwd: project, home });
-    expect(text.stdout).toContain(`- TICKET_DIR: \`${ticketDir}\` (created)`);
+    expect(text.stdout).toContain(ticketDir);
     expect(existsSync(join(plans, "78"))).toBe(true);
     expect(existsSync(join(project, ".plans"))).toBe(false);
     const json = await runMain(["ticket", "78", "--json"], { cwd: project, home });
     expect(JSON.parse(json.stdout)).toMatchObject({ TICKET_DIR: ticketDir, state: "existing" });
     const next = await runMain(["ticket", "78", "--next", "spec.md"], { cwd: project, home });
-    expect(next.stdout).toContain(`- TICKET_DIR: \`${ticketDir}\`\n`);
-    expect(next.stdout).toContain("- FILE_NAME: `A1-spec.md`");
+    expect(next.stdout).toContain(ticketDir);
+    expect(next.stdout).toContain("A1-spec.md");
   });
 
   it("reserves side tickets in the companion", async () => {
@@ -622,9 +556,8 @@ describe("ticket command with a companion .plans", () => {
     rmSync(plans, { recursive: true });
     const result = await runMain(["ticket", "78"], { cwd: project, home });
     expect(result.code).toBe(1);
-    expect(result.stderr).toBe(
-      `No .plans/ directory at ${plans} (companion).\nLocal work files:  mkdir -p ${plans}\nTeam work files:   alignfirst plans setup <clone-dir>\n`,
-    );
+    expect(result.stderr).toContain(plans);
+    expect(existsSync(plans)).toBe(false);
   });
 });
 

@@ -72,7 +72,7 @@ That range is reachable only through the authenticated HTTPS gateway; ports outs
 
 ### AlignFirst - Workflow protocols
 
-The `alignfirst` CLI is installed globally. From a project root, `alignfirst context` prints the project's conventions, documentation map and protocol aliases; `alignfirst guide` prints the protocol table and the ticket directory and work file rules. You run `alignfirst ticket` and `alignfirst sync` yourself; protocols run through `aligndev code --protocol`.
+The `alignfirst` CLI is installed globally. From a project root, `alignfirst context` prints conventions, the documentation map and protocol aliases; `alignfirst guide` prints the protocol table and the ticket directory and work file rules. You run `alignfirst ticket` and `alignfirst sync` yourself; protocols run through `aligndev code --protocol`.
 
 ### Node
 

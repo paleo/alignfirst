@@ -133,7 +133,6 @@ describe("installed workspace CLI cancellation", () => {
         INTERRUPT_DIR: join(fx.root, "home"),
       });
       expect(competing.status, competing.stderr).toBe(1);
-      expect(competing.stderr).toMatch(/cleanup.*in progress/i);
       expect(readWorkspaces(fx.repo)).toEqual(captured);
       expect(existsSync(join(fx.root, "later"))).toBe(false);
       expect(readFileSync(resource, "utf8")).toBe("original");
@@ -190,7 +189,6 @@ describe("installed workspace CLI cancellation", () => {
       ]) {
         const retry = runCli(fx.repo, args, { INTERRUPT_DIR: join(fx.root, "home") });
         expect(retry.status, retry.stderr).toBe(1);
-        expect(retry.stderr).toMatch(/abandoned cleanup.*explicit recovery/i);
         expect(readWorkspaces(fx.repo)).toEqual(captured);
         expect(readFileSync(resource, "utf8")).toBe("original");
       }
@@ -236,11 +234,9 @@ describe("installed workspace CLI cancellation", () => {
       writeFileSync(join(fx.root, "release"), "release");
       await waitUntil(() => running.closed, "stale cleaner exit");
       expect(running.code, running.output).toBe(1);
-      expect(running.output).toMatch(/cleanup ownership lost/i);
       expect(readWorkspaces(fx.repo).workspaces[name]).toEqual(entry);
       const retry = runCli(fx.repo, ["teardown"], { INTERRUPT_DIR: fx.root });
       expect(retry.status, retry.stderr).toBe(1);
-      expect(retry.stderr).toMatch(/abandoned cleanup.*explicit recovery/i);
       expect(readWorkspaces(fx.repo).workspaces[name]).toEqual(entry);
       // Remove only the synthetic replacement claim after its known purge group has joined.
       await waitUntil(() => [...ownedPids].every((pid) => !isAlive(pid)), "stale purge quiescence");

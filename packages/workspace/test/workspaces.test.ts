@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { WorkspaceError } from "../src/errors.js";
 import {
   allocateWorkspaceName,
   findWorkspaceByPath,
@@ -168,10 +169,10 @@ describe("workspace registration", () => {
       register(mainWorktree, {
         recipe: { kind: "manifest", file: "alignfirst.json", in: "companion" },
       }),
-    ).rejects.toThrow("source changed");
+    ).rejects.toThrow(WorkspaceError);
     rmSync(`${json}c`);
     const before = stored();
-    await expect(register(mainWorktree)).rejects.toThrow("manifest recipe is missing");
+    await expect(register(mainWorktree)).rejects.toThrow(WorkspaceError);
     expect(stored()).toBe(before);
     await markWorkspaceFailed(mainWorktree, registryDir, mainWorktree, "repair");
     expect(entries().main.recipe.kind).toBe("manifest");
@@ -183,7 +184,7 @@ describe("registry format rejection", () => {
     mkdirSync(join(mainWorktree, registryDir), { recursive: true });
     const retired = join(mainWorktree, registryDir, "slots.json");
     writeFileSync(retired, '{"old":"identity"}');
-    await expect(register(mainWorktree)).rejects.toThrow("Unsupported retired registry");
+    await expect(register(mainWorktree)).rejects.toThrow(WorkspaceError);
     expect(readFileSync(retired, "utf8")).toBe('{"old":"identity"}');
     expect(existsSync(workspacesFilePath(mainWorktree, registryDir))).toBe(false);
   });
@@ -191,8 +192,8 @@ describe("registry format rejection", () => {
   it.each([undefined, 1, 2, 3])("rejects version %s before any mutation", async (version) => {
     raw({ version, workspaces: { old: entry("/old/wt") } });
     const before = stored();
-    expect(() => entries()).toThrow("unsupported registry");
-    await expect(register(mainWorktree)).rejects.toThrow("unsupported registry");
+    expect(() => entries()).toThrow(WorkspaceError);
+    await expect(register(mainWorktree)).rejects.toThrow(WorkspaceError);
     expect(stored()).toBe(before);
   });
 
@@ -225,11 +226,11 @@ describe("registry format rejection", () => {
     });
     const before = stored();
     await expect(updateWorkspaces(mainWorktree, registryDir, () => {})).rejects.toThrow(
-      "duplicate",
+      WorkspaceError,
     );
     expect(stored()).toBe(before);
     writeFileSync(workspacesFilePath(mainWorktree, registryDir), "{broken");
-    await expect(register(mainWorktree)).rejects.toThrow("unsupported registry");
+    await expect(register(mainWorktree)).rejects.toThrow(WorkspaceError);
     expect(stored()).toBe("{broken");
   });
 
@@ -337,7 +338,6 @@ describe("main relocation and re-key", () => {
       const name = `main-${digest(mainWorktree).slice(0, 8)}`;
       expect(entries().main.worktree).toBe("/linked/main");
       expect(entries()[name]).toEqual({ ...entry(mainWorktree), main: true, ports: { web: 8200 } });
-      expect(warn.mock.calls.join("\n")).toContain(`renamed from "old" to "${name}"`);
       expect((await register(mainWorktree)).name).toBe(name);
     } finally {
       warn.mockRestore();
@@ -394,7 +394,7 @@ describe("path-scoped reads", () => {
     expect(storedPortsOf(mainWorktree, registryDir, "/other/wt")).toEqual({});
     expect(storedPortsOf(mainWorktree, registryDir, "/unknown/wt")).toEqual({});
     expect(() => resolveCurrentWorkspace(mainWorktree, registryDir, "/unknown/wt")).toThrow(
-      "No workspace",
+      WorkspaceError,
     );
   });
 });

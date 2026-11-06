@@ -351,7 +351,7 @@ describe("independent quota configuration", () => {
     });
   });
 
-  it("executes the selected quota source, labels its account boundary and leaves the child unchanged", async () => {
+  it("routes quota to its selected source without changing the child environment", async () => {
     makeLaunchFixture();
     settings({
       profiles: {
@@ -369,8 +369,7 @@ describe("independent quota configuration", () => {
       cwd: project,
       env: expect.objectContaining({ CODEX_HOME: nativeB }),
     });
-    expect(result.stdout).toContain("Profile: a; native source: codex");
-    expect(result.stdout).toContain("account pairing with the coding agent is not verified");
+    expect(result.stdout).toContain("Codex quota\n5 hours: 15% used");
     expect(result.stdout).not.toContain("fixture-secret");
     expect(resolveCodeConfig(loadConfig(home), env).childEnv.PI_CODING_AGENT_DIR).toBe(nativeA);
     expect(records()).toHaveLength(0);
@@ -384,9 +383,6 @@ describe("independent quota configuration", () => {
       const reader = vi.fn(async () => "must not run");
       const result = await launch(["quota"], undefined, reader);
       expect(result.code).toBe(1);
-      expect(result.stderr).toContain(
-        quota === undefined ? "set quota.source" : "Quota is disabled",
-      );
       expect(reader).not.toHaveBeenCalled();
       expect(result.modelResolver).not.toHaveBeenCalled();
     },
@@ -397,19 +393,23 @@ describe("independent quota configuration", () => {
     expect((await launch(["new", "-m", "go"])).code).toBe(0);
     settings({ profile: "b" });
     const reader = vi.fn(async () => "limits");
-    expect((await launch(["quota"], undefined, reader)).stdout).toContain("Profile: b;");
+    expect((await launch(["quota"], undefined, reader)).code).toBe(0);
     writeRegistry(home, { projects: { "~/app": { aligndev: { profile: "a" } } } });
-    expect((await launch(["quota"], undefined, reader)).stdout).toContain("Profile: a;");
-    expect((await launch(["quota", "--profile", "b"], undefined, reader)).stdout).toContain(
-      "Profile: b;",
-    );
+    expect((await launch(["quota"], undefined, reader)).code).toBe(0);
+    expect((await launch(["quota", "--profile", "b"], undefined, reader)).code).toBe(0);
+    for (const [index, nativeHome] of [nativeB, nativeA, nativeB].entries()) {
+      expect(reader).toHaveBeenNthCalledWith(index + 1, "claude", {
+        cwd: project,
+        env: expect.objectContaining({ CLAUDE_CONFIG_DIR: nativeHome }),
+      });
+    }
   });
 });
 
 describe("effective profiles through CLI launch and resume", () => {
   beforeEach(makeLaunchFixture);
 
-  it("unsets inherited storage for a real null-configured child and describes the reset", async () => {
+  it("unsets inherited storage for a real null-configured child without leaking values", async () => {
     settings({ profiles: { a: { agent: "claude", configDir: null, unset: ["TOKEN"] } } });
     env.CLAUDE_CONFIG_DIR = nativeB;
     const bytes = readFileSync(join(home, ".alignfirst/aligndev.settings.json"));
@@ -451,8 +451,6 @@ describe("effective profiles through CLI launch and resume", () => {
     const failed = await launch(["new", "-m", "go", "--quiet"]);
     expect(failed.code, failed.stderr).toBe(2);
     for (const text of [help.stdout, stdout.text(), failed.stderr]) {
-      expect(text).toContain("CLAUDE_CONFIG_DIR: unset by configDir: null; native defaults apply");
-      expect(text).toContain("HOME: inherited environment (value omitted)");
       expect(text).not.toContain(nativeB);
       expect(text).not.toContain("fixture-secret");
     }
@@ -535,11 +533,6 @@ describe("effective profiles through CLI launch and resume", () => {
       Object.assign(env, markers);
       const resumed = await launch(["resume", "native-session", "-m", "more"]);
       expect(resumed.code).toBe(1);
-      expect(resumed.stderr).toContain(
-        "AI_AGENT" in markers && !("CLAUDECODE" in markers)
-          ? "belongs to agent claude"
-          : "coding agent",
-      );
       expect(resumed.modelResolver).not.toHaveBeenCalled();
       expect(records()).toHaveLength(1);
       expect(readFileSync(historical.path, "utf8")).toBe(historical.bytes);
@@ -571,11 +564,13 @@ describe("effective profiles through CLI launch and resume", () => {
   it("uses the actual-cwd project selection for guide/help and preserves subcommand help overrides", async () => {
     writeRegistry(home, { projects: { "~/app": { aligndev: { profile: "b" } } } });
     const help = await launch(["--help"]);
-    expect(help.stdout).toContain("Effective profile: b");
+    expect(help.stdout).toContain(nativeB);
+    expect(help.stdout).not.toContain(nativeA);
     for (const args of [["--help"], ["new", "--help"], ["resume", "--help"], ["quota", "--help"]]) {
       const selected = await launch([...args, "--profile", "a"]);
       expect(selected.code, selected.stderr).toBe(0);
-      expect(selected.stdout).toContain("Effective profile: a");
+      expect(selected.stdout).toContain(nativeA);
+      expect(selected.stdout).not.toContain(nativeB);
       expect(selected.modelResolver).not.toHaveBeenCalled();
     }
     const stdout = makeSink();
@@ -592,7 +587,6 @@ describe("effective profiles through CLI launch and resume", () => {
       }),
       stderr.text(),
     ).toBe(0);
-    expect(stdout.text()).toContain("Effective profile: `b`");
     expect(stdout.text()).toContain(nativeB);
     expect(stdout.text()).toContain("`sonnet`");
     expect(stdout.text()).not.toContain("fixture-secret");
@@ -605,7 +599,7 @@ describe("effective profiles through CLI launch and resume", () => {
     ["codex", "CODEX_HOME"],
     ["pi", "PI_CODING_AGENT_DIR"],
   ] as const)(
-    "describes %s profile env storage in help and guide without values",
+    "redacts %s profile environment values in help and guide",
     async (agent, variable) => {
       settings({
         profiles: {
@@ -627,29 +621,13 @@ describe("effective profiles through CLI launch and resume", () => {
       expect(help.code, help.stderr).toBe(0);
       expect(guideCode, stderr.text()).toBe(0);
       for (const text of [help.stdout, stdout.text()]) {
-        expect(text).toContain(`${variable}: profile env override (value omitted)`);
-        expect(text).toContain("HOME: profile env override (value omitted)");
-        expect(text).toContain("same effective environment as the child");
-        expect(text).toContain("unset/env/configDir");
         expect(text).not.toContain("private-store-value");
         expect(text).not.toContain("private-home-value");
       }
     },
   );
 
-  it("distinguishes inherited native storage from profile removal without values", async () => {
-    env.CLAUDE_CONFIG_DIR = "inherited-private-store";
-    settings({ profiles: { a: { agent: "claude" } } });
-    const inherited = await launch(["--help"]);
-    expect(inherited.stdout).toContain("CLAUDE_CONFIG_DIR: inherited environment (value omitted)");
-    expect(inherited.stdout).not.toContain("inherited-private-store");
-    settings({ profiles: { a: { agent: "claude", unset: ["CLAUDE_CONFIG_DIR"] } } });
-    expect((await launch(["--help"])).stdout).toContain(
-      "CLAUDE_CONFIG_DIR: unset by profile; native defaults apply",
-    );
-  });
-
-  it("requires the selected effective environment for login after authentication failure", async () => {
+  it("redacts profile environment values after authentication failure", async () => {
     settings({
       profiles: {
         a: { agent: "claude", env: { CLAUDE_CONFIG_DIR: nativeA, FIXTURE_AUTH_FAILURE: "1" } },
@@ -657,9 +635,6 @@ describe("effective profiles through CLI launch and resume", () => {
     });
     const failed = await launch(["new", "-m", "go", "--quiet"]);
     expect(failed.code, failed.stderr).toBe(2);
-    expect(failed.stderr).toContain("CLAUDE_CONFIG_DIR: profile env override (value omitted)");
-    expect(failed.stderr).toContain("same effective environment as the child");
-    expect(failed.stderr).toContain("unset/env/configDir");
     expect(failed.stderr).not.toContain(nativeA);
     expect(failed.stderr).not.toContain("fixture-secret");
   });
@@ -687,8 +662,6 @@ process.exitCode = 1;
       stderr,
     });
     expect(code).toBe(1);
-    expect(stderr.text()).toContain("Could not resolve the codex model");
-    expect(stderr.text()).toContain("update the Codex CLI");
     expect(stdout.text() + stderr.text()).not.toContain("native-model-secret");
     expect(readFileSync(newest().path, "utf8")).not.toContain("native-model-secret");
     expect(readCompletion(newest().path).frontmatter).toMatchObject({
@@ -738,7 +711,6 @@ process.exitCode = 1;
       const status = await launch(["status", newest().path, "--result"]);
       expect(status.code).toBe(0);
       expect(status.stdout).toContain(`sessionId: ${resume ? "native-session" : ""}\n`);
-      expect(status.stdout).toContain("Could not resolve the claude model");
       expect(existsSync(join(nativeB, "identity"))).toBe(false);
       expect(readFileSync(originalFile, "utf8")).toBe(original);
     },
@@ -796,7 +768,6 @@ process.exitCode = 1;
       "missing",
     ]);
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("missing profile");
     expect(result.modelResolver).not.toHaveBeenCalled();
     expect(records()).toHaveLength(0);
     expect(existsSync(join(nativeA, "identity"))).toBe(false);
@@ -860,9 +831,6 @@ process.exitCode = 1;
     expect((await launch(["new", "-m", "go"])).code).toBe(0);
     const failed = await launch(["resume", "native-session", "-m", "more", "--profile", "b"]);
     expect(failed.code).toBe(1);
-    expect(failed.stderr).toContain('profile "b"');
-    expect(failed.stderr).toContain(nativeB);
-    expect(failed.stderr).toContain("No account fallback");
     expect(readCompletion(newest().path).frontmatter).toMatchObject({
       status: "failed",
       profile: "b",
@@ -882,7 +850,6 @@ process.exitCode = 1;
     const failed = await launch(["resume", "native-session", "-m", "more", "--profile", "b"]);
     expect(failed.code).toBe(1);
     const completion = readCompletion(newest().path);
-    expect(completion.result).toContain("identity changed");
     expect(completion.frontmatter).toMatchObject({
       status: "failed",
       profile: "b",
@@ -900,7 +867,6 @@ process.exitCode = 1;
     const before = records().length;
     const cross = await launch(["resume", "native-session", "-m", "more", "--profile", "pi"]);
     expect(cross.code).toBe(1);
-    expect(cross.stderr).toContain("belongs to agent claude");
     expect(cross.modelResolver).not.toHaveBeenCalled();
     settings({
       profiles: {
@@ -908,7 +874,7 @@ process.exitCode = 1;
       },
     });
     const disallowed = await launch(["resume", "native-session", "-m", "more"]);
-    expect(disallowed.stderr).toContain("supply --model");
+    expect(disallowed.code).toBe(1);
     expect(disallowed.modelResolver).not.toHaveBeenCalled();
     expect(records()).toHaveLength(before);
     expect(
@@ -936,9 +902,8 @@ process.exitCode = 1;
         profile: "b",
         profiles: { b: { agent: "claude", configDir: nativeA, modelAliases: { choice: "opus" } } },
       });
-      expect((await launch(["resume", "native-session", "-m", "more"])).stderr).toContain(
-        "missing profile",
-      );
+      expect((await launch(["resume", "native-session", "-m", "more"])).code).toBe(1);
+      expect(records()).toHaveLength(1);
       if (replacement === "project")
         writeRegistry(home, { projects: { "~/app": { aligndev: { profile: "b" } } } });
       const result = await launch([

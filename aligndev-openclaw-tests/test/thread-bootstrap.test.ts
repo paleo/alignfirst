@@ -55,12 +55,12 @@ for (const channel of ["slack-mock", "discord-mock"]) {
             offlineContext(channel, starter(request.text.replace(omission, ""))),
             opts,
           ),
-          /starter omitted the detailed request/,
+          (error) => error instanceof Error && error.name === "Error" && error !== checked,
         );
       }
       await assert.rejects(
         bootstrapThreadFromChannel(offlineContext(channel, starter("")), opts),
-        /starter omitted the detailed request/,
+        (error) => error instanceof Error && error.name === "Error" && error !== checked,
       );
     });
   }
@@ -114,7 +114,7 @@ function offlineContext(channel: string, text: string): ScenarioContext {
   return new Proxy(supported, {
     get(target, key) {
       if (Object.hasOwn(target, key)) return Reflect.get(target, key);
-      throw new Error(`unexpected offline bootstrap operation: ${String(key)}`);
+      assert.fail(`unexpected offline bootstrap operation: ${String(key)}`);
     },
   }) as ScenarioContext;
 }

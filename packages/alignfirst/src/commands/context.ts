@@ -7,6 +7,7 @@ import { renderConventionsSection } from "../conventions.js";
 import { readInstructions } from "../instructions.js";
 import { parseBareCommandArgs } from "../parse-args.js";
 import { layoutOf } from "../project-layout.js";
+import { renderWorkspaceGuidance } from "../workspace-guidance.js";
 import { runDocmap } from "./docmap.js";
 
 export function runContext(ctx: CommandContext, args: string[]): number {
@@ -14,6 +15,7 @@ export function runContext(ctx: CommandContext, args: string[]): number {
   if (parseBareCommandArgs(ctx, args, usage)) return 0;
   ctx.stdout.write(renderConventionsSection(ctx));
   writeProjectInstructions(ctx);
+  ctx.stdout.write(`\n${renderWorkspaceGuidance(ctx)}`);
   const code = layoutOf(ctx).locations.docs.exists ? writeDocmapSection(ctx) : 0;
   ctx.stdout.write(`\n${renderProtocolsSection(ctx)}`);
   return code;
@@ -28,8 +30,10 @@ function writeProjectInstructions(ctx: CommandContext): void {
 }
 
 function writeDocmapSection(ctx: CommandContext): number {
-  ctx.stdout.write("\n# Docmap Usage\n\n");
-  return runDocmap(ctx, []);
+  ctx.stdout.write(
+    "\n# Docmap Usage\n\nBefore working on a task, read the documents relevant to it.\n\n",
+  );
+  return runDocmap(ctx, [], { showRootCommandInShortHelp: false });
 }
 
 function renderProtocolsSection(ctx: CommandContext): string {

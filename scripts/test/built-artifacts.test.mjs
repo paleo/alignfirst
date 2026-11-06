@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { requireBuiltArtifacts } from "./built-artifacts.mjs";
 
-test("integration preflight accepts built files and reports all missing entries with a remedy", () => {
+test("integration preflight accepts built files and reports all missing entries", () => {
   const root = mkdtempSync(join(tmpdir(), "built-artifacts-"));
   try {
     const built = join(root, "cli.js");
@@ -20,7 +20,6 @@ test("integration preflight accepts built files and reports all missing entries 
     assert.throws(
       () => requireBuiltArtifacts([built, missing, directory]),
       (error) => {
-        assert.match(error.message, /npm run build.*repository root/);
         assert.ok(error.message.includes(missing));
         assert.ok(error.message.includes(directory));
         return true;

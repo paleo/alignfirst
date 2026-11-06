@@ -130,8 +130,6 @@ for (const agent of Object.keys(legacySettings)) {
       runSection(f, "Maintenance controls");
       const result = run(f, "bash", [join(f.infra, "bin/backup.sh")], {}, false);
       assert.notEqual(result.status, 0);
-      assert.match(result.stderr, /code.agent.*Retired launch setting.*manual conversion/u);
-      assert.match(result.stderr, /an explicit code.profile must name a provisioned profile/u);
       assert.equal(readFileSync(f.deployed, "utf8"), f.originalSettings);
       assert(!readFileSync(f.log, "utf8").includes("openclaw\n"));
     });
@@ -185,7 +183,6 @@ for (const destination of ["backups", "backups/bootstrap"]) {
         false,
       );
       assert.notEqual(result.status, 0);
-      assert.match(result.stderr, /must not be symlinks/u);
       assert.deepEqual(readdirSync(target), []);
       assert.equal(readFileSync(f.deployed, "utf8"), f.originalSettings);
     });

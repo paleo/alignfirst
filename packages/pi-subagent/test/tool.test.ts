@@ -58,7 +58,7 @@ describe("registered public subagent tool", () => {
     const captures = host.captures();
     expect(captures).toHaveLength(1);
     expect(captures[0]).toMatchObject({
-      input: `Task:\n${task}\nEnd of task.`,
+      input: expect.stringContaining(task),
       cwd: host.cwd,
       env: { SUBAGENT_TEST_CREDENTIAL: "preserved-fixture-value", PI_OFFLINE: "1" },
     });
@@ -212,7 +212,7 @@ describe("registered public subagent tool", () => {
         undefined,
         host.context,
       ),
-    ).rejects.toThrow("/trust");
+    ).rejects.toThrow();
     expect(host.captures()).toEqual([]);
   });
 

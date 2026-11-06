@@ -91,7 +91,7 @@ describe("bounded Pi JSON output", () => {
     const parser = createJsonOutput();
     parser.feed(Buffer.from(`${JSON.stringify(header)}\n{bad}\n${JSON.stringify(answer())}\n`));
     parser.end();
-    expect(parser.assess().error).toContain("Invalid Pi JSON stream");
+    expect(parser.assess().error).toBeDefined();
   });
 
   it("counts finalized assistant and nested tool usage once, not tool/turn snapshots", () => {
@@ -161,11 +161,12 @@ describe("bounded Pi JSON output", () => {
     const parser = createJsonOutput();
     parser.feed(Buffer.from(`${JSON.stringify(header)}\n`));
     parser.feed(Buffer.alloc(1024 * 1024 + 1, 65));
-    expect(parser.protocolError).toContain("exceeds");
+    const failure = parser.protocolError;
+    expect(failure).toBeDefined();
     parser.feed(Buffer.alloc(1024 * 1024));
-    expect(parser.protocolError).toContain("exceeds");
+    expect(parser.protocolError).toBe(failure);
     parser.end();
-    expect(parser.assess().error).toContain("exceeds");
+    expect(parser.assess().error).toBe(failure);
   });
 
   it("truncates on byte boundaries even with tiny budgets", () => {

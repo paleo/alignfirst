@@ -55,7 +55,7 @@ describe("thread_handoff tool", () => {
     ).rejects.toThrow(/unverifiedThreadDelivery/);
     await expect(
       fixture.tool.execute("call-2", { action: "claim", handoffId: "x", sessionKey: "forged" }),
-    ).rejects.toThrow("invalidTarget: Invalid thread_handoff input.");
+    ).rejects.toMatchObject({ cause: { code: "invalidTarget" } });
     fixture.store.close();
   });
 

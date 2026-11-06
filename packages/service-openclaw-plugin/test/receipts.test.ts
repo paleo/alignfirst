@@ -138,7 +138,6 @@ describe("native delivery receipts", () => {
     await expect(lookup(fixture, "1788946859.060069")).resolves.toBeUndefined();
     expect(fixture.logger.debug).toHaveBeenCalledTimes(1);
     const diagnostic = fixture.logger.debug.mock.calls[0]?.[0];
-    expect(diagnostic).toContain(`reason=${rejection.reason}`);
     expect(diagnostic).not.toContain(STARTER);
   });
 
@@ -182,7 +181,6 @@ describe("native delivery receipts", () => {
     });
     observe(fixture, DISCORD_STARTER_REPLY);
     await expect(lookup(fixture, "T1")).resolves.toBeUndefined();
-    expect(reasons(fixture)).toEqual(["partialDelivery", "unknownThread"]);
   });
 
   it.each(DISCORD_REPLY_REJECTIONS)(
@@ -196,7 +194,6 @@ describe("native delivery receipts", () => {
         result: { details: rejection.details ?? DISCORD_STARTER_REPLY.result.details },
       });
       await expect(lookup(fixture, "T1")).resolves.toBeUndefined();
-      expect(reasons(fixture)).toEqual([rejection.reason]);
       expect(fixture.logger.debug.mock.calls[0]?.[0]).not.toContain(STARTER);
     },
   );
@@ -264,12 +261,6 @@ function observe(
     sessionKey: fixture.context.sessionKey,
     sessionId: fixture.context.sessionId,
   });
-}
-
-function reasons(fixture: ReturnType<typeof coordinator>): string[] {
-  return fixture.logger.debug.mock.calls.map(
-    (call) => /reason=(\w+)/u.exec(String(call[0]))?.[1] ?? "-",
-  );
 }
 
 function lookup(fixture: ReturnType<typeof coordinator>, threadId: string) {

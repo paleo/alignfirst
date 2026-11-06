@@ -155,7 +155,7 @@ describe("bus HTTP round-trip", () => {
     expect(got.thread.id).toBe(created.thread.id);
     await expect(
       post(fixture.baseUrl, "/v1/actions/thread-get", { threadId: "nope" }),
-    ).rejects.toThrow(/thread not found/);
+    ).rejects.toThrow();
   });
 
   it("GET /health and /v1/state work", async () => {

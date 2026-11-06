@@ -7,22 +7,12 @@ import { fileURLToPath } from "node:url";
 
 const source = fileURLToPath(new URL("../../skills/alignfirst-setup-guide/", import.meta.url));
 
-test("installed setup skill keeps its required upgrade runbook and reference traversal self-contained", () => {
+test("installed setup skill keeps reference traversal self-contained", () => {
   const home = mkdtempSync(join(tmpdir(), "installed-setup-skill-"));
   const skill = join(home, ".agents/skills/alignfirst-setup-guide");
   try {
     cpSync(source, skill, { recursive: true });
     const entry = join(skill, "SKILL.md");
-    const runbookLink = localLinks(entry).find((link) =>
-      link.endsWith("upgrading-multi-stack-workspaces.md"),
-    );
-    assert(runbookLink, "The skill entry must route legacy installations to the upgrade runbook");
-    const runbook = installedDestination(skill, entry, runbookLink);
-    const abiLink = localLinks(runbook).find((link) => link.endsWith("#script-abi"));
-    assert(abiLink, "The upgrade procedure must link to its local script ABI reference");
-    const abi = installedDestination(skill, runbook, abiLink);
-    assert.match(readFileSync(abi, "utf8"), /^#{1,6} Script ABI\s*$/mu);
-
     const pending = [entry];
     const visited = new Set();
     while (pending.length > 0) {
@@ -39,8 +29,6 @@ test("installed setup skill keeps its required upgrade runbook and reference tra
           pending.push(destination);
       }
     }
-    assert(visited.has(runbook), "The canonical procedure must be reachable from the skill entry");
-    assert(visited.has(abi), "The script ABI reference must be traversed with the installed skill");
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

@@ -62,10 +62,13 @@ describe("linkSharedDirectories", () => {
     const { main, linked } = makeWorktrees();
     mkdirSync(join(main, ".local"));
     symlinkSync(join("..", "main", ".local"), join(linked, ".local"));
-    const messages: string[] = [];
-    linkSharedDirectories(linkedCtx(main, linked), [".local"], (msg) => messages.push(msg));
-    expect(messages[0]).toBe("Skipped .local symlink (already exists).");
-    expect(messages.some((msg) => msg.startsWith("Created"))).toBe(false);
+    writeFileSync(join(main, ".local", "keep.txt"), "existing data");
+    const linkBefore = lstatSync(join(linked, ".local"));
+    linkSharedDirectories(linkedCtx(main, linked), [".local"], () => {});
+    expect(readFileSync(join(main, ".local", "keep.txt"), "utf8")).toBe("existing data");
+    expect(readFileSync(join(linked, ".local", "keep.txt"), "utf8")).toBe("existing data");
+    expect(readlinkSync(join(linked, ".local"))).toBe(join("..", "main", ".local"));
+    expect(lstatSync(join(linked, ".local")).ino).toBe(linkBefore.ino);
   });
 
   it("follows a valid symlink in the main worktree (team plans repo layout)", () => {
@@ -153,12 +156,9 @@ describe("linkSharedDirectories", () => {
 
     rmSync(excludePath);
     mkdirSync(excludePath);
-    const messages: string[] = [];
-    expect(() =>
-      linkSharedDirectories(linkedCtx(main, linked), [".local", ".plans"], (message) =>
-        messages.push(message),
-      ),
-    ).not.toThrow();
-    expect(messages.some((message) => message.startsWith("Skipped shared-symlink"))).toBe(true);
+    writeFileSync(join(excludePath, "keep.txt"), "existing data");
+    linkSharedDirectories(linkedCtx(main, linked), [".local", ".plans"], () => {});
+    expect(readFileSync(join(excludePath, "keep.txt"), "utf8")).toBe("existing data");
+    expect(readlinkSync(join(linked, ".local"))).toBe(join("..", "main", ".local"));
   });
 });

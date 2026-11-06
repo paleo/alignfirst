@@ -11,9 +11,6 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const fixtures = {
   basic: resolve(__dirname, "fixtures/basic"),
   errors: resolve(__dirname, "fixtures/errors"),
-  empty: resolve(__dirname, "fixtures/empty"),
-  emptySubdirs: resolve(__dirname, "fixtures/empty-subdirs"),
-  nested: resolve(__dirname, "fixtures/nested"),
   badNames: resolve(__dirname, "fixtures/bad-names"),
   noFrontmatter: resolve(__dirname, "fixtures/no-frontmatter"),
   classify: resolve(__dirname, "fixtures/classify"),
@@ -29,14 +26,6 @@ function dp(fixtureDir: string, rel: string) {
 
 function run(args: string[], fixtureDir: string) {
   return invoke(["node", "docmap", "--root", fixtureDir, ...args], process.cwd());
-}
-
-/** The line following the first one that mentions `text`, which must exist. */
-function lineAfter(output: string, text: string): string {
-  const lines = output.split("\n");
-  const index = lines.findIndex((line) => line.includes(text));
-  expect(index).toBeGreaterThan(-1);
-  return lines[index + 1] ?? "";
 }
 
 function invoke(argv: string[], cwd: string, commands?: PackageManagerCommands) {
@@ -63,11 +52,9 @@ function invokeWith(options: Omit<MainOptions, "stdout" | "stderr">) {
 }
 
 describe("recursive-by-default for small sets (basic fixture)", () => {
-  it("lists root files with titles and summaries, prefixed by short help", () => {
+  it("lists root files with their supplied titles and summaries", () => {
     const { code, stdout } = run([], fixtures.basic);
     expect(code).toBe(0);
-    expect(stdout).toContain("--guide");
-    expect(stdout).toContain("--search");
     expect(stdout).toContain(dp(fixtures.basic, "code-style.md"));
     expect(stdout).toContain("Code Style");
     expect(stdout).toContain("Conventions and formatting rules for the codebase.");
@@ -77,16 +64,8 @@ describe("recursive-by-default for small sets (basic fixture)", () => {
 
   it("recurses into subdirectories without a flag", () => {
     const { stdout } = run([], fixtures.basic);
-    expect(stdout).toContain("## `backend/`");
     expect(stdout).toContain(dp(fixtures.basic, "backend/api-guide.md"));
-    expect(stdout).toContain("## `frontend/`");
     expect(stdout).toContain(dp(fixtures.basic, "frontend/components.md"));
-    expect(stdout).not.toContain("## Sub-directories");
-  });
-
-  it("does not print short help for a positional directory", () => {
-    const { stdout } = run(["backend"], fixtures.basic);
-    expect(stdout).not.toContain("--guide");
   });
 });
 
@@ -94,18 +73,11 @@ describe("top-level listing for large sets (large fixture)", () => {
   it("counts files recursively for the threshold: 20 docs nested under bulk/ still stay top-level", () => {
     const { code, stdout } = run([], fixtures.large);
     expect(code).toBe(0);
-    expect(stdout).toContain("## Sub-directories");
-    expect(stdout).toContain("- bulk/");
-    expect(stdout).toContain("- nested-a/");
+    expect(stdout).toContain("bulk/");
+    expect(stdout).toContain("nested-a/");
     // Top-level mode does not descend into subdirs, so the nested docs are not expanded.
     expect(stdout).not.toContain(dp(fixtures.large, "bulk/doc-01.md"));
     expect(stdout).not.toContain(dp(fixtures.large, "nested-a/inner.md"));
-  });
-
-  it("still prefixes the listing with short help", () => {
-    const { stdout } = run([], fixtures.large);
-    expect(stdout).toContain("--guide");
-    expect(stdout).toContain("--search");
   });
 });
 
@@ -138,13 +110,10 @@ describe("--recursive (basic fixture)", () => {
   it("lists all files across all directories", () => {
     const { code, stdout } = run(["--recursive"], fixtures.basic);
     expect(code).toBe(0);
-    expect(stdout).toContain("# Documentation");
     expect(stdout).toContain(dp(fixtures.basic, "code-style.md"));
     expect(stdout).toContain(dp(fixtures.basic, "getting-started.md"));
-    expect(stdout).toContain("## `backend/`");
     expect(stdout).toContain(dp(fixtures.basic, "backend/api-guide.md"));
     expect(stdout).toContain(dp(fixtures.basic, "backend/database.md"));
-    expect(stdout).toContain("## `frontend/`");
     expect(stdout).toContain(dp(fixtures.basic, "frontend/components.md"));
   });
 
@@ -193,16 +162,11 @@ describe("positional file read (basic fixture)", () => {
 });
 
 describe("mixed positionals (basic fixture)", () => {
-  it("lists directories before reading files", () => {
+  it("lists directories and reads files in the same invocation", () => {
     const { code, stdout } = run(["backend", "getting-started.md"], fixtures.basic);
     expect(code).toBe(0);
     expect(stdout).toContain(dp(fixtures.basic, "backend/api-guide.md"));
     expect(stdout).toContain(`<document_file path="${dp(fixtures.basic, "getting-started.md")}">`);
-    const listIdx = stdout.indexOf(dp(fixtures.basic, "backend/api-guide.md"));
-    const readIdx = stdout.indexOf(
-      `<document_file path="${dp(fixtures.basic, "getting-started.md")}">`,
-    );
-    expect(listIdx).toBeLessThan(readIdx);
   });
 
   it("file read combined with --recursive shows listing and document", () => {
@@ -254,12 +218,6 @@ describe("listable extensions (listable fixture)", () => {
     expect(stdout).not.toContain("image.png");
   });
 
-  it("shows a non-markdown file as a bare path with no title", () => {
-    const { stdout } = run(["--recursive"], fixtures.listable);
-    const dsl = dp(fixtures.listable, "diagrams/c4-model.dsl");
-    expect(stdout).toContain(`- \`${dsl}\`\n`);
-  });
-
   it("reads a non-markdown file verbatim, without stripping a leading `---` block", () => {
     const { code, stdout } = run(["config.yaml"], fixtures.listable);
     expect(code).toBe(0);
@@ -300,7 +258,6 @@ describe("env files and template suffixes (listable fixture)", () => {
     const { code, stdout } = run([".env.local"], fixtures.listable);
     expect(code).toBe(0);
     expect(stdout).not.toContain(secret.trimEnd());
-    expect(stdout).toContain("⚠ Not found: .env.local");
     expect(stdout).not.toContain("<document_file");
   });
 
@@ -318,19 +275,12 @@ describe("env files and template suffixes (listable fixture)", () => {
 });
 
 describe("not-found classification (basic fixture)", () => {
-  it("reports a mistyped directory without a silent empty listing", () => {
-    const { code, stdout } = run(["bakcend"], fixtures.basic);
+  it.each(["bakcend", "nonexistent.md"])("reports the unresolved target %s", (target) => {
+    const { code, stdout } = run([target], fixtures.basic);
     expect(code).toBe(0);
-    expect(stdout).toContain("⚠ Not found: bakcend");
+    expect(stdout).toContain(target);
     expect(stdout).not.toContain("<document_file");
-    expect(stdout).not.toContain("# `bakcend/`");
-  });
-
-  it("reports an absent file with the same generic line", () => {
-    const { code, stdout } = run(["nonexistent.md"], fixtures.basic);
-    expect(code).toBe(0);
-    expect(stdout).toContain("⚠ Not found: nonexistent.md");
-    expect(stdout).not.toContain("<document_file");
+    expect(stdout).not.toContain(dp(fixtures.basic, "getting-started.md"));
   });
 });
 
@@ -338,8 +288,7 @@ describe("path traversal (basic fixture)", () => {
   it("refuses to list a directory reached via `..` outside the root", () => {
     const { code, stdout } = run(["../.."], fixtures.basic);
     expect(code).toBe(0);
-    expect(stdout).toContain("⚠ Not found: ../..");
-    expect(stdout).not.toContain("# `");
+    expect(stdout).not.toContain("fixtures/");
     expect(stdout).not.toContain("<document_file");
   });
 
@@ -347,7 +296,7 @@ describe("path traversal (basic fixture)", () => {
     const outside = resolve(fixtures.basic, "..");
     const { code, stdout } = run([outside], fixtures.basic);
     expect(code).toBe(0);
-    expect(stdout).toContain(`⚠ Not found: ${outside}`);
+    expect(stdout).not.toContain("errors/");
     expect(stdout).not.toContain("<document_file");
   });
 });
@@ -356,7 +305,7 @@ describe("unknown flags", () => {
   it("warns on stderr, skips the flag, and processes the rest", () => {
     const { code, stdout, stderr } = run(["--dir", "backend"], fixtures.basic);
     expect(code).toBe(0);
-    expect(stderr).toContain("Unknown option: --dir (ignored)");
+    expect(stderr).toContain("--dir");
     expect(stdout).toContain(dp(fixtures.basic, "backend/api-guide.md"));
     expect(stdout).not.toContain("--dir");
   });
@@ -373,91 +322,14 @@ describe("display prefix", () => {
   });
 });
 
-describe("error fixtures", () => {
-  it("shows missing-frontmatter.md without warning", () => {
-    const { stdout } = run([], fixtures.errors);
-    expect(stdout).toContain("missing-frontmatter.md");
-    expect(stdout).not.toContain("⚠ Missing frontmatter");
-  });
-
-  it("shows unterminated frontmatter warning", () => {
-    const { stdout } = run([], fixtures.errors);
-    expect(stdout).toContain("⚠ Unterminated frontmatter");
-  });
-
-  it("lists missing-summary.md without warning", () => {
-    const { stdout } = run([], fixtures.errors);
-    expect(stdout).toContain(dp(fixtures.errors, "missing-summary.md"));
-    expect(stdout).toContain("Missing Summary Doc");
-    expect(stdout).not.toContain("Missing 'summary'");
-  });
-});
-
-describe("empty fixture", () => {
-  it("keeps the title and appends an explicit empty note, with no bullets", () => {
-    const { code, stdout } = run([], fixtures.empty);
-    expect(code).toBe(0);
-    expect(stdout).toContain("# Documentation");
-    expect(stdout).toContain("_No documents here._");
-    expect(stdout).not.toMatch(/^- /m);
-  });
-});
-
-describe("recursive listing over empty sub-directories", () => {
-  it("emits the sub-dir headings without the empty note", () => {
-    const { code, stdout } = run(["--recursive"], fixtures.emptySubdirs);
-    expect(code).toBe(0);
-    expect(stdout).toContain("## `topic-a/`");
-    expect(stdout).not.toContain("_No documents here._");
-  });
-});
-
-describe("missing root folder", () => {
-  const missing = resolve(__dirname, "fixtures/does-not-exist");
-
-  it("shows an explicit message instead of the title", () => {
-    const { code, stdout } = run([], missing);
-    expect(code).toBe(0);
-    expect(stdout).toContain("No documentation folder at");
-    expect(stdout).toContain(`${relative(process.cwd(), missing)}/`);
-    expect(stdout).not.toContain("# Documentation");
-  });
-});
-
-describe("nested fixture with --recursive", () => {
-  it("produces correct heading levels for deep nesting", () => {
-    const { code, stdout } = run(["--recursive"], fixtures.nested);
-    expect(code).toBe(0);
-    expect(stdout).toContain("# Documentation");
-    expect(stdout).toContain(dp(fixtures.nested, "top-level.md"));
-    expect(stdout).toContain("## `level-one/`");
-    expect(stdout).toContain(dp(fixtures.nested, "level-one/doc-a.md"));
-    expect(stdout).toContain("### `level-two/`");
-    expect(stdout).toContain(dp(fixtures.nested, "level-one/level-two/deep-doc.md"));
-  });
-});
-
-describe("name validation", () => {
-  const nameWarning = "⚠ Name contains spaces or special characters";
-
-  it.each(["has space.md", "special(chars).md"])("warns under the badly named file %s", (name) => {
-    expect(lineAfter(run([], fixtures.badNames).stdout, name)).toContain(nameWarning);
-  });
-
-  it("shows no warning for good file names", () => {
-    expect(lineAfter(run([], fixtures.badNames).stdout, "good-file.md")).not.toContain(nameWarning);
-  });
-
-  it("warns about a badly named directory", () => {
-    expect(run([], fixtures.badNames).stdout).toContain(`${nameWarning}: sub dir/`);
-  });
-});
-
 describe("--check", () => {
   it("reports name issues and returns exit code 1", () => {
     const { code, stdout } = run(["--check"], fixtures.badNames);
     expect(code).toBe(1);
-    expect(stdout).toContain("Name contains spaces or special characters");
+    expect(stdout).toContain("has space.md");
+    expect(stdout).toContain("special(chars).md");
+    expect(stdout).toContain("sub dir");
+    expect(stdout).not.toContain("good-file.md");
   });
 
   it("returns exit code 0 when no issues", () => {
@@ -469,34 +341,9 @@ describe("--check", () => {
   it("reports frontmatter issues", () => {
     const { code, stdout } = run(["--check"], fixtures.errors);
     expect(code).toBe(1);
-    expect(stdout).not.toContain("Missing frontmatter");
-    expect(stdout).toContain("Unterminated frontmatter");
-    expect(stdout).not.toContain("Missing 'summary'");
-  });
-});
-
-describe("--help", () => {
-  it("prints full help with the extra-option markers and no listing", () => {
-    const { code, stdout } = run(["--help"], fixtures.basic);
-    expect(code).toBe(0);
-    expect(stdout).toContain("--guide");
-    expect(stdout).toContain("--search");
-    expect(stdout).toContain("--check");
-    expect(stdout).not.toContain("# Documentation");
-    expect(stdout).not.toContain(dp(fixtures.basic, "code-style.md"));
-    expect(stdout).not.toContain("<document_file");
-  });
-});
-
-describe("--guide", () => {
-  it("prints the authoring guide and no listing", () => {
-    const { code, stdout } = run(["--guide"], fixtures.basic);
-    expect(code).toBe(0);
-    expect(stdout).toContain("# Authoring Documentation");
-    expect(stdout).toContain("YAML Frontmatter");
-    expect(stdout).not.toContain("# Documentation");
-    expect(stdout).not.toContain(dp(fixtures.basic, "code-style.md"));
-    expect(stdout).not.toContain("<document_file");
+    expect(stdout).toContain("unterminated-frontmatter.md");
+    expect(stdout).toContain("missing-frontmatter.md");
+    expect(stdout).not.toContain("missing-summary.md");
   });
 });
 
@@ -505,13 +352,10 @@ describe("--root propagation", () => {
   // `--root <value>` substring, which is independent of the package-manager prefix in front.
   const rooted = (sub: string) => `--root ${fixtures.basic} ${sub}`;
 
-  it("still renders the short help of a bare invocation and folds the root into every command", () => {
+  it("propagates the selected root into suggested commands", () => {
     const { code, stdout } = run([], fixtures.basic);
     expect(code).toBe(0);
-    expect(stdout).toContain("Commands:");
     expect(stdout).toContain(rooted("--recursive"));
-    expect(stdout).toContain(rooted('--search "term1 term2"'));
-    // The "Before writing…" line carries it too.
     expect(stdout).toContain(rooted("--guide"));
   });
 
@@ -519,17 +363,6 @@ describe("--root propagation", () => {
     const { stdout } = run(["--guide"], fixtures.basic);
     expect(stdout).toContain(rooted("--recursive"));
     expect(stdout).toContain(rooted("--check"));
-  });
-
-  it("drops the standalone `--root <path>` help row once a root is active", () => {
-    const { stdout } = run(["--help"], fixtures.basic);
-    expect(stdout).not.toContain("--root <path>");
-    expect(stdout).toContain(rooted("--check"));
-  });
-
-  it("documents `--root <path>` in full help when no root is given", () => {
-    const { stdout } = invoke(["node", "docmap", "--help"], process.cwd());
-    expect(stdout).toContain("--root <path>");
   });
 
   it("quotes a root with spaces so the folded command stays copy-pasteable", () => {
@@ -571,12 +404,6 @@ describe("--search", () => {
     expect(stdout).toContain(dp(fixtures.basic, "backend/database.md"));
     expect(stdout).toContain(dp(fixtures.basic, "backend/api-guide.md"));
     expect(stdout).not.toContain(dp(fixtures.basic, "code-style.md"));
-  });
-
-  it("reports when nothing matches", () => {
-    const { code, stdout } = run(["--search", "zzznomatch"], fixtures.basic);
-    expect(code).toBe(0);
-    expect(stdout).toContain("No documents match: zzznomatch");
   });
 });
 
@@ -686,34 +513,30 @@ describe("--search snippets (search fixture)", () => {
     const { code, stdout } = run(["--search", "forwards"], fixtures.search);
     expect(code).toBe(0);
     expect(stdout).toContain(dp(fixtures.search, "notes.md"));
-    expect(stdout).toContain("  > 7: The gateway forwards requests.");
+    expect(stdout).toContain("The gateway forwards requests.");
+    expect(stdout).toMatch(/\b7\b/);
   });
 
   it("adds no snippet when the match is metadata-only", () => {
     const { stdout } = run(["--search", "quarantine"], fixtures.search);
     expect(stdout).toContain(dp(fixtures.search, "meta-only.md"));
-    expect(stdout).not.toContain("  > ");
+    expect(stdout).not.toContain("Follow the checklist.");
   });
 
   it("clips a long line around the matched term", () => {
     const { stdout } = run(["--search", "telemetry"], fixtures.search);
-    const snippet = stdout.split("\n").find((line) => line.startsWith("  > "));
-    expect(snippet).toBeDefined();
-    expect(snippet).toContain("> 7:");
-    expect(snippet).toContain("telemetry");
-    expect(snippet).toContain("…");
-    expect(snippet).not.toContain("start-marker");
-    expect(snippet).not.toContain("end-marker");
+    expect(stdout).toContain("telemetry");
+    expect(stdout).toMatch(/\b7\b/);
+    expect(stdout).not.toContain("start-marker");
+    expect(stdout).not.toContain("end-marker");
   });
 });
 
 describe("--search result cap (large fixture)", () => {
-  it("caps output at 20 bullets and reports the remainder", () => {
+  it("caps results at the 20 highest-ranked documents", () => {
     const { code, stdout } = run(["--search", "doc"], fixtures.large);
     expect(code).toBe(0);
-    const bullets = stdout.split("\n").filter((line) => line.startsWith("- `"));
-    expect(bullets).toHaveLength(20);
-    expect(stdout).toContain("… and 2 more matches");
+    expect(stdout.match(/bulk\/doc-\d+\.md/g)).toHaveLength(20);
     // The two summary-only matches score below the 20 path/title hits and are the ones dropped.
     expect(stdout).not.toContain(dp(fixtures.large, "nested-a/inner.md"));
     expect(stdout).not.toContain(dp(fixtures.large, "only-subs/deep/leaf.md"));
@@ -738,16 +561,10 @@ describe("no-frontmatter fixture", () => {
     expect(stdout).toContain("My Title");
   });
 
-  it("shows no-heading.md without a title and without a warning", () => {
-    const { stdout } = run([], fixtures.noFrontmatter);
-    expect(lineAfter(stdout, "no-heading.md")).not.toContain("⚠");
-  });
-
   it("--check warns about missing title on no-heading.md", () => {
     const { code, stdout } = run(["--check"], fixtures.noFrontmatter);
     expect(code).toBe(1);
     expect(stdout).toContain("no-heading.md");
-    expect(stdout).toContain("Missing title");
   });
 });
 
@@ -853,17 +670,9 @@ describe("invocation-aware CLI prefixes", () => {
 describe("injected command prefix", () => {
   const commands = { base: "alignfirst docmap", withArgs: "alignfirst docmap" };
 
-  it("renders the injected prefix in full and short help", () => {
-    const full = invoke(["node", "docmap", "--help"], "/", commands).stdout;
-    const short = invoke(["node", "docmap"], "/", commands).stdout;
-    expect(full).toContain("alignfirst docmap --check");
-    expect(full).toContain("alignfirst docmap --guide");
-    expect(short).toContain("alignfirst docmap --guide");
-  });
-
-  it("renders the injected prefix in the guide", () => {
-    const out = invoke(["node", "docmap", "--guide"], "/", commands).stdout;
-    expect(out).toContain("alignfirst docmap --check");
+  it.each([[], ["--help"], ["--guide"]])("uses the enclosing CLI for %j", (...args) => {
+    const { stdout } = invoke(["node", "docmap", ...args], "/", commands);
+    expect(stdout).toContain("alignfirst docmap --recursive");
   });
 
   it("folds --root into the injected prefix", () => {

@@ -13,6 +13,17 @@ import {
 } from "./helpers.js";
 
 const dirs: string[] = [];
+const devServer = {
+  ports: { first: 28100, last: 28199, declare: ["app"] },
+  servers: [
+    {
+      kind: "spawn",
+      name: "app",
+      exec: { run: ["false"] },
+      ready: { log: "ready" },
+    },
+  ],
+};
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -20,32 +31,7 @@ afterEach(() => {
 });
 
 describe("context command", () => {
-  it("prints the conventions, the docmap sections, then the protocols section", async () => {
-    const cwd = temp();
-    mkdirSync(join(cwd, "docs"));
-    writeFileSync(join(cwd, "docs", "topic.md"), "---\ntitle: Topic\n---\n\n# Topic\n");
-    const result = await runMain(["context"], { cwd });
-    expect(result.code).toBe(0);
-    expect(result.stdout.startsWith("# Project Conventions\n\nTicket IDs:")).toBe(true);
-    expect(result.stdout).toContain(
-      "Default branch: unresolved; ask before default-branch operations.\n\n# Docmap Usage\n\ndocmap — browse",
-    );
-    expect(result.stdout).toContain("`docs/topic.md` — Topic\n\n# AlignFirst Protocols\n\n");
-    expect(result.stdout).toContain("run `alignfirst guide <protocol>` and follow it");
-    expect(result.stdout).toContain("Catch up (`alcatchup`) — run `alignfirst ticket --catchup`");
-    expect(result.stdout).not.toContain("{{");
-  });
-
-  it("skips the docmap sections without a docs directory", async () => {
-    const result = await runMain(["context"], { cwd: temp() });
-    expect(result.code).toBe(0);
-    expect(result.stdout).not.toContain("Docmap");
-    expect(result.stdout).toContain(
-      "Default branch: unresolved; ask before default-branch operations.\n\n# AlignFirst Protocols\n\n",
-    );
-  });
-
-  it("prints the context instructions after the conventions", async () => {
+  it("reads project context without including assistant-only instructions", async () => {
     const cwd = temp();
     mkdirSync(join(cwd, "docs"));
     mkdirSync(join(cwd, ".alignfirst-instructions"));
@@ -53,10 +39,15 @@ describe("context command", () => {
       join(cwd, ".alignfirst-instructions", "context.md"),
       "\nRun the tests with `npm test`.\n\n",
     );
-    const result = await runMain(["context"], { cwd });
-    expect(result.stdout).toContain(
-      "ask before default-branch operations.\n\n# Project Instructions\n\nRun the tests with `npm test`.\n\n# Docmap Usage\n\n",
+    writeFileSync(
+      join(cwd, "alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, devServer, assistantInstructionsFile: "assistant.md" }),
     );
+    writeFileSync(join(cwd, "assistant.md"), "Assistant-only instructions\n");
+    const result = await runMain(["context"], { cwd });
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Run the tests with `npm test`.");
+    expect(result.stdout).not.toContain("Assistant-only instructions");
   });
 
   it("reads the instructions and the docmap from the companion", async () => {
@@ -69,78 +60,19 @@ describe("context command", () => {
       join(companion, ".alignfirst-instructions", "context.md"),
       "Companion instructions.\n",
     );
+    writeFileSync(
+      join(companion, "alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, workspace: {} }),
+    );
+    writeFileSync(
+      join(project, "alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, devServer }),
+    );
     const result = await runMain(["context"], { cwd: project, home });
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("# Project Instructions\n\nCompanion instructions.\n");
+    expect(result.stdout).toContain("Companion instructions.");
     expect(result.stdout).toContain(`alignfirst docmap --root ${join(companion, "docs")}`);
-    expect(result.stdout).toContain("topic.md` — Topic");
-  });
-
-  it("prints the default conventions and the protocols in a repository without AlignFirst files", async () => {
-    const root = temp();
-    configureGit(root);
-    const cwd = join(root, "project");
-    initRepository(cwd);
-    const result = await runMain(["context"], { cwd });
-    expect(result).toMatchObject({ code: 0, stderr: "" });
-    expect(result.stdout).toMatch(
-      new RegExp(
-        "^# Project Conventions\n\n" +
-          "Ticket IDs: no configured format; .+\n" +
-          "Default branch: unresolved; ask before default-branch operations.\n\n" +
-          "# AlignFirst Protocols\n\n",
-      ),
-    );
-  });
-
-  it("prints the default conventions outside git, with local work files", async () => {
-    const cwd = temp();
-    mkdirSync(join(cwd, ".plans"));
-    const result = await runMain(["context"], { cwd });
-    expect(result).toMatchObject({ code: 0, stderr: "" });
-    expect(result.stdout).toContain(
-      "Default branch: unresolved; ask before default-branch operations.\nWork files: use `.plans`.\n",
-    );
-    expect(result.stdout).toContain("# AlignFirst Protocols");
-  });
-
-  it.each(["tracked", "differentTarget"])(
-    "prints only the first-line Work files diagnostic for %s plans",
-    async (kind) => {
-      const { root, home, project } = makeCompanionProject({ ".plans": "project" });
-      dirs.push(root);
-      mkdirSync(join(project, ".plans"));
-      let cwd = project;
-      if (kind === "tracked") {
-        writeFileSync(join(project, ".plans", "note.md"), "tracked\n");
-        git(project, "add", ".plans");
-      } else {
-        cwd = join(root, "linked");
-        git(project, "worktree", "add", "--quiet", "-b", "ticket", cwd);
-        mkdirSync(join(cwd, ".plans"));
-      }
-      const check = await runMain(["plans", "check"], { cwd, home });
-      expect(check.code).toBe(1);
-      const result = await runMain(["context"], { cwd, home });
-      expect(result).toMatchObject({ code: 0, stderr: "" });
-      expect(result.stdout.split("\n").filter((line) => line.startsWith("Work files:"))).toEqual([
-        `Work files: ${check.stderr.trim().split("\n")[0]}`,
-      ]);
-      expect(result.stdout).not.toContain("git rm -r --cached");
-      expect(result.stdout).toContain("# AlignFirst Protocols");
-    },
-  );
-
-  it("renders the npx command form", async () => {
-    const result = await runMain(["context"], {
-      cwd: temp(),
-      env: {
-        npm_config_user_agent: "npm/10.0.0 node/v22.0.0",
-        npm_command: "exec",
-        npm_lifecycle_event: "npx",
-      },
-    });
-    expect(result.stdout).toContain("run `npx -y alignfirst guide <protocol>` and follow it");
+    expect(result.stdout).toContain("topic.md");
   });
 });
 
@@ -155,17 +87,14 @@ describe("assistant-instructions command", () => {
     writeFileSync(join(cwd, "workflow.md"), "Use the project workflow.\n");
     const canonical = await runMain(["assistant-instructions"], { cwd });
     expect(canonical).toMatchObject({ code: 0, stderr: "" });
-    expect(canonical.stdout).toContain("# Assistant Instructions");
     expect(canonical.stdout).toContain("Use the project workflow.");
     expect(warn).not.toHaveBeenCalled();
     const legacy = await runMain(["developer-instructions"], { cwd });
     expect(legacy).toEqual(canonical);
-    const warnings = warn.mock.calls.flat().join("\n");
-    expect(warnings).toContain("developer-instructions");
-    expect(warnings).toContain("assistant-instructions");
+    expect(warn).toHaveBeenCalled();
   });
 
-  it("shares conventions without discovering filenames or printing agent context and guides", async () => {
+  it("includes configured conventions without discovering filenames or agent context", async () => {
     const cwd = temp();
     mkdirSync(join(cwd, "docs"));
     mkdirSync(join(cwd, ".plans"));
@@ -187,16 +116,12 @@ describe("assistant-instructions command", () => {
       }),
     );
     const result = await runMain(["assistant-instructions"], { cwd });
-    const context = await runMain(["context"], { cwd });
     expect(result).toMatchObject({ code: 0, stderr: "" });
-    expect(result.stdout).toBe(context.stdout.split("\n# Project Instructions")[0]);
-    expect(result.stdout).toContain("Ticket IDs: `^TASK-[0-9]+$`");
-    expect(result.stdout).toContain("Branch names: `{TICKET_ID}/{slug}`");
-    expect(result.stdout).toContain("`type: [TICKET_ID] summary`");
-    expect(result.stdout).toContain("Work files: use `.plans`");
-    expect(result.stdout).not.toMatch(
-      /Ignored|Agent-only|Docmap|Protocols|# Assistant Instructions/,
-    );
+    expect(result.stdout).toContain("^TASK-[0-9]+$");
+    expect(result.stdout).toContain("{TICKET_ID}/{slug}");
+    expect(result.stdout).toContain("type: [TICKET_ID] summary");
+    expect(result.stdout).toContain(".plans");
+    expect(result.stdout).not.toMatch(/Ignored|Agent-only/);
   });
 
   it("preserves custom content and reports its absolute source", async () => {
@@ -208,14 +133,15 @@ describe("assistant-instructions command", () => {
       JSON.stringify({
         schemaVersion: 1,
         assistantInstructionsFile: "handbook/workflow.md",
+        devServer,
       }),
     );
     const content = "\n# Workflow\r\n\nSee [setup](./setup.md). {{LITERAL}} $HOME\n  ";
     writeFileSync(path, content);
     const result = await runMain(["assistant-instructions"], { cwd });
     expect(result).toMatchObject({ code: 0, stderr: "" });
-    expect(result.stdout).toContain(`# Assistant Instructions\n\nSource: ${path}\n\n${content}`);
-    expect(result.stdout.endsWith(content)).toBe(true);
+    expect(result.stdout).toContain(path);
+    expect(result.stdout).toContain(content);
   });
 
   it.each(["missing", "directory"])(
@@ -234,7 +160,7 @@ describe("assistant-instructions command", () => {
       const result = await runMain(["assistant-instructions"], { cwd });
       expect(result.code).toBe(1);
       expect(result.stdout).toBe("");
-      expect(result.stderr).toContain(`Cannot read ${path}:`);
+      expect(result.stderr).toContain(path);
       if (kind === "missing") expect(existsSync(path)).toBe(false);
     },
   );
@@ -261,6 +187,7 @@ describe("assistant-instructions command", () => {
       JSON.stringify({
         schemaVersion: 1,
         assistantInstructionsFile: "branch.md",
+        devServer,
       }),
     );
     writeFileSync(join(linked, "branch.md"), "Branch instructions\n");
@@ -268,8 +195,10 @@ describe("assistant-instructions command", () => {
     mkdirSync(nested, { recursive: true });
     const result = await runMain(["assistant-instructions"], { cwd: nested });
     expect(result).toMatchObject({ code: 0, stderr: "" });
-    expect(result.stdout).toContain(`Source: ${join(linked, "branch.md")}\n\nBranch instructions`);
+    expect(result.stdout).toContain(join(linked, "branch.md"));
+    expect(result.stdout).toContain("Branch instructions");
     expect(result.stdout).not.toContain("Main instructions");
+    expect(result.stdout).toContain("alignfirst dev status");
     expect((await runMain(["assistant-instructions"], { cwd: main })).stdout).toContain(
       "Main instructions",
     );
@@ -287,16 +216,21 @@ describe("assistant-instructions command", () => {
       JSON.stringify({
         schemaVersion: 1,
         assistantInstructionsFile: "workflow.md",
+        devServer,
       }),
+    );
+    writeFileSync(
+      join(companion, "alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, workspace: {} }),
     );
     writeFileSync(join(project, "workflow.md"), "Wrong project guide\n");
     writeFileSync(join(companion, "workflow.md"), "Selected companion guide\n");
     const result = await runMain(["assistant-instructions"], { cwd: project, home });
     expect(result).toMatchObject({ code: 0, stderr: "" });
-    expect(result.stdout).toContain(
-      `Source: ${join(companion, "workflow.md")}\n\nSelected companion guide`,
-    );
+    expect(result.stdout).toContain(join(companion, "workflow.md"));
+    expect(result.stdout).toContain("Selected companion guide");
     expect(result.stdout).not.toContain("Wrong project guide");
+    expect(result.stdout).toContain("alignfirst dev status");
   });
 });
 

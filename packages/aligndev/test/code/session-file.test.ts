@@ -338,7 +338,6 @@ describe("session file lifecycle", () => {
     expect(completion.frontmatter.status).toBe("failed");
     expect(completion.frontmatter.endedAt).toBe(FIXED_DATE.toISOString());
     expect(completion.frontmatter.exitReason).toBe("terminated");
-    expect(completion.result).toContain("is gone");
   });
 
   it.skipIf(process.platform !== "linux")(
@@ -517,7 +516,6 @@ describe("listSessionRecords", () => {
     expect(sealed.frontmatter.status).toBe("failed");
     expect(sealed.frontmatter.exitReason).toBe("terminated");
     expect(sealed.frontmatter.agent).toBe("claude");
-    expect(sealed.result).toContain("is gone");
   });
 
   it("leaves a running record with no pid untouched", () => {

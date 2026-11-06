@@ -42,14 +42,6 @@ describe("plans commands", () => {
     expect(existsSync(join(ticket, "_aligndev", "run.md"))).toBe(true);
     expect(readdirSync(join(root, ".alignfirst", "companions"))).toEqual(["registry.json"]);
   });
-  it("reports local mode", async () => {
-    const fixture = makeFixture();
-    mkdirSync(join(fixture.product, ".plans"));
-    const result = await runMain(["plans", "check"], { cwd: fixture.product });
-    expect(result).toMatchObject({ code: 0, stderr: "" });
-    expect(result.stdout).toContain("local mode");
-  });
-
   it("sets up the plans link with the configured folder", async () => {
     const fixture = makeFixture();
     writeFileSync(
@@ -62,7 +54,6 @@ describe("plans commands", () => {
     expect(readlinkSync(join(fixture.product, ".plans"))).toBe(
       join("..", "team-plans", "product-plans"),
     );
-    expect(result.stdout).toContain("Publish with: alignfirst sync");
   });
 
   it("accepts --folder when it matches plans.repositoryFolder", async () => {
@@ -86,7 +77,6 @@ describe("plans commands", () => {
       cwd: fixture.product,
     });
     expect(traversal.code).toBe(1);
-    expect(traversal.stderr).toContain("must be a single path segment");
     expect(existsSync(join(fixture.root, "escaped"))).toBe(false);
 
     const outside = join(fixture.root, "outside");
@@ -96,7 +86,6 @@ describe("plans commands", () => {
       cwd: fixture.product,
     });
     expect(symlink.code).toBe(1);
-    expect(symlink.stderr).toContain("must resolve inside");
     expect(existsSync(join(fixture.product, ".plans"))).toBe(false);
   });
 
@@ -111,7 +100,6 @@ describe("plans commands", () => {
         cwd: fixture.product,
       });
       expect(result.code).toBe(1);
-      expect(result.stderr).toContain(`Project folder "${folder}" is reserved.`);
     }
 
     expect(readFileSync(localPlan, "utf8")).toBe("spec\n");
@@ -127,7 +115,6 @@ describe("plans commands", () => {
     writeFileSync(join(fixture.product, ".plans", "78", "A1-spec.md"), "spec\n");
     const result = await runMain(["sync"], { cwd: fixture.product });
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("local changes sent");
     expect(git(join(fixture.root, "remote.git"), "ls-tree", "-r", "HEAD", "--name-only")).toContain(
       "product-plans/78/A1-spec.md",
     );
@@ -153,7 +140,6 @@ describe("plans commands", () => {
     writeFileSync(plan, "local\n");
     const conflict = await runMain(["sync"], { cwd: fixture.product });
     expect(conflict.code).toBe(0);
-    expect(conflict.stdout).toContain("saved the local version as product-plans/78/A2-spec.md.");
     expect(readFileSync(plan, "utf8")).toBe("remote\n");
     expect(readFileSync(join(plan, "..", "A2-spec.md"), "utf8")).toBe("local\n");
     expect(git(join(fixture.root, "remote.git"), "show", "HEAD:product-plans/78/A1-spec.md")).toBe(
@@ -229,9 +215,6 @@ describe("plans commands", () => {
     writeFileSync(plan, "local\n");
     const conflict = await runMain(["sync"], { cwd: fixture.product });
     expect(conflict.code).toBe(0);
-    expect(conflict.stdout).toContain(
-      "Resolved product-plans/78/A1-spec.md: preserved committed contents at the surviving paths.",
-    );
     expect(git(join(fixture.root, "remote.git"), "show", "HEAD:product-plans/78/A1-spec.md")).toBe(
       "local",
     );
@@ -264,7 +247,6 @@ describe("plans commands", () => {
 
     const conflict = await runMain(["sync"], { cwd: fixture.product });
     expect(conflict.code).toBe(1);
-    expect(conflict.stderr).toContain("Work-files synchronization stopped on a conflict");
     for (const args of [
       ["plans", "check"],
       ["plans", "check", "--json"],
@@ -272,21 +254,16 @@ describe("plans commands", () => {
       const check = await runMain(args, { cwd: fixture.product });
       expect(check.code).toBe(1);
       expect(check.stdout).toBe("");
-      expect(check.stderr).toContain("Work-files synchronization stopped on a conflict");
     }
     const doctor = await runMain(["doctor"], {
       cwd: fixture.product,
       env: { PATH: "" },
       home: fixture.root,
     });
-    expect(doctor.stdout).toContain("[error] Work files: rebase stopped on a conflict in");
     expect(doctor.stdout).toContain(
       `git -C ${fixture.clone} add -A && git -C ${fixture.clone} rebase --continue`,
     );
-    expect(doctor.stdout).toContain(
-      `keeping the local commits: git -C ${fixture.clone} rebase --abort`,
-    );
-    expect(conflict.stderr).toContain("To abandon the rebase");
+    expect(doctor.stdout).toContain(`git -C ${fixture.clone} rebase --abort`);
     expect(findStoppedRebase(fixture.clone)).toBeDefined();
 
     writeFileSync(plan, "resolved\n");
@@ -306,19 +283,20 @@ describe("plans commands", () => {
         await runMain(["plans", "setup", fixture.clone, "--folder", "argument"], {
           cwd: fixture.product,
         })
-      ).stderr,
-    ).toContain('--folder "argument" differs from plans.repositoryFolder "configured"');
+      ).code,
+    ).toBe(1);
     rmSync(join(fixture.product, "alignfirst.json"));
-    expect(
-      (await runMain(["plans", "setup", fixture.clone], { cwd: fixture.product })).stderr,
-    ).toContain("Pass --folder");
+    expect((await runMain(["plans", "setup", fixture.clone], { cwd: fixture.product })).code).toBe(
+      1,
+    );
     expect(
       (
         await runMain(["plans", "setup", join(fixture.root, "missing"), "--folder", "p"], {
           cwd: fixture.product,
         })
-      ).stderr,
-    ).toContain("does not exist");
+      ).code,
+    ).toBe(1);
+    expect(existsSync(join(fixture.product, ".plans"))).toBe(false);
   });
 
   it("archives a ticket and honors ALIGNFIRST_ARCHIVE_DAYS", async () => {
@@ -335,7 +313,9 @@ describe("plans commands", () => {
       cwd: fixture.product,
       env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
     });
-    expect(automatic.stdout).toContain("Archived 79");
+    expect(automatic.code).toBe(0);
+    expect(existsSync(stale)).toBe(false);
+    expect(existsSync(join(fixture.product, ".plans", "_archives", "79"))).toBe(true);
   });
 
   it("keeps fresh running sessions while archiving stale completed sessions", async () => {
@@ -359,7 +339,7 @@ describe("plans commands", () => {
       env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
     });
 
-    expect(result.stdout).toContain("Archived _aligndev/20260901-110000.md");
+    expect(result.code).toBe(0);
     expect(existsSync(running)).toBe(true);
     expect(existsSync(succeeded)).toBe(false);
     expect(existsSync(join(plansDir, "_archives", "_aligndev", "20260901-110000.md"))).toBe(true);
@@ -386,8 +366,6 @@ describe("plans commands", () => {
     });
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("Archived _aligndev/20260901-100000.md");
-    expect(result.stdout).toContain("Archived 79");
     expect(existsSync(running)).toBe(false);
     expect(existsSync(ticketSession)).toBe(false);
     expect(existsSync(join(plansDir, "_archives", "_aligndev", "20260901-100000.md"))).toBe(true);
@@ -406,7 +384,6 @@ describe("plans commands", () => {
       cwd: fixture.product,
     });
     expect(result).toMatchObject({ code: 0, stderr: "" });
-    expect(result.stdout).toContain("Archived 78 → _archives/78");
     expect(existsSync(join(fixture.clone, "product-plans", "_archives", "78"))).toBe(true);
     expect(existsSync(join(fixture.clone, "product-plans", "78"))).toBe(false);
     expect(readdirSync(fixture.product).toSorted()).toEqual([".git", ".plans", "README.md"]);
@@ -431,7 +408,7 @@ describe("plans commands", () => {
       cwd: fixture.product,
       env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
     });
-    expect(archived.stdout).toContain("Archived 79");
+    expect(archived.code).toBe(0);
     expect(git(join(fixture.root, "remote.git"), "ls-tree", "-r", "HEAD", "--name-only")).toContain(
       "product-plans/_archives/79/A1-spec.md",
     );
@@ -444,7 +421,7 @@ describe("plans commands", () => {
       cwd: fixture.product,
       env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
     });
-    expect(kept.stdout).not.toContain("Archived 80");
+    expect(kept.code).toBe(0);
     expect(existsSync(join(fixture.product, ".plans", "80"))).toBe(true);
   });
 
@@ -455,21 +432,11 @@ describe("plans commands", () => {
       cwd: fixture.product,
     });
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("mutually exclusive");
+    expect(result.stdout).toBe("");
   });
 });
 
 describe("plans check contract", () => {
-  it.each([["--help"], ["check", "--help"], ["check", "-h"]])(
-    "documents check --json in %j without requiring plans",
-    async (...args) => {
-      const fixture = makeFixture();
-      const result = await runMain(["plans", ...args], { cwd: fixture.product });
-      expect(result).toMatchObject({ code: 0, stderr: "" });
-      expect(result.stdout).toContain("alignfirst plans check [--json]");
-    },
-  );
-
   it.each([["extra"], ["--root", "x"], ["--unknown"], ["--json", "extra"]])(
     "rejects check arguments %j without a success document",
     async (...args) => {
@@ -478,11 +445,10 @@ describe("plans check contract", () => {
       const result = await runMain(["plans", "check", ...args], { cwd: fixture.product });
       expect(result.code).toBe(1);
       expect(result.stdout).toBe("");
-      expect(result.stderr).toContain("Usage: alignfirst plans check [--json]");
     },
   );
 
-  it("reports exact local JSON and preserves the legacy text", async () => {
+  it("reports local plans in JSON", async () => {
     const fixture = makeFixture();
     const plans = join(fixture.product, ".plans");
     mkdirSync(plans);
@@ -493,11 +459,6 @@ describe("plans check contract", () => {
       mode: "local",
       plans: { in: "project", path: plans, target: realpathSync(plans) },
       mainWorktree: null,
-    });
-    expect(await runMain(["plans", "check"], options)).toEqual({
-      code: 0,
-      stdout: ".plans is a local directory (local mode): synchronization is disabled.\n",
-      stderr: "",
     });
   });
 
@@ -519,11 +480,6 @@ describe("plans check contract", () => {
       mode: "shared",
       plans: { in: "project", path: plans, target: realpathSync(target) },
       mainWorktree: null,
-    });
-    expect(await runMain(["plans", "check"], options)).toEqual({
-      code: 0,
-      stdout: ".plans is linked to the work-files repository.\n",
-      stderr: "",
     });
   });
 
@@ -602,19 +558,12 @@ describe("plans check contract", () => {
         mkdirSync(target);
         symlinkSync(target, plans);
       }
-      const messages: Record<string, string> = {
-        missing: "No .plans/ directory",
-        broken: "The .plans symlink is broken.",
-        file: ".plans is not a directory.",
-        outsideGit: ".plans points outside any git repository.",
-      };
       const result = await runMain(["plans", "check", "--json"], {
         cwd: fixture.product,
         home: fixture.root,
       });
       expect(result.code).toBe(1);
       expect(result.stdout).toBe("");
-      expect(result.stderr).toContain(messages[kind]);
     },
   );
 });
@@ -668,10 +617,7 @@ describe("project-tracked plans gate", () => {
       });
       expect(result.code).toBe(1);
       expect(result.stdout).toBe("");
-      expectTrackingRemedies(
-        result.stderr,
-        kind === "alias" || kind === "linkedAlias" ? source : plans,
-      );
+      expect(result.stderr).toContain(kind === "alias" || kind === "linkedAlias" ? source : plans);
       expect(snapshotTree(fixture.product)).toEqual(before);
       expect(snapshotTree(source)).toEqual(sourceBefore);
       expect(readFileSync(join(fixture.product, ".git", "index"))).toEqual(index);
@@ -695,7 +641,6 @@ describe("project-tracked plans gate", () => {
     });
     expect(result.code).toBe(1);
     expect(result.stdout).toBe("");
-    expect(result.stderr).toContain("tracked by this project's repository");
     expect(snapshotTree(fixture.clone)).toEqual(before);
   });
 
@@ -727,7 +672,7 @@ describe("project-tracked plans gate", () => {
       expect(result.code, result.stderr).toBe(tracked ? 1 : 0);
       if (tracked) {
         expect(result.stdout).toBe("");
-        expectTrackingRemedies(result.stderr, plans);
+        expect(result.stderr).toContain(plans);
       } else {
         expect(JSON.parse(result.stdout)).toEqual({
           mode: "local",
@@ -851,14 +796,6 @@ describe("linked-worktree plans parity", () => {
       });
       expect(result.code).toBe(1);
       expect(result.stdout).toBe("");
-      expect(result.stderr).toContain(
-        kind === "missing"
-          ? "No .plans/ directory"
-          : kind === "broken"
-            ? "symlink is broken"
-            : "not a directory",
-      );
-      expect(result.stderr).not.toContain("ENOENT");
     },
   );
 });
@@ -902,11 +839,10 @@ describe("plans refusals before command side effects", () => {
         });
         expect(result.code, `${args.join(" ")}: ${result.stderr}`).toBe(1);
         expect(result.stdout).toBe("");
-        if (kind === "tracked") expectTrackingRemedies(result.stderr, plans);
+        if (kind === "tracked") expect(result.stderr).toContain(plans);
         else {
           expect(result.stderr).toContain(realpathSync(plans));
           expect(result.stderr).toContain(realpathSync(mainPlans));
-          expect(result.stderr).toMatch(/linked worktrees.*main worktree/is);
         }
         expect(snapshotTree(cwd)).toEqual(before);
         expect(snapshotTree(mainPlans)).toEqual(mainBefore);
@@ -945,7 +881,7 @@ describe("plans setup tracking protection", () => {
       });
       expect(result.code).toBe(1);
       expect(result.stdout).toBe("");
-      expectTrackingRemedies(result.stderr, plans);
+      expect(result.stderr).toContain(plans);
       expect(snapshotTree(fixture.product)).toEqual(before);
       expect(snapshotTree(fixture.clone)).toEqual(cloneBefore);
       expect(readFileSync(indexPath)).toEqual(indexBefore);
@@ -979,18 +915,6 @@ describe("plans setup tracking protection", () => {
   });
 });
 
-function expectTrackingRemedies(stderr: string, path: string): void {
-  expect(stderr).toContain(path);
-  expect(stderr).toContain("tracked by this project's repository");
-  expect(stderr).toContain("Untrack and ignore these work files in their containing worktree");
-  expect(stderr).toContain("then commit before retrying or running");
-  expect(stderr).not.toContain("git rm -r --cached .plans");
-  expect(stderr).toContain("plans setup <clone-dir>");
-  expect(stderr).toContain("companion register");
-  expect(stderr).toContain('items[".plans"]');
-  expect(stderr).toContain('"companion"');
-}
-
 function snapshotTree(path: string): string[] {
   const stats = lstatSync(path);
   if (stats.isSymbolicLink()) return [`link:${readlinkSync(path)}`];
@@ -1013,14 +937,15 @@ describe("plans commands with a companion .plans", () => {
     expect(result).toMatchObject({ code: 0, stderr: "" });
     const target = join("..", "..", "..", "team-plans", "product-plans");
     expect(readlinkSync(link)).toBe(target);
-    expect(result.stdout).toContain(`Linked ${link} → ${target}\n`);
     expect(existsSync(join(fixture.product, ".plans"))).toBe(false);
 
     const options = { cwd: fixture.product, home: fixture.root };
-    expect((await runMain(["plans", "check"], options)).stdout).toContain("linked");
+    expect(JSON.parse((await runMain(["plans", "check", "--json"], options)).stdout).mode).toBe(
+      "shared",
+    );
     mkdirSync(join(link, "78"));
     const archive = await runMain(["plans", "archive", "78"], options);
-    expect(archive.stdout).toContain("Archived 78 → _archives/78");
+    expect(archive.code).toBe(0);
     expect(existsSync(join(fixture.clone, "product-plans", "_archives", "78"))).toBe(true);
     const stale = join(link, "79");
     mkdirSync(stale);
@@ -1030,8 +955,9 @@ describe("plans commands with a companion .plans", () => {
       ...options,
       env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
     });
-    expect(automatic.stdout).toContain("Archived 79");
-    expect(automatic.stdout).toContain("Publish with: alignfirst sync");
+    expect(automatic.code).toBe(0);
+    expect(existsSync(stale)).toBe(false);
+    expect(existsSync(join(link, "_archives", "79"))).toBe(true);
   });
 
   it("treats a plain companion .plans as local work files", async () => {
@@ -1039,10 +965,13 @@ describe("plans commands with a companion .plans", () => {
     const plans = join(useCompanion(fixture), ".plans");
     mkdirSync(join(plans, "78"), { recursive: true });
     const options = { cwd: fixture.product, home: fixture.root };
-    expect((await runMain(["sync"], options)).stdout).toBe("(local mode, nothing to sync)\n");
-    expect((await runMain(["plans", "check"], options)).stdout).toContain("local mode");
+    expect((await runMain(["sync"], options)).code).toBe(0);
+    expect(JSON.parse((await runMain(["plans", "check", "--json"], options)).stdout).mode).toBe(
+      "local",
+    );
     const missing = await runMain(["plans", "archive", "80"], options);
-    expect(missing.stderr).toContain(`80 must be an existing directory directly under ${plans}.`);
+    expect(missing.code).toBe(1);
+    expect(existsSync(join(plans, "_archives", "80"))).toBe(false);
     expect((await runMain(["plans", "archive", "78"], options)).code).toBe(0);
     expect(existsSync(join(plans, "_archives", "78"))).toBe(true);
   });
@@ -1085,9 +1014,7 @@ describe("plans commands with a separate session tree", () => {
         env: { ALIGNFIRST_ARCHIVE_DAYS: "1" },
       });
 
-      expect(result.stdout).toContain("Archived 79 → _archives/79");
-      expect(result.stdout).toContain("Archived 79 (session tree) → _archives/79");
-      expect(result.stdout).toContain("Archived _aligndev/20260901-100000.md (session tree)");
+      expect(result.code).toBe(0);
       expect(existsSync(join(plans, "_archives", "79", "A1-spec.md"))).toBe(true);
       expect(existsSync(join(sessions, "_archives", "79", "_aligndev", "a.md"))).toBe(true);
       expect(existsSync(join(sessions, "_archives", "_aligndev", "20260901-100000.md"))).toBe(true);

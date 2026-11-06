@@ -79,7 +79,7 @@ The guide installs the selected components and configures the repository. You ca
    ```markdown
    ## Start every session with the project context
 
-   Run `npx -y alignfirst context` from the repository root as your first command, whatever the task. It prints the project conventions (ticket IDs, branch names, commits), the documentation map, and the AlignFirst protocols.
+   Run `npx -y alignfirst context` from the repository root as your first command, whatever the task. It prints the project conventions, the documentation map, and the AlignFirst protocols.
 
    ### Conventions
 
@@ -98,11 +98,11 @@ The guide installs the selected components and configures the repository. You ca
 - `plans` — Link `.plans` to the work-files repository, check the effective work files (`plans check`, with `--json` for a machine-readable report), or archive tickets.
 - `docmap` — Browse project documentation.
 - `conventions` — Print the effective project conventions.
-- `context` — Print the conventions, the project instructions from `.alignfirst-instructions/context.md`, the documentation map when `docs/` exists, and the protocol aliases.
+- `context` — Print project conventions, the documentation map and protocol aliases.
 - `companion register` — Register the current project in the companion registry. `--dir` sets its companion directory; `--create-dir` also creates it.
 - `companion unregister` — Remove the current project from the companion registry. `--remove-dir` also removes its companion directory.
 - `config` — Report the effective project configuration, the companion directory and the location of each AlignFirst file.
-- `assistant-instructions` — Print conventions, then explicitly configured assistant guidance.
+- `assistant-instructions` — Print project guidance and explicitly configured assistant instructions.
 - `doctor` — Diagnose an AlignFirst setup.
 - `workspace` — Create/adopt, list, inspect, wait for, teardown, remove or prune workspaces. `workspace --guide` describes effective capabilities.
 - `dev` — Prepare declared ports/run files/infrastructure and start, stop or inspect managed services.
@@ -115,7 +115,13 @@ Use `npx -y alignfirst workspace` or `bunx --bun alignfirst workspace` for Node,
 
 One selected `alignfirst.json`/`.jsonc` holds `schemaVersion: 1`, optional URI-valued `$schema`, nested `conventions`, `plans`, optional `assistantInstructionsFile`, `workspace` and `devServer`. JSON is strict; JSONC permits comments/trailing commas. Ambiguity, unknown properties and unsupported schemas fail without fallback. One complete editor schema ships with AlignFirst; future breaking majors require retained in-memory converters through the CLI major. Reads never rewrite committed configuration.
 
-`config --json` returns the full configuration with canonical field names, logical locations, selection origins and workspace metadata including absolute `registryDir`/`runtimeDir`. It evaluates neither scripts nor environment bindings. Keep credentials in environment variables or ignored files; authored literals may appear in reports/logs. Companion selection chooses the entire configuration without section merging. Port ranges belong only in `devServer.ports`. `alignfirst assistant-instructions` prints conventions followed by explicitly referenced content and its source path under an Assistant Instructions heading; without a reference it prints conventions only, with no filename fallback.
+`config --json` returns the full configuration with canonical field names, logical locations, selection origins and workspace metadata including absolute `registryDir`/`runtimeDir`. It evaluates neither scripts nor environment bindings. Keep credentials in environment variables or ignored files; authored literals may appear in reports/logs. Companion selection chooses the entire configuration without section merging. Port ranges belong only in `devServer.ports`.
+
+`context` and `assistant-instructions` include workspace guidance. A declared `workspace` or `devServer` selects configured-workspace guidance; otherwise they show a workspace-guide pointer. Development-server commands appear only when `devServer` is declared.
+
+`context` places this guidance after optional project instructions and before Docmap. Embedded Docmap asks readers to read task-relevant documents and omits the bare invocation example.
+
+`assistant-instructions` places guidance before referenced content and its absolute source path. Without a reference, only guidance is printed; there is no filename fallback. A configured missing or unreadable file fails before any body output. It does not load coding-agent context, Docmap or protocols.
 
 The legacy `developerInstructions` key remains readable in configuration and companion registry items. Reads warn and expose `assistantInstructionsFile` without rewriting either file. A defined `assistantInstructionsFile` takes precedence, including when invalid; invalid canonical values fail validation. The legacy `developer-instructions` command prints the same output as `assistant-instructions` and warns.
 

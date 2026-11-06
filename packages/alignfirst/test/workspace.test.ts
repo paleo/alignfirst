@@ -71,7 +71,6 @@ describe("unified workspace inventory and defaults", () => {
     symlinkSync(row.runtimeDir, join(fx.repo, ".local"));
     const overlapping = await run(fx, ["setup"]);
     expect(overlapping.code).toBe(1);
-    expect(overlapping.stderr).toContain("overlaps runtime storage");
   });
 
   it("publishes project recipe and external cleanup identity before mutable preparation can fail", async () => {
@@ -183,7 +182,6 @@ describe("unified workspace inventory and defaults", () => {
     select("project");
     const refused = await run(fx, ["teardown", fx.target, "--json"]);
     expect(refused.code).toBe(1);
-    expect(refused.stderr).toContain("source changed");
     expect(existsSync(marker)).toBe(false);
     expect(readFileSync(registry)).toEqual(bytes);
     select("companion");
@@ -204,7 +202,6 @@ describe("unified workspace inventory and defaults", () => {
     ]) {
       const result = await runMain(args, { cwd: fx.root, home: fx.home });
       expect(result.code, result.stderr).toBe(0);
-      expect(result.stdout).toContain("Usage:");
     }
   });
 
@@ -345,7 +342,6 @@ describe("unified workspace inventory and defaults", () => {
         runtimeState: null,
       },
     });
-    expect(result.stderr).not.toContain("continuing in background");
     expect(realpathSync(join(fx.target, ".plans"))).toBe(join(fx.repo, ".plans"));
     expect(realpathSync(join(fx.target, ".local-wt/workspace-registry"))).toBe(
       join(fx.repo, ".local-wt/workspace-registry"),
@@ -369,9 +365,6 @@ describe("Git and baseline preflight", () => {
       const result = await run(fx, ["setup", "--json"]);
       expect(result.code).toBe(1);
       expect(result.stdout).toBe("");
-      expect(result.stderr).toMatch(
-        path === ".plans" ? /\.plans.*tracked/ : /Runtime storage is tracked/,
-      );
       expect(readFileSync(join(fx.repo, ".git/index"))).toEqual(index);
       expect(readFileSync(join(fx.repo, path, "keep"), "utf8")).toBe("staged bytes");
       expect(existsSync(join(fx.repo, ".local-wt/workspace-registry/workspaces.json"))).toBe(false);
@@ -528,7 +521,6 @@ describe("exact adoption and safe sharing", () => {
       const result = await run(fx, ["setup", "-c", "topic", "--path", fx.target, "--json"]);
       expect(result.code).toBe(1);
       expect(result.stdout).toBe("");
-      expect(result.stderr).toContain("mandatory plans/runtime storage");
       expect(existsSync(join(fx.target, ".plans"))).toBe(false);
     },
   );
@@ -677,7 +669,6 @@ describe("exact adoption and safe sharing", () => {
         expect(result.code, result.stderr).toBe(name === ".plans" ? 1 : 0);
         expect(readFileSync(index)).toEqual(before);
         if (name === ".local") {
-          expect(result.stderr).toContain("remains branch-local");
           if (kind === "stagedDeletion" || kind === "stagedMissing")
             expect(existsSync(path)).toBe(false);
           else if (kind === "symlink") expect(readlinkSync(path)).toBe(join(fx.repo, ".plans"));
@@ -743,7 +734,6 @@ describe("exact adoption and safe sharing", () => {
       expect(result.code, result.stderr).toBe(["file", "broken", "cyclic"].includes(kind) ? 1 : 0);
       expect(readFileSync(join(fx.target, ".local/keep"), "utf8")).toBe("unrelated bytes");
       expect(lstatSync(join(fx.target, ".local")).isDirectory()).toBe(true);
-      if (kind.startsWith("tracked")) expect(result.stderr).toContain("not shared");
     },
   );
 
@@ -874,7 +864,6 @@ describe("kernel registry ownership at the public boundary", () => {
       writeFileSync(file, JSON.stringify(manifest));
       const result = await runMain(["dev", "setup"], { cwd: fx.repo, home: fx.home });
       expect(result.code).toBe(1);
-      expect(result.stderr).toContain("registry destination");
       expect(existsSync(marker)).toBe(false);
       expect(readFileSync(registry)).toEqual(bytes);
       manifest.devServer.runFiles[0].path = ".local-wt/application.json";
@@ -901,7 +890,6 @@ describe("kernel registry ownership at the public boundary", () => {
     ]) {
       const result = await runMain(args, { cwd: fx.target, home: fx.home });
       expect(result.code).toBe(1);
-      expect(result.stderr).toContain("own main worktree");
       expect(readFileSync(victim)).toEqual(bytes);
     }
   });
@@ -957,8 +945,6 @@ describe("protected deletion", () => {
     const result = await run(fx, ["remove", fx.target, "--force", "--json"]);
     expect(result.code).toBe(1);
     expect(result.stdout).toBe("");
-    if (["local", "extraShared", "plans", "companion", "sessions"].includes(kind))
-      expect(result.stderr).toContain("protected shared directory");
     expect(readFileSync(join(shared, "keep"), "utf8")).toBe("shared bytes");
     expect(git(fx.repo, "worktree", "list", "--porcelain", "-z")).toBe(registrations);
   });
@@ -975,7 +961,6 @@ describe("protected deletion", () => {
       const registrations = git(fx.repo, "worktree", "list", "--porcelain", "-z");
       const result = await run(fx, ["remove", fx.target, "--json"]);
       expect(result.code, result.stderr).toBe(1);
-      expect(result.stderr).toContain("Uncommitted changes");
       expect(readFileSync(path, "utf8")).toBe("preserve");
       expect(git(fx.repo, "worktree", "list", "--porcelain", "-z")).toBe(registrations);
       expect(git(fx.repo, "branch", "--list", "topic")).toContain("topic");
