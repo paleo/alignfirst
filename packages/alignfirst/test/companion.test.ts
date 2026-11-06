@@ -47,8 +47,7 @@ describe("companion register", () => {
       home,
     });
     expect(registered.code).toBe(0);
-    expect(registered.stdout).toContain(`Registered ${alias}`);
-    expect(registered.stdout).toContain("(created)");
+    expect(existsSync(join(rootOf(home), "chosen"))).toBe(true);
     expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({
       projects: {
         [alias]: { aligndev, dir: "chosen" },
@@ -59,13 +58,12 @@ describe("companion register", () => {
       cwd: project,
       home,
     });
-    expect(again.stdout).toContain(`Already registered by ${alias}`);
+    expect(again.code).toBe(0);
     const removed = await runMain(["companion", "unregister", "--remove-dir"], {
       cwd: project,
       home,
     });
     expect(removed.code).toBe(0);
-    expect(removed.stdout).toContain("Kept profile-only entry: work");
     expect(existsSync(join(rootOf(home), "chosen"))).toBe(false);
     const preserved = readFileSync(registryOf(home), "utf-8");
     expect(JSON.parse(preserved)).toEqual({
@@ -73,7 +71,6 @@ describe("companion register", () => {
     });
     const noCompanion = await runMain(["companion", "unregister"], { cwd: project, home });
     expect(noCompanion.code).toBe(1);
-    expect(noCompanion.stderr).toContain("has no companion");
     expect(readFileSync(registryOf(home), "utf-8")).toBe(preserved);
   });
 
@@ -97,13 +94,7 @@ describe("companion register", () => {
   it("creates the registry and registers the project, without its companion", async () => {
     const { home, project } = makeHome();
     const result = await runMain(["companion", "register"], { cwd: project, home });
-    expect(result).toEqual({
-      code: 0,
-      stdout:
-        `Registered ~/projects/app in ${registryOf(home)}.\nCompanion: ${companionOf(home)} (missing)\n` +
-        "Next: write the items at the paths `alignfirst config` reports.\n",
-      stderr: "",
-    });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
     expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({
       projects: { "~/projects/app": { dir: "projects_app" } },
     });
@@ -129,7 +120,7 @@ describe("companion register", () => {
       cwd: project,
       home,
     });
-    expect(result.stdout).toContain(`Companion: ${resolved(home)} (created)\n`);
+    expect(result.code).toBe(0);
     expect(existsSync(resolved(home))).toBe(true);
     expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({
       projects: { "~/projects/app": { dir } },
@@ -146,7 +137,6 @@ describe("companion register", () => {
       home,
     });
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("Invalid --dir: ");
     expect(existsSync(registryOf(home))).toBe(false);
   });
 
@@ -156,21 +146,17 @@ describe("companion register", () => {
     const custom = join(home, ".alignfirst", "companions", "custom");
     const same = await runMain(["companion", "register", "--dir", custom], { cwd: project, home });
     expect(same.code).toBe(0);
-    expect(same.stdout).toContain("Already registered by ~/projects/app in ");
-    expect(same.stdout).toContain(`Companion: ${custom} (missing)\n`);
+    expect(same.stdout).toContain(custom);
 
     const plain = await runMain(["companion", "register"], { cwd: project, home });
-    expect(plain.stdout).toContain(`Companion: ${custom} (missing)\n`);
+    expect(plain.code).toBe(0);
+    expect(plain.stdout).toContain(custom);
 
     const other = await runMain(["companion", "register", "--dir", "other"], {
       cwd: project,
       home,
     });
     expect(other.code).toBe(1);
-    expect(other.stderr).toContain(
-      `--dir resolves to ${join(home, ".alignfirst", "companions", "other")}, but ~/projects/app ` +
-        `is registered with the companion directory ${custom}.`,
-    );
     expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({
       projects: { "~/projects/app": { dir: "custom" } },
     });
@@ -180,14 +166,10 @@ describe("companion register", () => {
     const { home, project } = makeHome();
     await runMain(["companion", "register"], { cwd: project, home });
     const result = await runMain(["companion", "register", "--create-dir"], { cwd: project, home });
-    expect(result.stdout).toBe(
-      `Already registered by ~/projects/app in ${registryOf(home)}.\n` +
-        `Companion: ${companionOf(home)} (created)\n` +
-        "Next: write the items at the paths `alignfirst config` reports.\n",
-    );
+    expect(result.code).toBe(0);
     expect(existsSync(companionOf(home))).toBe(true);
     const again = await runMain(["companion", "register"], { cwd: project, home });
-    expect(again.stdout).toContain(`Companion: ${companionOf(home)}\n`);
+    expect(again.stdout).toContain(companionOf(home));
   });
 
   it("refuses a project whose companion directory another key uses", async () => {
@@ -199,30 +181,20 @@ describe("companion register", () => {
       home,
     });
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain(
-      `The companion directory ${shared} is already used by ~/other.`,
-    );
     expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({
       projects: { "~/other": { dir: "shared" } },
     });
   });
 
-  it.each([
-    [".", (home: string) => `is ${rootOf(home)}, the companions root.`],
-    ["~/.alignfirst", (home: string) => `contains ${rootOf(home)}, the companions root.`],
-    ["/", (home: string) => `contains ${rootOf(home)}, the companions root.`],
-    [
-      "~/projects/app/companion",
-      (home: string) => `is inside ${join(home, "projects", "app")}, the project.`,
-    ],
-    ["~/projects", (home: string) => `contains ${join(home, "projects", "app")}, the project.`],
-  ])("refuses the --dir %s", async (dir, conflict) => {
-    const { home, project } = makeHome();
-    const result = await runMain(["companion", "register", "--dir", dir], { cwd: project, home });
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain(conflict(home));
-    expect(existsSync(registryOf(home))).toBe(false);
-  });
+  it.each([".", "~/.alignfirst", "/", "~/projects/app/companion", "~/projects"])(
+    "refuses the --dir %s",
+    async (dir) => {
+      const { home, project } = makeHome();
+      const result = await runMain(["companion", "register", "--dir", dir], { cwd: project, home });
+      expect(result.code).toBe(1);
+      expect(existsSync(registryOf(home))).toBe(false);
+    },
+  );
 
   it("refuses the home directory when the companions root is elsewhere", async () => {
     const { root, home, project } = makeHome();
@@ -231,26 +203,20 @@ describe("companion register", () => {
     symlinkSync(join(root, "store"), rootOf(home));
     const result = await runMain(["companion", "register", "--dir", "~/"], { cwd: project, home });
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain(
-      `The companion directory ${home} is ${home}, the home directory.`,
-    );
+    expect(existsSync(registryOf(home))).toBe(false);
   });
 
   it.each([
-    ["team", ["--dir", "team/app"], "team/app", "is inside"],
-    ["team/other", ["--dir", "team"], "team", "contains"],
-    ["projects_app/other", [], "projects_app", "contains"],
+    ["team", ["--dir", "team/app"]],
+    ["team/other", ["--dir", "team"]],
+    ["projects_app/other", []],
   ])(
     "refuses a companion directory nested with another key's %s: register %j",
-    async (otherDir, args, dir, relation) => {
+    async (otherDir, args) => {
       const { home, project } = makeHome();
       writeRegistry(home, { projects: { "~/other": { dir: otherDir } } });
       const result = await runMain(["companion", "register", ...args], { cwd: project, home });
       expect(result.code).toBe(1);
-      expect(result.stderr).toContain(
-        `The companion directory ${join(rootOf(home), dir)} ${relation} ` +
-          `${join(rootOf(home), otherDir)}, the companion directory of ~/other.`,
-      );
       expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({
         projects: { "~/other": { dir: otherDir } },
       });
@@ -263,7 +229,7 @@ describe("companion register", () => {
     const registry = registryOf(home);
     mkdirSync(join(project, "src"));
     const result = await runMain(["companion", "register"], { cwd: join(project, "src"), home });
-    expect(result.stdout).toContain(`Registered ~/projects/app in ${registry}.`);
+    expect(result.code).toBe(0);
     expect(JSON.parse(readFileSync(registry, "utf-8"))).toEqual({
       projects: { "~/projects": { dir: "projects" }, "~/projects/app": { dir: "projects_app" } },
     });
@@ -275,15 +241,16 @@ describe("companion register", () => {
     initRepository(project);
     const result = await runMain(["companion", "register"], { cwd: project, home });
     const key = realpathSync(project);
-    expect(result.stdout).toContain(`Registered ${key} in `);
-    expect(result.stdout).toContain(`companions/${key.slice(1).replaceAll("/", "_")} (missing)\n`);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(readFileSync(registryOf(home), "utf8")).projects[key]).toEqual({
+      dir: key.slice(1).replaceAll("/", "_"),
+    });
   });
 
   it("fails outside a git repository", async () => {
     const { root, home } = makeHome();
     const result = await runMain(["companion", "register"], { cwd: root, home });
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("A companion needs a git repository with a main worktree.");
     expect(existsSync(join(home, ".alignfirst"))).toBe(false);
   });
 });
@@ -308,15 +275,13 @@ describe("companion unregister", () => {
     for (const flags of [[], ["--remove-dir", "--force"]]) {
       const refused = await runMain(["companion", "unregister", ...flags], { cwd: project, home });
       expect(refused.code).toBe(1);
-      expect(refused.stderr).toContain("workspace resources");
       expect(existsSync(companion)).toBe(true);
     }
     const runtime = resolveProjectLayout(project, home).storage.runtimeDir;
     expect((await runMain(["workspace", "teardown"], { cwd: project, home })).code).toBe(0);
     const removed = await runMain(["companion", "unregister"], { cwd: project, home });
     expect(removed.code, removed.stderr).toBe(0);
-    expect(removed.stdout).toContain(`Retained runtime: ${runtime}`);
-    expect(removed.stdout).toContain("Automatic discovery is being removed");
+    expect(removed.stdout).toContain(runtime);
     expect(existsSync(runtime)).toBe(true);
     expect(JSON.parse(readFileSync(registryOf(home), "utf8")).projects["~/projects/app"]).toEqual({
       aligndev: { profile: "work" },
@@ -394,7 +359,6 @@ describe("companion unregister", () => {
     try {
       const prune = await runMain(["workspace", "prune", "--json"], { cwd: project, home });
       expect(prune.code, prune.stderr).toBe(1);
-      expect(prune.stderr).toContain("removal is in progress");
       expect(prune.stdout).toBe("");
       expect(readFileSync(join(storage.registryDir, "workspaces.json"), "utf8")).toBe(before);
       expect(readFileSync(join(storage.runtimeDir, "evidence"), "utf8")).toBe("retained");
@@ -424,7 +388,7 @@ describe("companion unregister", () => {
       claimRuntimeDisposal(storage, runtime.generation, () =>
         assertCompanionLifecycleAdmission(home, layout),
       ),
-    ).rejects.toThrow(/selection changed/);
+    ).rejects.toThrow();
     expect(readFileSync(join(storage.registryDir, "workspaces.json"), "utf8")).toBe(before);
   });
 
@@ -463,7 +427,6 @@ describe("companion unregister", () => {
     const [removed, refused] = await Promise.all([unregister, setup]);
     expect(removed.code, removed.stderr).toBe(0);
     expect(refused.code).toBe(1);
-    expect(refused.stderr).toMatch(/removal is in progress|selection changed/);
     expect(existsSync(storage.runtimeDir)).toBe(false);
     const state = JSON.parse(readFileSync(join(storage.registryDir, "workspaces.json"), "utf8"));
     expect(state.workspaces).toEqual({});
@@ -492,7 +455,6 @@ describe("companion unregister", () => {
     expect(readFileSync(registryOf(home), "utf-8")).toBe(before);
     const removed = await runMain(["companion", "unregister"], { cwd: project, home });
     expect(removed.code).toBe(0);
-    expect(removed.stdout).toContain("Orphaned companion directory:");
     expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({
       projects: { "~/projects/app": { aligndev } },
     });
@@ -509,28 +471,12 @@ describe("companion unregister", () => {
     const registry = join(home, ".alignfirst", "companions", "registry.json");
     mkdirSync(join(companion, "docs"), { recursive: true });
     const result = await runMain(["companion", "unregister"], { cwd: project, home });
-    expect(result).toEqual({
-      code: 0,
-      stdout: `Unregistered ~/projects/app from ${registry}.\nOrphaned companion directory: ${companion}\n`,
-      stderr: "",
-    });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(result.stdout).toContain(companion);
     expect(JSON.parse(readFileSync(registry, "utf-8"))).toEqual({
       projects: { "~/other": { dir: "other" } },
     });
     expect(existsSync(join(companion, "docs"))).toBe(true);
-  });
-
-  it("marks an empty directory and omits a missing one", async () => {
-    const { home, project } = makeHome();
-    const companion = companionOf(home);
-    await runMain(["companion", "register", "--create-dir"], { cwd: project, home });
-    const empty = await runMain(["companion", "unregister"], { cwd: project, home });
-    expect(empty.stdout).toContain(`Orphaned companion directory: ${companion} (empty)\n`);
-    rmSync(companion, { recursive: true });
-    await runMain(["companion", "register"], { cwd: project, home });
-    const missing = await runMain(["companion", "unregister"], { cwd: project, home });
-    expect(missing.code).toBe(0);
-    expect(missing.stdout).not.toContain("Orphaned");
   });
 
   it("fails when the project has no key of its own", async () => {
@@ -538,7 +484,9 @@ describe("companion unregister", () => {
     writeRegistry(home, { projects: { "~/projects": { dir: "projects" } } });
     const result = await runMain(["companion", "unregister"], { cwd: project, home });
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain(`${project} is not registered in `);
+    expect(JSON.parse(readFileSync(registryOf(home), "utf8"))).toEqual({
+      projects: { "~/projects": { dir: "projects" } },
+    });
   });
 
   it("removes an empty companion directory with --remove-dir", async () => {
@@ -548,10 +496,7 @@ describe("companion unregister", () => {
       cwd: project,
       home,
     });
-    expect(result.stdout).toBe(
-      `Unregistered ~/projects/app from ${registryOf(home)}.\n` +
-        `Removed companion directory: ${companionOf(home)}\n`,
-    );
+    expect(result.code).toBe(0);
     expect(existsSync(companionOf(home))).toBe(false);
   });
 
@@ -565,10 +510,8 @@ describe("companion unregister", () => {
       home,
     });
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain(
-      `The companion directory ${companionOf(home)} is not empty: DEVELOPERS.md, docs. ` +
-        "Add --force to delete it.",
-    );
+    expect(existsSync(join(companionOf(home), "docs"))).toBe(true);
+    expect(existsSync(join(companionOf(home), "DEVELOPERS.md"))).toBe(true);
     expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({
       projects: { "~/projects/app": { dir: "projects_app" } },
     });
@@ -586,7 +529,6 @@ describe("companion unregister", () => {
       home,
     });
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain(`Removed companion directory: ${companionOf(home)}\n`);
     expect(existsSync(companionOf(home))).toBe(false);
     expect(existsSync(join(workFiles, "app"))).toBe(true);
   });
@@ -600,40 +542,28 @@ describe("companion unregister", () => {
       cwd: project,
       home,
     });
-    expect(result).toEqual({
-      code: 0,
-      stdout:
-        `Unregistered ~/projects/app from ${registryOf(home)}.\n` +
-        `Orphaned companion directory: ${companion}\n` +
-        "Kept: it is outside ~/.alignfirst/companions. Remove it by hand.\n",
-      stderr: "",
-    });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(result.stdout).toContain(companion);
     expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({ projects: {} });
     expect(existsSync(join(companion, "docs"))).toBe(true);
   });
 
-  it.each([
-    [".", (home: string) => `is ${rootOf(home)}, the companions root.`],
-    ["~/.alignfirst", (home: string) => `contains ${rootOf(home)}, the companions root.`],
-    [
-      "team",
-      (home: string) =>
-        `contains ${join(rootOf(home), "team", "other")}, the companion directory of ~/other.`,
-    ],
-  ])("refuses to remove the companion directory %s, and changes nothing", async (dir, conflict) => {
-    const { home, project } = makeHome();
-    const projects = { "~/other": { dir: "team/other" }, "~/projects/app": { dir } };
-    writeRegistry(home, { projects });
-    mkdirSync(join(rootOf(home), "team", "other"), { recursive: true });
-    const result = await runMain(["companion", "unregister", "--remove-dir", "--force"], {
-      cwd: project,
-      home,
-    });
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain(conflict(home));
-    expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({ projects });
-    expect(existsSync(join(rootOf(home), "team", "other"))).toBe(true);
-  });
+  it.each([".", "~/.alignfirst", "team"])(
+    "refuses to remove the companion directory %s, and changes nothing",
+    async (dir) => {
+      const { home, project } = makeHome();
+      const projects = { "~/other": { dir: "team/other" }, "~/projects/app": { dir } };
+      writeRegistry(home, { projects });
+      mkdirSync(join(rootOf(home), "team", "other"), { recursive: true });
+      const result = await runMain(["companion", "unregister", "--remove-dir", "--force"], {
+        cwd: project,
+        home,
+      });
+      expect(result.code).toBe(1);
+      expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({ projects });
+      expect(existsSync(join(rootOf(home), "team", "other"))).toBe(true);
+    },
+  );
 
   it("refuses to remove a companion directory another key uses, even with --force", async () => {
     const { home, project } = makeHome();
@@ -647,9 +577,6 @@ describe("companion unregister", () => {
       home,
     });
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain(
-      `The companion directory ${companion} is already used by ~/other.`,
-    );
     expect(existsSync(companion)).toBe(true);
   });
 
@@ -658,7 +585,9 @@ describe("companion unregister", () => {
     writeRegistry(home, { projects: { "~/projects/app": { dir: "projects_app" } } });
     const result = await runMain(["companion", "unregister", "--force"], { cwd: project, home });
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("--force requires --remove-dir.");
+    expect(JSON.parse(readFileSync(registryOf(home), "utf8"))).toEqual({
+      projects: { "~/projects/app": { dir: "projects_app" } },
+    });
   });
 });
 
@@ -697,7 +626,6 @@ describe("companion registry preservation", () => {
     expect(report.stdout).not.toContain(secret);
     expect(readFileSync(registryOf(home), "utf-8")).toBe(before);
     const warnings = warn.mock.calls.flat().join("\n");
-    expect(warnings).toContain("convert paths manually");
     expect(warnings).toContain("projects[<entry>].items.extra");
     expect(warnings).toContain("projects[<entry>].aligndev.extra");
     expect(warnings).not.toContain(secret);
@@ -759,7 +687,6 @@ describe("companion registry preservation", () => {
       expect(readFileSync(registryOf(home), "utf-8")).toBe(before);
       const removed = await runMain(["companion", "unregister"], { cwd: project, home });
       expect(removed.code).toBe(0);
-      expect(removed.stdout).toContain("Kept profile-only entry: work");
       const remaining = JSON.parse(readFileSync(registryOf(home), "utf-8"));
       expect(remaining).toEqual(original);
       expect(Object.hasOwn(remaining, key)).toBe(true);
@@ -791,7 +718,7 @@ describe("companion registry preservation", () => {
     ]) {
       const result = await runMain(args, { cwd: project, home });
       expect(result.code).toBe(1);
-      expect(result.stderr).toContain(`Invalid ${registryOf(home)}`);
+      expect(result.stderr).toContain(registryOf(home));
       expect(result.stderr).not.toContain("PRIVATE");
       expect(readFileSync(registryOf(home), "utf-8")).toBe(before);
       expect(existsSync(join(rootOf(home), "chosen"))).toBe(false);

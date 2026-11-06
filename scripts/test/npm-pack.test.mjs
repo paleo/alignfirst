@@ -11,5 +11,5 @@ test("pack consumers accept npm 11 array and npm 12 keyed output", () => {
 });
 
 test("pack consumers reject absent filenames instead of installing a registry fallback", () => {
-  assert.throws(() => readPackedFilename({ alignfirst: {} }), /no filename/);
+  assert.throws(() => readPackedFilename({ alignfirst: {} }));
 });

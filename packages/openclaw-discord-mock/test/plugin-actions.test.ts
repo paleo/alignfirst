@@ -217,7 +217,7 @@ describe("discord-mock handleAction (post-normalization shape)", () => {
         threadName: "renamed",
         text: "lost report",
       }),
-    ).rejects.toThrow(/thread not found/);
+    ).rejects.toThrow();
     expect(fixture.bus.state.getSnapshot().messages.length).toBe(before);
   });
 

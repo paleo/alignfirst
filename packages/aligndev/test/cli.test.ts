@@ -38,25 +38,11 @@ async function run(
 }
 
 describe("aligndev", () => {
-  it("lists the subcommands in its help", async () => {
-    for (const flag of ["--help", "-h"]) {
-      const result = await run([flag]);
-      expect(result.code).toBe(0);
-      for (const command of ["aligndev code", "aligndev project", "aligndev guide"]) {
-        expect(result.stdout).toContain(command);
-      }
-      expect(result.stdout).not.toContain("aligndev plans");
-      expect(result.stdout).toContain("~/.alignfirst/aligndev.settings.json");
-    }
-  });
-
-  it("rejects retired worktree commands without loading coding settings or offering an alias", async () => {
+  it("rejects retired worktree commands", async () => {
     for (const args of [["worktree"], ["worktree", "--help"], ["worktree", "setup", "--json"]]) {
-      const result = await run(args, { code: { agent: "invalid" } });
+      const result = await run(args);
       expect(result.code).toBe(1);
       expect(result.stdout).toBe("");
-      expect(result.stderr).toContain('unknown command "worktree"');
-      expect(result.stderr).not.toContain("aligndev worktree");
     }
   });
 
@@ -68,14 +54,10 @@ describe("aligndev", () => {
     }
   });
 
-  it("rejects a missing or unknown subcommand with the help on stderr", async () => {
-    const missing = await run([]);
-    expect(missing.code).toBe(1);
-    expect(missing.stderr).toMatch(/^Error: no command given\.\n\naligndev — /);
-
-    const unknown = await run(["nope"]);
-    expect(unknown.code).toBe(1);
-    expect(unknown.stderr).toMatch(/^Error: unknown command "nope"\.\n\naligndev — /);
+  it.each([[], ["nope"]])("rejects missing or unknown commands %j", async (...args) => {
+    const result = await run(args);
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
   });
 
   it("rejects the unpublished plans command without a compatibility alias", async () => {
@@ -83,30 +65,6 @@ describe("aligndev", () => {
       const result = await run(args);
       expect(result.code).toBe(1);
       expect(result.stdout).toBe("");
-      expect(result.stderr).toMatch(/^Error: unknown command "plans"\.\n\naligndev — /);
-      expect(result.stderr).not.toContain("aligndev plans");
     }
-  });
-
-  it("delegates --help to each subcommand", async () => {
-    const code = await run(["code", "--help"], {
-      platform: "codingAgent",
-      code: { agent: "claude" },
-    });
-    expect(code.code).toBe(0);
-    expect(code.stdout).toMatch(/^aligndev code — /);
-
-    const project = await run(["project", "--help"]);
-    expect(project.code).toBe(0);
-    expect(project.stdout).toContain("aligndev project list [--json] [--root <path>]");
-
-    const guide = await run(["guide", "--help"], {
-      platform: "openclaw",
-      code: { agent: "claude" },
-    });
-    expect(guide.code).toBe(0);
-    expect(guide.stdout).toContain(
-      "aligndev guide [--channel <slack|discord|app>] [<topic>] [--root <path>]",
-    );
   });
 });

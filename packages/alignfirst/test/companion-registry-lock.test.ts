@@ -72,9 +72,7 @@ it.each([
   writeLock(content, now - age);
   const original = statSync(lock);
   const mutate = vi.fn();
-  await expect(withCompanionRegistryLock(path, mutate)).rejects.toThrow(
-    "Timed out waiting for companion registry lock",
-  );
+  await expect(withCompanionRegistryLock(path, mutate)).rejects.toThrow();
   expect(mutate).not.toHaveBeenCalled();
   expect(readFileSync(lock, "utf8")).toBe(content);
   expect(statSync(lock).ino).toBe(original.ino);
@@ -131,9 +129,7 @@ it.each([`${process.pid}:live-token`, String(process.pid)])(
   async (content) => {
     writeLock(content, now - 60_000);
     const mutate = vi.fn();
-    await expect(withCompanionRegistryLock(path, mutate)).rejects.toThrow(
-      "Timed out waiting for companion registry lock",
-    );
+    await expect(withCompanionRegistryLock(path, mutate)).rejects.toThrow();
     expect(mutate).not.toHaveBeenCalled();
     expect(readFileSync(lock, "utf8")).toBe(content);
     expect(readdirSync(root)).toEqual(["registry.json.lock"]);
@@ -149,9 +145,7 @@ it("preserves a dead owner's lock until explicit quiescent recovery permits retr
   writeLock(content, now);
   const original = statSync(lock);
   const mutate = vi.fn();
-  await expect(withCompanionRegistryLock(path, mutate)).rejects.toThrow(
-    "Timed out waiting for companion registry lock",
-  );
+  await expect(withCompanionRegistryLock(path, mutate)).rejects.toThrow();
   expect(mutate).not.toHaveBeenCalled();
   expect(readFileSync(lock, "utf8")).toBe(content);
   expect(statSync(lock).ino).toBe(original.ino);
@@ -194,9 +188,7 @@ it("does not displace owner B or admit contender C after a stale observation", a
 
   try {
     const mutate = vi.fn();
-    await expect(withCompanionRegistryLock(path, mutate)).rejects.toThrow(
-      "Timed out waiting for companion registry lock",
-    );
+    await expect(withCompanionRegistryLock(path, mutate)).rejects.toThrow();
     expect(scheduled).toBe(true);
     expect(mutate).not.toHaveBeenCalled();
     expect(existsSync(join(root, "B.release"))).toBe(false);

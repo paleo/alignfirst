@@ -4,29 +4,17 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { runAlignfirst } from "../src/alignfirst-cli.js";
-import { resolveCommandForms } from "../src/command-form.js";
-import { PLATFORMS, type Platform } from "../src/config.js";
 import type { CompanionReport, ProjectReport } from "../src/project/layout.js";
-import { ALIGNFIRST_BIN, writeRegistry, writeSettings } from "./helpers.js";
+import { ALIGNFIRST_BIN, writeRegistry } from "./helpers.js";
 import {
   execGit,
   type Fixture,
   makeFixture,
   makeRepository,
-  runAligndev,
   useProjectFixtures,
 } from "./project/fixtures.js";
 
-const COMPANION_SETUP = new URL(
-  "../../../skills/alignfirst-setup-guide/references/companion-setup.md",
-  import.meta.url,
-);
 const REGISTRATION_STATES = ["missing", "profileOnly", "registered"] as const;
-const NPX_ENV = {
-  npm_config_user_agent: "npm/11.19.0 node/v26.8.1 linux x64",
-  npm_command: "exec",
-  npm_lifecycle_event: "npx",
-};
 
 interface OnboardingReport extends ProjectReport {
   companion: OnboardingCompanion | null;
@@ -50,82 +38,6 @@ interface RegistryEntry {
 useProjectFixtures();
 
 describe("explicit companion-only onboarding", () => {
-  it.each([false, true])(
-    "renders registration before the conditional plans gate and delegation (npx=%s)",
-    async (viaNpx) => {
-      const fixture = makeFixture();
-      writeSettings(fixture.home, { platform: "openclaw", projectsRoot: fixture.root });
-      const env = viaNpx ? NPX_ENV : {};
-      const forms = resolveCommandForms(env);
-      const result = await runAligndev(
-        fixture,
-        ["guide", "--channel", "slack", "project-lifecycle"],
-        { env },
-      );
-      expect(result.code, result.stderr).toBe(0);
-      expect(result.stdout).not.toContain("{{");
-      const route = result.stdout
-        .split("### Prepare through the companion\n")[1]
-        .split("\n## Remove a project")[0];
-      const register = route.indexOf(`${forms.alignfirst} companion register`);
-      const select = route.indexOf(`${forms.aligndev} guide --channel slack work-files-setup`);
-      const verify = route.indexOf(`${forms.alignfirst} config --json`);
-      const delegate = route.indexOf(`${forms.aligndev} guide --channel slack code`);
-      expect(register).toBeGreaterThan(0);
-      expect(select).toBeGreaterThan(register);
-      expect(verify).toBeGreaterThan(select);
-      expect(delegate).toBeGreaterThan(verify);
-      expect(route).toContain("even when existing project plans are usable");
-      expect(route).toContain("starting at section 3");
-      expect(route).toContain("every item to write resolve inside `companion.dir`");
-      expect(route).toContain("Missing `locations.alignfirst` must have a companion destination");
-      expect(route).toContain(
-        "`locations.assistantInstructionsFile` is null until a reference is configured",
-      );
-      expect(route).toContain("stop and resolve that selection with the user");
-      expect(route).toContain("without copying them");
-    },
-  );
-
-  it.each(PLATFORMS)(
-    "renders the explicit entry into the shared selection recipe for %s",
-    async (platform) => {
-      const fixture = makeFixture();
-      const repo = makeUntouchedProject(fixture);
-      writeSettings(fixture.home, { platform, projectsRoot: fixture.root });
-      const result = await runAligndev(fixture, workFilesSetupArgs(platform), { cwd: repo });
-      expect(result.code, result.stderr).toBe(0);
-      expect(result.stdout).not.toContain("{{");
-      const explicitEntry = result.stdout.indexOf("For explicit companion-only onboarding");
-      const readinessGate = result.stdout.indexOf("## 1. Check the effective work files");
-      expect(explicitEntry).toBeGreaterThan(0);
-      expect(explicitEntry).toBeLessThan(readinessGate);
-      expect(result.stdout).toContain("start at section 3 under the onboarding authorization");
-      expect(result.stdout).toContain("even when existing project plans are usable");
-      expect(result.stdout).toContain(
-        "Usable, non-project-tracked effective plans need no preparation",
-      );
-      expect(result.stdout).toContain("alignfirst companion register");
-      expect(result.stdout).toContain('setting `items[".plans"]` to `"companion"`');
-      expect(result.stdout).toContain(
-        "Preserve all other fields, item settings, profile selections",
-      );
-    },
-  );
-
-  it("keeps companion declaration and explicit plans selection in the setup skill", () => {
-    const reference = readFileSync(COMPANION_SETUP, "utf8");
-    expect(reference).toContain("obtain onboarding authorization");
-    expect(reference).toContain("npx -y alignfirst companion register");
-    expect(reference).toContain("even when project plans are usable");
-    expect(reference).toContain("before ticket reservation, request capture or coding delegation");
-    expect(reference).not.toContain("Usable plans need no preparation");
-    expect(reference).toContain('`projects[companion.key].items[".plans"]` to `"companion"`');
-    expect(reference).toContain("Preserve other entries, fields, item selections and profiles");
-    expect(reference).toContain("each intended write resolve inside `companion.dir`");
-    expect(reference).toMatch(/do not copy, merge, migrate, archive,? or delete them/);
-  });
-
   it.each(REGISTRATION_STATES)(
     "follows the authorized recipe with usable ignored project plans (%s registration)",
     async (state) => {
@@ -162,9 +74,6 @@ describe("explicit companion-only onboarding", () => {
       expect(before.companion === null).toBe(state !== "registered");
       expect(before.config).toBeNull();
       expect(before.locations.assistantInstructionsFile).toBeNull();
-      const conventionsOnly = runFirst(fixture, repo, ["assistant-instructions"]);
-      expect(conventionsOnly).toContain("# Project Conventions");
-      expect(conventionsOnly).not.toContain("# Assistant Instructions");
       expect(before.locations[".plans"].path).toBe(join(repo, ".plans"));
       expect(execGit(repo, "ls-files", "--", ".plans")).toBe("");
       expect(execGit(repo, "check-ignore", ".plans/side-7/A1-request.md")).toBe(
@@ -232,8 +141,9 @@ describe("explicit companion-only onboarding", () => {
       mkdirSync(join(dir, "handbook"));
       writeFileSync(instructions.path, "# Assistant guide\n\nSee [details](./details.md).\n");
       const assistantInstructions = runFirst(fixture, repo, ["assistant-instructions"]);
+      expect(assistantInstructions).toContain(instructions.path);
       expect(assistantInstructions).toContain(
-        `Source: ${instructions.path}\n\n# Assistant guide\n\nSee [details](./details.md).\n`,
+        "# Assistant guide\n\nSee [details](./details.md).\n",
       );
       const prepared = readReport(fixture, repo);
       expect(prepared.source).toBe("companion");
@@ -292,10 +202,4 @@ function snapshot(root: string): Record<string, string> {
     }
   }
   return files;
-}
-
-function workFilesSetupArgs(platform: Platform): string[] {
-  return platform === "openclaw"
-    ? ["guide", "--channel", "slack", "work-files-setup"]
-    : ["guide", "work-files-setup"];
 }

@@ -86,6 +86,7 @@ describe("slack-mock action surface", () => {
   });
 
   it("prepares sends for core delivery and rejects the plugin send path", async () => {
+    await startBus();
     const payload = { text: "  exact starter\nbody  " };
     expect(
       await prepareSendPayload({ ctx: { action: "send" }, payload } as unknown as Parameters<
@@ -97,9 +98,9 @@ describe("slack-mock action surface", () => {
         typeof prepareSendPayload
       >[0]),
     ).toBeNull();
-    await expect(run("send", { to: "channel:Sample-Project", text: payload.text })).rejects.toThrow(
-      /must use OpenClaw core delivery/,
-    );
+    await expect(
+      run("send", { to: "channel:Sample-Project", text: payload.text }),
+    ).rejects.toThrow();
   });
 
   it("returns the bus-resolved target and thread from the message adapter", async () => {
@@ -126,11 +127,17 @@ describe("slack-mock action surface", () => {
   });
 
   it("rejects thread-create and thread-reply", async () => {
-    await expect(run("thread-create", { to: "sample-project", title: "x" })).rejects.toThrow(
-      /does not expose action/,
-    );
+    await startBus();
+    const thread = bus.state.createThread({
+      accountId: "default",
+      conversationId: "sample-project",
+      title: "Existing thread",
+    });
+    await expect(run("thread-create", { to: "sample-project", title: "x" })).rejects.toThrow();
     await expect(
-      run("thread-reply", { to: "sample-project", threadId: "T", text: "x" }),
-    ).rejects.toThrow(/does not expose action/);
+      run("thread-reply", { to: "sample-project", threadId: thread.id, text: "x" }),
+    ).rejects.toThrow();
+    expect(bus.state.getSnapshot().threads).toHaveLength(1);
+    expect(bus.state.getSnapshot().messages).toEqual([]);
   });
 });

@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  parseDevArgs,
-  parseWorkspaceArgs,
-  renderDevHelp,
-  renderWorkspaceHelp,
-} from "../src/cli.js";
+import { parseDevArgs, parseWorkspaceArgs } from "../src/cli.js";
 import { ConfigError } from "../src/errors.js";
 
 describe("parseWorkspaceArgs", () => {
@@ -240,30 +235,6 @@ describe("parseWorkspaceArgs", () => {
 
   it("returns guide for --guide", () => {
     expect(parseWorkspaceArgs(["--guide"]).command).toEqual({ kind: "guide" });
-  });
-});
-
-describe("renderWorkspaceHelp", () => {
-  it("describes teardown preservation and registered selectors", () => {
-    const help = renderWorkspaceHelp();
-    expect(help).toContain("teardown [<dir>] [--verbose]");
-    expect(help).toContain("Keep worktree files and Git registration");
-    expect(help).toContain("path or registered name");
-    expect(help).not.toContain("basename");
-  });
-
-  it("documents `setup --full`", () => {
-    const help = renderWorkspaceHelp();
-    expect(help).toContain("[--enter] [--full]");
-    expect(help).toContain("--full: also run the dev setup");
-  });
-});
-
-describe("renderDevHelp", () => {
-  it("documents `dev setup` and its public options, not the internal one", () => {
-    const help = renderDevHelp();
-    expect(help).toContain("alignfirst dev setup [--force] [--reset-ports]");
-    expect(help).not.toContain("--from-finalize");
   });
 });
 

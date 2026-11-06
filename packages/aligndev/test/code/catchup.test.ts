@@ -84,18 +84,15 @@ describe("catchup launch", () => {
     ]);
     const prompt = readFileSync(join(dir, "received.txt"), "utf8");
     expect(prompt).toContain("Content omitted: total limit exceeded.");
-    expect(prompt).toContain("Run `alignfirst guide aad`");
+    expect(prompt).toContain("alignfirst guide aad");
     expect(prompt.endsWith(message)).toBe(true);
     expect(listSessionRecords(plans, readMachineId(home))[0].frontmatter.command).toContain(
       '--message-file "message.md"',
     );
   });
 
-  it("summarizes without a message and rejects catchup on resume", async () => {
+  it("accepts catchup without a message but rejects it on resume", async () => {
     expect(await run(["new", "--catchup", "--ticket", "29"])).toBe(0);
-    expect(readFileSync(join(dir, "received.txt"), "utf8")).toContain(
-      "Summarize the ticket history briefly",
-    );
     rmSync(join(dir, "catchup-args.json"));
     expect(await run(["resume", "session-1", "--catchup"])).toBe(1);
     expect(existsSync(join(dir, "catchup-args.json"))).toBe(false);

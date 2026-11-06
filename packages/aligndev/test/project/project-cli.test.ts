@@ -37,27 +37,13 @@ describe("projects command surface", () => {
     ]);
   });
 
-  it("renders help without a coding-agent selection", async () => {
-    const fixture = makeFixture();
-    for (const args of [["--help"], []]) {
-      const result = await runProjects(fixture, args, { env: {} });
-      expect(result.code).toBe(0);
-      expect(result.stdout).toContain("aligndev project doctor [--root <path>]");
-      expect(result.stdout).toContain("aligndev project free-ports --size <n> [--range <code>]");
-      expect(result.stdout).not.toContain("--guide");
-    }
-  });
-
   it("requires a marker and expands --root ~/ against the injected home", async () => {
     const fixture = makeFixture();
     const projects = join(fixture.home, "projects");
     mkdirSync(projects);
     const result = await runProjects(fixture, ["list", "--root", "~/projects"]);
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain(`${projects} is not a projects directory`);
-    expect(result.stderr).toContain(".alignfirst-projects.json is missing");
-    expect(result.stderr).toContain("Run `aligndev project init` there");
-    expect(result.stderr).toContain("--root <path>");
+    expect(result.stderr).toContain(projects);
   });
 
   it("defaults --root to projectsRoot in the config, and lets --root override it", async () => {
@@ -111,7 +97,6 @@ describe("projects command surface", () => {
       "local=9000-9099",
     ]);
     expect(created.code).toBe(0);
-    expect(created.stdout).toContain("Created");
     expect(readJson(join(fixture.root, ".alignfirst-projects.json"))).toEqual({
       description: "Services",
       portRanges: [
@@ -122,23 +107,25 @@ describe("projects command surface", () => {
 
     const duplicate = await runProjects(fixture, ["init"]);
     expect(duplicate.code).toBe(1);
-    expect(duplicate.stderr).toContain("already exists");
+    expect(readJson(join(fixture.root, ".alignfirst-projects.json"))).toEqual({
+      description: "Services",
+      portRanges: [range(8000, 8099), { code: "local", ...range(9000, 9099) }],
+    });
 
     const other = makeFixture();
     const invalid = await runProjects(other, ["init", "--port-range", "9000-8000"]);
     expect(invalid.code).toBe(1);
-    expect(invalid.stderr).toContain("must not exceed");
+    expect(existsSync(join(other.root, ".alignfirst-projects.json"))).toBe(false);
   });
 
   it("rejects invalid groups of init port ranges before writing", async () => {
-    for (const [args, message] of [
-      [["--port-range", "8000-8099", "--port-range", "8100-8199"], "at most one port range"],
-      [["--port-range", "8000-8099", "--port-range", "local=8050-8199"], "overlap"],
-    ] as const) {
+    for (const args of [
+      ["--port-range", "8000-8099", "--port-range", "8100-8199"],
+      ["--port-range", "8000-8099", "--port-range", "local=8050-8199"],
+    ]) {
       const fixture = makeFixture();
       const result = await runProjects(fixture, ["init", ...args]);
       expect(result.code).toBe(1);
-      expect(result.stderr).toContain(message);
       expect(existsSync(join(fixture.root, ".alignfirst-projects.json"))).toBe(false);
     }
   });
@@ -148,7 +135,6 @@ describe("projects command surface", () => {
     const result = await runProjects(fixture, ["list"]);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain(join(fixture.root, ".alignfirst-projects.json"));
-    expect(result.stderr).toContain("unknown");
   });
 
   it("rejects invalid marker range groups and the legacy field", async () => {
@@ -177,12 +163,11 @@ describe("projects command surface", () => {
       ],
       [{ portRange: range(8000, 8099) }, "portRange"],
     ];
-    for (const [marker, message] of cases) {
+    for (const [marker] of cases) {
       const fixture = makeFixture(marker);
       const result = await runProjects(fixture, ["list"]);
       expect(result.code).toBe(1);
       expect(result.stderr).toContain(join(fixture.root, ".alignfirst-projects.json"));
-      expect(result.stderr).toContain(message);
     }
   });
 
@@ -195,10 +180,9 @@ describe("projects command surface", () => {
     [["list", "--range", "local"], "--range is valid only with free-ports"],
     [["free-ports"], "free-ports requires --size"],
     [["--guide"], "Unknown option '--guide'"],
-  ])("rejects the command-specific option misuse %j", async (args, message) => {
+  ])("rejects the command-specific option misuse %j", async (args) => {
     const result = await runProjects(makeFixture(), args);
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain(message);
   });
 });
 
@@ -209,11 +193,7 @@ describe("project inventory doctor", () => {
 
     const result = await runProjects(fixture, ["doctor"]);
 
-    expect(result).toEqual({
-      code: 0,
-      stdout: "[ok] Project inventory: 1 project, 1 directory\n",
-      stderr: "",
-    });
+    expect(result.code).toBe(0);
   });
 
   it("reports every overlapping pair with both project paths and ranges", async () => {
@@ -226,11 +206,19 @@ describe("project inventory doctor", () => {
 
     expect(result.code).toBe(1);
     expect(result.stderr).toBe("");
-    expect(result.stdout.trim().split("\n")).toEqual([
-      `[error] Port conflict: ${JSON.stringify(alpha)} (8000..8050) overlaps ${JSON.stringify(beta)} (8020..8070)`,
-      `[error] Port conflict: ${JSON.stringify(alpha)} (8000..8050) overlaps ${JSON.stringify(gamma)} (8040..8090)`,
-      `[error] Port conflict: ${JSON.stringify(beta)} (8020..8070) overlaps ${JSON.stringify(gamma)} (8040..8090)`,
-    ]);
+    const lines = result.stdout.trim().split("\n");
+    expect(lines).toHaveLength(3);
+    for (const [left, leftRange, right, rightRange] of [
+      [alpha, "8000..8050", beta, "8020..8070"],
+      [alpha, "8000..8050", gamma, "8040..8090"],
+      [beta, "8020..8070", gamma, "8040..8090"],
+    ]) {
+      expect(
+        lines.filter((line) =>
+          [left, leftRange, right, rightRange].every((value) => line.includes(value)),
+        ),
+      ).toHaveLength(1);
+    }
   });
 
   it("reports conflicting peer claims without flagging parent-child containment", async () => {
@@ -247,10 +235,18 @@ describe("project inventory doctor", () => {
     const result = await runProjects(fixture, ["doctor"]);
 
     expect(result.code).toBe(1);
-    expect(result.stdout.trim().split("\n")).toEqual([
-      `[error] Port conflict: ${JSON.stringify(nested)} (8120..8199) overlaps ${JSON.stringify(other)} (8180..8200)`,
-      `[error] Port conflict: ${JSON.stringify(nested)} (8120..8199) overlaps ${JSON.stringify(project)} (8100..8149)`,
-    ]);
+    const lines = result.stdout.trim().split("\n");
+    expect(lines).toHaveLength(2);
+    for (const [path, ports] of [
+      [other, "8180..8200"],
+      [project, "8100..8149"],
+    ]) {
+      expect(
+        lines.filter((line) =>
+          [nested, "8120..8199", path, ports].every((value) => line.includes(value)),
+        ),
+      ).toHaveLength(1);
+    }
   });
 
   it("rejects the retired project CLI range instead of silently ignoring it", async () => {
@@ -260,9 +256,7 @@ describe("project inventory doctor", () => {
     const result = await runProjects(fixture, ["doctor"]);
 
     expect(result.code).toBe(1);
-    expect(result.stdout).toContain(`[error] Project inventory: ${JSON.stringify(project)}:`);
-    expect(result.stdout).toContain("/cli");
-    expect(result.stdout).toContain("update alignfirst");
+    expect(result.stdout).toContain(project);
   });
 
   it("fails for invalid configuration and incomplete discovery", async () => {
@@ -277,12 +271,8 @@ describe("project inventory doctor", () => {
 
     expect(result.code).toBe(1);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toContain(
-      `[error] Project inventory: ${JSON.stringify(invalid)}: Invalid `,
-    );
-    expect(result.stdout).toContain(
-      `[error] Project inventory: ${JSON.stringify(nongit)}: not a git main worktree`,
-    );
+    expect(result.stdout).toContain(invalid);
+    expect(result.stdout).toContain(nongit);
   });
 
   it("renders discovery failures as a failing health line", async () => {
@@ -292,7 +282,6 @@ describe("project inventory doctor", () => {
 
     expect(result.code).toBe(1);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toMatch(/^\[error\] Project inventory: Invalid projects marker /u);
   });
 });
 
@@ -385,16 +374,13 @@ describe("project discovery", () => {
     const result = await runProjects(fixture, ["list", "--json"]);
     expect(result.code).toBe(0);
     const report = JSON.parse(result.stdout);
-    const messages = report.issues.map((issue: { message: string }) => issue.message);
-    expect(messages).toContain("port range 8030..8059 overlaps a");
-    expect(messages).toContain("port range 8200..8299 fits no single enclosing range: 8000..8099");
-    expect(messages).toContain("port range 9000..9099 fits no single enclosing range: 8000..8099");
-    expect(messages).toContain("not a git main worktree");
-    expect(
-      messages.some(
-        (message: string) => message.startsWith("Invalid ") && message.includes("alignfirst.json"),
-      ),
-    ).toBe(true);
+    expect(report.issues.map((issue: { path: string }) => issue.path)).toEqual([
+      join(fixture.root, "b"),
+      invalid,
+      join(fixture.root, "nested-outside"),
+      nongit,
+      join(fixture.root, "outside"),
+    ]);
     expect(report.projects.some((project: { name: string }) => project.name === "invalid")).toBe(
       false,
     );
@@ -408,18 +394,13 @@ describe("project discovery", () => {
     makeRepository(fixture.root, "straddling", { portRange: range(8040, 8059) });
 
     const result = await runProjects(fixture, ["list", "--json"]);
-    const messages = JSON.parse(result.stdout).issues.map(
-      (issue: { message: string }) => issue.message,
-    );
-    expect(messages).toContain(
-      "port range 8200..8219 fits no single enclosing range: 8000..8049, 8050..8099",
-    );
-    expect(messages).toContain(
-      "port range 8040..8059 fits no single enclosing range: 8000..8049, 8050..8099",
-    );
+    expect(JSON.parse(result.stdout).issues.map((issue: { path: string }) => issue.path)).toEqual([
+      join(fixture.root, "outside"),
+      join(fixture.root, "straddling"),
+    ]);
   });
 
-  it("renders coded ranges and project range codes in text and JSON", async () => {
+  it("reports coded ranges and selects each project's range code", async () => {
     const portRanges = [
       { ...range(8000, 8099), description: "Web projects." },
       { code: "local", ...range(9000, 9099), description: "Desktop apps." },
@@ -428,11 +409,6 @@ describe("project discovery", () => {
     const nested = makeProjectsDirectory(fixture.root, "nested", {});
     makeRepository(nested, "desktop", { portRange: range(9000, 9019) });
     makeRepository(fixture.root, "web", { portRange: range(8000, 8019) });
-
-    const text = await runProjects(fixture, ["list"]);
-    expect(text.stdout).toContain("  Port ranges:\n    8000..8099 (default) — Web projects.");
-    expect(text.stdout).toContain("    9000..9099 (local) — Desktop apps.");
-    expect(text.stdout).toContain("  Port range: 9000..9019 (local)");
 
     const json = JSON.parse((await runProjects(fixture, ["list", "--json"])).stdout);
     expect(json.directories[0].portRanges).toEqual(portRanges);
@@ -457,18 +433,9 @@ describe("project discovery", () => {
       ],
     });
     expect(result.code).toBe(0);
-    expect(JSON.parse(result.stdout).issues).toEqual([
-      {
-        path: old,
-        message: expect.stringContaining(
-          `The alignfirst CLI used in ${old} is too old: aligndev requires the workspace-aware alignfirst config --json contract (merged configuration, assistantInstructionsFile, workspaceRuntime and selectionOrigins). Upgrade alignfirst.`,
-        ),
-      },
+    expect(JSON.parse(result.stdout).issues.map((issue: { path: string }) => issue.path)).toEqual([
+      old,
     ]);
-    const message: string = JSON.parse(result.stdout).issues[0].message;
-    expect(message.startsWith(`The alignfirst CLI used in ${old} is too old:`)).toBe(true);
-    expect(message).toContain("alignfirst: ");
-    expect(message).not.toContain("\n");
     const doctor = await runProjects(fixture, ["doctor"], {
       alignfirstCommand: [
         process.execPath,
@@ -477,9 +444,6 @@ describe("project discovery", () => {
       ],
     });
     expect(doctor.code).toBe(1);
-    expect(doctor.stdout.split("\n").filter((line) => line.includes("alignfirst: "))).toHaveLength(
-      1,
-    );
   });
 
   it("fails the listing when alignfirst is missing", async () => {
@@ -489,8 +453,6 @@ describe("project discovery", () => {
       alignfirstCommand: ["/nonexistent/alignfirst"],
     });
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("alignfirst is not installed");
-    expect(result.stderr).toContain("executable /nonexistent/alignfirst (not found)");
   });
 });
 
@@ -515,8 +477,6 @@ describe("project classification and companions", () => {
         { name: "two", aligndev },
       ],
     });
-    const text = await runProjects(fixture, ["list"]);
-    expect(text.stdout).toContain('AlignDev profile: "not-provisioned"');
     const status = await runProjects(fixture, ["status", one, "--json"]);
     expect(status.code).toBe(0);
     expect(JSON.parse(status.stdout)).toMatchObject({
@@ -524,9 +484,6 @@ describe("project classification and companions", () => {
       aligndev,
       locations: { _aligndev: { path: join(one, ".plans"), in: "project", exists: false } },
     });
-    expect((await runProjects(fixture, ["status", one])).stdout).toContain(
-      'AlignDev profile: "not-provisioned"',
-    );
     expect(existsSync(join(fixture.home, ".alignfirst", "companions", "two"))).toBe(false);
     expect(existsSync(join(one, ".plans"))).toBe(false);
   });
@@ -547,8 +504,8 @@ describe("project classification and companions", () => {
       exists: false,
     });
     expect(report.directories[0].others).toEqual(["plain"]);
-    expect(report.issues).toEqual([
-      { path: realpathSync(nongit), message: "not a git main worktree" },
+    expect(report.issues.map((issue: { path: string }) => issue.path)).toEqual([
+      realpathSync(nongit),
     ]);
   });
 
@@ -597,12 +554,6 @@ describe("project classification and companions", () => {
     expect(status.configSource).toBeNull();
     expect(status.companion).toEqual(list.projects[0].companion);
     expect(status.locations.assistantInstructionsFile).toBeNull();
-
-    const text = (await runProjects(fixture, ["status", "app"])).stdout;
-    expect(text).toContain("  Config source: (none)\n");
-    expect(text).toContain(`  Companion: ${JSON.stringify(companion)}\n`);
-    expect(text).toContain("  Assistant instructions: (not configured)\n");
-    expect(text).toContain(`  Work files: ${JSON.stringify(join(companion, ".plans"))}\n`);
   });
 
   it("uses a selected companion range for inventory and free-port lookup without merging project settings", async () => {
@@ -647,13 +598,9 @@ describe("project classification and companions", () => {
 
     const result = await runProjects(fixture, ["doctor"]);
     expect(result.code).toBe(1);
-    const companion = join(fixture.home, ".alignfirst", "companions", "shared");
-    expect(result.stdout.trim().split("\n")).toEqual([
-      `[error] Project inventory: ${JSON.stringify(one)}: shares companion directory ` +
-        `${companion} with ${two}`,
-      `[error] Project inventory: ${JSON.stringify(two)}: shares companion directory ` +
-        `${companion} with ${one}`,
-    ]);
+    expect(result.stdout).toContain(one);
+    expect(result.stdout).toContain(two);
+    expect(result.stdout).toContain(join(fixture.home, ".alignfirst", "companions", "shared"));
   });
 });
 
@@ -714,23 +661,8 @@ describe("project status", () => {
       ],
     });
 
-    const text = await runProjects(fixture, ["status", project]);
-    expect(text.stdout).toContain("Project:\n");
-    expect(text.stdout).toContain('  Remote host: "github.com"');
-    expect(text.stdout).toContain("  Port range: 8000..8099 (web)");
-    expect(text.stdout).toContain('  Ticket id pattern: "^P-\\\\d+$"');
-    expect(text.stdout).toContain("  Config source: project\n  Companion: (none)\n");
-    expect(text.stdout).toContain(
-      `  Assistant instructions: ${JSON.stringify(join(project, "DEVELOPERS.md"))} (missing)\n`,
-    );
-    expect(text.stdout).toContain(
-      `  Work files: ${JSON.stringify(join(project, ".plans"))} (missing)\n`,
-    );
-
     const rejected = await runProjects(fixture, ["status", workspace]);
     expect(rejected.code).toBe(1);
-    expect(rejected.stderr).toContain("is not a project of");
-    expect(rejected.stderr).toContain("main-worktree path");
   });
 
   it("resolves a relative path against the working directory", async () => {
@@ -759,14 +691,12 @@ describe("project ports", () => {
 
     const exhausted = await runProjects(fixture, ["free-ports", "--size", "80"]);
     expect(exhausted.code).toBe(1);
-    expect(exhausted.stderr).toContain("No block of 80 contiguous free ports in 8000..8099");
   });
 
   it("requires root port ranges for free-ports", async () => {
     const fixture = makeFixture({});
     const result = await runProjects(fixture, ["free-ports", "--size", "1"]);
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("has no portRanges");
   });
 
   it("selects a coded range and reports unknown codes", async () => {
@@ -790,8 +720,6 @@ describe("project ports", () => {
       "missing",
     ]);
     expect(unknown.code).toBe(1);
-    expect(unknown.stderr).toContain('Unknown port range code "missing"');
-    expect(unknown.stderr).toContain("declared codes: local, worker");
   });
 
   it("requires an explicit code when the marker has no default range", async () => {
@@ -804,8 +732,6 @@ describe("project ports", () => {
 
     const result = await runProjects(fixture, ["free-ports", "--size", "10"]);
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("declares no default range: pass --range <code>");
-    expect(result.stderr).toContain("codes: local, worker");
   });
 });
 

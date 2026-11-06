@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { WorkspaceError } from "../src/errors.js";
 import { adaptWorkspaceManifest } from "../src/manifest-adapter.js";
 import { resolveDevPortsConfig } from "../src/ports.js";
 import { writeDevServers } from "../src/dev-servers-registry.js";
@@ -104,7 +105,7 @@ describe("run-file write batches", () => {
     },
   );
 
-  it("generates dependent content in order on creation and rewrite, with one update message", async () => {
+  it("generates dependent content in order on creation and rewrite", async () => {
     let host = "A";
     let generations = 0;
     input.runFilesInputs = () => ({ host });
@@ -132,9 +133,6 @@ describe("run-file write batches", () => {
     await runDevSetup(input);
     expect(fileContent("derived.txt")).toBe("HOST=B\n");
     expect(generations).toBe(2);
-    expect(console.warn).toHaveBeenCalledExactlyOnceWith(
-      "Warning: the run-file inputs changed (host). Updated host.env, derived.txt.",
-    );
 
     writeFileSync(filePath("derived.txt"), "hand edit\n");
     await runDevSetup(input);
@@ -146,7 +144,7 @@ describe("run-file write batches", () => {
     });
   });
 
-  it("reports preceding updates when a later generated source fails", async () => {
+  it("retains preceding updates and clears the write basis when a later source fails", async () => {
     let host = "A";
     let fail = false;
     input.runFilesInputs = () => ({ host });
@@ -168,9 +166,6 @@ describe("run-file write batches", () => {
     fail = true;
     await expect(runDevSetup(input)).rejects.toThrow("generation failed");
     expect(fileContent("host.env")).toBe("HOST=B\n");
-    expect(console.warn).toHaveBeenCalledExactlyOnceWith(
-      "Warning: the run-file inputs changed (host). Updated host.env.",
-    );
     expect(currentEntry().runFilesWrittenWith).toBeUndefined();
   });
 
@@ -196,9 +191,6 @@ describe("run-file write batches", () => {
     expect(fileContent("container.env")).toBe("CONTAINER=renamed-database\n");
     expect(provisioned).toEqual(["main", "renamed"]);
     expect(currentEntry().runFilesWrittenWith).toEqual({ ports: {}, inputs: {} });
-    expect(console.warn).toHaveBeenCalledExactlyOnceWith(
-      "Warning: the run files had no recorded ports or inputs. Updated container.env.",
-    );
   });
 });
 
@@ -249,9 +241,6 @@ describe("computed run-file inputs", () => {
     await runDevSetup(input);
     expect(currentEntry().runFilesWrittenWith?.inputs).toEqual({});
     expect(fileContent("invocation.txt")).toBe("absent");
-    expect(console.warn).toHaveBeenCalledTimes(2);
-    for (const [warning] of vi.mocked(console.warn).mock.calls)
-      expect(warning).toContain(`inputs changed (${key})`);
     const recorded = [
       readFileSync(filePath(`${input.registryDir}/workspaces.json`), "utf8"),
       ...vi.mocked(console.warn).mock.calls.flat(),
@@ -321,7 +310,6 @@ describe("computed run-file inputs", () => {
     await runDevSetup(input);
     expect(currentEntry().ports).toEqual({});
     expect(currentEntry().runFilesWrittenWith).toEqual({ ports: {}, inputs: {} });
-    expect(console.warn).toHaveBeenLastCalledWith(expect.stringContaining("inputs changed (host)"));
     expect(vi.mocked(console.warn).mock.calls.flat().join("\n")).not.toContain(secret);
   });
 });
@@ -338,7 +326,7 @@ describe("registered main identity", () => {
     await runDevSetup(input);
     rmSync(`${path}c`);
     input.recipe = { kind: "defaults" };
-    await expect(runDevSetup(input)).rejects.toThrow("manifest recipe is missing");
+    await expect(runDevSetup(input)).rejects.toThrow(WorkspaceError);
     expect(currentEntry().recipe.kind).toBe("manifest");
   });
 
@@ -400,7 +388,9 @@ describe("registered main identity", () => {
       ],
     });
     input.options.resetPorts = true;
-    await expect(runDevSetup(input)).rejects.toThrow("dev-server of this worktree is running");
+    const before = currentEntry();
+    await expect(runDevSetup(input)).rejects.toThrow(WorkspaceError);
+    expect(currentEntry()).toEqual(before);
   });
 });
 

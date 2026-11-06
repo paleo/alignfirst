@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { readDevServers, writeDevServers } from "../src/dev-servers-registry.js";
 import { seedFiles } from "../src/file-entries.js";
+import { ConfigError, WorkspaceError } from "../src/errors.js";
 import { assertFileDestination } from "../src/file-destinations.js";
 import { withRegistryLock } from "../src/registry-lock.js";
 import { assertRegistryOwnership } from "../src/registry-ownership.js";
@@ -69,7 +70,7 @@ describe("kernel-owned file destinations", () => {
         existing: "reseed",
         log: { tee: () => {}, verbose: () => {} },
       }),
-    ).rejects.toThrow(/registry/i);
+    ).rejects.toThrow(ConfigError);
     expect(produced).toBe(false);
     expect(existsSync(join(main, path))).toBe(false);
   });
@@ -82,14 +83,14 @@ describe("kernel-owned file destinations", () => {
     symlinkSync(registry, join(main, "registry-alias"));
     symlinkSync(dirname(registry), join(main, "runtime-alias"));
     for (const path of ["file-alias", "registry-alias/new", "runtime-alias"]) {
-      expect(() => assertFileDestination(main, path)).toThrow(/registry/i);
+      expect(() => assertFileDestination(main, path)).toThrow(ConfigError);
     }
     expect(readFileSync(join(registry, "workspaces.json"), "utf8")).toBe("original");
     const selected = join(foreign, registryDir);
     const before = readFileSync(join(selected, "workspaces.json"), "utf8");
     symlinkSync(selected, join(main, "selected-registry"));
     expect(() => assertFileDestination(main, "selected-registry/new", selected)).toThrow(
-      /registry/i,
+      ConfigError,
     );
     expect(readFileSync(join(selected, "workspaces.json"), "utf8")).toBe(before);
   });
@@ -134,10 +135,10 @@ describe("main registry ownership", () => {
       ]);
       if (location !== "lock") {
         const read = location === "devFile" ? readDevServers : readWorkspaces;
-        expect(() => read(main, registryDir)).toThrow(/local|ownership/i);
+        expect(() => read(main, registryDir)).toThrow(WorkspaceError);
         const filename = location === "devFile" ? "dev-servers.json" : "workspaces.json";
         expect(() => writeRegistry(join(registry, filename), {}, { type: "object" }, main)).toThrow(
-          /local|ownership/i,
+          WorkspaceError,
         );
       }
       let ran = false;
@@ -146,7 +147,7 @@ describe("main registry ownership", () => {
           withRegistryLock(main, registryDir, () => {
             ran = true;
           }),
-        ).rejects.toThrow(/local|ownership/i);
+        ).rejects.toThrow(WorkspaceError);
         expect(ran).toBe(false);
       }
       expect(
@@ -181,7 +182,7 @@ describe("main registry ownership", () => {
         existing: "reseed",
         log: { tee: () => {}, verbose: () => {} },
       }),
-    ).rejects.toThrow(/registry/i);
+    ).rejects.toThrow(ConfigError);
     expect(readFileSync(registry, "utf8")).toBe("original");
   });
 
@@ -197,7 +198,7 @@ describe("main registry ownership", () => {
           kind === "foreign" ? join(foreign, registryDir) : join(scratch, "missing"),
           join(linked, registryDir),
         );
-      expect(() => assertRegistryOwnership(main, linked, registryDir)).toThrow(/own main/i);
+      expect(() => assertRegistryOwnership(main, linked, registryDir)).toThrow(WorkspaceError);
     },
   );
 
@@ -228,7 +229,7 @@ describe("main registry ownership", () => {
     expect(readWorkspaces(main, registryDir).workspaces).toEqual({});
     expect(readDevServers(main, registryDir)).toEqual({ servers: [] });
     expect(() => assertFileDestination(linked, `${registryDir}/workspaces.json`)).toThrow(
-      /registry/i,
+      ConfigError,
     );
   });
 });

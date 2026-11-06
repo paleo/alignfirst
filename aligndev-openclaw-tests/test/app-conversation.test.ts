@@ -21,7 +21,7 @@ for (const toolName of ["message", "thread_handoff"]) {
   test(`assertNoChannelTools rejects a \`${toolName}\` call`, async () => {
     await assert.rejects(
       assertNoChannelTools(offlineContext([call("exec", { command: "ls" }), call(toolName, {})])),
-      new RegExp(`no \`${toolName}\` call`),
+      { code: "ERR_ASSERTION", actual: 1, expected: 0 },
     );
   });
 }
@@ -44,13 +44,16 @@ const REJECTED_LAUNCHES = [
 
 for (const { name, command } of REJECTED_LAUNCHES) {
   test(`expectAppDelegationChain rejects a launch ${name}`, async () => {
-    await assert.rejects(chain(offlineContext([launch(command)])), /chains `openclaw system event/);
+    await assert.rejects(chain(offlineContext([launch(command)])), {
+      code: "ERR_ASSERTION",
+      expected: SESSION_KEY,
+    });
   });
 }
 
 test("expectAppDelegationChain rejects a foreground launch", async () => {
   const ctx = offlineContext([launch(`${LAUNCH} ; ${WAKE}`, { background: false })]);
-  await assert.rejects(chain(ctx), /runs in the background/);
+  await assert.rejects(chain(ctx), { code: "ERR_ASSERTION", actual: false, expected: true });
 });
 
 function chain(ctx: ScenarioContext): Promise<void> {

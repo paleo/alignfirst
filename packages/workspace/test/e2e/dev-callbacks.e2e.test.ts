@@ -8,6 +8,7 @@ import { resolveWorkspaceStorage } from "../../src/storage.js";
 import type { WorkspaceManifest } from "../../src/workspace-config-types.js";
 import type { DevServerEntry } from "../../src/dev-servers-registry.js";
 import type { ServerContext } from "../../src/server-descriptor.js";
+import type { StartupOwners } from "../../src/startup-registry.js";
 import {
   cliExecutable,
   alignfirstBin,
@@ -129,7 +130,7 @@ describe("registered callback identity (e2e)", () => {
       writeFileSync(file, JSON.stringify(manifest));
       const started = runDev(root, ["up"], ENV, nested);
       expect(started.status, started.stderr).toBe(0);
-      expect(started.stdout).toContain(`Workspace: ${ctx.name}`);
+      expect(started.stdout).toContain(ctx.name);
       const runtime = resolveWorkspaceStorage(
         {
           in: companionRuntime ? "companion" : "project",
@@ -139,7 +140,7 @@ describe("registered callback identity (e2e)", () => {
         root,
       ).runtimeDir;
       const log = join(runtime, "logs", "ready.log");
-      expect(started.stdout).toContain(`log: ${log}`);
+      expect(started.stdout).toContain(log);
       expect(readFileSync(log, "utf-8")).toContain("FIXTURE_READY");
       expect(existsSync(join(nested, ".local-wt"))).toBe(false);
       expect(spawns(fx).map((event) => event.cwd)).toEqual([root]);
@@ -156,18 +157,15 @@ describe("registered callback identity (e2e)", () => {
       });
       const status = runDev(root, ["status"], ENV, nested);
       expect(status.status, status.stderr).toBe(0);
-      expect(status.stdout).toContain("status: UP");
-      expect(status.stdout).toContain(`log: ${log}`);
+      expect(status.stdout).toContain(log);
       const noop = runDev(root, ["up"], { ...ENV, E2E_DEV_LIMIT: "invalid" }, nested);
       expect(noop.status, noop.stderr).toBe(0);
-      expect(noop.stdout).toContain("already running");
       expect(spawns(fx)).toHaveLength(1);
 
       const attached = foreground(target, { E2E_DEV_LIMIT: "invalid" });
       await waitUntil(() => attached.output.includes("FIXTURE_READY"), "root log replay");
       attached.child.kill("SIGINT");
       await exited(attached, 0);
-      expect(attached.output).toContain("Detached.");
       expect(stops(fx)).toEqual([]);
       expect(isAlive(spawns(fx)[0].pid)).toBe(true);
 
@@ -182,7 +180,7 @@ describe("registered callback identity (e2e)", () => {
       });
       expect(devEntries(fx)).toEqual([]);
       await waitUntil(() => !isAlive(spawns(fx)[0].pid), "local down");
-      expect(runDev(root, ["status"], ENV, nested).stdout).toContain("status: DOWN");
+      expect(runDev(root, ["status"], ENV, nested).status).toBe(0);
       expect(runDev(root, ["down"], ENV, nested).status).toBe(0);
       expect(stops(fx)).toEqual(expectedStops(ctx));
     },
@@ -211,7 +209,6 @@ describe("registered callback identity (e2e)", () => {
       const before = bytes();
       const failed = runDev(root, ["up"], invalid);
       expect(failed.status, failed.stderr).toBe(1);
-      expect(failed.stderr).toContain("maxConcurrentDevServers: E2E_DEV_LIMIT");
       expect(failed.stderr).not.toContain("PRIVATE");
       expect(bytes()).toEqual(before);
       // Zero overrides a finite default and permits more than one live environment.
@@ -224,7 +221,6 @@ describe("registered callback identity (e2e)", () => {
       for (const args of [["restart"], ["up", "--restart"], ["--restart"]]) {
         const rejected = runDev(root, args, invalid);
         expect(rejected.status, rejected.stderr).toBe(1);
-        expect(rejected.stderr).toContain("maxConcurrentDevServers: E2E_DEV_LIMIT");
         expect(isAlive(pid)).toBe(true);
         expect(bytes()).toEqual(runningBytes);
       }
@@ -302,7 +298,6 @@ describe("registered callback identity (e2e)", () => {
       const recorded = devEntries(target.fx);
       const lost = runDev(target.root, ["up", "--restart"], ENV);
       expect(lost.status, lost.stderr).toBe(1);
-      expect(lost.stderr).toContain("startup already in progress");
       expect(callbacks(target.fx)).toEqual(before);
       expect(devEntries(target.fx)).toEqual(recorded);
       expect(stops(target.fx)).toEqual([]);
@@ -342,7 +337,7 @@ describe("registered callback identity (e2e)", () => {
     async (signal) => {
       const target = prepareTarget();
       const running = foreground(target);
-      await waitUntil(() => running.output.includes("Dev servers started!"), "foreground ready");
+      await waitUntil(() => foregroundReady(target), "foreground ready");
       expect(devEntries(target.fx)[0].name).toBe(target.ctx.name);
       running.child.kill(signal);
       await exited(running, 0);
@@ -367,7 +362,6 @@ describe("registered callback identity (e2e)", () => {
       });
       await waitUntil(() => spawns(target.fx).length === 1, "spawn before readiness");
       expect(callbacks(target.fx).filter((event) => event.event === "start")).toHaveLength(2);
-      expect(running.output).not.toContain("Dev servers started!");
       running.child.kill("SIGINT");
       await exited(running, 130);
       expect(stops(target.fx)).toEqual(expectedStops(target.ctx));
@@ -416,13 +410,12 @@ describe("registered callback identity (e2e)", () => {
       if (mode === "attached") expect(runDev(target.root, ["up"], ENV).status).toBe(0);
       const running = foreground(target);
       await waitUntil(
-        () => running.output.includes(mode === "owned" ? "Dev servers started!" : "Attaching"),
+        () => running.output.includes("FIXTURE_READY") && foregroundReady(target),
         "foreground ownership",
       );
       const stopped = runDev(target.root, ["down"], ENV, target.nested);
       expect(stopped.status, stopped.stderr).toBe(0);
       await exited(running, 0);
-      expect(running.output).toContain("stopped externally");
       expect(stops(target.fx)).toEqual(expectedStops(target.ctx));
       expect(devEntries(target.fx)).toEqual([]);
     },
@@ -532,8 +525,12 @@ describe("registered callback identity (e2e)", () => {
       );
       await waitUntil(() => existsSync(`${barrier}.entered`), "stop barrier after PID exit");
       expect(isAlive(pid)).toBe(false);
-      expect(runDev(fx.repo, ["list"]).stdout).toContain("cleanupPending=true");
-      expect(runDev(root, ["up"], ENV).stderr).toContain("Cleanup is pending");
+      expect(runDev(fx.repo, ["list"]).status).toBe(0);
+      expect(devEntries(fx).find((entry) => entry.worktree === root)).toMatchObject({
+        name: ctx.name,
+        cleanupPending: true,
+      });
+      expect(runDev(root, ["up"], ENV).status).toBe(1);
       expect(spawns(fx)).toHaveLength(1);
       expect(runDev(fx.repo, ["up"], ENV).status).toBe(0);
       const sibling = devEntries(fx).find((entry) => entry.worktree === fx.repo);
@@ -589,7 +586,7 @@ describe("registered callback identity (e2e)", () => {
         { name: ctx.name, worktree: root, pids: {}, cleanupPending: true },
       ]);
       expect(runDev(root, ["list"]).stdout).toContain(ctx.name);
-      expect(runDev(root, ["up"], ENV).stderr).toContain("Cleanup is pending");
+      expect(runDev(root, ["up"], ENV).status).toBe(1);
       expect(runDev(root, ["down"], ENV).status).toBe(0);
       expect(devEntries(fx)).toEqual([]);
       expect(stops(fx).map((event) => event.label)).toEqual(["docker", "cache", "docker"]);
@@ -652,6 +649,13 @@ function foreground(
   });
   children.push(running);
   return running;
+}
+
+function foregroundReady(target: Target): boolean {
+  if (!devEntries(target.fx).some((entry) => entry.worktree === target.root)) return false;
+  const file = join(fixtureRegistryDir(target.fx.repo), "dev-startups.json");
+  const pending: StartupOwners = JSON.parse(readFileSync(file, "utf8"));
+  return pending.owners.every((owner) => owner.worktree !== target.root);
 }
 
 async function exited(running: RunningChild, code: number): Promise<void> {

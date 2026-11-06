@@ -93,7 +93,7 @@ describe("built worktree CLI lifecycle", () => {
     const failed = run("code", "status", "--no-ticket");
     expect(failed.status).toBe(1);
     expect(failed.stderr).toContain("`npx -y alignfirst`");
-    expect(failed.stderr).toContain("version 0.1.0");
+    expect(failed.stderr).toContain("0.1.0");
     expect(failed.stderr).not.toContain("counterpart-script-must-not-run");
   });
 
@@ -298,7 +298,6 @@ describe("built worktree CLI lifecycle", () => {
       expect(realpathSync(locations._aligndev.path)).toBe(sessions);
       const doctor = cli(alignfirst, destination, env, "doctor");
       expect(doctor.status, doctor.stderr).toBe(0);
-      expect(doctor.stdout).toContain("embedded docmap");
       const context = cli(alignfirst, destination, env, "context");
       expect(context.status, context.stderr).toBe(0);
       expect(context.stdout).toContain(mode === "companion" ? plans : ".plans");

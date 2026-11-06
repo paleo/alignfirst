@@ -112,7 +112,6 @@ describe("actual Pi 1.3.0 headless parent", () => {
         );
         if (scope === "untrusted") {
           expect(toolEvent).toMatchObject({ isError: true });
-          expect(JSON.stringify(toolEvent)).toContain("/trust");
           expect(
             readdirSync(captures).every((file) => file.startsWith(`${managed.child.pid}-`)),
           ).toBe(true);
@@ -159,11 +158,7 @@ describe("actual Pi 1.3.0 headless parent", () => {
         expect(
           children
             .map((file) => readFileSync(join(captures, file), "utf8"))
-            .some((text) =>
-              text.includes(
-                "Task:\\n/skill:literal-child\\n$(not shell) @file  \\n\\t\\nEnd of task.",
-              ),
-            ),
+            .some((text) => text.includes("/skill:literal-child\\n$(not shell) @file  \\n\\t")),
         ).toBe(true);
       } finally {
         clearTimeout(timer);

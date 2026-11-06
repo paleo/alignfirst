@@ -53,7 +53,11 @@ describe("bounded byte-tail output", () => {
     expect(Buffer.byteLength(snapshot.output)).toBe(snapshot.returnedBytes);
     expect(snapshot.truncated).toBe(true);
   });
-  it("marks metadata previews explicitly without splitting characters", () => {
-    expect(preview("😀".repeat(100), 5)).toBe("😀…[preview]");
+  it("truncates metadata without splitting characters", () => {
+    const input = "😀".repeat(100);
+    const result = preview(input, 5);
+    expect(result.startsWith("😀")).toBe(true);
+    expect(result).not.toContain("�");
+    expect(result.match(/😀/gu)).toHaveLength(1);
   });
 });

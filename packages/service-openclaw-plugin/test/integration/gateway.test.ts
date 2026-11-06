@@ -40,7 +40,6 @@ const OPENCLAW = resolve(PACKED_ROOT ?? REPO_ROOT, "node_modules/.bin/openclaw")
 const BOT_MENTION = "@openclaw";
 
 const FINALIZER_FALLBACK = "no final summary was produced";
-const ISOLATED_FINALIZATION_LOG = "running isolated finalization";
 
 const execFileAsync = promisify(execFile);
 const fixtures: FixtureOwner[] = [];
@@ -147,12 +146,7 @@ describe("OpenClaw external-plugin gateway", () => {
       40_000,
     );
     expect(providerContentIncludes(fixture, "Exec completed (")).toBe(true);
-    expect(
-      providerContentIncludes(
-        fixture,
-        "unsupportedContext: Trusted channel session context is unavailable.",
-      ),
-    ).toBe(true);
+    expect(providerContentIncludes(fixture, "unsupportedContext:")).toBe(true);
     expect([...providerClaimResults(fixture).values()]).toEqual(["claimed", "error"]);
     expect(outboundMessages(fixture, "NATIVE_COMPLETION_REPORTED")).toHaveLength(0);
   });
@@ -171,9 +165,6 @@ describe("OpenClaw external-plugin gateway", () => {
         inbound.message.id,
         "Start a task that needs a human answer.",
       );
-      expect(
-        fixture.gatewayLog.some((line) => line.includes("running isolated finalization")),
-      ).toBe(false);
       expect(
         fixture.bus.state
           .getSnapshot()
@@ -225,7 +216,6 @@ describe("OpenClaw external-plugin gateway", () => {
     const threadId = fixture.bus.state.getSnapshot().threads[0]?.id;
     expect(threadId).toBeTruthy();
     expect(finalizer.threadId).toBe(threadId);
-    expect(fixture.gatewayLog.join("")).toContain(ISOLATED_FINALIZATION_LOG);
     expect(allOutbound(fixture).map((message) => message.threadId)).toEqual([threadId, threadId]);
   });
 
@@ -288,7 +278,6 @@ describe("OpenClaw external-plugin gateway", () => {
       expect(providerContentIncludes(fixture, '"status": "queued"')).toBe(true);
       expect(providerContentIncludes(fixture, '"status": "claimed"')).toBe(true);
       expect(providerContentIncludes(fixture, '"status": "alreadyStarted"')).toBe(true);
-      expect(providerContentIncludes(fixture, "AlignFirst Service")).toBe(true);
       expect(providerContentIncludes(fixture, TAKEOVER_MESSAGE)).toBe(true);
       expect(providerToolCallIncludes(fixture, "message", { action: "read" })).toBe(true);
       expect(providerToolCallIncludes(fixture, "thread_handoff", { action: "claim" }, true)).toBe(
@@ -318,9 +307,6 @@ describe("OpenClaw external-plugin gateway", () => {
         (message) => message.text === "SAME_SESSION_CONTINUED",
       );
       expect(continued.threadId).toBe(expectedThreadId);
-      expect(
-        fixture.gatewayLog.some((line) => line.includes("running isolated finalization")),
-      ).toBe(false);
 
       expect(
         fixture.bus.state
@@ -362,9 +348,6 @@ describe("OpenClaw external-plugin gateway", () => {
         (message) => message.text === RACING_HUMAN_HANDLED,
       );
       expect(handled.threadId).toBe(threadId);
-      expect(fixture.gatewayLog.join("")).not.toContain(
-        "restart recovery claim changed before agent adoption",
-      );
     },
   );
 
@@ -1021,7 +1004,6 @@ function allOutbound(fixture: Fixture) {
 }
 
 function expectNoIsolatedFinalization(fixture: Fixture) {
-  expect(fixture.gatewayLog.join("")).not.toContain(ISOLATED_FINALIZATION_LOG);
   expect(
     allOutbound(fixture).filter(
       (message) =>

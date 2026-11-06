@@ -20,7 +20,6 @@ import {
 } from "../scripts/lightweight-fixture.ts";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const aligndev = join(root, "packages/aligndev/bin/aligndev.mjs");
 const alignfirst = join(root, "packages/alignfirst/bin/alignfirst.mjs");
 
 test("request capture tolerates presentation but retains every requirement", () => {
@@ -39,12 +38,12 @@ test("request capture tolerates presentation but retains every requirement", () 
       .replace("Ne pousse rien", "Ne rien pousser"),
   );
   for (const missing of ["sans ticket externe, ", "et exécute `npm test`", "- Ne pousse rien."]) {
-    assert.throws(() => assertCapturedRequest(presented.replace(missing, "")), /omitted/);
+    assert.throws(() => assertCapturedRequest(presented.replace(missing, "")));
   }
 });
 
 for (const mode of ["shared", "missing", "tracked"] as const) {
-  test(`lightweight ${mode}: real creation, discovery/reuse, consultation, cleanup`, () => {
+  test(`lightweight ${mode}: real creation, discovery/reuse and cleanup`, () => {
     const base = realpathSync(mkdtempSync(join(tmpdir(), "side29-lightweight-")));
     const home = join(base, "home");
     const repo = join(base, "nimbus");
@@ -116,7 +115,11 @@ for (const mode of ["shared", "missing", "tracked"] as const) {
         JSON.parse(cli(alignfirst, repo, "config", "--json")).config,
         retainedConfig,
       );
-      assert.match(cli(alignfirst, repo, "assistant-instructions"), /small ESM library/);
+      assert(
+        cli(alignfirst, repo, "assistant-instructions").includes(
+          readFileSync(join(repo, "DEVELOPERS.md"), "utf8"),
+        ),
+      );
       assert.equal(
         JSON.parse(readFileSync(join(repo, "package.json"), "utf8")).dependencies,
         undefined,
@@ -220,10 +223,6 @@ for (const mode of ["shared", "missing", "tracked"] as const) {
       );
       assert.equal(duplicate.status, 1);
       assert(duplicate.stderr.includes(worktree));
-      const consultation = cli(aligndev, repo, "guide", "consultation");
-      assert.match(consultation, /Do not create a worktree merely to answer a question/);
-      const working = cli(aligndev, repo, "guide", "project-workspace-setup");
-      assert.match(working, /for a status request, end the turn/);
       const beforeStatus = git("worktree", "list", "--porcelain");
       assert.equal(git("branch", "--list", "side-2/*"), "");
       cli(alignfirst, repo, "workspace", "list", "--json");

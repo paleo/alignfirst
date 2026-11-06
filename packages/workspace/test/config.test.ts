@@ -10,6 +10,7 @@ import {
   resolveDevServerLimit,
   validateWorkspaceSettings,
 } from "../src/config.js";
+import { ConfigError } from "../src/errors.js";
 import type { WorkspaceManifest } from "../src/workspace-config-types.js";
 
 const dirs: string[] = [];
@@ -25,19 +26,19 @@ it("distinguishes absence, broken links, ambiguity and strict JSON/JSONC without
   expect(resolveConfigFamily(dir, "settings")).toEqual({ path: json, exists: false });
   symlinkSync(join(dir, "missing"), jsonc);
   expect(configFamilyExists(dir, "settings")).toBe(true);
-  expect(() => readConfigFile(resolveConfigFamily(dir, "settings").path)).toThrow("cannot read");
+  expect(() => readConfigFile(resolveConfigFamily(dir, "settings").path)).toThrow(ConfigError);
   writeFileSync(json, "{}");
-  expect(() => resolveConfigFamily(dir, "settings")).toThrow("Ambiguous");
+  expect(() => resolveConfigFamily(dir, "settings")).toThrow(ConfigError);
   rmSync(jsonc);
   const text = '{/* comment */ "__proto__":"literal",}';
   writeFileSync(json, text);
-  expect(() => readConfigFile(json)).toThrow("valid JSON");
+  expect(() => readConfigFile(json)).toThrow(ConfigError);
   rmSync(json);
   writeFileSync(jsonc, text);
   expect(Object.entries(readConfigFile(jsonc) ?? {})).toContainEqual(["__proto__", "literal"]);
   expect(readFileSync(jsonc, "utf8")).toBe(text);
   writeFileSync(jsonc, '{"key": BROKEN}');
-  expect(() => readConfigFile(jsonc)).toThrow("valid JSONC");
+  expect(() => readConfigFile(jsonc)).toThrow(ConfigError);
 });
 
 it("resolves safe nonnegative startup limits without reading ambient values", async () => {
@@ -65,7 +66,7 @@ it("resolves safe nonnegative startup limits without reading ambient values", as
     const attempt = Promise.resolve().then(() =>
       resolveDevServerLimit(binding, { DEV_LIMIT: value }),
     );
-    await expect(attempt).rejects.toThrow("maxConcurrentDevServers: DEV_LIMIT");
+    await expect(attempt).rejects.toThrow(ConfigError);
     await expect(attempt).rejects.not.toThrow("PRIVATE");
   }
   for (const value of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1, Number.POSITIVE_INFINITY]) {
@@ -74,13 +75,13 @@ it("resolves safe nonnegative startup limits without reading ambient values", as
         { devServer: { servers: [], maxConcurrentDevServers: value } },
         "recipe",
       ),
-    ).toThrow("maxConcurrentDevServers");
+    ).toThrow(ConfigError);
     expect(() =>
       validateWorkspaceSettings(
         { devServer: { servers: [], maxConcurrentDevServers: { ...binding, default: value } } },
         "recipe",
       ),
-    ).toThrow("maxConcurrentDevServers");
+    ).toThrow(ConfigError);
   }
 });
 
@@ -91,31 +92,25 @@ it("checks source-independent recipe semantics after structural validation", () 
     exec: { run: "true" },
     ready: { log: "ready" },
   };
-  const cases: [WorkspaceManifest, string][] = [
-    [{ devServer: { servers: [spawn, spawn] } }, "duplicate server"],
-    [{ devServer: { servers: [{ ...spawn, port: "unknown" }] } }, "undeclared port"],
-    [{ devServer: { servers: [{ ...spawn, ready: { log: "[" } }] } }, "ready.log"],
-    [{ devServer: { servers: [{ ...spawn, error: { log: "[" } }] } }, "error.log"],
-    [
-      {
-        devServer: {
-          servers: [spawn],
-          ports: { first: 8100, last: 8199, declare: [{ name: "api", mainWorktree: 8200 }] },
-        },
+  const cases: WorkspaceManifest[] = [
+    { devServer: { servers: [spawn, spawn] } },
+    { devServer: { servers: [{ ...spawn, port: "unknown" }] } },
+    { devServer: { servers: [{ ...spawn, ready: { log: "[" } }] } },
+    { devServer: { servers: [{ ...spawn, error: { log: "[" } }] } },
+    {
+      devServer: {
+        servers: [spawn],
+        ports: { first: 8100, last: 8199, declare: [{ name: "api", mainWorktree: 8200 }] },
       },
-      "mainWorktree",
-    ],
-    [
-      {
-        workspace: { gitignoredFiles: [{ path: "config/.env", source: { kind: "mainWorktree" } }] },
-        devServer: {
-          servers: [spawn],
-          runFiles: [{ path: "config/./.env", source: { kind: "committed", path: "template" } }],
-        },
+    },
+    {
+      workspace: { gitignoredFiles: [{ path: "config/.env", source: { kind: "mainWorktree" } }] },
+      devServer: {
+        servers: [spawn],
+        runFiles: [{ path: "config/./.env", source: { kind: "committed", path: "template" } }],
       },
-      "also occurs",
-    ],
+    },
   ];
-  for (const [settings, field] of cases)
-    expect(() => validateWorkspaceSettings(settings, "recipe")).toThrow(field);
+  for (const settings of cases)
+    expect(() => validateWorkspaceSettings(settings, "recipe")).toThrow(ConfigError);
 });

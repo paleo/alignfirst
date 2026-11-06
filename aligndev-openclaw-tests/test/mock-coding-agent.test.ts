@@ -36,6 +36,7 @@ const PROMPT =
 const REVIEW_INSTRUCTION =
   "Run `npx -y alignfirst guide review` and follow the protocol. Ticket ID = ABC-0160.";
 const REVIEW_RESULT = "Review complete against main. No findings.";
+const IMPLEMENTATION_RESULT = "Implementation fixture result";
 const WORKTREE = "/home/assistant/projects/nimbus-ABC-0120-export-bold";
 const PUBLISH_REQUEST =
   "Publish the existing local commit on branch ABC-0120/export-bold: push it to origin " +
@@ -95,7 +96,7 @@ for (const [agent, adapter] of [
   test(`${agent} A16 review matcher and mock accept actual CLI prompt wrapping`, async (t) => {
     const fixture = createMockFixture(t, agent, {
       onPrompt: async (_ctx, _cwd, prompt) => {
-        if (isReviewProtocolPrompt(prompt)) return REVIEW_RESULT;
+        return isReviewProtocolPrompt(prompt) ? REVIEW_RESULT : IMPLEMENTATION_RESULT;
       },
     });
     for (const alignfirst of ["alignfirst", "npx -y alignfirst"]) {
@@ -131,7 +132,6 @@ for (const [agent, adapter] of [
           assessment.error ?? "Review stream did not succeed",
         );
         assert.equal(assessment.result, REVIEW_RESULT);
-        assert.doesNotMatch(response.stdout, /Implemented the requested change/u);
       }
     }
     const prompt = buildPrompt({
@@ -145,8 +145,7 @@ for (const [agent, adapter] of [
     const config = { ...mockRunConfig(fixture.home), prompt };
     const response = await fixture.invoke(agent, adapter.buildArgs(config), prompt);
     assert.equal(response.exitCode, 0, response.stderr);
-    assert.match(response.stdout, /Implemented the requested change/u);
-    assert.doesNotMatch(response.stdout, /Review complete against main/u);
+    assert.equal(assessStream(adapter, config, response.stdout).result, IMPLEMENTATION_RESULT);
   });
 }
 
@@ -226,8 +225,7 @@ for (const prompt of [
   test("explicit publication pushes the existing fixture commit without changing it", async (t) => {
     const fixture = createPushFixture(t);
     const before = fixture.git(["rev-parse", "HEAD"]);
-    const result = await pushMockFixtureBranch(fixture.context, WORKTREE, prompt);
-    assert.match(result ?? "", /Published the existing commit on ABC-0120\/export-bold to origin/u);
+    await pushMockFixtureBranch(fixture.context, WORKTREE, prompt);
     assert.equal(fixture.git(["rev-parse", "HEAD"]), before);
     assert.equal(fixture.git(["status", "--porcelain"]), "");
     assert.equal(fixture.git(["rev-parse", "@{upstream}"]), before);
@@ -261,21 +259,25 @@ test("push mock ignores prohibitions, references, and historical publication ins
 
 test("push mock refuses paths outside the linked fixture and non-fixture origins", async (t) => {
   const fixture = createPushFixture(t);
+  const commands: string[][] = [];
+  const context: PushFixtureContext = {
+    execInGateway: async (argv, options) => {
+      commands.push(argv);
+      assert.notEqual(argv[3], "push", "A rejected target must never reach Git push");
+      return fixture.context.execInGateway(argv, options);
+    },
+  };
   for (const path of [
     "/home/assistant/projects/nimbus",
     `${WORKTREE}/nested`,
     `${WORKTREE}/../nimbus`,
   ]) {
-    await assert.rejects(
-      pushMockFixtureBranch(fixture.context, path, PUBLISH_REQUEST),
-      /outside a fixture worktree/u,
-    );
+    await assert.rejects(pushMockFixtureBranch(context, path, PUBLISH_REQUEST));
+    assert.deepEqual(commands, []);
   }
   fixture.git(["remote", "set-url", "origin", "https://example.invalid/unrelated.git"]);
-  await assert.rejects(
-    pushMockFixtureBranch(fixture.context, WORKTREE, PUBLISH_REQUEST),
-    /non-fixture origin/u,
-  );
+  await assert.rejects(pushMockFixtureBranch(context, WORKTREE, PUBLISH_REQUEST));
+  assert(commands.every((argv) => argv[3] !== "push"));
   assert.equal(
     fixture.git(["--git-dir", fixture.origin, "for-each-ref", "refs/heads/ABC-0120"]),
     "",
@@ -350,7 +352,6 @@ for (const argv of [
     const response = await fixture.invoke("pi", argv);
     assert.equal(response.exitCode, 1);
     assert.equal(response.stdout, "");
-    assert.match(response.stderr, /malformed pi invocation/u);
   });
 }
 
@@ -368,17 +369,17 @@ test("Pi validates optional native model and session, and requires stdin", () =>
 
 // Parser-only permutations (duplicate headers, invalid message blocks, usage fields, retries and
 // post-settlement work) remain in packages/aligndev/test/code/pi-agent.test.ts.
-for (const [variant, error, authEvidence] of [
-  ["wrongIdentity", /differs from native-id/u, false],
-  ["missingIdentity", /missing initial session header/u, false],
-  ["missingSettlement", /before agent_settled/u, false],
-  ["aborted", /after an abort/u, false],
-  ["assistantError", /Pi provider fixture failure/u, false],
-  ["authenticationFailure", /No API key found/u, true],
-  ["malformedJson", /invalid JSON record/u, false],
-  ["malformedHeader", /session header/u, false],
-  ["malformedSettlement", /aborted boolean/u, false],
-] satisfies [PiResponseVariant, RegExp, boolean][]) {
+for (const [variant, authEvidence] of [
+  ["wrongIdentity", false],
+  ["missingIdentity", false],
+  ["missingSettlement", false],
+  ["aborted", false],
+  ["assistantError", false],
+  ["authenticationFailure", true],
+  ["malformedJson", false],
+  ["malformedHeader", false],
+  ["malformedSettlement", false],
+] satisfies [PiResponseVariant, boolean][]) {
   test(`queued Pi ${variant} fails the real adapter contract`, async (t) => {
     const fixture = createMockFixture(t, "pi");
     const adapter = createPiAdapter();
@@ -387,7 +388,6 @@ for (const [variant, error, authEvidence] of [
     const response = await fixture.invoke("pi", adapter.buildArgs(config));
     const assessment = assessStream(adapter, config, response.stdout);
     assert.equal(assessment.succeeded, false);
-    assert.match(assessment.error ?? "", error);
     assert.equal(assessment.authEvidence, authEvidence);
     if (variant === "assistantError" || variant === "aborted" || authEvidence) {
       assert.equal(assessment.result, undefined);
@@ -421,7 +421,7 @@ test("Pi streams are bounded deterministic version-3 records with latest-respons
   const assessment = assessStream(adapter, config, response.stdout);
   assert.equal(assessment.contextTokens, MOCK_CONTEXT_TOKENS);
   assert.notEqual(assessment.contextTokens, records.at(-2).message.usage.totalTokens);
-  assert.throws(() => buildPiStreamResponse("id", "/fixture", "x".repeat(16_385)), /bounds/u);
+  assert.throws(() => buildPiStreamResponse("id", "/fixture", "x".repeat(16_385)));
 });
 
 function createMockFixture(

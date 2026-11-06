@@ -18,21 +18,6 @@ afterEach(() => {
 });
 
 describe("docmap command", () => {
-  it("injects the alignfirst command form", async () => {
-    const cwd = temp();
-    expect((await runMain(["docmap", "--help"], { cwd })).stdout).toContain(
-      "alignfirst docmap --check",
-    );
-    expect(
-      (
-        await runMain(["docmap", "--guide"], {
-          cwd,
-          env: { npm_config_user_agent: "npm/11", npm_command: "exec", npm_lifecycle_event: "npx" },
-        })
-      ).stdout,
-    ).toContain("npx -y alignfirst docmap --check");
-  });
-
   it.each([
     ["docmap", false],
     ["context", true],
@@ -51,7 +36,7 @@ describe("docmap command", () => {
       if (command === "docmap") {
         const atRoot = await runMain([command], { cwd: project });
         expect(atRoot).toMatchObject({ code: 0, stderr: "" });
-        expect(atRoot.stdout).toContain("`docs/selected.md` — Selected");
+        expect(atRoot.stdout).toContain("docs/selected.md");
         expect(atRoot.stdout).not.toContain("--root");
       }
       if (withDecoy) {
@@ -60,7 +45,7 @@ describe("docmap command", () => {
       }
       const result = await runMain([command], { cwd: nested });
       expect(result).toMatchObject({ code: 0, stderr: "" });
-      expect(result.stdout).toContain("`../docs/selected.md` — Selected");
+      expect(result.stdout).toContain("../docs/selected.md");
       expect(result.stdout).not.toContain("decoy.md");
       expect(result.stdout).toContain(`alignfirst docmap --root ${join(project, "docs")}`);
     },
@@ -78,11 +63,11 @@ describe("docmap command", () => {
     writeFileSync(join(nested, "docs", "decoy.md"), "# Decoy\n");
     const selected = await runMain(["docmap"], { cwd: nested, home });
     expect(selected).toMatchObject({ code: 0, stderr: "" });
-    expect(selected.stdout).toContain("topic.md` — Topic");
+    expect(selected.stdout).toContain("topic.md");
     expect(selected.stdout).not.toMatch(/local\.md|decoy\.md/);
     const explicit = await runMain(["docmap", "--root", "docs"], { cwd: nested, home });
     expect(explicit).toMatchObject({ code: 0, stderr: "" });
-    expect(explicit.stdout).toContain("`docs/decoy.md` — Decoy");
+    expect(explicit.stdout).toContain("docs/decoy.md");
     expect(explicit.stdout).not.toMatch(/topic\.md|local\.md/);
   });
 

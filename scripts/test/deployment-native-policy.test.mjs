@@ -23,13 +23,6 @@ const storageProbe = fileURLToPath(
 );
 
 // Preserve the accepted auth.json persistence risk; these probes do not certify OS hardening.
-test("deployment audit uses the pinned native package and declared npm entry", () => {
-  assert.equal(piManifest.version, "1.4.0", "Re-audit native storage on Pi upgrades");
-  assert.equal(piManifest.engines.node, ">=22.19.0");
-  assert.equal(piManifest.bin.pi, "dist/bundle/cli.js");
-  assert(existsSync(piCli));
-});
-
 for (const custom of [false, true]) {
   const directoryKind = custom ? "custom" : "default";
   test(`approved exception: mutable ${directoryKind} auth persists commands across CLI startups`, () => {

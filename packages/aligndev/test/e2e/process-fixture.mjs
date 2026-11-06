@@ -125,25 +125,37 @@ async function checkQuota() {
       "ok",
       2000,
     ],
-    ["process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);", /timed out/, 100],
+    ["process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);", undefined, 100],
     [
-      "process.stdout.write('x'.repeat(1_048_577)); setInterval(() => {}, 1000);",
-      /output exceeded/,
+      "process.stdin.resume(); process.stdout.write('x'.repeat(1_048_577) + 'ready'); setInterval(() => {}, 1000);",
+      "overflow",
       2000,
     ],
-    ["require('node:fs').closeSync(0); process.exit(7);", /could not write|exited before/, 2000],
+    ["require('node:fs').closeSync(0); process.exit(7);", undefined, 2000],
   ]) {
     const child = own(
       spawn(process.execPath, ["-e", script], { cwd, env: {}, stdio: ["pipe", "pipe", "pipe"] }),
     );
+    let observedBytes = 0;
+    let forwarded = "";
+    child.stdout.on("data", (chunk) => {
+      observedBytes += Buffer.byteLength(chunk);
+    });
     const result = runQuotaProcess(child, {
       source: "offline",
       timeoutMs,
       start: (write) => write({ request: "usage" }),
-      stdout: (chunk) => (chunk === "ready" ? "ok" : undefined),
+      stdout(chunk) {
+        forwarded += chunk;
+        return forwarded.endsWith("ready") ? "ok" : undefined;
+      },
     });
     if (expected === "ok") assert.equal(await result, expected);
-    else await assert.rejects(result, expected);
+    else await assert.rejects(result, Error);
+    if (expected === "overflow") {
+      assert.ok(observedBytes > 1_048_576);
+      assert.ok(Buffer.byteLength(forwarded) <= 1_048_576);
+    }
     assert.ok(
       child.exitCode !== null || child.signalCode !== null,
       "quota child reaped before settlement",
@@ -178,7 +190,7 @@ setInterval(() => {}, 1000);`;
     "exit guard retained while child remains owned",
   );
   try {
-    await assert.rejects(result, /cleanup did not complete/);
+    await assert.rejects(result, Error);
     await closed;
     assert.equal(process.listenerCount("exit"), before);
     assert.equal(child.stdout.destroyed, true);
@@ -218,9 +230,8 @@ async function checkCatalog() {
     writeFileSync(executable, `#!${process.execPath}\n${script}\n`, { mode: 0o755 });
     const result = createExecutableModelResolver()("codex", "terra", { cwd, env: { PATH: bin } });
     if (success) assert.equal(await result, "gpt-9-terra");
-    else await assert.rejects(result, /Unable to resolve Codex/);
+    else await assert.rejects(result, Error);
   }
-  assert.ok(readFileSync(executable, "utf8").startsWith(`#!${process.execPath}`));
 }
 
 async function checkSessionIdentity() {

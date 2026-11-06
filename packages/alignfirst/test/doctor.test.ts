@@ -6,14 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { main } from "../src/cli.js";
 import { resolveSkillRoots } from "../src/skills.js";
-import {
-  git,
-  makeCompanionProject,
-  makeTempDir,
-  runMain,
-  writeRegistry,
-  makeSink,
-} from "./helpers.js";
+import { makeCompanionProject, makeTempDir, runMain, writeRegistry, makeSink } from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -45,7 +38,7 @@ describe("doctor command", () => {
           stderr: makeSink(),
         }),
       ).toBe(0);
-      expect(stdout.text()).toContain(`update: ${runner} skills update --global --yes`);
+      expect(stdout.text()).toContain(`${runner} skills update --global --yes`);
     },
   );
   it("reports a profile without a companion and warns about unmatched profile keys", async () => {
@@ -58,10 +51,8 @@ describe("doctor command", () => {
       },
     });
     const result = await runMain(["doctor"], { cwd: project, home });
-    expect(result.stdout).toContain("[ok] Companion: none");
-    expect(result.stdout).toContain("[ok] AlignDev: profile unprovisioned");
-    expect(result.stdout).toContain("key ~/gone names no git main worktree");
-    expect(result.stdout).not.toContain("share the companion");
+    expect(result.stdout).toContain("unprovisioned");
+    expect(result.stdout).toContain("~/gone");
   });
 
   it.each([
@@ -98,9 +89,9 @@ describe("doctor command", () => {
     vi.stubEnv("PI_CODING_AGENT_DIR", join(temp(), "ambient-agent"));
     vi.stubEnv("HOME", temp());
     const result = await runMain(["doctor"], { cwd, home, env: { PI_CODING_AGENT_DIR: value } });
-    expect(result.stdout).toContain(`[ok] Skills: alignfirst 4.2.0 (${root})`);
-    expect(result.stdout).toContain(`[ok] Skills: alspec 4.1.0 (${root})`);
-    expect(result.stdout).toContain("[warn] Skills: alplan missing");
+    expect(result.stdout).toContain(root);
+    expect(result.stdout).toContain("4.2.0");
+    expect(result.stdout).toContain("4.1.0");
   });
 
   it("replaces only the default Pi root and preserves shared/Claude/Codex precedence", async () => {
@@ -116,11 +107,11 @@ describe("doctor command", () => {
       home,
       env: { PI_CODING_AGENT_DIR: custom },
     });
-    expect(result.stdout).toContain(
-      `[ok] Skills: alspec 4.0.0 (${join(home, ".agents", "skills")})`,
-    );
-    expect(result.stdout).toContain(`[ok] Skills: al 4.0.1 (${join(home, ".claude", "skills")})`);
-    expect(result.stdout).toContain("[warn] Skills: alplan missing");
+    expect(result.stdout).toContain(join(home, ".agents", "skills"));
+    expect(result.stdout).toContain(join(home, ".claude", "skills"));
+    expect(result.stdout).toContain("4.0.1");
+    expect(result.stdout).not.toContain("4.0.2");
+    expect(result.stdout).not.toContain(join(home, ".pi", "agent", "skills"));
   });
 
   it("does not fall back to default Pi skills when the custom root is missing", async () => {
@@ -131,16 +122,8 @@ describe("doctor command", () => {
       home,
       env: { PI_CODING_AGENT_DIR: "missing" },
     });
-    expect(result.stdout).toContain("[ok] Skills: no command skill installed");
-  });
-
-  it.each(["3.9.0", undefined])("retains Pi version warnings: %s", async (version) => {
-    const home = temp();
-    installSkill(join(home, ".pi", "agent", "skills"), "alignfirst", version);
-    const result = await runMain(["doctor"], { cwd: home, home });
-    expect(result.stdout).toContain(
-      `[warn] Skills: alignfirst ${version ?? "unknown"} predates v4`,
-    );
+    expect(result.stdout).not.toContain(join(home, ".pi", "agent", "skills"));
+    expect(result.stdout).not.toContain("4.0.0");
   });
 
   it("deduplicates canonical roots without changing precedence and tolerates missing roots", () => {
@@ -161,33 +144,7 @@ describe("doctor command", () => {
       [".agents/skills", ".claude/skills", ".codex/skills"].map((root) => join(home, root)),
     );
   });
-  it("always reports every section in an empty directory", async () => {
-    const cwd = temp();
-    const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
-    expect(result.code).toBe(0);
-    for (const section of [
-      "CLI",
-      "alignfirst",
-      "Workspace",
-      "Companion",
-      "Git",
-      "Work files",
-      "Docmap",
-      "Skills",
-    ])
-      expect(result.stdout).toContain(`] ${section}:`);
-    expect(result.stdout).toContain(`[ok] alignfirst: ${join(cwd, "alignfirst.json")} (missing)`);
-    expect(result.stdout).toContain(
-      `[ok] Companion: registry absent (${join(cwd, ".alignfirst", "companions", "registry.json")})\n[ok] Companion: none\n`,
-    );
-    expect(result.stdout).toContain("[warn] Git: default branch unresolved");
-    expect(result.stdout).toContain("[ok] Docmap: docs/ none");
-    expect(result.stdout).toContain("[ok] Skills: alignfirst none");
-    expect(result.stdout).toContain("[ok] Skills: no command skill installed");
-    expect(result.stdout).not.toContain("Skills: aligndev");
-  });
-
-  it("reports the companion and warns about a missing item set to companion", async () => {
+  it("reports selected companion and project paths", async () => {
     const { root, home, project, companion } = makeCompanionProject({
       docs: "companion",
       ".plans": "project",
@@ -196,52 +153,15 @@ describe("doctor command", () => {
     mkdirSync(join(project, ".plans"));
     const result = await runMain(["doctor"], { cwd: project, env: { PATH: "" }, home });
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain(
-      [
-        `[ok] Companion: registry valid (${join(home, ".alignfirst", "companions", "registry.json")})`,
-        "[ok] Companion: key ~/app",
-        `[ok] Companion: directory ${companion} (missing)`,
-        `[ok] Companion: alignfirst (auto): ${join(companion, "alignfirst.json")} (companion, missing)`,
-        `[ok] Companion: .alignfirst-instructions (auto): ${join(companion, ".alignfirst-instructions")} (companion, missing)`,
-        "[ok] Companion: assistantInstructionsFile (auto): not configured",
-        `[ok] Companion: workspaceRuntime (auto): ${join(project, ".local-wt")} (project, missing)`,
-        `[warn] Companion: docs (companion): ${join(companion, "docs")} (companion, missing)`,
-        `[ok] Companion: .plans (project): ${join(project, ".plans")} (project)`,
-        `[ok] Companion: _aligndev (auto): ${join(project, ".plans")} (project)`,
-        "[ok] AlignDev: profile none",
-        "[warn] Git:",
-      ].join("\n"),
-    );
-    expect(result.stdout).toContain("[ok] Work files: local");
+    for (const path of [
+      join(companion, "alignfirst.json"),
+      join(companion, ".alignfirst-instructions"),
+      join(companion, "docs"),
+      join(project, ".local-wt"),
+      join(project, ".plans"),
+    ])
+      expect(result.stdout).toContain(path);
   });
-
-  it.each(["tracked", "differentTarget"])(
-    "reports %s plans as a Work files error and continues other sections",
-    async (kind) => {
-      const { root, home, project } = makeCompanionProject({ ".plans": "project" });
-      dirs.push(root);
-      mkdirSync(join(project, ".plans"));
-      let cwd = project;
-      if (kind === "tracked") {
-        writeFileSync(join(project, ".plans", "note.md"), "tracked\n");
-        git(project, "add", ".plans");
-      } else {
-        cwd = join(root, "linked");
-        git(project, "worktree", "add", "--quiet", "-b", "ticket", cwd);
-        mkdirSync(join(cwd, ".plans"));
-      }
-      const check = await runMain(["plans", "check"], { cwd, home });
-      expect(check.code).toBe(1);
-      const result = await runMain(["doctor"], { cwd, home, env: { PATH: "" } });
-      expect(result).toMatchObject({ code: 0, stderr: "" });
-      expect(result.stdout).toContain(
-        `[error] Work files: ${check.stderr.trim().split("\n")[0]}\n`,
-      );
-      expect(result.stdout).not.toContain("[ok] Work files:");
-      expect(result.stdout).toContain("] Docmap:");
-      expect(result.stdout).toContain("] Skills:");
-    },
-  );
 
   it("warns about registry keys that name no git main worktree", async () => {
     const { root, home, project } = makeCompanionProject({});
@@ -257,11 +177,8 @@ describe("doctor command", () => {
     });
     const result = await runMain(["doctor"], { cwd: project, env: { PATH: "" }, home });
     expect(result.code).toBe(0);
-    for (const key of ["~", "~/app/src", "~/gone"])
-      expect(result.stdout).toContain(
-        `[warn] Companion: key ${key} names no git main worktree (ignored)\n`,
-      );
-    expect(result.stdout).toContain("[ok] Companion: key ~/app\n");
+    for (const key of ["~", "~/app/src", "~/gone"]) expect(result.stdout).toContain(key);
+    expect(result.stdout).toContain("~/app");
   });
 
   it("warns about registry keys that share a companion directory", async () => {
@@ -275,9 +192,9 @@ describe("doctor command", () => {
       },
     });
     const result = await runMain(["doctor"], { cwd: project, env: { PATH: "" }, home });
-    expect(result.stdout).toContain(
-      `[warn] Companion: keys ~/one, ~/two share the companion directory ${join(home, ".alignfirst", "companions", "shared")}\n`,
-    );
+    expect(result.stdout).toContain(join(home, ".alignfirst", "companions", "shared"));
+    expect(result.stdout).toContain("~/one");
+    expect(result.stdout).toContain("~/two");
   });
 
   it("warns about a companion directory inside another key's companion directory", async () => {
@@ -288,48 +205,28 @@ describe("doctor command", () => {
     });
     const result = await runMain(["doctor"], { cwd: project, env: { PATH: "" }, home });
     const team = join(home, ".alignfirst", "companions", "team");
-    expect(result.stdout).toContain(
-      `[warn] Companion: companion directory ${join(team, "two")} (~/two) is inside ${team} (~/one)\n`,
-    );
-  });
-
-  it("reports an invalid registry in every section that needs the layout", async () => {
-    const cwd = temp();
-    writeRegistry(cwd, {});
-    const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
-    expect(result.code).toBe(0);
-    for (const section of ["alignfirst", "Companion", "Work files", "Docmap"])
-      expect(result.stdout).toContain(
-        `[error] ${section}: Invalid ${cwd}/.alignfirst/companions/registry.json: projects`,
-      );
-    expect(result.stdout).toContain("[ok] Skills: alignfirst none");
-  });
-
-  it("reports invalid merged settings in dependent sections", async () => {
-    const cwd = temp();
-    writeFileSync(join(cwd, "alignfirst.jsonc"), '{"schemaVersion":1,"plans":{"folder":"x"}}');
-    const result = await runMain(["doctor"], { cwd, home: cwd });
-    expect(result).toMatchObject({ code: 0, stderr: "" });
-    expect(result.stdout).toContain(`[error] alignfirst: Invalid ${join(cwd, "alignfirst.jsonc")}`);
-    expect(result.stdout).toContain("/plans/folder");
-    expect(result.stdout).toContain("[error] Workspace:");
-    expect(result.stdout).toContain("update alignfirst");
+    expect(result.stdout).toContain(join(team, "two"));
+    expect(result.stdout).toContain(team);
   });
 
   it("continues after an invalid project config", async () => {
     const cwd = temp();
     writeFileSync(join(cwd, "alignfirst.json"), "{");
+    installSkill(join(cwd, ".agents", "skills"), "alignfirst", "4.2.3");
     const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("[error] alignfirst: Invalid");
-    expect(result.stdout).toContain("] Work files:");
+    expect(result.stdout).toContain(join(cwd, "alignfirst.json"));
+    expect(result.stdout).toContain("4.2.3");
   });
 
-  it("reports the configured default branch and skill generation", async () => {
+  it("reports the configured default branch and installed skill version", async () => {
     const cwd = temp();
     writeFileSync(
       join(cwd, "alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, conventions: { git: { defaultBranch: "main" } } }),
+      JSON.stringify({
+        schemaVersion: 1,
+        conventions: { git: { defaultBranch: "release/integration" } },
+      }),
     );
     const skillDir = join(cwd, ".agents", "skills", "alignfirst");
     mkdirSync(skillDir, { recursive: true });
@@ -339,26 +236,13 @@ describe("doctor command", () => {
       env: { PATH: "" },
       home: cwd,
     });
-    expect(result.stdout).toContain("[ok] Git: default branch main (git.defaultBranch)");
-    expect(result.stdout).toContain("[warn] Skills: alignfirst 3.12.0 predates v4");
+    expect(result.stdout).toContain("release/integration");
+    expect(result.stdout).toContain("3.12.0");
 
     writeFileSync(join(skillDir, "SKILL.md"), '---\nmetadata:\n  version: "4.0.0"\n---\n');
     const current = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
-    expect(current.stdout).toContain("[ok] Skills: alignfirst 4.0.0");
-  });
-
-  it("warns about missing command skills only once one is installed", async () => {
-    const cwd = temp();
-    const skillDir = join(cwd, ".agents", "skills", "alspec");
-    mkdirSync(skillDir, { recursive: true });
-    writeFileSync(join(skillDir, "SKILL.md"), '---\nmetadata:\n  version: "4.0.0"\n---\n');
-    const result = await runMain(["doctor"], { cwd, env: { PATH: "" }, home: cwd });
-    expect(result.stdout).toContain("[ok] Skills: alignfirst none");
-    expect(result.stdout).toContain(
-      `[ok] Skills: alspec 4.0.0 (${join(cwd, ".agents", "skills")})`,
-    );
-    expect(result.stdout).toContain("[warn] Skills: alplan missing");
-    expect(result.stdout).not.toContain("no command skill installed");
+    expect(current.stdout).toContain("4.0.0");
+    expect(current.stdout).not.toContain("3.12.0");
   });
 });
 

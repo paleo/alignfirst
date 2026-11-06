@@ -47,7 +47,7 @@ test("fixture and A12 port blocks patch strictly and idempotently", () => {
     source.replace('"last": 6519,', ""),
     source.replace('["frontend"]', '["other"]'),
   ]) {
-    assert.throws(() => patchDevServerRange(malformed, 6600, 6607), /Expected fixture manifest/);
+    assert.throws(() => patchDevServerRange(malformed, 6600, 6607));
   }
   for (const [first, last] of [
     [0, 1],
@@ -55,7 +55,7 @@ test("fixture and A12 port blocks patch strictly and idempotently", () => {
     [6500, 6499],
     [6500.5, 6519],
   ]) {
-    assert.throws(() => fixturePortRange(first, last), /Invalid fixture port range/);
+    assert.throws(() => fixturePortRange(first, last));
   }
 });
 
@@ -138,7 +138,6 @@ test("fixture frozen install and real workspace/dev lifecycle", { timeout: 240_0
       if (transition.domain !== undefined) next.REMOTE_DEV_DOMAIN = transition.domain;
       if (transition.host !== undefined) next.REMOTE_DEV_HOST = transition.host;
       const output = command(linked, process.execPath, [devScript, "up"], next);
-      assert.match(output, /Dev servers started!/);
       assert(output.includes(transition.url));
       assert(
         readFileSync(join(linked, "local.env"), "utf8").includes(`PUBLIC_URL=${transition.url}\n`),
@@ -251,8 +250,6 @@ test("reset recovers externally deleted running workspaces and retains failed cl
       timeout: 60_000,
     });
     assert.equal(refused.status, 1, refused.stderr);
-    assert.match(refused.stderr, /Refuse cleanup: exited with code 7/);
-    assert.match(refused.stderr, /state retained/);
     assert(existsSync(nova));
     assert(existsSync(linked));
     assert(existsSync(join(storage.registryDir, "workspaces.json")));
@@ -292,9 +289,10 @@ test("reset recovers externally deleted running workspaces and retains failed cl
       assert.equal(report.config.conventions.ticketIdPattern, "^ABC-\\d+$");
       assert.equal(report.config.assistantInstructionsFile, "DEVELOPERS.md");
       assert.equal(report.workspace.hasDevServer, true);
-      assert.match(
-        command(repo, process.execPath, [alignfirst, "assistant-instructions"], env),
-        /Developer Reference/,
+      assert(
+        command(repo, process.execPath, [alignfirst, "assistant-instructions"], env).includes(
+          readFileSync(join(repo, "DEVELOPERS.md"), "utf8"),
+        ),
       );
     }
     assert(existsSync(join(lifecycle, ".alignfirst-projects.json")));

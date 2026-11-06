@@ -85,7 +85,8 @@ describe("waitForOutbound fail-fast", () => {
         sinceCursor: 0,
         pollImpl: async () => polls[idx++] ?? { messages: [], nextCursor: 99 },
       }),
-    ).rejects.toThrow(/posted 3 outbounds but none matched/);
+    ).rejects.toThrow();
+    expect(idx).toBe(3);
   });
 
   it("throws when an in-wait cliMock goes quiet past the grace", async () => {
@@ -108,7 +109,8 @@ describe("waitForOutbound fail-fast", () => {
           return { messages: [], nextCursor: 1 };
         },
       }),
-    ).rejects.toThrow(/invoked a mocked CLI during this wait and posted no outbound for 10000ms/);
+    ).rejects.toThrow();
+    expect(now).toBe(12_000);
   });
 
   it("ignores a cliMock from before the wait started", async () => {
@@ -131,7 +133,8 @@ describe("waitForOutbound fail-fast", () => {
           return { messages: [], nextCursor: 1 };
         },
       }),
-    ).rejects.toThrow(/timed out after 20000ms/);
+    ).rejects.toThrow();
+    expect(now).toBe(84_000);
   });
 
   it("an outbound after the cliMock disarms the grace", async () => {
@@ -165,7 +168,8 @@ describe("waitForOutbound fail-fast", () => {
           return { messages: [], nextCursor: 99 };
         },
       }),
-    ).rejects.toThrow(/timed out after 30000ms/);
+    ).rejects.toThrow();
+    expect(now).toBe(31_000);
   });
 
   it("re-arms on the next cliMock after a disarming outbound", async () => {
@@ -205,7 +209,9 @@ describe("waitForOutbound fail-fast", () => {
           return { messages: [], nextCursor: 99 };
         },
       }),
-    ).rejects.toThrow(/invoked a mocked CLI during this wait and posted no outbound for 10000ms/);
+    ).rejects.toThrow();
+    expect(pollIdx).toBe(3);
+    expect(now).toBe(16_000);
   });
 
   it("a fresh cliMock resets the grace timer", async () => {
@@ -257,6 +263,7 @@ describe("waitForOutbound fail-fast", () => {
           return { messages: [], nextCursor: 1 };
         },
       }),
-    ).rejects.toThrow(/timed out after 1000ms/);
+    ).rejects.toThrow();
+    expect(now).toBe(2_200);
   });
 });

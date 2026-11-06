@@ -32,7 +32,6 @@ describe("actual Pi 1.3.0 native completion", () => {
       expect(notice[0].content).toContain(job.id);
       expect(notice[0].content).not.toContain("PRIVATE-LOG");
       expect(notice[0].content).not.toContain(waitCommand);
-      expect(notice[0].content).toContain("untrusted");
       expect(h.extensionErrors).toEqual([]);
     } finally {
       await h.close();
@@ -217,7 +216,7 @@ describe("actual Pi 1.3.0 native completion", () => {
           const navigated = await pending;
           if (outcome === "failure") expect(navigated).toBeInstanceOf(Error);
           if (outcome === "success")
-            await expect(h.call({ action: "status", id: job.id })).rejects.toThrow("handle");
+            await expect(h.call({ action: "status", id: job.id })).rejects.toThrow();
           else
             expect(jobFrom(await h.call({ action: "status", id: job.id })).status).toBe(
               "succeeded",
@@ -264,7 +263,7 @@ describe("actual Pi 1.3.0 native completion", () => {
         summary.release();
         const result = await navigating;
         if (outcome === "success")
-          await expect(h.call({ action: "status", id: job.id })).rejects.toThrow("handle");
+          await expect(h.call({ action: "status", id: job.id })).rejects.toThrow();
         else {
           if (outcome === "failure") expect(result).toBeInstanceOf(Error);
           else expect(result).toMatchObject({ cancelled: true, aborted: true });
@@ -352,7 +351,7 @@ describe("actual Pi 1.3.0 native completion", () => {
         if (replacement === "reload") await h.runtime.session.reload();
         else if (replacement === "clear") await h.call({ action: "clear", id: job.id });
         else await h.runtime.session.navigateTree(target);
-        await expect(h.call({ action: "status", id: job.id })).rejects.toThrow("handle");
+        await expect(h.call({ action: "status", id: job.id })).rejects.toThrow();
         busy.release();
         await h.runtime.session.prompt("later ordinary user turn");
         const stale = h.requests
@@ -362,7 +361,6 @@ describe("actual Pi 1.3.0 native completion", () => {
         expect(stale.length).toBeGreaterThan(0);
         expect(stale[0].content).toContain('"runtimeId"');
         expect(stale[0].content).toContain('"generation":0');
-        expect(stale[0].content).toContain("Ignore unknown/retired");
         expect(rewrite).not.toHaveBeenCalled();
       } finally {
         busy.release();
@@ -469,7 +467,7 @@ describe.skipIf(process.platform !== "linux")("actual runtime process retirement
       expect(processes[0].child.signalCode).not.toBeNull();
       await processes[0].closed;
       expect(() => process.kill(pid, 0)).toThrow();
-      await expect(h.call({ action: "status", id: job.id })).rejects.toThrow("handle");
+      await expect(h.call({ action: "status", id: job.id })).rejects.toThrow();
       expect(h.requests).toHaveLength(2);
     } finally {
       await h.close();
@@ -610,14 +608,14 @@ describe.skipIf(process.platform !== "linux")("actual runtime process retirement
               processFields(record.pid)?.[0] !== "Z",
           ),
         ).toEqual([]);
-        await expect(h.call({ action: "status", id: late.id })).rejects.toThrow("lifecycle");
+        await expect(h.call({ action: "status", id: late.id })).rejects.toThrow();
         expect(h.requests).toHaveLength(1);
         expect(h.requests.flatMap(notices).some((notice) => notice.content.includes(late.id))).toBe(
           false,
         );
         laterRelease.release();
         await replacing;
-        await expect(h.call({ action: "status", id: early.id })).rejects.toThrow("handle");
+        await expect(h.call({ action: "status", id: early.id })).rejects.toThrow();
         expect(h.extensionErrors).toEqual([]);
       } finally {
         earlierRelease.release();

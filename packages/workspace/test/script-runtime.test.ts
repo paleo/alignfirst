@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { ConfigError, WorkspaceError } from "../src/errors.js";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -171,8 +172,8 @@ describe("script ABI and executor", () => {
       { run: ["touch"], env: { VALUE: "\0" } },
     ];
     for (const command of invalid)
-      expect(() => resolveCommand(command, ctx, "config.field")).toThrow(/config.field/);
-    expect(() => interpolate("${{ ports.web }}", ctx, "field")).toThrow(/preSetup/);
+      expect(() => resolveCommand(command, ctx, "config.field")).toThrow(ConfigError);
+    expect(() => interpolate("${{ ports.web }}", ctx, "field")).toThrow(ConfigError);
   });
 
   it("keeps transformation stdout as data and propagates launch, exit and signal failures", async () => {
@@ -186,9 +187,9 @@ describe("script ABI and executor", () => {
       ),
     ).toBe("$(touch injected)\n");
     expect(existsSync(join(root, "injected"))).toBe(false);
-    await expect(run({ run: [join(root, "missing")] })).rejects.toThrow(/launch/);
-    await expect(run({ run: "exit 7" })).rejects.toThrow(/code 7/);
-    await expect(run({ run: "kill -TERM $$" })).rejects.toThrow(/SIGTERM/);
+    await expect(run({ run: [join(root, "missing")] })).rejects.toThrow(WorkspaceError);
+    await expect(run({ run: "exit 7" })).rejects.toThrow(WorkspaceError);
+    await expect(run({ run: "kill -TERM $$" })).rejects.toThrow(WorkspaceError);
   });
 
   it("cancels real child/grandchild processes before any later step can launch", async () => {
@@ -476,7 +477,7 @@ describe("manifest adapters", () => {
         existing: "patch",
         log: { tee: () => {}, verbose: () => {} },
       }),
-    ).rejects.toThrow(/Overlapping/);
+    ).rejects.toThrow(ConfigError);
     expect(existsSync(join(root, "nested/out"))).toBe(false);
   });
 
@@ -604,7 +605,7 @@ describe("manifest adapters", () => {
       maxConcurrentDevServers: 2,
     });
     const inherited = adapter();
-    expect(() => inherited?.resolveStartSettings?.()).toThrow("DEV_LIMIT");
+    expect(() => inherited?.resolveStartSettings?.()).toThrow(ConfigError);
   });
 
   it("selects defined invocation inputs and uses the parent environment only as a default", async () => {
@@ -649,7 +650,7 @@ describe("manifest adapters", () => {
         { recipe: { kind: "defaults" }, mainWorktree: root },
       );
       await expect(adapters.devServer?.runFilesInputs?.({ ...base, ports: {} })).rejects.toThrow(
-        /JSON object of strings/,
+        ConfigError,
       );
     },
   );

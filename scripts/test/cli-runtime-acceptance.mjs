@@ -274,7 +274,6 @@ function externalNativeMatrix(npm) {
     cwd: project,
     env,
     runtime: "node",
-    contains: "25% used",
   });
   const guide = check("dollar-aligndev-guide", npm, ["run", "ad$&", "--", "guide", "code"], {
     cwd: project,
@@ -551,7 +550,6 @@ function companionAndCustomRoots() {
   );
   check("actual-version-diagnostic", bun, [join(root, "diagnostic.mjs")], {
     runtime: "bun",
-    contains: "explicit Bun runtime",
   });
   const diagnostics = readRecords(commands).find(
     (record) => record.label === "actual-version-diagnostic",

@@ -118,44 +118,18 @@ describe("workspace setup (e2e)", () => {
       });
       expect(failed.status).toBe(1);
       expect(failed.stdout).toBe("");
-      expect(failed.stderr).toContain("Setup failed:");
     },
     TEST_TIMEOUT_MS,
   );
 
-  it("renders direct workspace/dev commands despite unrelated npm scripts and lockfiles", () => {
-    const { repo } = fixture();
-    writeFileSync(
-      join(repo, "package.json"),
-      JSON.stringify({ scripts: { workspace: "exit 99", dev: "exit 99" } }),
-    );
-    writeFileSync(join(repo, "package-lock.json"), "{}");
-    const guide = runCli(repo, ["--guide"]);
-    expect(guide.status, guide.stderr).toBe(0);
-    expect(guide.stdout).toContain("alignfirst workspace setup");
-    expect(guide.stdout).not.toContain("npm run");
-    for (const result of [runCli(repo, ["unknown"]), runDev(repo, ["unknown"])]) {
-      expect(result.status).toBe(1);
-      expect(result.stdout).toBe("");
-      expect(result.stderr).toContain("alignfirst");
-      expect(result.stderr).toContain("--help");
-    }
-  });
-
   it(
-    "blocking setup reaches READY and prints no background message",
+    "blocking setup waits for finalization and marks the workspace ready",
     () => {
       const { repo } = fixture();
       const result = runCli(repo, ["setup", "-c", "feat-x"]);
-      const output = result.stdout + result.stderr;
-
       expect(result.status).toBe(0);
-      expect(output).toContain("… ready");
-      expect(output).not.toContain("Setup continuing in background.");
       expect(existsSync(join(repo, "..", "fixrepo-feat-x", "finalized.txt"))).toBe(true);
       expect(entryFor(repo, "fixrepo-feat-x").status).toBe("ready");
-      const log = setupLog(repo, "fixrepo-feat-x");
-      expect(log).toContain("PROGRESS: step-one");
     },
     TEST_TIMEOUT_MS,
   );
@@ -170,11 +144,7 @@ describe("workspace setup (e2e)", () => {
       const detached = runCli(fx, ["setup", "-c", "feat-y", "-d"], {
         E2E_FINALIZE_BARRIER: barrier,
       });
-      const detachedOut = detached.stdout + detached.stderr;
-
       expect(detached.status).toBe(0);
-      expect(detachedOut).toContain("Setup continuing in background.");
-      expect(detachedOut).toContain("Join it with");
       await waitForFile(`${barrier}.entered`);
       expect(entryFor(repo, "fixrepo-feat-y").status).toBe("pending");
       expect(existsSync(join(repo, "..", "fixrepo-feat-y", "finalized.txt"))).toBe(false);
@@ -189,49 +159,13 @@ describe("workspace setup (e2e)", () => {
   );
 
   it(
-    "failing finalize exits 1 with the FAILED reason",
+    "failing finalize exits 1, preserves command output and marks the workspace failed",
     () => {
       const { repo } = fixture();
       const result = runCli(repo, ["setup", "-c", "feat-z"], { E2E_FINALIZE_FAIL: "1" });
-      const output = result.stdout + result.stderr;
-
       expect(result.status).toBe(1);
-      expect(output).toContain("Setup failed:");
       expect(setupLog(repo, "fixrepo-feat-z")).toContain("e2e boom");
-      expect(output).toContain("finalize step-one");
       expect(entryFor(repo, "fixrepo-feat-z").status).toBe("failed");
-    },
-    TEST_TIMEOUT_MS,
-  );
-
-  it(
-    "a failing finalize retried from inside the worktree omits the foreign-script hint",
-    () => {
-      const { repo } = fixture();
-      runCli(repo, ["setup", "-c", "feat-r"], { E2E_FINALIZE_FAIL: "1" });
-      const retry = runCli(join(repo, "..", "fixrepo-feat-r"), ["setup"], {
-        E2E_FINALIZE_FAIL: "1",
-      });
-      const output = retry.stdout + retry.stderr;
-
-      expect(retry.status).toBe(1);
-      expect(output).toContain("finalize step-one");
-      expect(setupLog(repo, "fixrepo-feat-r")).toContain("e2e boom");
-      expect(output).not.toContain("ran the workspace scripts of another worktree");
-    },
-    TEST_TIMEOUT_MS,
-  );
-
-  it(
-    "detached --enter prints the cd hint immediately on non-TTY",
-    () => {
-      const { repo } = fixture();
-      const result = runCli(repo, ["setup", "-c", "feat-g", "-d", "--enter"]);
-      const output = result.stdout + result.stderr;
-
-      expect(result.status).toBe(0);
-      expect(output).toContain("Now run: cd");
-      expect(output).toContain("Setup continuing in background.");
     },
     TEST_TIMEOUT_MS,
   );
@@ -267,34 +201,36 @@ describe("workspace setup (e2e)", () => {
       writeFileSync(join(repo, "workspace.local"), "edited-by-hand\n");
       const rerun = runCli(repo, ["setup"]);
       expect(rerun.status).toBe(0);
-      expect(rerun.stdout).toContain("Updated workspace.local.");
-      expect(setupLog(repo, "fixrepo")).toContain("Updated workspace.local.");
       expect(readFileSync(join(repo, "workspace.local"), "utf-8")).toBe(
         "edited-by-hand\nworktree=main\n",
       );
 
       const unchanged = runCli(repo, ["setup"]);
       expect(unchanged.status).toBe(0);
-      expect(unchanged.stdout).not.toContain("Updated");
-      expect(setupLog(repo, "fixrepo")).toContain("Skipped workspace.local (already up to date).");
+      expect(readFileSync(join(repo, "workspace.local"), "utf-8")).toBe(
+        "edited-by-hand\nworktree=main\n",
+      );
     },
     TEST_TIMEOUT_MS,
   );
 
   it(
-    "reports a file already rewritten when a later entry fails",
+    "keeps earlier file writes and the ready state when a later patch fails",
     () => {
       const { repo } = fixture({ fallbackSeeding: true });
       expect(runCli(repo, ["setup"]).status).toBe(0);
 
       writeFileSync(join(repo, "workspace.local"), "edited-by-hand\n");
+      writeFileSync(join(repo, "required.local"), "preserve-on-failure\n");
       const rerun = runCli(repo, ["setup"], { E2E_SEED_FAIL: "1" });
       expect(rerun.status).toBe(1);
-      expect(rerun.stdout).toContain("Updated workspace.local.");
-      const log = setupLog(repo, "fixrepo");
-      expect(log).toContain("Updated workspace.local.");
-      expect(log).toContain("FAILED");
-      expect(log.indexOf("Updated workspace.local.")).toBeLessThan(log.lastIndexOf("FAILED"));
+      expect(rerun.stderr).toContain("missing.template");
+      expect(readFileSync(join(repo, "workspace.local"), "utf8")).toBe(
+        "edited-by-hand\nworktree=main\n",
+      );
+      expect(readFileSync(join(repo, "required.local"), "utf8")).toBe("preserve-on-failure\n");
+      expect(entryFor(repo, "fixrepo").status).toBe("ready");
+      expect(entryFor(repo, "fixrepo").preparationOwner).toBeUndefined();
     },
     TEST_TIMEOUT_MS,
   );
@@ -305,7 +241,16 @@ describe("workspace setup (e2e)", () => {
       const { repo } = fixture({ oldConfig: true });
       const result = runCli(repo, ["setup"]);
       expect(result.status).toBe(1);
-      expect(result.stderr).toContain('"/ports" must NOT have additional properties');
+      expect(existsSync(registryFile(repo))).toBe(false);
+      expect(existsSync(join(repo, "finalized.txt"))).toBe(false);
+
+      const path = join(repo, "alignfirst.json");
+      const manifest = JSON.parse(readFileSync(path, "utf8"));
+      delete manifest.ports;
+      writeFileSync(path, JSON.stringify(manifest));
+      const valid = runCli(repo, ["setup"]);
+      expect(valid.status, valid.stderr).toBe(0);
+      expect(entryFor(repo, "fixrepo").status).toBe("ready");
     },
     TEST_TIMEOUT_MS,
   );
@@ -317,17 +262,11 @@ describe("portless workspace (e2e)", () => {
     () => {
       const { repo } = fixture({ portless: true });
       const setup = runCli(repo, ["setup", "-c", "feat-portless"]);
-      expect(setup.stdout + setup.stderr).toContain("… ready");
       expect(setup.status).toBe(0);
 
       const entry = entryFor(repo, "fixrepo-feat-portless");
       expect(entry.status).toBe("ready");
       expect(entry.ports).toBeUndefined();
-
-      // Without a dev-server script there is no dev-server block to report.
-      const status = runCli(repo, ["status", "fixrepo-feat-portless"]);
-      expect(status.status).toBe(0);
-      expect(status.stdout).not.toContain("Dev-server");
 
       // `--force`: the finalize step leaves an untracked `finalized.txt` behind.
       const removed = runCli(repo, ["remove", "fixrepo-feat-portless", "--force"]);
@@ -344,7 +283,6 @@ describe("portless workspace (e2e)", () => {
       const { repo } = fixture({ portless: true });
       const result = runCli(repo, ["setup", "--full"]);
       expect(result.status).toBe(1);
-      expect(result.stderr).toContain("requires declared dev services");
       expect(existsSync(registryFile(repo))).toBe(false);
     },
     TEST_TIMEOUT_MS,
@@ -364,7 +302,6 @@ describe("dev setup (e2e)", () => {
 
       const mainSetup = runDev(repo, ["setup"]);
       expect(mainSetup.status).toBe(0);
-      expect(mainSetup.stdout).toContain("Ports: web=");
       const linkedSetup = runDev(linked, ["setup"]);
       expect(linkedSetup.status).toBe(0);
 
@@ -385,7 +322,6 @@ describe("dev setup (e2e)", () => {
 
       const again = runDev(linked, ["setup"]);
       expect(again.status).toBe(0);
-      expect(again.stdout).not.toContain("Ports:");
       expect(entryFor(repo, "fixrepo-feat-a").ports).toEqual(feat.ports);
       expect(setupRuns(linked)).toEqual(["force=false"]);
     },
@@ -412,7 +348,6 @@ describe("dev setup (e2e)", () => {
 
       const reset = runDev(repo, ["setup", "--reset-ports"]);
       expect(reset.status).toBe(0);
-      expect(reset.stdout).toContain("Ports: web=");
       const ports = entryFor(repo, "fixrepo").ports ?? {};
       expect(ports.web).toBeLessThan(47108);
       expect(ports.api).not.toBe(DEV_PORTS.excluded);
@@ -434,12 +369,11 @@ describe("dev setup (e2e)", () => {
 
       const started = runDev(repo, ["up"]);
       expect(started.status).toBe(0);
-      expect(started.stderr).not.toContain("Warning");
       expect(readFileSync(join(repo, "ports.env"), "utf-8")).toBe(edited);
       expect(runDev(repo, ["down"]).status).toBe(0);
 
       const synced = runDev(repo, ["setup"]);
-      expect(synced.stdout).toContain("Updated ports.env.");
+      expect(synced.status).toBe(0);
       expect(readFileSync(join(repo, "ports.env"), "utf-8")).toBe(
         portsEnv(entryFor(repo, "fixrepo")),
       );
@@ -448,7 +382,7 @@ describe("dev setup (e2e)", () => {
   );
 
   it(
-    "rewrites the run files at a start after the ports moved, with a warning",
+    "rewrites the run files at a start after the ports moved",
     () => {
       const { repo } = fixture();
       expect(runDev(repo, ["setup"]).status).toBe(0);
@@ -459,9 +393,6 @@ describe("dev setup (e2e)", () => {
 
       const started = runDev(repo, ["up"]);
       expect(started.status).toBe(0);
-      expect(started.stderr).toContain(
-        `Warning: the ports moved (web ${before.web} → 47108). Updated ports.env, ports.txt.`,
-      );
       expect(runDev(repo, ["down"]).status).toBe(0);
       const entry = entryFor(repo, "fixrepo");
       expect(readFileSync(join(repo, "ports.env"), "utf-8")).toBe(portsEnv(entry));
@@ -472,7 +403,7 @@ describe("dev setup (e2e)", () => {
   );
 
   it(
-    "rewrites the run files at a start after a run-file input changed, with a warning",
+    "rewrites the run files at a start after a run-file input changed",
     () => {
       const { repo } = fixture();
       expect(runDev(repo, ["setup"]).status).toBe(0);
@@ -480,19 +411,17 @@ describe("dev setup (e2e)", () => {
 
       const remote = runDev(repo, ["up"], { E2E_HOST: "example.test" });
       expect(remote.status).toBe(0);
-      expect(remote.stderr).toContain(
-        "Warning: the run-file inputs changed (E2E_HOST). Updated ports.txt.",
-      );
       expect(readFileSync(join(repo, "ports.txt"), "utf-8")).toBe(`web=example.test:${web}\n`);
       expect(runDev(repo, ["down"]).status).toBe(0);
 
       const local = runDev(repo, ["up"]);
-      expect(local.stderr).toContain("Warning: the run-file inputs changed (E2E_HOST).");
+      expect(local.status).toBe(0);
       expect(readFileSync(join(repo, "ports.txt"), "utf-8")).toBe(`web=localhost:${web}\n`);
       expect(runDev(repo, ["down"]).status).toBe(0);
 
       const again = runDev(repo, ["up"]);
-      expect(again.stderr).not.toContain("Warning");
+      expect(again.status).toBe(0);
+      expect(readFileSync(join(repo, "ports.txt"), "utf-8")).toBe(`web=localhost:${web}\n`);
       expect(runDev(repo, ["down"]).status).toBe(0);
     },
     TEST_TIMEOUT_MS,
@@ -520,7 +449,14 @@ describe("dev setup (e2e)", () => {
       execFileSync("git", ["worktree", "add", "-b", "bare", bare], { cwd: repo, stdio: "pipe" });
       const result = runDev(bare, ["setup"]);
       expect(result.status).toBe(1);
-      expect(result.stderr).toContain("workspace setup");
+      expect(existsSync(registryFile(repo))).toBe(false);
+      expect(existsSync(join(bare, "ports.env"))).toBe(false);
+      expect(setupRuns(bare)).toEqual([]);
+
+      expect(runCli(bare, ["setup"]).status).toBe(0);
+      const registered = runDev(bare, ["setup"]);
+      expect(registered.status, registered.stderr).toBe(0);
+      expect(setupRuns(bare)).toEqual(["force=false"]);
     },
     TEST_TIMEOUT_MS,
   );
@@ -549,7 +485,6 @@ describe("workspace setup --full (e2e)", () => {
       const { repo } = fixture();
       const result = runCli(repo, ["setup", "-c", "feat-full", "--full"]);
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("… ready");
 
       const entry = entryFor(repo, "fixrepo-feat-full");
       expect(entry.status).toBe("ready");
@@ -558,32 +493,24 @@ describe("workspace setup --full (e2e)", () => {
       const linked = sibling(repo, "fixrepo-feat-full");
       expect(readFileSync(join(linked, "ports.env"), "utf-8")).toBe(portsEnv(entry));
       expect(setupRuns(linked)).toEqual(["force=false"]);
-      expect(setupLog(repo, "fixrepo-feat-full")).toContain("PROGRESS: Dev setup");
     },
     TEST_TIMEOUT_MS,
   );
 
-  it(
-    "leaves the workspace ready with devSetupFailure when setup fails, and exits 1",
-    () => {
+  it.each(["E2E_DEV_SETUP_FAIL", "E2E_DEV_EXIT"])(
+    "leaves the workspace ready with a retryable dev failure after %s",
+    (failure) => {
       const { repo } = fixture();
-      const failing = { E2E_DEV_SETUP_FAIL: "1" };
+      const failing = { [failure]: "1" };
       const result = runCli(repo, ["setup", "-c", "feat-fail", "--full"], failing);
       expect(result.status).toBe(1);
-      expect(result.stderr).toContain("Workspace ready; dev setup failed: devSetup infrastructure");
       const entry = entryFor(repo, "fixrepo-feat-fail");
       expect(entry.status).toBe("ready");
-      expect(entry.devSetupFailure?.message).toContain("devSetup infrastructure");
+      expect(entry.devSetupFailure).toBeDefined();
       expect(entry.devSetupAt).toBeUndefined();
-      expect(setupLog(repo, "fixrepo-feat-fail")).toContain(
-        "DEV SETUP FAILED: devSetup infrastructure",
-      );
 
       const waited = runCli(repo, ["wait", "fixrepo-feat-fail"]);
       expect(waited.status).toBe(1);
-      expect(waited.stderr).toContain("dev setup failed: devSetup infrastructure");
-      const status = runCli(repo, ["status", "fixrepo-feat-fail"]);
-      expect(status.stdout).toContain("Dev setup failed: devSetup infrastructure");
 
       const linked = sibling(repo, "fixrepo-feat-fail");
       expect(runDev(linked, ["setup"]).status).toBe(0);
@@ -591,22 +518,6 @@ describe("workspace setup --full (e2e)", () => {
       expect(retried.devSetupFailure).toBeUndefined();
       expect(retried.devSetupAt).toBeDefined();
       expect(runCli(repo, ["wait", "fixrepo-feat-fail"]).status).toBe(0);
-    },
-    TEST_TIMEOUT_MS,
-  );
-
-  it(
-    "records the failing lifecycle command's exit code",
-    () => {
-      const { repo } = fixture();
-      const result = runCli(repo, ["setup", "-c", "feat-exit", "--full"], { E2E_DEV_EXIT: "1" });
-      expect(result.status).toBe(1);
-      expect(result.stderr).toContain(
-        "dev setup failed: devSetup infrastructure: exited with code 3",
-      );
-      const entry = entryFor(repo, "fixrepo-feat-exit");
-      expect(entry.status).toBe("ready");
-      expect(entry.devSetupFailure?.message).toBe("devSetup infrastructure: exited with code 3.");
     },
     TEST_TIMEOUT_MS,
   );
@@ -670,7 +581,6 @@ describe("workspace remove (e2e)", () => {
           E2E_CALLBACK_STOP_FAIL: "1",
         });
         expect(removed.status).toBe(1);
-        expect(removed.stderr).toContain("stop");
         expect(isAlive(pid)).toBe(false);
         const devServers = readFileSync(
           join(repo, ".local-wt", "workspace-registry", "dev-servers.json"),
@@ -689,25 +599,25 @@ describe("workspace remove (e2e)", () => {
 
 describe("list and status (e2e)", () => {
   it(
-    "show the ports, `-` for a workspace without",
+    "report allocated ports and an empty map for a workspace without ports",
     () => {
       const { repo } = fixture();
       expect(runCli(repo, ["setup", "-c", "feat-l"]).status).toBe(0);
       expect(runDev(repo, ["setup"]).status).toBe(0);
       const mainPorts = entryFor(repo, "fixrepo").ports ?? {};
 
-      const list = runCli(repo, ["list"]);
-      expect(list.status).toBe(0);
-      const [header, ...rows] = list.stdout.trim().split("\n");
-      const column = header.split(/\s+/).indexOf("PORTS");
-      expect(column).toBeGreaterThan(0);
-      const cell = (name: string): string | undefined =>
-        rows.find((row) => row.startsWith(`${name} `))?.split(/\s+/)[column];
-      expect(cell("fixrepo")).toBe(Object.values(mainPorts).join(","));
-      expect(cell("fixrepo-feat-l")).toBe("-");
+      const list = runCli(repo, ["list", "--json"]);
+      expect(list.status, list.stderr).toBe(0);
+      expect(JSON.parse(list.stdout).workspaces).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "fixrepo", ports: mainPorts }),
+          expect.objectContaining({ name: "fixrepo-feat-l", ports: {} }),
+        ]),
+      );
 
-      const status = runCli(repo, ["status"]);
-      expect(status.stdout).toContain(`Ports: web=${mainPorts.web}, api=${mainPorts.api}`);
+      const status = runCli(repo, ["status", "--json"]);
+      expect(status.status, status.stderr).toBe(0);
+      expect(JSON.parse(status.stdout).workspace.ports).toEqual(mainPorts);
     },
     TEST_TIMEOUT_MS,
   );

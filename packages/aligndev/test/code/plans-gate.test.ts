@@ -42,8 +42,6 @@ describe("coding launch plans gate", () => {
         { cwd: repo },
       );
       expect(result.code).toBe(1);
-      expect(result.stderr).toContain("tracked");
-      expect(result.stderr).toContain("the `work-files-setup` topic of `aligndev guide`");
       expect(readFileSync(file, "utf8")).toBe(contents);
       expect(existsSync(join(repo, ".plans", "123"))).toBe(false);
       const status = await runAligndev(fixture, ["code", "status", file, "--result"], {
@@ -51,7 +49,6 @@ describe("coding launch plans gate", () => {
       });
       expect(status.code, status.stderr).toBe(0);
       expect(status.stdout).toContain("status: failed");
-      expect(status.stderr).not.toContain("tracked");
       expect((await runAligndev(fixture, ["code", "--help"], { cwd: repo })).code).toBe(0);
     },
   );

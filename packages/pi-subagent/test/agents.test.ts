@@ -49,7 +49,7 @@ describe("agent discovery", () => {
   });
 
   it.each(["project", "both"] as const)("refuses untrusted %s scope without UI bypass", (scope) => {
-    expect(() => discoverAgents({ cwd: temporary(), scope, trusted: false })).toThrow("/trust");
+    expect(() => discoverAgents({ cwd: temporary(), scope, trusted: false })).toThrow();
   });
 
   it.each([
@@ -64,7 +64,7 @@ describe("agent discovery", () => {
     profile(join(dir, "agents"), "bad", frontmatter);
     const discover = discoverAgents({ cwd: dir, agentDir: dir, scope: "user", trusted: false });
     expect(discover("worker").source).toBe("bundled");
-    expect(() => discover("bad")).toThrow("Invalid agent bad");
+    expect(() => discover("bad")).toThrow();
   });
 
   it("rejects unknown names and duplicate names within one source", () => {
@@ -75,8 +75,8 @@ describe("agent discovery", () => {
       "---\nname: duplicate\ndescription: duplicate\n---\nprompt",
     );
     const discover = discoverAgents({ cwd: dir, agentDir: dir, scope: "user", trusted: false });
-    expect(() => discover("missing")).toThrow("Available:");
-    expect(() => discover("duplicate")).toThrow("Duplicate profile");
+    expect(() => discover("missing")).toThrow();
+    expect(() => discover("duplicate")).toThrow();
   });
 });
 

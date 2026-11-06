@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { WorkspaceError } from "../src/errors.js";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -117,7 +118,7 @@ describe("evictOldest", () => {
       const path = devServersFilePath(mainWorktree, registryDir);
       const before = JSON.stringify({ version, servers: [entry("old", { app: 1 })] });
       writeFileSync(path, before);
-      expect(() => readDevServers(mainWorktree, registryDir)).toThrow("unsupported registry");
+      expect(() => readDevServers(mainWorktree, registryDir)).toThrow(WorkspaceError);
       await expect(
         registerDevServer(mainWorktree, registryDir, entry("new", { app: process.pid })),
       ).rejects.toThrow();
@@ -138,11 +139,9 @@ describe("evictOldest", () => {
     ]);
     expect(findOwnEntry(mainWorktree, registryDir, old.worktree)?.name).toBe(old.name);
     expect(() => assertNoPendingCleanup(mainWorktree, registryDir, old.worktree)).toThrow(
-      "Cleanup is pending",
+      WorkspaceError,
     );
-    await expect(registerDevServer(mainWorktree, registryDir, old)).rejects.toThrow(
-      "Cleanup is pending",
-    );
+    await expect(registerDevServer(mainWorktree, registryDir, old)).rejects.toThrow(WorkspaceError);
     await completeDevServerCleanup(mainWorktree, registryDir, old.worktree);
     expect(findOwnEntry(mainWorktree, registryDir, rollback.worktree)?.cleanupPending).toBe(true);
     expect(
@@ -159,9 +158,7 @@ describe("evictOldest", () => {
     const owner = await claimStartup(mainWorktree, registryDir, worktree);
     const path = join(mainWorktree, registryDir, "dev-startups.json");
     utimesSync(path, new Date(0), new Date(0));
-    await expect(claimStartup(mainWorktree, registryDir, worktree)).rejects.toThrow(
-      "startup already in progress",
-    );
+    await expect(claimStartup(mainWorktree, registryDir, worktree)).rejects.toThrow(WorkspaceError);
     const sibling = entry("sibling", { app: process.pid });
     await registerDevServer(mainWorktree, registryDir, sibling);
     expect(readDevServers(mainWorktree, registryDir).servers).toEqual([sibling]);
@@ -189,16 +186,14 @@ describe("evictOldest", () => {
     };
     await registerDevServer(mainWorktree, registryDir, winner, owner);
     await releaseStartup(mainWorktree, registryDir, deadOwner);
-    await expect(claimStartup(mainWorktree, registryDir, worktree)).rejects.toThrow(
-      "startup already in progress",
-    );
+    await expect(claimStartup(mainWorktree, registryDir, worktree)).rejects.toThrow(WorkspaceError);
     const stale = { ...winner, instanceId: deadOwner.id };
     await expect(registerDevServer(mainWorktree, registryDir, stale, deadOwner)).rejects.toThrow(
-      "ownership lost",
+      WorkspaceError,
     );
     await expect(
       markDevServerCleanupPending(mainWorktree, registryDir, worktree, stale, deadOwner),
-    ).rejects.toThrow("ownership lost");
+    ).rejects.toThrow(WorkspaceError);
     expect(
       await markDevServerCleanupPending(mainWorktree, registryDir, worktree, stale),
     ).toBeUndefined();

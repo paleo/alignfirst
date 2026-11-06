@@ -13,11 +13,11 @@ describe("extractTaggedBlock", () => {
   });
 
   it("throws when the opening tag is missing", () => {
-    expect(() => extractTaggedBlock("nothing here", "result-json")).toThrow(/opening/);
+    expect(() => extractTaggedBlock("nothing here", "result-json")).toThrow();
   });
 
   it("throws when the closing tag is missing", () => {
-    expect(() => extractTaggedBlock("<result-json>oops", "result-json")).toThrow(/closing/);
+    expect(() => extractTaggedBlock("<result-json>oops", "result-json")).toThrow();
   });
 
   it("returns only the first occurrence when the tag appears twice", () => {

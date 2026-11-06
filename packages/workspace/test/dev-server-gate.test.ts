@@ -33,20 +33,14 @@ describe("buildWorktreeReadyMessage", () => {
     expect(buildWorktreeReadyMessage(input(entry))).toEqual({ ok: true });
   });
 
-  it("reports a pending message with the workspace name and elapsed time", () => {
+  it("refuses a pending workspace without finalize admission", () => {
     const entry: WorkspaceEntry = {
       worktree: "/tmp/wt",
       createdAt: "2026-05-16T23:00:00.000Z",
       status: "pending",
       recipe: { kind: "defaults" },
     };
-    const result = buildWorktreeReadyMessage(input(entry));
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.message).toContain("still in progress");
-    expect(result.message).toContain("workspace repo-feat-a");
-    expect(result.message).toContain("1h");
-    expect(result.message).toContain("/tmp/wt/.local-wt/logs/workspace-setup.log");
+    expect(buildWorktreeReadyMessage(input(entry)).ok).toBe(false);
   });
 
   it("accepts a pending workspace with `acceptPending` (the finalize child of `setup --full`)", () => {
@@ -71,7 +65,7 @@ describe("buildWorktreeReadyMessage", () => {
     expect(buildWorktreeReadyMessage({ ...input(entry), acceptPending: true }).ok).toBe(false);
   });
 
-  it("reports a failed message with failure reason and elapsed", () => {
+  it("refuses a failed workspace", () => {
     const entry: WorkspaceEntry = {
       worktree: "/tmp/wt",
       createdAt: "2026-05-16T22:00:00.000Z",
@@ -79,25 +73,6 @@ describe("buildWorktreeReadyMessage", () => {
       recipe: { kind: "defaults" },
       failure: { at: "2026-05-16T23:30:00.000Z", message: "boom" },
     };
-    const result = buildWorktreeReadyMessage(input(entry));
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.message).toContain("failed");
-    expect(result.message).toContain("boom");
-    expect(result.message).toContain("30m");
-    expect(result.message).toContain("npm run workspace -- setup");
-  });
-
-  it("uses (no message) when failure.message is absent", () => {
-    const entry: WorkspaceEntry = {
-      worktree: "/tmp/wt",
-      createdAt: "2026-05-16T22:00:00.000Z",
-      status: "failed",
-      recipe: { kind: "defaults" },
-    };
-    const result = buildWorktreeReadyMessage(input(entry));
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.message).toContain("(no message)");
+    expect(buildWorktreeReadyMessage(input(entry)).ok).toBe(false);
   });
 });

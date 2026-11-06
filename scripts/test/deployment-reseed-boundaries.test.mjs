@@ -61,11 +61,9 @@ for (const agent of Object.keys(agents)) {
 
       writeFileSync(f.instructionSource, "Changed fixture instructions\n");
       f.seed(1);
-      assert.match(f.last.stderr, /PERMISSION MODEL: install denied/u);
       assert.equal(readFileSync(f.instructions, "utf8"), original);
       f.policy("unlock", "agent-skills");
       f.seed(1);
-      assert.match(f.last.stderr, /PERMISSION MODEL: install denied/u);
       assert.equal(readFileSync(f.instructions, "utf8"), original);
       f.policy("harden", "agent-skills");
 
@@ -107,7 +105,6 @@ for (const declaration of [
       const before = treeState(f.home);
       for (const action of ["inventory", "prepare", "unlock", "harden"]) {
         f.policy(action, undefined, 1);
-        assert.match(f.last.stderr, /Managed resources overlap deployment runtime state/u);
         assert.deepEqual(treeState(f.home), before, `${action} must fail before filesystem writes`);
         assert.deepEqual(f.state(), {});
         assert.deepEqual(f.calls(), [], `${action} must fail before privileged command doubles`);

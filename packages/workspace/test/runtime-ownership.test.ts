@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { WorkspaceError } from "../src/errors.js";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -145,7 +146,7 @@ describe("external runtime ownership", () => {
         owner: { pid: process.pid, token: "stale-cleaner" },
         runtimeGeneration: runtime.generation,
       }),
-    ).rejects.toThrow(/cleanup ownership lost/i);
+    ).rejects.toThrow(WorkspaceError);
     expect(registryBytes()).toBe(before);
   });
 
@@ -185,9 +186,9 @@ describe("external runtime ownership", () => {
     const foreign = join(root, "other-main");
     mkdirSync(foreign);
     const before = registryBytes();
-    expect(() => readDevServers(foreign, storage.registryDir)).toThrow(/foreign|ownership/);
+    expect(() => readDevServers(foreign, storage.registryDir)).toThrow(WorkspaceError);
     await expect(withRegistryLock(foreign, storage.registryDir, () => {})).rejects.toThrow(
-      /foreign|ownership/,
+      WorkspaceError,
     );
     expect(registryBytes()).toBe(before);
     expect(readdirSync(storage.registryDir)).toEqual(["workspaces.json"]);
@@ -216,18 +217,18 @@ describe("external runtime ownership", () => {
     expect(readWorkspaces(main, storage.registryDir).workspaces).toEqual({});
     expect(inspectKnownWorkspaceState(main, storage.registryDir).requiresCleanup).toBe(true);
     await expect(releaseRuntimeResources(storage, runtime.generation, "retain")).rejects.toThrow(
-      /deletion pending/i,
+      WorkspaceError,
     );
-    await expect(claimRuntime(storage)).rejects.toThrow(/deletion pending/i);
+    await expect(claimRuntime(storage)).rejects.toThrow(WorkspaceError);
     await expect(claimStartup(main, storage.registryDir, storage.currentWorktree)).rejects.toThrow(
-      /deletion pending/i,
+      WorkspaceError,
     );
     const disposal = await claimRuntimeDisposal(storage, runtime.generation);
     const outside = join(root, "outside");
     mkdirSync(outside);
     writeFileSync(join(outside, "data"), "protected");
     symlinkSync(outside, join(storage.runtimeDir, "application-link"));
-    await expect(claimRuntimeDisposal(storage, runtime.generation)).rejects.toThrow(/owned/);
+    await expect(claimRuntimeDisposal(storage, runtime.generation)).rejects.toThrow(WorkspaceError);
     await expect(
       registerWorkspace({
         currentWorktree: storage.currentWorktree,
@@ -236,7 +237,7 @@ describe("external runtime ownership", () => {
         isMainWorktree: false,
         recipe: { kind: "defaults" },
       }),
-    ).rejects.toThrow(/deletion pending/i);
+    ).rejects.toThrow(WorkspaceError);
     await disposeRuntime(disposal);
     expect(existsSync(storage.runtimeDir)).toBe(false);
     expect(readFileSync(join(outside, "data"), "utf8")).toBe("protected");
@@ -270,9 +271,7 @@ describe("external runtime ownership", () => {
     await cleanTarget(old.generation);
     const replacement = await claimRuntime(storage);
     expect(replacement?.generation).not.toBe(old.generation);
-    await expect(claimRuntimeDisposal(storage, old.generation)).rejects.toThrow(
-      /generation changed/,
-    );
+    await expect(claimRuntimeDisposal(storage, old.generation)).rejects.toThrow(WorkspaceError);
     expect(readFileSync(join(storage.runtimeDir, "logs/kept.log"), "utf8")).toBe("evidence");
   });
 
@@ -299,7 +298,7 @@ describe("external runtime ownership", () => {
     const replacement = await claimRuntimeDisposal(storage, runtime.generation);
     await expect(
       disposeRuntime({ ...replacement, claim: { pid: deadPid, token: "old" } }),
-    ).rejects.toThrow(/ownership lost/);
+    ).rejects.toThrow(WorkspaceError);
     expect(retainedRuntime(storage)?.deletionClaim).toEqual(replacement.claim);
     await disposeRuntime(replacement);
   });
@@ -316,7 +315,7 @@ describe("exclusive workspace cleanup ownership", () => {
       updateWorkspaces(main, storage.registryDir, (registry) =>
         claimCleanupOwnership(registry, storage.currentWorktree),
       ),
-    ).rejects.toThrow(/cleanup.*in progress/i);
+    ).rejects.toThrow(WorkspaceError);
     await updateWorkspaces(main, storage.registryDir, (registry) => {
       const entry = assertCleanupOwnership(registry, first);
       entry.cleanupOwner = { ...first.owner, pid: exitedPid() };
@@ -326,7 +325,7 @@ describe("exclusive workspace cleanup ownership", () => {
       updateWorkspaces(main, storage.registryDir, (registry) =>
         claimCleanupOwnership(registry, storage.currentWorktree),
       ),
-    ).rejects.toThrow(/abandoned cleanup.*explicit recovery/i);
+    ).rejects.toThrow(WorkspaceError);
     expect(registryBytes()).toBe(abandoned);
     // This fixture never launched cleanup subprocesses; explicit recovery keeps the pending gate.
     await updateWorkspaces(main, storage.registryDir, (registry) => {
@@ -340,13 +339,13 @@ describe("exclusive workspace cleanup ownership", () => {
     const before = registryBytes();
     await expect(
       releaseRuntimeResources(storage, runtime.generation, "retain", first),
-    ).rejects.toThrow(/cleanup ownership lost/i);
+    ).rejects.toThrow(WorkspaceError);
     await expect(
       releaseRuntimeResources(storage, runtime.generation, "retain", {
         ...replacement,
         createdAt: new Date(0).toISOString(),
       }),
-    ).rejects.toThrow(/cleanup ownership lost/i);
+    ).rejects.toThrow(WorkspaceError);
     await releaseCleanupOwnership(main, storage.registryDir, first);
     expect(registryBytes()).toBe(before);
     await releaseCleanupOwnership(main, storage.registryDir, replacement);
@@ -366,7 +365,7 @@ describe("preparation and startup cleanup exclusion", () => {
     const owner = createPreparationOwner();
     const runtime = await activeTarget(storage, owner);
     await expect(releaseRuntimeResources(storage, runtime.generation, "delete")).rejects.toThrow(
-      /Live preparation/,
+      WorkspaceError,
     );
     const deadPid = exitedPid();
     await updateWorkspaces(main, storage.registryDir, (registry) => {
@@ -381,14 +380,14 @@ describe("preparation and startup cleanup exclusion", () => {
         isMainWorktree: false,
         recipe: { kind: "defaults" },
       }),
-    ).rejects.toThrow(/abandoned/);
+    ).rejects.toThrow(WorkspaceError);
     await updateWorkspaces(main, storage.registryDir, (registry) => {
       const entry = findWorkspaceByPath(registry, storage.currentWorktree)?.entry;
       if (entry) recoverPreparationForCleanup(entry);
     });
     await expect(
       adoptPreparationOwner(main, storage.registryDir, storage.currentWorktree, owner.token),
-    ).rejects.toThrow(/ownership lost/);
+    ).rejects.toThrow(WorkspaceError);
     await cleanTarget(runtime.generation, "delete");
     await disposeRuntime(await claimRuntimeDisposal(storage, runtime.generation));
   });
@@ -414,7 +413,7 @@ describe("preparation and startup cleanup exclusion", () => {
         { ...adopted, token: "wrong" },
         { status: "ready" },
       ),
-    ).rejects.toThrow(/ownership lost/);
+    ).rejects.toThrow(WorkspaceError);
     await settlePreparationOwner(main, storage.registryDir, storage.currentWorktree, adopted, {
       status: "ready",
     });
@@ -427,7 +426,7 @@ describe("preparation and startup cleanup exclusion", () => {
   it("refuses live startup ownership and invalidates abandoned tokens on cleanup-to-disposal handoff", async () => {
     const runtime = await activeTarget();
     const live = await claimStartup(main, storage.registryDir, storage.currentWorktree);
-    await expect(cleanTarget(runtime.generation, "delete")).rejects.toThrow(/Live startup/);
+    await expect(cleanTarget(runtime.generation, "delete")).rejects.toThrow(WorkspaceError);
     await releaseStartup(main, storage.registryDir, live);
     const abandoned = { ...live, pid: exitedPid() };
     writeFileSync(
@@ -436,9 +435,7 @@ describe("preparation and startup cleanup exclusion", () => {
     );
     await cleanTarget(runtime.generation, "delete");
     expect(readStartupOwners(main, storage.registryDir).owners).toEqual([]);
-    expect(() => assertStartupOwner(main, storage.registryDir, abandoned)).toThrow(
-      /ownership lost/,
-    );
+    expect(() => assertStartupOwner(main, storage.registryDir, abandoned)).toThrow(WorkspaceError);
   });
 });
 
@@ -450,9 +447,7 @@ describe("external ownership boundaries", () => {
       mkdirSync(storage.runtimeDir, { recursive: true });
       const evidence = join(storage.runtimeDir, "data");
       writeFileSync(evidence, "unaccounted");
-      await expect(claimRuntime(storage)).rejects.toThrow(
-        existingRegistry ? /Nonempty unowned runtime/ : /without their registry owner/,
-      );
+      await expect(claimRuntime(storage)).rejects.toThrow(WorkspaceError);
       expect(readFileSync(evidence, "utf8")).toBe("unaccounted");
       expect(existsSync(storage.registryDir)).toBe(existingRegistry);
     },
@@ -477,15 +472,15 @@ describe("external ownership boundaries", () => {
     writeFileSync(join(foreign, "data"), "foreign bytes");
     mkdirSync(join(storage.registryDir, "../worktrees"), { recursive: true });
     symlinkSync(foreign, storage.runtimeDir);
-    await expect(claimRuntime(storage)).rejects.toThrow(/ownership/);
+    await expect(claimRuntime(storage)).rejects.toThrow(WorkspaceError);
     expect(readFileSync(join(foreign, "data"), "utf8")).toBe("foreign bytes");
     rmSync(storage.runtimeDir);
     mkdirSync(storage.runtimeDir);
     symlinkSync(foreign, join(storage.runtimeDir, "logs"));
-    expect(() => assertRuntimeOwnership(storage)).toThrow(/ownership/);
+    expect(() => assertRuntimeOwnership(storage)).toThrow(WorkspaceError);
     rmSync(join(storage.runtimeDir, "logs"));
     symlinkSync(join(foreign, "data"), join(storage.registryDir, "dev-startups.json"));
-    expect(() => readDevServers(main, storage.registryDir)).toThrow(/ownership/);
+    expect(() => readDevServers(main, storage.registryDir)).toThrow(WorkspaceError);
     expect(readFileSync(join(foreign, "data"), "utf8")).toBe("foreign bytes");
   });
 
@@ -501,11 +496,11 @@ describe("external ownership boundaries", () => {
       },
     };
     writeFileSync(workspacesFilePath(main, storage.registryDir), JSON.stringify(moved));
-    expect(() => readWorkspaces(main, storage.registryDir)).toThrow(/foreign|relocated/);
+    expect(() => readWorkspaces(main, storage.registryDir)).toThrow(WorkspaceError);
     const duplicate = JSON.parse(original);
     duplicate.runtimeOwners.other = runtime;
     writeFileSync(workspacesFilePath(main, storage.registryDir), JSON.stringify(duplicate));
-    expect(() => readDevServers(main, storage.registryDir)).toThrow(/runtime ownership/);
+    expect(() => readDevServers(main, storage.registryDir)).toThrow(WorkspaceError);
     const obsolete = JSON.parse(original);
     Object.values<{ recipe: unknown }>(obsolete.workspaces)[0].recipe = {
       kind: "manifest",
@@ -514,7 +509,7 @@ describe("external ownership boundaries", () => {
     };
     const before = JSON.stringify(obsolete);
     writeFileSync(workspacesFilePath(main, storage.registryDir), before);
-    expect(() => readDevServers(main, storage.registryDir)).toThrow(/unsupported registry/);
+    expect(() => readDevServers(main, storage.registryDir)).toThrow(WorkspaceError);
     expect(registryBytes()).toBe(before);
   });
 });

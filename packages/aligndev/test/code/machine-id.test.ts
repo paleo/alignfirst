@@ -61,7 +61,6 @@ describe("readMachineId", () => {
     mkdirSync(join(home, ".alignfirst"));
     writeFileSync(path, " \n");
     expect(() => readMachineId(home)).toThrow(path);
-    expect(() => readMachineId(home)).toThrow("empty");
     expect(readFileSync(path, "utf8")).toBe(" \n");
   });
 

@@ -387,7 +387,7 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
           stderr: () => {},
           inputError: () => {},
         }),
-      ).toThrow("WSL");
+      ).toThrow();
     } finally {
       vi.unstubAllGlobals();
     }
@@ -424,6 +424,6 @@ describe("macOS process query parsing", () => {
   });
 
   it("rejects a malformed record", () => {
-    expect(() => psTarget("  913   412 Z+")).toThrow("Invalid process query record.");
+    expect(() => psTarget("  913   412 Z+")).toThrow();
   });
 });

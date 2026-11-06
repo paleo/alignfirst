@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { WorkspaceError } from "../src/errors.js";
 import { runDevSetup, type DevSetupInput } from "../src/dev-setup.js";
 import { createPreparationOwner, settlePreparationOwner } from "../src/preparation-ownership.js";
 import * as startup from "../src/startup-ownership.js";
@@ -48,7 +49,7 @@ describe("preparation and dev setup admission", () => {
     await entered.wait;
     const before = registryBytes();
     try {
-      await expect(prepare()).rejects.toThrow(/startup/i);
+      await expect(prepare()).rejects.toThrow(WorkspaceError);
       expect(registryBytes()).toBe(before);
     } finally {
       release.release();
@@ -68,7 +69,7 @@ describe("preparation and dev setup admission", () => {
     const hook = vi.fn();
     input.setup = hook;
     const running = runDevSetup(input);
-    const rejected = expect(running).rejects.toThrow(/preparation/i);
+    const rejected = expect(running).rejects.toThrow(WorkspaceError);
     await entered.wait;
     try {
       await prepare();
@@ -94,7 +95,7 @@ describe("preparation and dev setup admission", () => {
       join(input.registryDir, "dev-startups.json"),
       JSON.stringify({ version: 1, owners: [{ ...owner, pid: 2147483647 }] }),
     );
-    await expect(prepare()).rejects.toThrow(/startup/i);
+    await expect(prepare()).rejects.toThrow(WorkspaceError);
     expect(currentEntry()?.preparationOwner).toBeUndefined();
   });
 
@@ -111,10 +112,10 @@ describe("preparation and dev setup admission", () => {
         input.registryDir,
         input.worktree.currentWorktree,
       ),
-    ).rejects.toThrow(/preparation/i);
+    ).rejects.toThrow(WorkspaceError);
     input.options = { ...input.options, fromFinalize: true, preparationToken: owner.token };
     input.setup = vi.fn();
-    await expect(runDevSetup(input)).rejects.toThrow(/preparation/i);
+    await expect(runDevSetup(input)).rejects.toThrow(WorkspaceError);
     expect(input.setup).not.toHaveBeenCalled();
   });
 
@@ -129,7 +130,7 @@ describe("preparation and dev setup admission", () => {
     expect(currentEntry()?.preparationOwner).toEqual(owner);
 
     input.options.preparationToken = "wrong-token";
-    await expect(runDevSetup(input)).rejects.toThrow(/preparation/i);
+    await expect(runDevSetup(input)).rejects.toThrow(WorkspaceError);
     input.options.preparationToken = owner.token;
     await settlePreparationOwner(
       input.worktree.mainWorktree,
@@ -138,7 +139,7 @@ describe("preparation and dev setup admission", () => {
       owner,
       { status: "ready" },
     );
-    await expect(runDevSetup(input)).rejects.toThrow(/preparation/i);
+    await expect(runDevSetup(input)).rejects.toThrow(WorkspaceError);
     expect(hook).toHaveBeenCalledTimes(1);
   });
 });
