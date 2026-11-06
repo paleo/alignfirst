@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+
 import { main as docmapMain } from "@alignfirst/docmap";
 
 import type { CommandContext } from "../context.js";
@@ -13,7 +15,8 @@ export function runDocmap(
   presentation?: DocmapPresentation,
 ): number {
   const docs = layoutOf(ctx).locations.docs;
-  const rootArgs = docs.in === "companion" && !args.includes("--root") ? ["--root", docs.path] : [];
+  const needsRoot = docs.in === "companion" || docs.path !== resolve(ctx.cwd, "docs");
+  const rootArgs = needsRoot && !args.includes("--root") ? ["--root", docs.path] : [];
   return docmapMain({
     argv: ["node", "docmap", ...rootArgs, ...args],
     cwd: ctx.cwd,
