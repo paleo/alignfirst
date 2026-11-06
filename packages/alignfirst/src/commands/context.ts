@@ -30,8 +30,10 @@ function writeProjectInstructions(ctx: CommandContext): void {
 }
 
 function writeDocmapSection(ctx: CommandContext): number {
-  ctx.stdout.write("\n# Docmap Usage\n\n");
-  return runDocmap(ctx, []);
+  ctx.stdout.write(
+    "\n# Docmap Usage\n\nBefore working on a task, read the documents relevant to it.\n\n",
+  );
+  return runDocmap(ctx, [], { showRootCommandInShortHelp: false });
 }
 
 function renderProtocolsSection(ctx: CommandContext): string {

@@ -33,6 +33,7 @@ export interface MainOptions {
   cwd?: string;
   evidence?: LaunchEvidence;
   commands?: PackageManagerCommands;
+  showRootCommandInShortHelp?: boolean;
 }
 
 export function main(options?: MainOptions): number {
@@ -91,7 +92,14 @@ export function main(options?: MainOptions): number {
   // and renderListing below walks it again to format — an intentional double traversal,
   // negligible at this threshold and not worth threading a shared pass through.
   const bare = paths.length === 0 && !recursive;
-  if (bare) stdout.write(`${renderHelp(pm, { full: false, showRootOption })}\n`);
+  if (bare)
+    stdout.write(
+      `${renderHelp(pm, {
+        full: false,
+        showRootOption,
+        showRootCommand: options?.showRootCommandInShortHelp,
+      })}\n`,
+    );
   const smallSet = bare && countFilesUpTo(baseDir, SMALL_SET_THRESHOLD) < SMALL_SET_THRESHOLD;
 
   const { dirs, files } = classifyTargets(baseDir, paths, prefix);
@@ -169,6 +177,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
 interface HelpOptions {
   full: boolean;
   showRootOption: boolean;
+  showRootCommand?: boolean;
 }
 
 export interface PackageManagerCommands {
@@ -192,9 +201,9 @@ function renderCommands(rows: CommandRow[]): string {
 
 // Everyday browse/search commands, shared by short help, full help, and the guide.
 // Examples carry the `docs/` prefix to nudge agents toward valid, openable paths.
-function browseCommands(pm: PackageManagerCommands): CommandRow[] {
+function browseCommands(pm: PackageManagerCommands, showRootCommand = true): CommandRow[] {
   return [
-    { command: pm.base, comment: "list root documents" },
+    ...(showRootCommand ? [{ command: pm.base, comment: "list root documents" }] : []),
     { command: `${pm.withArgs} dir-a`, comment: "list a sub-directory" },
     { command: `${pm.withArgs} docs/dir-a/doc-1.md`, comment: "read a document" },
     {
@@ -204,7 +213,7 @@ function browseCommands(pm: PackageManagerCommands): CommandRow[] {
     { command: `${pm.withArgs} --recursive`, comment: "list every document" },
     {
       command: `${pm.withArgs} --search "term1 term2"`,
-      comment: "search documents (any term matches; best matches first)",
+      comment: "search documents (prefer browsing the documentation map)",
     },
   ];
 }
@@ -233,14 +242,17 @@ function guideCommands(pm: PackageManagerCommands): CommandRow[] {
   ];
 }
 
-function renderHelp(pm: PackageManagerCommands, { full, showRootOption }: HelpOptions): string {
+function renderHelp(
+  pm: PackageManagerCommands,
+  { full, showRootOption, showRootCommand = true }: HelpOptions,
+): string {
   const lines = [
     "docmap — browse and read a project's docs/ tree of Markdown files.",
     "",
     "Commands:",
     "",
-    "```",
-    renderCommands(browseCommands(pm)),
+    "```bash",
+    renderCommands(browseCommands(pm, showRootCommand)),
     "```",
     "",
     `Before writing a new document or editing an existing one, run \`${pm.withArgs} --guide\` and follow its rules.`,
@@ -249,7 +261,7 @@ function renderHelp(pm: PackageManagerCommands, { full, showRootOption }: HelpOp
     lines.push(
       "",
       "More:",
-      "```",
+      "```bash",
       renderCommands(moreCommands(pm, showRootOption)),
       "```",
       "",
