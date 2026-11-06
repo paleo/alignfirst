@@ -7,6 +7,7 @@ import { renderConventionsSection } from "../conventions.js";
 import { readInstructions } from "../instructions.js";
 import { parseBareCommandArgs } from "../parse-args.js";
 import { layoutOf } from "../project-layout.js";
+import { renderWorkspaceGuidance } from "../workspace-guidance.js";
 import { runDocmap } from "./docmap.js";
 
 export function runContext(ctx: CommandContext, args: string[]): number {
@@ -14,6 +15,7 @@ export function runContext(ctx: CommandContext, args: string[]): number {
   if (parseBareCommandArgs(ctx, args, usage)) return 0;
   ctx.stdout.write(renderConventionsSection(ctx));
   writeProjectInstructions(ctx);
+  ctx.stdout.write(`\n${renderWorkspaceGuidance(ctx)}`);
   const code = layoutOf(ctx).locations.docs.exists ? writeDocmapSection(ctx) : 0;
   ctx.stdout.write(`\n${renderProtocolsSection(ctx)}`);
   return code;
