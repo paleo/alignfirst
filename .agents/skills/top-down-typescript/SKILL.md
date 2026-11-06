@@ -4,8 +4,8 @@ description: TypeScript and JavaScript coding style conventions, centered on top
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.4.0"
-  repository: https://github.com/paleo/skills
+  version: "0.4.2"
+  repository: https://github.com/paleo/paleo-skills
 ---
 
 # Top-Down TypeScript Coding Style
@@ -70,7 +70,8 @@ metadata:
 - Keep functions small with a single responsibility
 - Avoid `any`; take the time to find the proper type. If you fail to find one, always insert a `/* FIXME */` after the `any`. For example: `let myVariable: any /* FIXME */;`.
 - Export only functions (or variables, classes) that are imported from elsewhere. By default, do not export.
-- When an interface is used in the signature of an exported function or component, that interface must also be exported.
+- Always export locally declared types and interfaces used in public signatures, even if no file imports them yet.
+- When a named type describes a public result, use it as the return type (`Promise<T>` for async functions).
 
 ## Imports
 

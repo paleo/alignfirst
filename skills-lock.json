@@ -2,10 +2,10 @@
   "version": 1,
   "skills": {
     "top-down-typescript": {
-      "source": "paleo/skills",
+      "source": "paleo/paleo-skills",
       "sourceType": "github",
       "skillPath": "skills/top-down-typescript/SKILL.md",
-      "computedHash": "f376266394809b435f75f823a563fd5262ebbc67e8900a890ae3ed9a8afc52a3"
+      "computedHash": "adeacd369f54154758034baa3e25c46bcb7fd3a546ab4ba63ef3c339bcd43660"
     }
   }
 }
