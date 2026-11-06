@@ -192,7 +192,7 @@ npx -y skills add https://github.com/paleo/alignfirst --global --skill alignfirs
 
 Deployments require null or a string for every coding profile and enabled explicit quota source; omission is invalid there. Generated service defaults use null. Inventory still records absolute filesystem paths, while native commands unset the directory variable for null or set its resolved value for a string.
 
-Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code, Codex or Pi variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the preparation contract: project context, usable work files, docmap, runtime procedures and an explicitly referenced assistant guide, in the repository or its companion. `alignfirst assistant-instructions` prints conventions, workspace guidance and development-server commands when configured, then that content without filename discovery. The shared sections remain without a configured reference. The workspace recipe is optional; default preparation is protocol-ready.
+Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code, Codex or Pi variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the preparation contract: project context, usable work files, docmap, runtime procedures and an explicitly referenced assistant guide, in the repository or its companion. `alignfirst assistant-instructions` reads project guidance and any explicitly referenced content. The workspace recipe is optional; default preparation is protocol-ready.
 
 ## Maintainer checks
 
