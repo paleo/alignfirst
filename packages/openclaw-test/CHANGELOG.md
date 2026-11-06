@@ -1,5 +1,12 @@
 # @alignfirst/openclaw-test
 
+## 0.24.2
+
+### Patch Changes
+
+- Updated dependencies [d440e00]
+  - @alignfirst/docmap@0.13.0
+
 ## 0.24.1
 
 ### Patch Changes

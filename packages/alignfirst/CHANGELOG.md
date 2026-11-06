@@ -1,5 +1,18 @@
 # alignfirst
 
+## 0.18.0
+
+### Minor Changes
+
+- d440e00: Added workspace guidance and configured development-server commands to context and assistant instructions. Improved Docmap help and added a programmatic option to omit the root example from short help.
+
+### Patch Changes
+
+- d440e00: Fixed context and Docmap to select project documentation when invoked from nested directories, preserving explicit `--root` overrides.
+- Updated dependencies [d440e00]
+  - @alignfirst/docmap@0.13.0
+  - @alignfirst/workspace@0.42.1
+
 ## 0.17.0
 
 ### Minor Changes
