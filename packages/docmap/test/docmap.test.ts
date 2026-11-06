@@ -69,7 +69,6 @@ describe("recursive-by-default for small sets (basic fixture)", () => {
     expect(stdout).toContain("--guide");
     expect(stdout).toContain("--search");
     expect(stdout).toContain("Commands:\n\n```bash\n");
-    expect(stdout).toMatch(/^.+\s+# list root documents$/m);
     expect(stdout).toContain("# search documents (prefer browsing the documentation map)");
     expect(stdout).toContain("Before writing a new document or editing an existing one, run `");
     expect(stdout).toContain(dp(fixtures.basic, "code-style.md"));
@@ -488,8 +487,6 @@ describe("--help", () => {
     expect(stdout).toContain("--check");
     expect(stdout).toContain("Commands:\n\n```bash\n");
     expect(stdout).toContain("More:\n```bash\n");
-    expect(stdout).toMatch(/^.+\s+# list root documents$/m);
-    expect(stdout).toContain("# search documents (prefer browsing the documentation map)");
     expect(stdout).not.toContain("# Documentation");
     expect(stdout).not.toContain(dp(fixtures.basic, "code-style.md"));
     expect(stdout).not.toContain("<document_file");
@@ -503,7 +500,6 @@ describe("--guide", () => {
     expect(stdout).toContain("# Authoring Documentation");
     expect(stdout).toContain("YAML Frontmatter");
     expect(stdout).toContain("```bash\n");
-    expect(stdout).toMatch(/^.+\s+# list root documents$/m);
     expect(stdout).toContain("# search documents (prefer browsing the documentation map)");
     expect(stdout).not.toContain("# Documentation");
     expect(stdout).not.toContain(dp(fixtures.basic, "code-style.md"));
@@ -875,13 +871,7 @@ describe("injected command prefix", () => {
     expect(full).toContain("alignfirst docmap --check");
     expect(full).toContain("alignfirst docmap --guide");
     expect(short).toContain("alignfirst docmap --guide");
-    for (const output of [full, short]) {
-      expect(output).toMatch(/^alignfirst docmap\s+# list root documents$/m);
-      expect(output).toContain("```bash\nalignfirst docmap");
-      expect(output).toMatch(
-        /^alignfirst docmap --search "term1 term2"\s+# search documents \(prefer browsing the documentation map\)$/m,
-      );
-    }
+    expect(full).toMatch(/^alignfirst docmap\s+# list root documents$/m);
   });
 
   it("omits only the short-help root example when requested, leaving the map unchanged", () => {

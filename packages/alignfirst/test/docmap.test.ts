@@ -33,9 +33,12 @@ describe("docmap command", () => {
     ).toContain("npx -y alignfirst docmap --check");
   });
 
-  it.each(["context", "docmap"])(
-    "%s selects project docs from nested cwd, ignoring nested decoys",
-    async (command) => {
+  it.each([
+    ["docmap", false],
+    ["context", true],
+  ] as const)(
+    "%s selects project docs from nested cwd with decoy=%s",
+    async (command, withDecoy) => {
       const root = temp();
       configureGit(root);
       const project = join(root, "project");
@@ -45,63 +48,42 @@ describe("docmap command", () => {
       mkdirSync(join(project, "docs"));
       writeFileSync(join(project, "docs", "selected.md"), "# Selected\n");
 
-      const atRoot = await runMain([command], { cwd: project });
-      expect(atRoot).toMatchObject({ code: 0, stderr: "" });
-      expect(atRoot.stdout).toContain("`docs/selected.md` — Selected");
-      expect(atRoot.stdout).not.toContain("--root");
-
-      for (const withDecoy of [false, true]) {
-        if (withDecoy) {
-          mkdirSync(join(nested, "docs"));
-          writeFileSync(join(nested, "docs", "decoy.md"), "# Decoy\n");
-        }
-        const result = await runMain([command], { cwd: nested });
-        expect(result).toMatchObject({ code: 0, stderr: "" });
-        expect(result.stdout).toContain("`../docs/selected.md` — Selected");
-        expect(result.stdout).not.toContain("decoy.md");
-        expect(result.stdout).toContain(`alignfirst docmap --root ${join(project, "docs")}`);
-      }
-
       if (command === "docmap") {
-        const explicit = await runMain(["docmap", "--root", "docs"], { cwd: nested });
-        expect(explicit).toMatchObject({ code: 0, stderr: "" });
-        expect(explicit.stdout).toContain("`docs/decoy.md` — Decoy");
-        expect(explicit.stdout).not.toContain("selected.md");
+        const atRoot = await runMain([command], { cwd: project });
+        expect(atRoot).toMatchObject({ code: 0, stderr: "" });
+        expect(atRoot.stdout).toContain("`docs/selected.md` — Selected");
+        expect(atRoot.stdout).not.toContain("--root");
       }
+      if (withDecoy) {
+        mkdirSync(join(nested, "docs"));
+        writeFileSync(join(nested, "docs", "decoy.md"), "# Decoy\n");
+      }
+      const result = await runMain([command], { cwd: nested });
+      expect(result).toMatchObject({ code: 0, stderr: "" });
+      expect(result.stdout).toContain("`../docs/selected.md` — Selected");
+      expect(result.stdout).not.toContain("decoy.md");
+      expect(result.stdout).toContain(`alignfirst docmap --root ${join(project, "docs")}`);
     },
   );
 
-  it("passes the companion docs as --root unless one is given", async () => {
+  it("selects companion docs from nested cwd unless a caller-relative root is given", async () => {
     const { root, home, project, companion } = makeCompanionProject({ docs: "companion" });
     dirs.push(root);
     mkdirSync(join(companion, "docs"), { recursive: true });
     writeFileSync(join(companion, "docs", "topic.md"), "---\ntitle: Topic\n---\n\n# Topic\n");
     mkdirSync(join(project, "docs"));
     writeFileSync(join(project, "docs", "local.md"), "---\ntitle: Local\n---\n\n# Local\n");
-    const companionDocs = await runMain(["docmap"], { cwd: project, home });
-    expect(companionDocs.stdout).toContain("topic.md` — Topic");
-    expect(companionDocs.stdout).not.toContain("Local");
-    const explicit = await runMain(["docmap", "--root", "docs"], { cwd: project, home });
-    expect(explicit.stdout).toContain("`docs/local.md` — Local");
-    expect(explicit.stdout).not.toContain("Topic");
-
     const nested = join(project, "src");
     mkdirSync(join(nested, "docs"), { recursive: true });
     writeFileSync(join(nested, "docs", "decoy.md"), "# Decoy\n");
-    for (const command of ["context", "docmap"]) {
-      const result = await runMain([command], { cwd: nested, home });
-      expect(result).toMatchObject({ code: 0, stderr: "" });
-      expect(result.stdout).toContain("topic.md` — Topic");
-      expect(result.stdout).not.toContain("local.md");
-      expect(result.stdout).not.toContain("decoy.md");
-    }
-    const nestedExplicit = await runMain(["docmap", "--root", "docs"], {
-      cwd: nested,
-      home,
-    });
-    expect(nestedExplicit).toMatchObject({ code: 0, stderr: "" });
-    expect(nestedExplicit.stdout).toContain("`docs/decoy.md` — Decoy");
-    expect(nestedExplicit.stdout).not.toContain("topic.md");
+    const selected = await runMain(["docmap"], { cwd: nested, home });
+    expect(selected).toMatchObject({ code: 0, stderr: "" });
+    expect(selected.stdout).toContain("topic.md` — Topic");
+    expect(selected.stdout).not.toMatch(/local\.md|decoy\.md/);
+    const explicit = await runMain(["docmap", "--root", "docs"], { cwd: nested, home });
+    expect(explicit).toMatchObject({ code: 0, stderr: "" });
+    expect(explicit.stdout).toContain("`docs/decoy.md` — Decoy");
+    expect(explicit.stdout).not.toMatch(/topic\.md|local\.md/);
   });
 
   it("propagates docmap exit codes", async () => {

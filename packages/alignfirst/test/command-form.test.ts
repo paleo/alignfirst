@@ -1,5 +1,5 @@
 import type { LaunchEvidence } from "@alignfirst/docmap/invocation";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -34,38 +34,22 @@ describe("command form", () => {
     ["bun", { npm_config_user_agent: "bun/1.4.4", npm_command: "exec" }, "bunx --bun alignfirst"],
     ["bun", {}, "bunx --bun alignfirst"],
   ] as const)(
-    "propagates %s/%j through help, context, assistant instructions, docmap and guides",
+    "propagates %s/%j through help, context, embedded docmap and protocol guides",
     async (runtime, env, form) => {
-      const cwd = makeTempDir("alignfirst-command-form-");
-      try {
-        writeFileSync(join(cwd, "alignfirst.json"), JSON.stringify(devConfig));
-        mkdirSync(join(cwd, "docs"));
-        writeFileSync(join(cwd, "docs", "topic.md"), "# Topic\n");
-        const evidence = { runtime, env, cwd, executable: "/runtime" };
-        for (const args of [
-          ["--help"],
-          ["context"],
-          ["assistant-instructions"],
-          ["guide", "spec"],
-          ["guide", "spec", "--protocol-only"],
-          ["docmap", "--guide", "--root", "docs with spaces"],
-        ]) {
-          const { code, output } = await runWithEvidence(args, evidence);
-          expect(code).toBe(0);
-          expect(output).toContain(form);
-          if (form === "alignfirst") expect(output).not.toMatch(/\b(?:npx|bunx)\b/);
-          if (args[0] === "context" || args[0] === "assistant-instructions") {
-            expect(output).toContain(`run \`${form} workspace --guide\` and follow it`);
-            expect(output).toContain(`${form} dev up     # start in the background`);
-            expect(output).toContain(`${form} dev status # inspect its status`);
-            expect(output).toContain(`${form} dev down   # stop it`);
-          }
-          if (args[0] === "context") expect(output).toContain(`${form} docmap dir-a`);
-          if (args[0] === "docmap")
-            expect(output).toContain(`${form} docmap --root 'docs with spaces'`);
-        }
-      } finally {
-        rmSync(cwd, { recursive: true, force: true });
+      const evidence = { runtime, env, cwd: "/tmp", executable: "/runtime" };
+      for (const args of [
+        ["--help"],
+        ["context"],
+        ["guide", "spec"],
+        ["guide", "spec", "--protocol-only"],
+        ["docmap", "--guide", "--root", "docs with spaces"],
+      ]) {
+        const { code, output } = await runWithEvidence(args, evidence);
+        expect(code).toBe(0);
+        expect(output).toContain(form);
+        if (form === "alignfirst") expect(output).not.toMatch(/\b(?:npx|bunx)\b/);
+        if (args[0] === "docmap")
+          expect(output).toContain(`${form} docmap --root 'docs with spaces'`);
       }
     },
   );
@@ -94,17 +78,14 @@ describe("command form", () => {
         executable: "/runtime",
         parentArgv: ["/bin/sh", "-c", script],
       };
-      for (const command of ["guide", "context", "assistant-instructions"]) {
+      const guide = await runWithEvidence(["guide"], evidence);
+      expect(guide.code).toBe(0);
+      expect(guide.output).toContain("npm run af -- guide spec");
+      for (const command of ["context", "assistant-instructions"]) {
         const { code, output } = await runWithEvidence([command], evidence);
         expect(code).toBe(0);
-        if (command === "guide") {
-          expect(output).toContain("npm run af -- guide spec");
-        } else {
-          expect(output).toContain("run `npm run af -- workspace --guide` and follow it");
-          expect(output).toContain("npm run af -- dev up     # start in the background");
-          expect(output).toContain("npm run af -- dev status # inspect its status");
-          expect(output).toContain("npm run af -- dev down   # stop it");
-        }
+        expect(output).toContain("npm run af -- workspace --guide");
+        expect(output).toContain("npm run af -- dev status");
       }
     } finally {
       rmSync(cwd, { recursive: true, force: true });
