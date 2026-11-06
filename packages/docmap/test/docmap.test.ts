@@ -68,6 +68,10 @@ describe("recursive-by-default for small sets (basic fixture)", () => {
     expect(code).toBe(0);
     expect(stdout).toContain("--guide");
     expect(stdout).toContain("--search");
+    expect(stdout).toContain("Commands:\n\n```bash\n");
+    expect(stdout).toMatch(/^.+\s+# list root documents$/m);
+    expect(stdout).toContain("# search documents (prefer browsing the documentation map)");
+    expect(stdout).toContain("Before writing a new document or editing an existing one, run `");
     expect(stdout).toContain(dp(fixtures.basic, "code-style.md"));
     expect(stdout).toContain("Code Style");
     expect(stdout).toContain("Conventions and formatting rules for the codebase.");
@@ -482,6 +486,10 @@ describe("--help", () => {
     expect(stdout).toContain("--guide");
     expect(stdout).toContain("--search");
     expect(stdout).toContain("--check");
+    expect(stdout).toContain("Commands:\n\n```bash\n");
+    expect(stdout).toContain("More:\n```bash\n");
+    expect(stdout).toMatch(/^.+\s+# list root documents$/m);
+    expect(stdout).toContain("# search documents (prefer browsing the documentation map)");
     expect(stdout).not.toContain("# Documentation");
     expect(stdout).not.toContain(dp(fixtures.basic, "code-style.md"));
     expect(stdout).not.toContain("<document_file");
@@ -494,6 +502,9 @@ describe("--guide", () => {
     expect(code).toBe(0);
     expect(stdout).toContain("# Authoring Documentation");
     expect(stdout).toContain("YAML Frontmatter");
+    expect(stdout).toContain("```bash\n");
+    expect(stdout).toMatch(/^.+\s+# list root documents$/m);
+    expect(stdout).toContain("# search documents (prefer browsing the documentation map)");
     expect(stdout).not.toContain("# Documentation");
     expect(stdout).not.toContain(dp(fixtures.basic, "code-style.md"));
     expect(stdout).not.toContain("<document_file");
@@ -854,16 +865,54 @@ describe("injected command prefix", () => {
   const commands = { base: "alignfirst docmap", withArgs: "alignfirst docmap" };
 
   it("renders the injected prefix in full and short help", () => {
-    const full = invoke(["node", "docmap", "--help"], "/", commands).stdout;
+    const full = invokeWith({
+      argv: ["node", "docmap", "--help"],
+      cwd: "/",
+      commands,
+      showRootCommandInShortHelp: false,
+    }).stdout;
     const short = invoke(["node", "docmap"], "/", commands).stdout;
     expect(full).toContain("alignfirst docmap --check");
     expect(full).toContain("alignfirst docmap --guide");
     expect(short).toContain("alignfirst docmap --guide");
+    for (const output of [full, short]) {
+      expect(output).toMatch(/^alignfirst docmap\s+# list root documents$/m);
+      expect(output).toContain("```bash\nalignfirst docmap");
+      expect(output).toMatch(
+        /^alignfirst docmap --search "term1 term2"\s+# search documents \(prefer browsing the documentation map\)$/m,
+      );
+    }
   });
 
-  it("renders the injected prefix in the guide", () => {
-    const out = invoke(["node", "docmap", "--guide"], "/", commands).stdout;
+  it("omits only the short-help root example when requested, leaving the map unchanged", () => {
+    const options = {
+      argv: ["node", "docmap", "--root", "."],
+      cwd: fixtures.basic,
+      commands,
+    };
+    const ordinary = invokeWith(options);
+    const embedded = invokeWith({ ...options, showRootCommandInShortHelp: false });
+    expect(ordinary).toMatchObject({ code: 0, stderr: "" });
+    expect(embedded).toMatchObject({ code: 0, stderr: "" });
+    expect(ordinary.stdout).toMatch(/^alignfirst docmap --root \.\s+# list root documents$/m);
+    expect(embedded.stdout).not.toMatch(/^alignfirst docmap --root \.\s+#/m);
+    expect(embedded.stdout).toContain("alignfirst docmap --root . dir-a");
+    expect(embedded.stdout).toContain("alignfirst docmap --root . --guide");
+    expect(embedded.stdout).toContain("# Documentation\n");
+    expect(embedded.stdout.slice(embedded.stdout.indexOf("# Documentation\n"))).toBe(
+      ordinary.stdout.slice(ordinary.stdout.indexOf("# Documentation\n")),
+    );
+  });
+
+  it("renders the injected prefix in the guide regardless of the short-help setting", () => {
+    const out = invokeWith({
+      argv: ["node", "docmap", "--guide"],
+      cwd: "/",
+      commands,
+      showRootCommandInShortHelp: false,
+    }).stdout;
     expect(out).toContain("alignfirst docmap --check");
+    expect(out).toMatch(/^alignfirst docmap\s+# list root documents$/m);
   });
 
   it("folds --root into the injected prefix", () => {
