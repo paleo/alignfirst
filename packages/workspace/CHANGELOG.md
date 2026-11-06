@@ -1,5 +1,12 @@
 # @alignfirst/workspace
 
+## 0.42.1
+
+### Patch Changes
+
+- Updated dependencies [d440e00]
+  - @alignfirst/docmap@0.13.0
+
 ## 0.42.0
 
 ### Minor Changes

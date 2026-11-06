@@ -1,5 +1,14 @@
 # aligndev
 
+## 0.31.1
+
+### Patch Changes
+
+- d440e00: Added workspace guidance and configured development-server commands to context and assistant instructions. Improved Docmap help and added a programmatic option to omit the root example from short help.
+- Updated dependencies [d440e00]
+  - @alignfirst/docmap@0.13.0
+  - @alignfirst/workspace@0.42.1
+
 ## 0.31.0
 
 ### Minor Changes

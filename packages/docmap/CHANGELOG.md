@@ -1,5 +1,11 @@
 # @alignfirst/docmap
 
+## 0.13.0
+
+### Minor Changes
+
+- d440e00: Added workspace guidance and configured development-server commands to context and assistant instructions. Improved Docmap help and added a programmatic option to omit the root example from short help.
+
 ## 0.12.0
 
 ### Minor Changes
