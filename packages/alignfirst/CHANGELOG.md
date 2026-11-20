@@ -1,5 +1,11 @@
 # alignfirst
 
+## 0.18.1
+
+### Patch Changes
+
+- eececc9: `alignfirst doctor` reports the `aligndev` skill at info level.
+
 ## 0.18.0
 
 ### Minor Changes
