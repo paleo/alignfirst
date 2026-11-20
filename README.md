@@ -4,25 +4,47 @@ Companion products for AI-assisted software work. They can be used independently
 
 Home page: **[alignfirst.paroi.tech](https://alignfirst.paroi.tech/)**.
 
+## Command skills
+
+Ten Agent Skill stubs expose the CLIs as commands, such as `/alspec` in Claude Code and `$alspec` in Codex. Nine run the AlignFirst CLI ([details](packages/alignfirst/README.md#protocols)); `aligndev` turns the session into an AlignDev assistant through the AlignDev CLI ([details](packages/aligndev/README.md)). Install them globally:
+
+```sh
+npx skills add https://github.com/paleo/alignfirst --global \
+  --skill alspec --skill alplan --skill al --skill almerge \
+  --skill alreview --skill aldescription --skill alcatchup \
+  --skill alcatchupaad --skill alcatchupspec --skill aligndev
+```
+
+These examples use the `/` form. Replace it with `$` in Codex, or with `/skill:` in Pi (for example `/skill:alspec`).
+
+| Workflow | Command | Result |
+| --- | --- | --- |
+| Specification | `/alspec <request>` | Discuss and write a technical specification. |
+| Planning | `/alplan` | Turn a specification into one or more implementation plans. |
+| Align and do | `/al <request>` | Discuss and implement a small change, then write a summary. |
+| Description | `/aldescription` | Summarize the work and propose a commit message. |
+| Review | `/alreview` | Review the current branch against its base. |
+| Merge | `/almerge` | Resolve merge or rebase conflicts. |
+| Catch up | `/alcatchup` | Load the current ticket history and continue. |
+| Catch up and AAD | `/alcatchupaad <request>` | Load ticket history, then start AAD. |
+| Catch up and spec | `/alcatchupspec <request>` | Load ticket history, then start specification. |
+| AlignDev | `/aligndev <request>` | Switch your session to an AlignDev assistant. |
+
 ## `alignfirst` CLI
 
 The `alignfirst` CLI provides the AlignFirst workflows. See [the CLI README](packages/alignfirst/README.md) for installation and usage.
 
-### Agent skills
+### Docmap - Agent-discoverable documentation
 
-Nine Agent Skill stubs expose the CLI through commands such as `/alspec` in Claude Code and `$alspec` in Codex. See [the Agent skills section](packages/alignfirst/README.md#agent-skills).
+`alignfirst docmap` is a lightweight table of contents that lets agents navigate documentation files. This way we have one set of docs, shared by humans and AI agents. See [packages/docmap/README.md](packages/docmap/README.md).
 
-## Docmap - Agent-discoverable documentation
-
-`@alignfirst/docmap` is a lightweight table of contents that lets agents navigate documentation files. This way we have one set of docs, shared by humans and AI agents. See [packages/docmap/README.md](packages/docmap/README.md).
-
-## Workspaces - Local environments with worktrees
+### Workspaces - Local environments with worktrees
 
 `alignfirst workspace` and `alignfirst dev`, backed by `@alignfirst/workspace`, prepare and run language-neutral Git-worktree environments without consumer JavaScript wrappers. See [packages/workspace/README.md](packages/workspace/README.md).
 
-## AlignDev - Autonomous software development
+## AlignDev CLI
 
-`aligndev` turns a Claude Code or Codex session, or an OpenClaw bot, into an **assistant**: you talk to it, and it delegates the coding to an AI coding agent through the AlignFirst protocols. See [packages/aligndev/README.md](packages/aligndev/README.md).
+`aligndev` turns a Claude Code, Codex or Pi session, or an OpenClaw bot, into an **assistant**: you talk to it, and it delegates the coding to an AI coding agent through the AlignFirst protocols. See [packages/aligndev/README.md](packages/aligndev/README.md).
 
 ### AlignDev for OpenClaw
 
@@ -36,9 +58,9 @@ AlignDev for OpenClaw deploys the assistant as an OpenClaw bot. One deployment i
 
 ---
 
-## Setup with your agent
+## Set up your project
 
-Our `alignfirst-setup-guide` skill can help to install these tools. Temporarily install the skill globally:
+Our `alignfirst-setup-guide` skill can help to install these tools. Install the skill globally:
 
 ```bash
 npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide

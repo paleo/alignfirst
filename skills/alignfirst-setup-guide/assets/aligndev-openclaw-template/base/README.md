@@ -1,6 +1,6 @@
 # {{ADMIN_REPOSITORY_NAME}}
 
-Private repository that reproduces and operates **{{ASSISTANT_NAME}}**, the AlignFirst assistant of {{TEAM_NAME}}, on `{{SERVER_HOST}}`. Runbooks under [`docs/`](docs/) (`alignfirst docmap` to browse); the OpenClaw seed, workspace files and scripts under [`infra/openclaw/`](infra/openclaw/).
+Private repository that reproduces and operates **{{ASSISTANT_NAME}}**, the AlignFirst assistant of {{TEAM_NAME}}, on `{{SERVER_HOST}}`. Runbooks under [`docs/`](docs/) (`npx -y alignfirst docmap` to browse); the OpenClaw seed, workspace files and scripts under [`infra/openclaw/`](infra/openclaw/).
 
 ## Bootstrap order
 
@@ -24,16 +24,15 @@ Then [`docs/operations/`](docs/operations/), starting with [use-the-apps.md](doc
 In the admin account:
 
 ```sh
-npm install -g alignfirst
 # TEAM_PLANS_SECTION
 git clone {{PLANS_REPOSITORY_URL}} <plans-clone-path>
-alignfirst plans setup <plans-clone-path>
+npx -y alignfirst plans setup <plans-clone-path>
 # TEAM_PLANS_SECTION
 mkdir -p .plans .local
-alignfirst plans check
-alignfirst config --json
-alignfirst workspace setup
-alignfirst context
+npx -y alignfirst plans check
+npx -y alignfirst config --json
+npx -y alignfirst workspace setup
+npx -y alignfirst context
 ```
 
 Optional upstream reference for investigations (host-only, gitignored):
