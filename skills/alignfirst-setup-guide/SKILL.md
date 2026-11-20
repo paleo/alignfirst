@@ -5,7 +5,7 @@ description: >-
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.55.7"
+  version: "0.55.9"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -47,7 +47,7 @@ Install or upgrade only what the user requested. Do not add unrelated tools or p
 
 When asked what to adopt, inspect repository evidence and available skills. Present global skills separately from project tooling. Let the user choose any subset before installation.
 
-Global choices are `aligndev` (assistant playbook), `alignfirst` (protocol recognition), `paseo-alignfirst-workspace` (Paseo lifecycle), and command shortcuts `alspec`, `alplan`, `al`, `almerge`, `alreview`, `aldescription`, `alcatchup`, `alcatchupaad`, `alcatchupspec`. Command skills retain `disable-model-invocation: true`. Humans use `/name` in Claude/Copilot/Cursor, `$name` in Codex and `/skill:name` in Pi. The protocol-recognition skill is unnecessary when canonical project context instructions already supply it.
+Global choices are the command skills `alspec`, `alplan`, `al`, `almerge`, `alreview`, `aldescription`, `alcatchup`, `alcatchupaad`, `alcatchupspec` and `aligndev` (assistant playbook), installed together by default; `alignfirst` (protocol recognition); and `paseo-alignfirst-workspace` (Paseo lifecycle). Command skills retain `disable-model-invocation: true`. Humans use `/name` in Claude/Copilot/Cursor, `$name` in Codex and `/skill:name` in Pi. The protocol-recognition skill is unnecessary when canonical project context instructions already supply it.
 
 A missing name in the session's skill list means unavailable here, not absent on disk. If the host exposes no list, availability is unknown. This check needs no filesystem scan or installer. Install globally only with approval, using the selected reference's current command. A skill alone supplies no executable Pi tools. Preserve duplicate-tool audits and native trust/permission policies.
 
@@ -126,7 +126,7 @@ For Claude Code, Codex or a persistent Pi session on one project, read [coding-a
 
 ## Investigation rules
 
-Install current stable packages and current Node LTS. Inspect the installed packages' declared runtime and peer compatibility before use. Preserve project-owned runtime requirements and system/project isolation. Review source and security changes before operator-controlled maintenance; an unversioned install does not authorize unattended updates.
+Install current stable packages and current Node LTS. Never suggest a global AlignFirst CLI installation; use `npx -y alignfirst`. Inspect the installed packages' declared runtime and peer compatibility before use. Preserve project-owned runtime requirements and system/project isolation. Review source and security changes before operator-controlled maintenance; an unversioned install does not authorize unattended updates.
 
 Detect the package manager from `packageManager`, then root lockfiles, falling back to npm. Translate application commands to the confirmed toolchain. CLI forms remain `npx -y alignfirst` for Node and `bunx --bun alignfirst` for explicit Bun; project scripts are optional conveniences.
 

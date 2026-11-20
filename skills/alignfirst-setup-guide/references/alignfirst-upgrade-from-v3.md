@@ -7,17 +7,7 @@ migration leaves no `plans-share` compatibility package or npm-script wrappers.
 
 The migrated project invokes the CLI as `npx alignfirst` and declares no dependency on it.
 
-Installing the CLI globally on a developer machine is a convenience:
-
-```sh
-npm install -g alignfirst
-```
-
-An assistant host installs it globally with `aligndev`, the AlignDev CLI:
-
-```sh
-npm install -g alignfirst aligndev
-```
+Never suggest a global CLI installation. An AlignDev OpenClaw host installs its protected CLIs through its own update runbook.
 
 ## Inventory the `plans-share` Contract
 

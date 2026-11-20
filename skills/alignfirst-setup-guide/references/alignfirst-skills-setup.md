@@ -4,21 +4,11 @@ Install the requested AlignFirst components. The protocols work through the CLI 
 
 For a skills-only request, follow **Install the Skills**. Configure the project only when the user also wants the repository to adopt AlignFirst. For a protocols-only request, configure the project and omit skill installation.
 
-## Install the CLI
-
-Project files invoke the CLI as `npx alignfirst`, which requires no installation. `npx` resolves a project dependency or fetches the CLI from the registry and caches it. The project therefore works on a machine that has never installed AlignFirst.
-
-Installing the CLI globally provides the bare `alignfirst` command:
-
-```sh
-npm install -g alignfirst
-```
-
-Offer global installation only when requested. Omit it from generated READMEs by default. Project instructions remain on `npx alignfirst` and never depend on the global installation.
-
 ## Install the Skills
 
 `alspec`, `alplan`, `al`, `almerge`, `alreview`, and `aldescription` select individual protocols. `alcatchup` loads ticket history; `alcatchupaad` and `alcatchupspec` load history before starting AAD or specification. Skills reuse guides already in context; each named guide includes the ticket directory and work file rules. Humans invoke them with `/` in Claude Code, GitHub Copilot, and Cursor, `$` in Codex, or `/skill:name` in Pi (for example `/skill:alspec` or `/skill:alplan`).
+
+The `aligndev` command skill turns the session into an AlignFirst assistant that delegates coding to agent sessions. Install it with the command skills by default; omit `--skill aligndev` only when the user declines it.
 
 The optional `alignfirst` skill lets the agent recognize a protocol named in prose. Add `--skill alignfirst` when the user wants that recognition in repositories without an `alignfirst context` instruction.
 
@@ -39,7 +29,7 @@ npx -y skills add https://github.com/paleo/alignfirst --global --yes \
   --agent claude-code \
   --skill alspec --skill alplan --skill al --skill almerge \
   --skill alreview --skill aldescription --skill alcatchup \
-  --skill alcatchupaad --skill alcatchupspec </dev/null
+  --skill alcatchupaad --skill alcatchupspec --skill aligndev </dev/null
 ```
 
 For Codex:
@@ -49,7 +39,7 @@ npx -y skills add https://github.com/paleo/alignfirst --global --yes \
   --agent codex \
   --skill alspec --skill alplan --skill al --skill almerge \
   --skill alreview --skill aldescription --skill alcatchup \
-  --skill alcatchupaad --skill alcatchupspec </dev/null
+  --skill alcatchupaad --skill alcatchupspec --skill aligndev </dev/null
 ```
 
 For Pi (target `pi`):
@@ -59,12 +49,12 @@ npx -y skills add https://github.com/paleo/alignfirst --global --yes \
   --agent pi \
   --skill alspec --skill alplan --skill al --skill almerge \
   --skill alreview --skill aldescription --skill alcatchup \
-  --skill alcatchupaad --skill alcatchupspec </dev/null
+  --skill alcatchupaad --skill alcatchupspec --skill aligndev </dev/null
 ```
 
 Pi discovers global `~/.agents/skills/`; the verified installer writes there. It also discovers `<agent-dir>/skills`, defaulting to `~/.pi/agent/skills`. `PI_CODING_AGENT_DIR` replaces the Pi agent directory. Confirm current help/source when upgrading, since target layouts can change. Invoke `/skill:alspec`, not `/alspec`, in stock Pi.
 
-`alignfirst doctor` checks shared, Claude Code, Codex, then the selected Pi root, keeping the first installation and deduplicating canonical roots. It reports missing command skills once any is installed, and warns about old or unknown versions. The Pi override accepts `~`, `~/`, absolute/relative paths and native file URLs; relative paths use the command's working directory, and an empty override uses the default. Nonempty paths retain whitespace and do not expand variables or `~otheruser`.
+`alignfirst doctor` checks shared, Claude Code, Codex, then the selected Pi root, keeping the first installation and deduplicating canonical roots. It reports missing command skills once any is installed, and warns about old or unknown versions. It reports `aligndev` presence at info level without expecting it. The Pi override accepts `~`, `~/`, absolute/relative paths and native file URLs; relative paths use the command's working directory, and an empty override uses the default. Nonempty paths retain whitespace and do not expand variables or `~otheruser`.
 
 This is a global installation check. It excludes project `.pi/skills`, ancestor resources, packages, resource filters and trust decisions.
 
@@ -75,7 +65,7 @@ npx -y skills add https://github.com/paleo/alignfirst --global --yes \
   --agent claude-code --agent codex \
   --skill alspec --skill alplan --skill al --skill almerge \
   --skill alreview --skill aldescription --skill alcatchup \
-  --skill alcatchupaad --skill alcatchupspec </dev/null
+  --skill alcatchupaad --skill alcatchupspec --skill aligndev </dev/null
 ```
 
 Restart the target agent after installation. Update the skills with `npx -y skills update --global --yes`, and remove one with `npx -y skills remove --global <skill-name> --yes`.
@@ -85,6 +75,12 @@ Restart the target agent after installation. Update the skills with `npx -y skil
 For a direct AlignFirst user who requests isolated plan/review delegation, offer `pi install npm:@alignfirst/pi-subagent` as a separate executable capability. The protocols retain their host-neutral fallback when no subagent tool exists. A skills-only request installs no extensions; the generic background package is unnecessary for synchronous delegation.
 
 Before replacing an existing local `subagent` extension, obtain approval and disable it explicitly with `pi config`; keep its profiles and do not load both tools. `/reload` cancels active subagents and background jobs. Install the current stable package and inspect its declared Pi peer and Node runtime compatibility. It preserves normal Pi project-trust discovery without forced approval. See [the package README](https://github.com/paleo/alignfirst/blob/main/packages/pi-subagent/README.md).
+
+## Pin the CLI
+
+Project files invoke the CLI as `npx alignfirst`, which requires no installation. `npx` resolves a project dependency or fetches the CLI from the registry and caches it. The project therefore works on a machine that has never installed AlignFirst.
+
+Never suggest a global CLI installation. To pin a version, follow [Local installation](#local-installation).
 
 ## Configure the Project
 

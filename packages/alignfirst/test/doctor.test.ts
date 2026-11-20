@@ -244,6 +244,19 @@ describe("doctor command", () => {
     expect(current.stdout).toContain("4.0.0");
     expect(current.stdout).not.toContain("3.12.0");
   });
+  it("reports the aligndev skill at info level without expecting it", async () => {
+    const home = temp();
+    installSkill(join(home, ".agents", "skills"), "alspec", "4.0.0");
+    const absent = await runMain(["doctor"], { cwd: home, env: { PATH: "" }, home });
+    expect(absent.stdout).toContain("[info] Skills: aligndev none");
+
+    installSkill(join(home, ".agents", "skills"), "aligndev", "1.0.1");
+    const present = await runMain(["doctor"], { cwd: home, env: { PATH: "" }, home });
+    expect(present.stdout).toContain(
+      `[info] Skills: aligndev 1.0.1 (${join(home, ".agents", "skills")})`,
+    );
+    expect(present.stdout).not.toContain("aligndev 1.0.1 predates");
+  });
 });
 
 function installSkill(root: string, name: string, version: string | undefined): void {

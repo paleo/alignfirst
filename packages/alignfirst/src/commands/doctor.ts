@@ -37,7 +37,7 @@ import {
 } from "../skills.js";
 
 interface DoctorLine {
-  level: "ok" | "warn" | "error";
+  level: "ok" | "info" | "warn" | "error";
   text: string;
 }
 
@@ -223,13 +223,23 @@ function inspectSkills(ctx: CommandContext): DoctorLine[] {
     alignfirst === undefined
       ? { level: "ok", text: "alignfirst none" }
       : describeInstalledSkill("alignfirst", alignfirst, update);
+  const aligndevLine = describeAligndevSkill(findInstalledSkill(roots, "aligndev"));
   const commands = COMMAND_SKILLS.map((name) => ({
     name,
     installed: findInstalledSkill(roots, name),
   }));
   if (commands.every(({ installed }) => installed === undefined))
-    return [alignfirstLine, { level: "ok", text: "no command skill installed" }];
-  return [alignfirstLine, ...commands.map((command) => describeCommandSkill(command, update))];
+    return [alignfirstLine, aligndevLine, { level: "ok", text: "no command skill installed" }];
+  return [
+    alignfirstLine,
+    aligndevLine,
+    ...commands.map((command) => describeCommandSkill(command, update)),
+  ];
+}
+
+function describeAligndevSkill(installed: InstalledSkill | undefined): DoctorLine {
+  if (installed === undefined) return { level: "info", text: "aligndev none" };
+  return { level: "info", text: `aligndev ${installed.version ?? "unknown"} (${installed.root})` };
 }
 
 interface CommandSkill {

@@ -6,15 +6,9 @@ See the [product page](https://alignfirst.paroi.tech/skills) for a demonstration
 
 Supported systems: Linux and macOS, and Windows through WSL.
 
-## CLI runtimes
-
-Use Node.js 22.11 or later with `npx -y alignfirst context`, or Bun with `bunx --bun alignfirst context` (`bun x --bun` is equivalent). Bun 1.4.4 is the tested baseline; older releases are not all compatible. Published bins retain Node shebangs, so ordinary `bunx alignfirst` normally runs Node when it is installed. Bun-only hosts should explicitly select `--bun`.
-
-Direct `bun <installed-entry.mjs>` and transparent project scripts launched with `bun --bun run <script>` also preserve Bun in follow-up commands. npm scripts retain their `--` argument separator. Embedded docmap follows the enclosing AlignFirst command, including custom or companion documentation roots. Git and external tools retain their own prerequisites.
-
 ## Agent skills
 
-Nine Agent Skill stubs expose the CLI as commands in Claude Code, Codex, GitHub Copilot, and Cursor. Install them globally:
+Nine Agent Skill stubs expose the CLI as commands in Claude Code, Codex, Pi, GitHub Copilot, and Cursor. Install them globally:
 
 ```sh
 npx skills add https://github.com/paleo/alignfirst --global \
@@ -29,9 +23,9 @@ Install the `alignfirst` skill when a project's `AGENTS.md` does not run `npx al
 npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst
 ```
 
-## Workflows
+## Protocols
 
-These examples use the `/` form. Replace it with `$` in Codex.
+These examples use the `/` form. Replace it with `$` in Codex, or with `/skill:` in Pi (for example `/skill:alspec`).
 
 | Workflow | Command | Result |
 | --- | --- | --- |
@@ -163,7 +157,7 @@ When you work on the project `/path/to/a/project`, run `npx -y alignfirst contex
 
 ### Global skill diagnostics
 
-`alignfirst doctor` checks global skills in shared, Claude Code, Codex, then Pi roots. Pi defaults to `~/.pi/agent/skills`; `PI_CODING_AGENT_DIR` replaces that Pi root with `<agent-dir>/skills`. Relative paths resolve from the command's working directory. This check excludes project resources, package filters and trust decisions.
+`alignfirst doctor` checks global skills in shared, Claude Code, Codex, then Pi roots. Pi defaults to `~/.pi/agent/skills`; `PI_CODING_AGENT_DIR` replaces that Pi root with `<agent-dir>/skills`. Relative paths resolve from the command's working directory. It reports the `aligndev` skill at info level without expecting it. This check excludes project resources, package filters and trust decisions.
 
 ## Upgrade from v1, v2, or v3
 

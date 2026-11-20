@@ -40,7 +40,6 @@ git config --global user.email "<email>"
 
 git clone git@{{SERVER_HOST}}-admin:<repository-path> ~/{{ADMIN_REPOSITORY_NAME}}
 cd ~/{{ADMIN_REPOSITORY_NAME}}
-npm install -g alignfirst
 ```
 
 <!-- TEAM_PLANS_SECTION -->
@@ -48,14 +47,14 @@ npm install -g alignfirst
 
 `.plans` is a symlink into `~/projects/{{PLANS_CLONE_NAME}}/{{ADMIN_REPOSITORY_NAME}}`. Clone the work-files repository once with the operator's credentials.
 
-> **User action required.** Enable the deploy key on the work-files repository too, with write access: `alignfirst sync` pushes. A key enabled read-only clones fine and fails on the first push with `This deploy key does not have write access`.
+> **User action required.** Enable the deploy key on the work-files repository too, with write access: `npx -y alignfirst sync` pushes. A key enabled read-only clones fine and fails on the first push with `This deploy key does not have write access`.
 
 ```sh
 mkdir -p ~/projects
 git -C ~/projects clone {{PLANS_REPOSITORY_URL}} {{PLANS_CLONE_NAME}}
 cd ~/{{ADMIN_REPOSITORY_NAME}}
-alignfirst plans setup ~/projects/{{PLANS_CLONE_NAME}}
-alignfirst plans check
+npx -y alignfirst plans setup ~/projects/{{PLANS_CLONE_NAME}}
+npx -y alignfirst plans check
 ```
 <!-- TEAM_PLANS_SECTION -->
 
@@ -66,10 +65,10 @@ alignfirst plans check
 ```sh
 cd ~/{{ADMIN_REPOSITORY_NAME}}
 mkdir -p .plans .local
-alignfirst plans check
-alignfirst config --json
-alignfirst workspace setup
-alignfirst context
+npx -y alignfirst plans check
+npx -y alignfirst config --json
+npx -y alignfirst workspace setup
+npx -y alignfirst context
 ```
 
 Continue with [03-toolchain.md](03-toolchain.md).
