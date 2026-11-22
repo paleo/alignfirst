@@ -61,7 +61,7 @@ For workspaces, the companion can supply the complete recipe and the external ru
 
 ## 5. Global instructions line
 
-A repository without the bootstrap section, such as one whose default location is `companion`, needs the line in the developer's global agent instructions: `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.pi/agent/AGENTS.md` or the agent's equivalent. Agents do not read a companion's `AGENTS.md` on their own. When the default location is `companion`, `{{CMD}} setup init` and `{{CMD}} setup instructions` print the section with the project's path filled in. Elsewhere, use its form:
+A repository without the bootstrap section, such as one whose default location is `companion`, needs the line in the developer's global agent instructions: `~/.claude/CLAUDE.md` (under `$CLAUDE_CONFIG_DIR` when set), `~/.codex/AGENTS.md`, `~/.pi/agent/AGENTS.md` or the agent's equivalent. Agents do not read a companion's `AGENTS.md` on their own. When the default location is `companion`, `{{CMD}} setup init` and `{{CMD}} setup instructions` print the section with the project's path filled in. Elsewhere, use its form:
 
 ```markdown
 ## AlignFirst - Start every session with the project context

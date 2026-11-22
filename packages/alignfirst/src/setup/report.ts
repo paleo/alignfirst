@@ -262,7 +262,11 @@ function inspectSkillsState(ctx: CommandContext): string[] {
     paseo === undefined
       ? `${PASEO_SKILL} none`
       : `${PASEO_SKILL} ${paseo.version ?? "unknown"} (${paseo.root})`;
-  return [...inspectGlobalSkills(ctx).map(({ text }) => text), paseoText];
+  return [
+    "on disk; the session's skill list shows availability",
+    ...inspectGlobalSkills(ctx).map(({ text }) => text),
+    paseoText,
+  ];
 }
 
 function inspectPaseo(root: string): string[] {

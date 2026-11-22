@@ -135,6 +135,13 @@ describe("setup", () => {
     expect(result.stdout).toMatch(/^# Project state$/m);
     for (const { name } of SETUP_TOPICS) expect(result.stdout).toContain(`\`${name}\``);
   });
+
+  it("nests every global skill under the summary line", async () => {
+    const result = await runMain(["setup"], { cwd: makeProject() });
+    expect(result.stdout).toContain(
+      "- Global skills: on disk; the session's skill list shows availability\n  - alignfirst none\n",
+    );
+  });
 });
 
 function makeProject(): string {

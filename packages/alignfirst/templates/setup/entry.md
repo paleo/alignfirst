@@ -36,7 +36,7 @@ When the user names AlignDev without saying where the assistant runs, ask whethe
 
 ## Recommend tooling
 
-When the user asks what to adopt, base the answer on the project state and the session's available skills. Present global skills separately from project tooling. Let the user choose any subset before installation.
+When the user asks what to adopt, base the answer on the project state and the session's available skills. Present global skills separately from project tooling; `{{CMD}} setup guide skills` describes them. Let the user choose any subset before installation.
 
 - Recommend the protocols and Docmap whatever the language.
 - Workspace isolation is language-neutral. Preserve the project's existing commands by expressing them in the workspace recipe. Without a recipe, setup is protocol-ready.

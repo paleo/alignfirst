@@ -74,3 +74,32 @@ Changing the snippet's wording turns every existing section into `differs`. This
 ## The OpenClaw Skill
 
 The OpenClaw material is a separate skill, `skills/aligndev-openclaw-setup/`, distributed through `npx skills add`. It holds the admin-repository template under `assets/aligndev-openclaw-template/`. It keeps its own freshness gate, which compares the installed `metadata.version` with the upstream one: bump that version whenever the skill or its assets change. Its pointers to the setup guide are `npx -y alignfirst setup guide <topic>` commands.
+
+## Trial Script
+
+`scripts/setup-trial.mjs` checks the guide against a coding agent that knows nothing of its implementation. It is a manual check, outside CI. Run it after a substantial change to the entry guide or a topic.
+
+Each scenario gets a sandbox under the system temp directory: a fixture project, a throwaway `HOME`, and an `npx` shim that maps `alignfirst` and `aligndev` to the local build and delegates everything else to the real `npx`. The script launches `claude -p` in the fixture with a prompt that opens with "Run `npx -y alignfirst setup` first.", then stops it after 30 minutes.
+
+| Scenario | Fixture | Request |
+| --- | --- | --- |
+| `protocols` | Node repository, one commit | Set up the AlignFirst protocols |
+| `recommendation` | `docs/`, a bootstrap section in an older wording, Jira-like branches and commits | What can I set up? |
+| `workspace` | Python HTTP server | A workspace with a dev server |
+| `companion` | Node repository, one commit | A companion directory, no footprint |
+| `new-project` | Empty directory | AlignFirst and a Node, Express, React and TypeScript stack |
+
+Prerequisites: run `npm run build`, and set `CLAUDE_CONFIG_DIR` to the Claude Code configuration whose login the trial uses. The agent also loads that configuration's global instructions and skills, which can color its behavior. The script removes `ANTHROPIC_API_KEY` and the variables of a parent agent session.
+
+```sh
+node scripts/setup-trial.mjs --check            # the shim, then a one-line claude -p
+node scripts/setup-trial.mjs                    # every scenario, sequentially
+node scripts/setup-trial.mjs protocols companion
+node scripts/setup-trial.mjs --reply <sandbox> "<answer>"
+```
+
+A guide that requires approval makes the agent stop with a question. `--reply` answers it: it resumes the agent's session in that sandbox, and suffixes the new transcript and result with `-2`, `-3` and so on. It refreshes the other outputs.
+
+The script prints each sandbox path. Its `out/` directory holds `transcript.jsonl` (the agent's stream), `result.md` (its final answer), `git-status.txt`, `tree.txt` (the project and `home/.alignfirst/`), and the local CLI's `setup.txt` and `doctor.txt`. Sandboxes are kept; delete them by hand.
+
+Each agent run consumes the subscription quota of that configuration, and runs with permission prompts bypassed inside its sandbox. The throwaway `HOME` catches home-relative writes, such as a global `skills add`. Absolute paths, the npm cache, `CLAUDE_CONFIG_DIR` and the machine's processes stay reachable: an agent may write under `/tmp` or run `pkill -f vite`.

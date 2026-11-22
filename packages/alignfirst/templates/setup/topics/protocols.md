@@ -11,7 +11,7 @@ The report lists the configured conventions or, when none are configured, the br
 - **Ticket IDs.** Take the pattern from branch names and ticket references: `^\d+$` for issue numbers, `^[A-Z]+-\d+$` for Jira-like keys. The pattern is one anchored expression. Alternatives go inside a group, as in `^(ABC|XYZ)-\d+$`.
 - **Branch names.** Take the template from existing branches, such as `{TICKET_ID}/{slug-1-3-words}`.
 - **Commits.** The supported style is conventional commits. The ticket reference is `bracketed` for `type: [TICKET_ID] summary` or `bracketedHash` for `type: [#TICKET_ID] summary`. Without a ticket reference, subjects are `type: summary`.
-- **Default branch.** The report prints the branch Git resolves. When it is unresolved, run `git ls-remote --symref origin HEAD`. Use the sole remote when `origin` is absent, and ask the user when several other remotes exist.
+- **Default branch.** The report prints the branch Git resolves. When it is unresolved, run `git ls-remote --symref origin HEAD`. Use the sole remote when `origin` is absent, and ask the user when several other remotes exist. Without a remote, take the current branch.
 
 When evidence is missing or unclear, ask the user to confirm the conventions before writing them. Suggest this baseline: numeric ticket IDs, `main`, `{TICKET_ID}/{slug-1-3-words}` branches, conventional commits with `bracketedHash` ticket references, and no agent attribution. Preserve established conventions. Leave a field out only when the user chooses to leave it unspecified.
 
