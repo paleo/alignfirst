@@ -305,9 +305,9 @@ Skip the fix step when the review is informational.
 
 ```bash
 {{ALIGNDEV}} code new --ticket AB-123 --catchup                  # short synthesis of the history
-{{ALIGNDEV}} code new --ticket AB-123 --catchup --protocol aad --message-file - <<'ALIGNDEV_MESSAGE'
+{{ALIGNDEV}} code new --ticket AB-123 --catchup --protocol aad --message-file - <<'END_ALIGNDEV_MESSAGE'
 Investigate `someFunction()` and the literal expression $(example).
-ALIGNDEV_MESSAGE
+END_ALIGNDEV_MESSAGE
 ```
 
 Prefer `--message-file` for long or multi-line messages. A quoted heredoc delimiter keeps quotes, backticks and dollar signs literal in Bash.
