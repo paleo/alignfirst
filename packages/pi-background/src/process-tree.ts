@@ -181,8 +181,13 @@ function linuxProcessTable(): Target[] {
     .flatMap((name) => {
       const pid = Number(name);
       const fields = readStatFields(pid, HIDDEN_CODES);
-      return fields ? [linuxTarget(pid, fields)] : [];
+      return fields && !isReaping(fields) ? [linuxTarget(pid, fields)] : [];
     });
+}
+
+// A task being reaped reports state X, then pgid -1 once its signal handlers are released.
+function isReaping([state, , group]: string[]): boolean {
+  return state === "X" || group === "-1";
 }
 
 // The fields after the command name, or undefined when the read fails with a skipped code.

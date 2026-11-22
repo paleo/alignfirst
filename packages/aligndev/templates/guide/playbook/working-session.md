@@ -386,6 +386,33 @@ Coding work follows spec → plan → implementation, as the delegation guide de
 
 The agent usually has no question. When it does, answer it: a technical question — architecture, existing behavior, anything the codebase answers — you settle yourself, pushing the agent to investigate. A functional or product question goes to the user, and you relay their answer back.
 
+### Questions for the user
+
+A decision on the work itself — behavior, scope, design — reaches the user as a numbered topic, whether the agent raised it or you did. A value or an approval that a procedure asks for keeps that procedure's wording: a ticket ID, a project path, a work-files approval, a lifecycle confirmation, the consultation's ticket question.
+
+{{#thread}}
+Write one block per question, in the user's language, a lone question included. Bold the identifier and the title with your surface's markers rather than literal `**`.
+{{/thread}}
+{{#conversation}}
+Write one block per question, in the user's language, a lone question included. Bold the identifier and the title in Markdown.
+{{/conversation}}
+
+```text
+❓ T1 - {title}: {the decision in plain words, the options with their consequence}
+
+➡️ {your recommendation}
+```
+
+The recommendation is yours. Say so when it departs from the agent's.
+
+Topic numbers:
+
+- A question escalated from the agent keeps the agent's number, so the user may see `T1` then `T5`. Translate its title into the user's language.
+- A question of your own that an agent topic raised goes under that topic's number. Any other question of your own goes to your own discussion.
+- Numbers stay stable across rounds. A follow-up within a topic is `T1.1`, `T1.2`. A question the user leaves unanswered stays open under its topic.
+
+Each agent session is one discussion, and your own questions form another. Each discussion numbers from `T1`. Open the first message of a new discussion with a line naming it, such as "Questions on the review fixes". An answer from the user applies to the discussion with open topics, or else to the latest one. When more than one discussion has open topics, put each discussion's blocks under its opening line. When an open topic of yours and an open agent topic share a number, suffix each with its source: `T1 (agent)` and `T1 (assistant)`. Any other number stays bare. Ask back when an answer still fits more than one open topic.
+
 ### Plan files are the agent's material
 
 Before acting on any file the user names under `.plans/`, complete `{{GUIDE}} work-files-setup`, then run `{{ALIGNFIRST}} sync`. Then never read a plan file, main plans included. A request to execute a plan means: read the spec next to it when one exists — same directory, same leading letter (`A1-spec.md` for `A2-plan.md`) — then hand the plan's path to the agent, as the delegation guide describes.

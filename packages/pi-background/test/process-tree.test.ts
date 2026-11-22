@@ -332,9 +332,18 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
     12_000,
   );
 
-  it.each(["EPERM", "EACCES"])(
-    "skips an unrelated process whose stat fails with %s",
-    async (code) => {
+  it.each([
+    { stat: "unreadable (EPERM)", read: hiddenStat("EPERM") },
+    { stat: "unreadable (EACCES)", read: hiddenStat("EACCES") },
+    // Linux output for a task being reaped, once its signal handlers are released.
+    {
+      stat: "a reaping record",
+      read: (pid: number) =>
+        `${pid} (sh) Z 0 -1 -1 0 -1 4227084 110 455 0 0 0 0 0 0 20 0 0 0 1263055 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 17 13 0 0 0 0 0 0\n`,
+    },
+  ])(
+    "skips an unrelated process whose stat is $stat",
+    async ({ read }) => {
       const dir = mkdtempSync(join(tmpdir(), "pi-background-hidden-"));
       const managed = launchManaged({
         command: process.execPath,
@@ -354,7 +363,7 @@ describe.skipIf(process.platform !== "linux")("real process cleanup gate", () =>
         vi.mocked(readFileSync).mockImplementation((...args) => {
           if (String(args[0]) === `/proc/${process.ppid}/stat`) {
             ++hiddenReads;
-            throw Object.assign(new Error("hidden process"), { code });
+            return read(process.ppid);
           }
           return original(...args);
         });
@@ -426,3 +435,9 @@ describe("macOS process query parsing", () => {
     expect(() => psTarget("  913   412 Z+")).toThrow();
   });
 });
+
+function hiddenStat(code: string): () => never {
+  return () => {
+    throw Object.assign(new Error("hidden process"), { code });
+  };
+}
