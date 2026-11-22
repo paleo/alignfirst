@@ -15,7 +15,7 @@ Companion placement is not a write sandbox. Shared-directory links, application 
 
 Before `setup init`, settle the conventions as `{{CMD}} setup guide protocols` describes, and add their flags. On a project that already has its files, change the selection with `{{CMD}} companion register`, which accepts the same `--default-location` and `--item` flags.
 
-Every item left out stays on `auto`, and under `auto` a missing item is created in the companion once one is registered. For that reason, `setup init` refuses `--item` without `--default-location`: the default location must be an explicit choice. `companion register` accepts `--item` alone; on a project whose files are not all written yet, add `--default-location project` to keep the new files in the project.
+Without `--default-location`, every item left out stays on `auto`, and under `auto` a missing item is created in the companion once one is registered. For that reason, `setup init` refuses `--item` without `--default-location`: the default location must be an explicit choice. `companion register` accepts `--item` alone; on a project whose files are not all written yet, add `--default-location project` to keep the new files in the project.
 
 ## 1. Confirm the scope
 

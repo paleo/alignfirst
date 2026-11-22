@@ -10,6 +10,8 @@ import {
 } from "../project-layout.js";
 
 const HELP_OPTION = { help: { type: "boolean", short: "h", default: false } } as const;
+const HELP_WIDTH = 100;
+const OPTION_INDENT = " ".repeat(16);
 
 export async function runCompanion(ctx: CommandContext, args: string[]): Promise<number> {
   const [command, ...rest] = args;
@@ -41,13 +43,23 @@ function companionUsage(ctx: CommandContext): string {
 }
 
 async function runRegister(ctx: CommandContext, args: string[]): Promise<number> {
+  const itemHelp = wrapHelp(
+    `Set one item, keeping the others. Repeatable. Names: ${ITEM_NAMES.join(", ")}. ` +
+      "_aligndev accepts companion or auto.",
+    OPTION_INDENT,
+  );
   const usage = `Usage: ${ctx.form} companion register [--dir <path>] [--create-dir]
     [--default-location <location>] [--item <name>=<location>]...
 
 Registers the current project in ~/.alignfirst/companions/registry.json as { "dir": <path> },
-with every item on "auto", preserving any profile selection. An existing companion is kept. Fails when the companion
-directory is or contains ~/.alignfirst/companions or the home directory, or when it is, contains
-or is inside the project or the companion directory of another key.
+preserving any profile selection. Every item starts on "auto"; --default-location and --item
+change the selections of a new or an existing registration. An existing registration keeps its
+companion directory.
+
+Fails when the companion directory is or contains ~/.alignfirst/companions or the home
+directory, or when it is, contains or is inside the project or the companion directory of
+another key. Also fails when the selections move the workspace storage while it still holds
+workspace resources or incomplete cleanup.
 
 Options:
   --dir <path>  The companion directory, written as given: absolute, ~/..., or relative to
@@ -57,13 +69,10 @@ Options:
   --create-dir  Create the companion directory when it is missing. Without it, the commands
                 that write an item there create it.
   --default-location <location>
-                Set the registration's defaultLocation: project, companion or auto.
+                Set the registration's defaultLocation: project, companion or auto. It applies
+                to every item without its own selection.
   --item <name>=<location>
-                Set one item, keeping the others. Repeatable. Names: ${ITEM_NAMES.join(", ")}.
-                _aligndev accepts companion or auto.
-
-Both selections apply to a new or an existing registration and keep its directory, its other
-items and its profile selection.
+${itemHelp}
 `;
   const { values } = parseCommandArgs(usage, () =>
     parseArgs({
@@ -179,4 +188,19 @@ Options:
 function printedHelp(ctx: CommandContext, help: boolean, usage: string): boolean {
   if (help) ctx.stdout.write(usage);
   return help;
+}
+
+/** Wraps `text` into lines of at most `HELP_WIDTH` characters, each starting with `indent`. */
+function wrapHelp(text: string, indent: string): string {
+  const lines: string[] = [];
+  let line = indent;
+  for (const word of text.split(" ")) {
+    if (line !== indent && line.length + 1 + word.length > HELP_WIDTH) {
+      lines.push(line);
+      line = indent;
+    }
+    line += line === indent ? word : ` ${word}`;
+  }
+  lines.push(line);
+  return lines.join("\n");
 }
