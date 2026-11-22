@@ -408,10 +408,10 @@ The recommendation is yours. Say so when it departs from the agent's.
 Topic numbers:
 
 - A question escalated from the agent keeps the agent's number, so the user may see `T1` then `T5`. Translate its title into the user's language.
-- A question of your own goes under the agent topic that raised it. An unrelated one takes the next free number of the open agent discussion.
+- A question of your own that an agent topic raised goes under that topic's number. Any other question of your own goes to your own discussion.
 - Numbers stay stable across rounds. A follow-up within a topic is `T1.1`, `T1.2`. A question the user leaves unanswered stays open under its topic.
 
-Each agent session is one discussion. Your own questions, asked while no agent discussion is open, form one too. Each discussion numbers from `T1`. Open the first message of a new discussion with a line naming it, such as "Questions on the review fixes". An answer from the user applies to the latest discussion. When more than one discussion has open topics, put each discussion's blocks under its opening line, and ask back when an answer does not say which discussion it is for.
+Each agent session is one discussion, and your own questions form another. Each discussion numbers from `T1`. Open the first message of a new discussion with a line naming it, such as "Questions on the review fixes". An answer from the user applies to the discussion with open topics, or else to the latest one. When more than one discussion has open topics, put each discussion's blocks under its opening line, and ask back when an answer does not say which discussion it is for.
 
 ### Plan files are the agent's material
 
