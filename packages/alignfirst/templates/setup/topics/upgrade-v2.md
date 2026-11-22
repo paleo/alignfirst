@@ -8,7 +8,7 @@ Commands are Unix-style. Adapt them for another shell.
 
 Find every project skill root containing `alignfirst/SKILL.md`. Common roots are `.agents/skills/`, `.claude/skills/`, `.codex/skills/`, `.github/skills/`, `.cursor/skills/`, `.gemini/skills/` and `.agent/skills/`. Ignore dependencies and generated output.
 
-When the current skills CLI owns the installation, run `npx -y skills remove alignfirst --yes </dev/null` so it removes canonical links and updates the lock state. Otherwise, remove only the detected legacy `alignfirst` and `technical-documentation-authoring` directories. Do not delete unrelated skills.
+When the current skills CLI owns the installation, run `{{SKILLS}} remove alignfirst --yes </dev/null` so it removes canonical links and updates the lock state. Otherwise, remove only the detected legacy `alignfirst` and `technical-documentation-authoring` directories. Do not delete unrelated skills.
 
 ## Remove Legacy Commands
 

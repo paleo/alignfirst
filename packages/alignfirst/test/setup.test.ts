@@ -26,10 +26,13 @@ const dirs: string[] = [];
 const CONTRACT_PLACEHOLDERS = [
   "{{CMD}}",
   "{{TOPICS}}",
+  "{{SKILLS}}",
   "{{SKILLS_INSTALL}}",
   "{{SAMPLE_MANIFEST}}",
   "{{PROJECT_PATH}}",
 ];
+// Fixed facts the guide states whatever the caller's launcher.
+const FIXED_LAUNCHERS = ["npx -y aligndev", "bunx --bun alignfirst"];
 const SETUP_TEMPLATES = fileURLToPath(new URL("../templates/setup/", import.meta.url));
 
 afterEach(() => {
@@ -158,6 +161,40 @@ describe("setup guide", () => {
     expect(result.code).toBe(0);
     for (const placeholder of CONTRACT_PLACEHOLDERS)
       expect(result.stdout).not.toContain(placeholder);
+  });
+
+  it.each([
+    [{}, "alignfirst", "npx -y skills"],
+    [
+      { npm_config_user_agent: "npm/11.0.0", npm_command: "exec" },
+      "npx -y alignfirst",
+      "npx -y skills",
+    ],
+    [
+      { npm_config_user_agent: "pnpm/10.0.0", npm_command: "dlx" },
+      "pnpm dlx alignfirst",
+      "pnpm dlx skills",
+    ],
+  ])("renders every launcher through the caller's form %j", async (env, cmd, skills) => {
+    const cwd = temp();
+    const render = async (...args: string[]) => (await runMain(args, { cwd, env })).stdout;
+    const guides = [
+      await render("setup"),
+      ...(await Promise.all(SETUP_TOPICS.map(({ name }) => render("setup", "guide", name)))),
+    ].join("\n");
+    expect(guides).toContain(`\`${cmd} setup guide upgrade\``);
+    expect(guides).toContain(
+      `\`${skills} add https://github.com/paleo/alignfirst --global --skill`,
+    );
+    expect(guides).toContain(`${skills} add https://github.com/paleo/alignfirst --list`);
+    expect(guides).toContain(`\`${skills} remove --global <skill-name> --yes\``);
+    expect(guides).toContain(`\n${skills} update --global --yes\n`);
+    expect(guides).toContain(
+      `${skills} add https://github.com/paleo/alignfirst --global --yes \\\n`,
+    );
+    const allowed = new Set([cmd, skills, ...FIXED_LAUNCHERS]);
+    const launchers = guides.match(/(?:npx -y|pnpm dlx|bunx(?: --bun)?) [\w@/-]+/g) ?? [];
+    expect(launchers.filter((launcher) => !allowed.has(launcher))).toEqual([]);
   });
 
   it("names only registered topics in the templates", () => {

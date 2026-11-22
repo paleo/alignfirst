@@ -29,12 +29,12 @@ The skills are installed globally only. With the user's approval, run:
 Replace `<host>` with the user's coding host: `claude-code`, `codex` or `pi`. Repeat `--agent` for several hosts, as in `--agent claude-code --agent codex`. To list the package's skills without installing them:
 
 ```sh
-npx -y skills add https://github.com/paleo/alignfirst --list </dev/null
+{{SKILLS}} add https://github.com/paleo/alignfirst --list </dev/null
 ```
 
 When a global installation fails for lack of write access, report it once and continue without the skills. Never fall back to another location. On an AlignDev OpenClaw host, the service account's skill directories are admin-owned and locked, by design.
 
-Restart the target agent after installation. Update the skills with `npx -y skills update --global --yes`. Remove one with `npx -y skills remove --global <skill-name> --yes`.
+Restart the target agent after installation. Update the skills with `{{SKILLS}} update --global --yes`. Remove one with `{{SKILLS}} remove --global <skill-name> --yes`.
 
 ## Pi
 

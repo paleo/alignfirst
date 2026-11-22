@@ -74,7 +74,7 @@ Remove the old AlignFirst section from `AGENTS.md` or `CLAUDE.md`; the bootstrap
 Replace the full protocol content with CLI-backed stubs:
 
 ```sh
-npx -y skills update --global --yes
+{{SKILLS}} update --global --yes
 ```
 
 `{{CMD}} setup guide skills` covers new installations.

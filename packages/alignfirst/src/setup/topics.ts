@@ -1,4 +1,4 @@
-import { renderCommand } from "@alignfirst/docmap/invocation";
+import { type InvocationCommand, renderCommand } from "@alignfirst/docmap/invocation";
 import { readFileSync } from "node:fs";
 
 import { CliError } from "../cli-error.js";
@@ -96,6 +96,7 @@ export const SETUP_TOPICS: readonly SetupTopic[] = [
 ];
 export const PROJECT_PATH_PLACEHOLDER = "{{PROJECT_PATH}}";
 const TOPICS_PLACEHOLDER = "{{TOPICS}}";
+const SKILLS_PLACEHOLDER = "{{SKILLS}}";
 const SKILLS_INSTALL_PLACEHOLDER = "{{SKILLS_INSTALL}}";
 const SAMPLE_MANIFEST_PLACEHOLDER = "{{SAMPLE_MANIFEST}}";
 const SKILLS_REPOSITORY = "https://github.com/paleo/alignfirst";
@@ -121,9 +122,11 @@ export function renderTopicList(): string {
 /** Renders every placeholder of the template contract except `{{PROJECT_PATH}}`. */
 export function renderSetupTemplate(ctx: CommandContext, path: string): string {
   const template = renderCommandForm(readSetupTemplate(path), ctx.form);
+  const skills = skillsCommand(ctx);
   return template
     .replaceAll(TOPICS_PLACEHOLDER, () => renderTopicList())
-    .replaceAll(SKILLS_INSTALL_PLACEHOLDER, () => renderSkillsInstall(ctx))
+    .replaceAll(SKILLS_PLACEHOLDER, () => skills.base)
+    .replaceAll(SKILLS_INSTALL_PLACEHOLDER, () => renderSkillsInstall(skills))
     .replaceAll(SAMPLE_MANIFEST_PLACEHOLDER, () => readSetupTemplate("examples/alignfirst.json"));
 }
 
@@ -131,15 +134,10 @@ function readSetupTemplate(path: string): string {
   return readFileSync(new URL(`../../templates/setup/${path}`, import.meta.url), "utf-8").trimEnd();
 }
 
-function renderSkillsInstall(ctx: CommandContext): string {
-  const launcher = renderCommand(skillsCommand(ctx), [
-    "add",
-    SKILLS_REPOSITORY,
-    "--global",
-    "--yes",
-  ]);
+function renderSkillsInstall(launcher: InvocationCommand): string {
+  const install = renderCommand(launcher, ["add", SKILLS_REPOSITORY, "--global", "--yes"]);
   const skills = [...COMMAND_SKILLS, "aligndev"].map((name) => `--skill ${name}`);
-  const lines = [launcher, "--agent <host>"];
+  const lines = [install, "--agent <host>"];
   for (let i = 0; i < skills.length; i += SKILLS_PER_LINE)
     lines.push(skills.slice(i, i + SKILLS_PER_LINE).join(" "));
   return `${lines.join(" \\\n  ")} </dev/null`;

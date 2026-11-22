@@ -342,7 +342,7 @@ function warnUnknownRegistrySetting(path: string, key: string): void {
   if (path === "" && key === "paths") {
     hint =
       'The registry now uses "projects" entries with a "dir"; convert paths manually. ' +
-      'See "Convert the Companion Registry" in `npx -y alignfirst setup guide upgrade`.';
+      'See "Convert the Companion Registry" in `alignfirst setup guide upgrade`.';
   } else if (path === "" && key === "root") {
     hint = "Use a symlink at ~/.alignfirst/companions or a per-project dir instead.";
   }

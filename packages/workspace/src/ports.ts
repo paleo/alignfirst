@@ -17,7 +17,7 @@ const PROBE_HOSTS = ["127.0.0.1", "::1"];
 const ENTRY_KEYS: ReadonlySet<string> = new Set(["name", "range", "mainWorktree"]);
 
 const UPGRADE_POINTER =
-  'Follow "Historical: Declare Workspace Ports" in `npx -y alignfirst setup guide upgrade`.';
+  'Follow "Historical: Declare Workspace Ports" in `alignfirst setup guide upgrade`.';
 
 /** The project's port range and the ports declared in it. */
 export interface DevPortsConfig {

@@ -3,7 +3,7 @@
 When the user works in Paseo, recommend the global `paseo-alignfirst-workspace` skill. With the user's approval, install it:
 
 ```sh
-npx -y skills add https://github.com/paleo/alignfirst --global --yes --skill paseo-alignfirst-workspace </dev/null
+{{SKILLS}} add https://github.com/paleo/alignfirst --global --yes --skill paseo-alignfirst-workspace </dev/null
 ```
 
 Add `--agent <host>` to target the user's coding host (`{{CMD}} setup guide skills`). Recommend adding this line to the system prompt in Paseo's settings:

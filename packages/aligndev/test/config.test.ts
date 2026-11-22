@@ -59,7 +59,7 @@ function run(home: string, argv: string[], env: NodeJS.ProcessEnv = {}, quotaRea
 describe("settings shape", () => {
   it("keeps absent settings and file settings distinct from effective defaults", () => {
     const home = makeHome();
-    const config = loadConfig(home);
+    const config = loadConfig(home, "alignfirst");
     expect(config).toEqual({
       path: join(home, ".alignfirst/aligndev.settings.json"),
       platform: "codingAgent",
@@ -77,13 +77,13 @@ describe("settings shape", () => {
 
   it("retains platform and resolves projectsRoot independently", () => {
     const home = makeHome({ platform: "openclaw", projectsRoot: "~/projects" });
-    expect(loadConfig(home).projectsRoot).toEqual({
+    expect(loadConfig(home, "alignfirst").projectsRoot).toEqual({
       path: join(home, "projects"),
       written: "~/projects",
     });
     writeConfig(home, { projectsRoot: "../work" });
-    expect(requireProjectsRoot(loadConfig(home)).path).toBe(join(home, "work"));
-    expect(() => requireProjectsRoot(loadConfig(makeHome()))).toThrow(Error);
+    expect(requireProjectsRoot(loadConfig(home, "alignfirst")).path).toBe(join(home, "work"));
+    expect(() => requireProjectsRoot(loadConfig(makeHome(), "alignfirst"))).toThrow(Error);
   });
 
   it.each(['{"secret":"private-json-value" trailing}', "private-json-value"])(
@@ -92,8 +92,8 @@ describe("settings shape", () => {
       const home = makeHome({});
       const path = join(home, ".alignfirst/aligndev.settings.json");
       writeFileSync(path, text);
-      expect(() => loadConfig(home)).toThrow(Error);
-      expect(() => loadConfig(home)).not.toThrow("private-json-value");
+      expect(() => loadConfig(home, "alignfirst")).toThrow(Error);
+      expect(() => loadConfig(home, "alignfirst")).not.toThrow("private-json-value");
       expect(readFileSync(path, "utf8")).toBe(text);
     },
   );
@@ -102,16 +102,16 @@ describe("settings shape", () => {
     const home = makeHome();
     const path = join(home, ".alignfirst/aligndev.settings.json");
     mkdirSync(path, { recursive: true });
-    expect(() => loadConfig(home)).toThrow("EISDIR");
+    expect(() => loadConfig(home, "alignfirst")).toThrow("EISDIR");
   });
 
   it("rejects the old filename only when the current file is absent", () => {
     const home = makeHome();
     mkdirSync(join(home, ".alignfirst"));
     writeFileSync(join(home, ".alignfirst/aligndev.config.json"), "{}");
-    expect(() => loadConfig(home)).toThrow(Error);
+    expect(() => loadConfig(home, "alignfirst")).toThrow(Error);
     writeConfig(home, {});
-    expect(loadConfig(home).code).toEqual({});
+    expect(loadConfig(home, "alignfirst").code).toEqual({});
   });
 
   it.each(["agent", "defaultModel", "models", "skipPermissions", "unset"])(
@@ -119,7 +119,7 @@ describe("settings shape", () => {
     (field) => {
       const home = makeHome({ code: { [field]: "old" } });
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      expect(loadConfig(home).code).toEqual({});
+      expect(loadConfig(home, "alignfirst").code).toEqual({});
       expect(warn).toHaveBeenCalledOnce();
     },
   );
@@ -175,7 +175,7 @@ describe("settings shape", () => {
     ],
   ])("rejects structural settings errors %j (%s)", (settings) => {
     const home = makeHome(settings);
-    expect(() => loadConfig(home)).toThrow(Error);
+    expect(() => loadConfig(home, "alignfirst")).toThrow(Error);
   });
 
   it.each([
@@ -185,19 +185,19 @@ describe("settings shape", () => {
   ] as const)("rejects null %s directory conflicts in env and unset", (agent, variable) => {
     for (const conflict of [{ env: { [variable]: "private" } }, { unset: [variable] }]) {
       const home = makeHome(profileConfig({ agent, configDir: null, ...conflict }));
-      expect(() => loadConfig(home)).toThrow(Error);
+      expect(() => loadConfig(home, "alignfirst")).toThrow(Error);
       if (agent === "pi") continue;
       writeConfig(
         home,
         profileConfig({ agent: "pi", quota: { source: agent, configDir: null, ...conflict } }),
       );
-      expect(() => loadConfig(home)).toThrow(Error);
+      expect(() => loadConfig(home, "alignfirst")).toThrow(Error);
     }
   });
 
   it.each([null, "true", 1, [], {}])("rejects non-boolean defaults %j", (value) => {
     const home = makeHome(profileConfig({ agent: "pi", default: value }));
-    expect(() => loadConfig(home)).toThrow(Error);
+    expect(() => loadConfig(home, "alignfirst")).toThrow(Error);
   });
 
   it.each([{}, null, { claude: "a" }])("ignores every retired map value %j", (map) => {
@@ -208,13 +208,31 @@ describe("settings shape", () => {
         profiles: { a: { agent: "claude" }, b: { agent: "claude" } },
       },
     });
-    const config = loadConfig(home);
+    const config = loadConfig(home, "alignfirst");
     expect(config.code).not.toHaveProperty("defaultProfiles");
     expect(() => resolveCodeConfig(config, { CLAUDECODE: "1" })).toThrow(Error);
     expect(warn).toHaveBeenCalledOnce();
   });
 
-  it("warns at every fixed settings shape, discards unknown values and preserves maps and bytes", () => {
+  it.each([
+    [{}, "alignfirst"],
+    [{ npm_config_user_agent: "pnpm/10.0.0", npm_command: "dlx" }, "pnpm dlx alignfirst"],
+    [{ npm_config_user_agent: "npm/11.0.0", npm_command: "exec" }, "npx -y alignfirst"],
+  ])(
+    "points the retired map at the upgrade guide through the caller's form %j",
+    async (env, form) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const home = makeHome({ code: { defaultProfiles: {} } });
+      await run(home, ["project", "--help"], env);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `See "Convert AlignDev Profile Defaults" in \`${form} setup guide upgrade\`.`,
+        ),
+      );
+    },
+  );
+
+  it("warns at every fixed settings shape,discards unknown values and preserves maps and bytes", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const home = makeHome({
       unknownRoot: "private-value",
@@ -233,7 +251,7 @@ describe("settings shape", () => {
     });
     const path = join(home, ".alignfirst/aligndev.settings.json");
     const before = readFileSync(path);
-    const config = loadConfig(home);
+    const config = loadConfig(home, "alignfirst");
     const profile = config.code.profiles?.["sk-secret-profile\n\u001b[31m"];
     expect(profile).toEqual({
       agent: "pi",
@@ -257,7 +275,7 @@ describe("settings shape", () => {
 
   it("escapes unusual unknown property names on one physical warning line", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    loadConfig(makeHome({ "bad\n\u001b\u0085\u202e\u{e0001}.key": "private-value" }));
+    loadConfig(makeHome({ "bad\n\u001b\u0085\u202e\u{e0001}.key": "private-value" }), "alignfirst");
     expect(warn).toHaveBeenCalledExactlyOnceWith(
       expect.stringContaining('settings["bad\\n\\u001b\\u0085\\u202e\\udb40\\udc01.key"]'),
     );
@@ -276,6 +294,7 @@ describe("settings shape", () => {
             profiles: { broken: { agent: "pi", default: "yes", stale: true } },
           },
         }),
+        "alignfirst",
       ),
     ).toThrow(Error);
   });
@@ -294,7 +313,7 @@ describe("settings shape", () => {
         },
       }),
     );
-    const config = loadConfig(home);
+    const config = loadConfig(home, "alignfirst");
     const code = resolveCodeConfig(config, {});
     expect(code.configDir).toBe(join(home, "pi dir"));
     expect(code.childEnv.LITERAL).toBe(LITERAL_ENV);
@@ -316,7 +335,10 @@ describe("profile resolution", () => {
     [{ recorded: null }, "global"],
     [{}, "global"],
   ])("uses exact precedence %j", (selection, expected) => {
-    const config = loadConfig(makeHome({ code: { profile: "global", profiles: PROFILES } }));
+    const config = loadConfig(
+      makeHome({ code: { profile: "global", profiles: PROFILES } }),
+      "alignfirst",
+    );
     expect(resolveCodeConfig(config, {}, selection).profile).toBe(expected);
     expect(resolveCodeConfig(config, { CLAUDECODE: "1", AI_AGENT: "pi" }, selection).profile).toBe(
       expected,
@@ -331,10 +353,13 @@ describe("profile resolution", () => {
     ["pi", { PI_CODING_AGENT: "true", AI_AGENT: "pi" }],
   ])("uses %s built-ins, matching singleton or per-agent preference", (agent, env) => {
     const home = makeHome();
-    expect(resolveCodeConfig(loadConfig(home), env)).toMatchObject({ agent, profile: null });
+    expect(resolveCodeConfig(loadConfig(home, "alignfirst"), env)).toMatchObject({
+      agent,
+      profile: null,
+    });
     for (const flag of [undefined, false, true]) {
       writeConfig(home, { code: { profiles: { only: { agent, default: flag } } } });
-      const config = loadConfig(home);
+      const config = loadConfig(home, "alignfirst");
       expect(resolveCodeConfig(config, env)).toMatchObject({ agent, profile: "only" });
       expect(resolveCodeConfig(config, {})).toMatchObject({ agent, profile: "only" });
       expect(resolveCodeConfig(config, env, { recorded: undefined }).profile).toBe("only");
@@ -350,7 +375,7 @@ describe("profile resolution", () => {
         },
       },
     });
-    const config = loadConfig(home);
+    const config = loadConfig(home, "alignfirst");
     expect(resolveCodeConfig(config, env).profile).toBe("preferred");
     expect(resolveCodeConfig(config, env, { recorded: null }).profile).toBeNull();
     expect(() => resolveCodeConfig(config, {})).toThrow(Error);
@@ -363,6 +388,7 @@ describe("profile resolution", () => {
   ])("never overrides detected %s with another agent's singleton", (agent, env, other) => {
     const config = loadConfig(
       makeHome({ code: { profiles: { other: { agent: other, default: true } } } }),
+      "alignfirst",
     );
     expect(resolveCodeConfig(config, env)).toMatchObject({ agent, profile: null });
   });
@@ -386,6 +412,7 @@ describe("profile resolution", () => {
               },
             },
           }),
+          "alignfirst",
         );
         expect(() => resolveCodeConfig(config, marker)).toThrow(Error);
         expect(() => resolveCodeConfig(config, marker)).not.toThrow(/never-print-me/);
@@ -407,6 +434,7 @@ describe("profile resolution", () => {
             },
           },
         }),
+        "alignfirst",
       );
       expect(() => resolveCodeConfig(config, {}, selection)).toThrow(Error);
     },
@@ -422,14 +450,17 @@ describe("profile resolution", () => {
         },
       },
     });
-    const config = loadConfig(home);
+    const config = loadConfig(home, "alignfirst");
     expect(resolveCodeConfig(config, { CLAUDECODE: "1" }).defaultModel).toBe("opus");
     expect(resolveCodeConfig(config, { CODEX_THREAD_ID: "thread" }).defaultModel).toBe("sol");
     expect(resolveCodeConfig(config, { AI_AGENT: "pi" }).defaultModel).toBe("openai/sol");
   });
 
   it("detects only when needed and never falls through selected errors", () => {
-    const config = loadConfig(makeHome({ code: { profile: "global", profiles: PROFILES } }));
+    const config = loadConfig(
+      makeHome({ code: { profile: "global", profiles: PROFILES } }),
+      "alignfirst",
+    );
     for (const selection of [
       { explicit: "missing" },
       { project: { profile: "missing" } },
@@ -441,13 +472,16 @@ describe("profile resolution", () => {
     expect(
       resolveCodeConfig(config, {}, { explicit: "explicit", recorded: "deleted" }).profile,
     ).toBe("explicit");
-    const absent = loadConfig(makeHome());
+    const absent = loadConfig(makeHome(), "alignfirst");
     expect(() => resolveCodeConfig(absent, {})).toThrow(Error);
     expect(() => resolveCodeConfig(absent, { CLAUDECODE: "1", AI_AGENT: "pi" })).toThrow(Error);
   });
 
   it("validates global references at resolution even with valid explicit selection", () => {
-    const config = loadConfig(makeHome({ code: { profile: "missing", profiles: PROFILES } }));
+    const config = loadConfig(
+      makeHome({ code: { profile: "missing", profiles: PROFILES } }),
+      "alignfirst",
+    );
     expect(() => resolveCodeConfig(config, { CLAUDECODE: "1" })).toThrow(Error);
     expect(() => resolveCodeConfig(config, {}, { explicit: "explicit" })).toThrow(Error);
   });
@@ -466,7 +500,7 @@ describe("profile resolution", () => {
         },
       },
     });
-    const config = loadConfig(home);
+    const config = loadConfig(home, "alignfirst");
     expect(() => resolveCodeConfig(config, env)).toThrow(Error);
     expect(() => resolveCodeConfig(config, env)).not.toThrow(/never-print-me/);
     expect(() => resolveCodeConfig(config, env, { recorded: null })).toThrow(Error);
@@ -477,7 +511,7 @@ describe("profile resolution", () => {
     ])
       expect(resolveCodeConfig(config, env, selection).profile).not.toBeNull();
     writeConfig(home, { code: { ...config.code, profile: "pi" } });
-    expect(resolveCodeConfig(loadConfig(home), env).profile).toBe("pi");
+    expect(resolveCodeConfig(loadConfig(home, "alignfirst"), env).profile).toBe("pi");
   });
 
   it("uses own properties for arbitrary profile and alias names", () => {
@@ -486,16 +520,16 @@ describe("profile resolution", () => {
         '{"code":{"profile":"__proto__","profiles":{"__proto__":{"agent":"pi","modelAliases":{"constructor":"openai/sol"}}}}}',
       ),
     );
-    expect(resolveCodeConfig(loadConfig(home), {}).profile).toBe("__proto__");
+    expect(resolveCodeConfig(loadConfig(home, "alignfirst"), {}).profile).toBe("__proto__");
     writeConfig(home, { code: { profile: "constructor", profiles: {} } });
-    expect(() => resolveCodeConfig(loadConfig(home), {})).toThrow(Error);
+    expect(() => resolveCodeConfig(loadConfig(home, "alignfirst"), {})).toThrow(Error);
   });
 
   it("validates defaults with the same accepted-name policy, without alias recursion", () => {
     const home = makeHome(
       profileConfig({ agent: "codex", defaultModel: "fast", modelAliases: { fast: "sol" } }),
     );
-    expect(resolveCodeConfig(loadConfig(home), {}).defaultModel).toBe("fast");
+    expect(resolveCodeConfig(loadConfig(home, "alignfirst"), {}).defaultModel).toBe("fast");
     writeConfig(
       home,
       profileConfig({
@@ -505,12 +539,14 @@ describe("profile resolution", () => {
         modelAliases: { fast: "sol" },
       }),
     );
-    expect(() => resolveCodeConfig(loadConfig(home), {})).toThrow(Error);
+    expect(() => resolveCodeConfig(loadConfig(home, "alignfirst"), {})).toThrow(Error);
     writeConfig(
       home,
       profileConfig({ agent: "pi", defaultModel: " provider/model:high ", models: [] }),
     );
-    expect(resolveCodeConfig(loadConfig(home), {}).defaultModel).toBe(" provider/model:high ");
+    expect(resolveCodeConfig(loadConfig(home, "alignfirst"), {}).defaultModel).toBe(
+      " provider/model:high ",
+    );
   });
 
   it.each([
@@ -538,7 +574,7 @@ describe("profile resolution", () => {
         );
         const path = join(home, ".alignfirst/aligndev.settings.json");
         const bytes = readFileSync(path);
-        const config = loadConfig(home);
+        const config = loadConfig(home, "alignfirst");
         const stored = config.code.profiles?.test;
         Object.freeze(stored?.unset);
         Object.freeze(stored?.env);
@@ -600,7 +636,7 @@ describe("profile resolution", () => {
       PI_MODEL: "parent",
       PATH: "/fixture/bin",
     });
-    const config = loadConfig(home);
+    const config = loadConfig(home, "alignfirst");
     const before = JSON.stringify(config);
     const code = resolveCodeConfig(config, env, { explicit: "selected" });
     expect(code.childEnv).toEqual({
@@ -668,7 +704,7 @@ describe("command boundaries outside Git", () => {
     expect(result.stdout).toContain("pi");
     expect(existsSync(join(home, ".plans"))).toBe(false);
     expect(existsSync(join(home, ".alignfirst/companions"))).toBe(false);
-    expect(() => requireProjectsRoot(loadConfig(home))).toThrow();
+    expect(() => requireProjectsRoot(loadConfig(home, "alignfirst"))).toThrow();
   });
 
   it.each([["guide", "project"], ["guide"], ["code", "status", "--help"]])(

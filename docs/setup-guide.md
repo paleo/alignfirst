@@ -52,6 +52,7 @@ To add a topic:
 | --- | --- |
 | `{{CMD}}` | The caller's invocation form, such as `npx -y alignfirst` or `bunx --bun alignfirst` |
 | `{{TOPICS}}` | The topic list from the registry |
+| `{{SKILLS}}` | The `skills` CLI through the caller's package runner, such as `npx -y skills` or `pnpm dlx skills` |
 | `{{SKILLS_INSTALL}}` | The `skills add` command for every command skill plus `aligndev`, with `--agent <host>`; templates add the code fence |
 | `{{SAMPLE_MANIFEST}}` | The content of `examples/alignfirst.json` |
 | `{{PROJECT_PATH}}` | The main-worktree path, in `snippets/global-bootstrap.md` only |
@@ -59,7 +60,8 @@ To add a topic:
 ## Writing Rules
 
 - **One home per concept.** A fact lives in one topic. Other topics point to it.
-- **Pointers are commands.** Write `` `{{CMD}} setup guide <topic>` ``, and quote a section title when the pointer targets a section. Error messages in the packages cite topics the same way, such as "Convert the Companion Registry" in `alignfirst setup guide upgrade`. Keep those titles stable.
+- **Pointers are commands.** Write `` `{{CMD}} setup guide <topic>` ``, and quote a section title when the pointer targets a section. Error messages in the packages cite topics the same way, such as "Convert the Companion Registry" in `alignfirst setup guide upgrade`. A message renders the caller's form when its package knows it, as AlignDev does; otherwise it writes `alignfirst`. Keep those titles stable.
+- **Launchers are placeholders.** Write `{{CMD}}` for `alignfirst` and `{{SKILLS}}` for the `skills` CLI. A literal launcher states a fixed fact, such as the `aligndev` skill running `npx -y aligndev guide`.
 - **Mechanical steps are commands.** When a command performs a step (`setup init`, `setup instructions --write`, `companion register --item`), the topic gives the command instead of the manual procedure.
 - **Never restate another guide.** A fact already stated by a package README, `workspace --guide`, `docmap --guide` or `aligndev guide` is pointed to.
 
