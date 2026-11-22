@@ -9,7 +9,7 @@ Installations with `.alignfirst.json`, workspace wrappers or old registries firs
 ## Implementation process
 
 1. Inspect the repository from a clean working tree. Identify the work files, ignored data, runtime requirements, install, build and test commands, file templates, ports, service readiness logs and resource ownership.
-2. Present the proposed preparation, services and destructive cleanup procedures. Obtain approval before changes.
+2. Present the proposed changes: `setup init` and its ignore rules, the recipe, the destructive cleanup procedures and the project documentation. The request for a workspace does not approve them: wait for the user's approval before the first change.
 3. Prepare the work files and runtime storage (below). Add a recipe only for project-specific behavior.
 4. Validate with `{{CMD}} config --json`, and read `{{CMD}} workspace --guide`.
 5. With authorization, commit the scaffolding before creating a disposable linked worktree, so that it contains the recipe and the project scripts. Exercise setup, dev when declared, stop and cleanup. Preserve user branches and shared data. Do not push unless separately authorized.
