@@ -26,16 +26,10 @@ Direct `bun <installed-entry.mjs>` and transparent project scripts launched with
 
 ### Bootstrapping a docs/ directory (optional)
 
-To bootstrap a `docs/` directory, wire docmap into a project, and migrate existing docs or skills, install the `alignfirst-setup-guide` skill temporarily and let an agent drive the setup:
-
-```bash
-npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
-```
-
-Then ask your agent:
+To bootstrap a `docs/` directory, wire docmap into a project, and migrate existing docs or skills, let an agent drive the setup. Ask your agent:
 
 ```md
-Use your *alignfirst-setup-guide* skill. What are my options for bootstrapping a `docs/` directory in this project?
+Run `npx -y alignfirst setup guide docmap`. What are my options for bootstrapping a `docs/` directory in this project?
 ```
 
 ## How It Works

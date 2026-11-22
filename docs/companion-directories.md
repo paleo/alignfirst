@@ -10,7 +10,7 @@ read_when:
 
 # Companion Directories
 
-A companion holds selected AlignFirst files outside a product repository. Protocols and Docmap can leave repository files untouched. Workspace runtime can also live in the companion. Project-local shared directories and user commands retain their normal write behavior; companion placement is not a write sandbox. See [companion setup](../skills/alignfirst-setup-guide/references/companion-setup.md) for the user-facing procedure and [the upgrade runbook](upgrading-multi-stack-workspaces.md) for retired settings.
+A companion holds selected AlignFirst files outside a product repository. Protocols and Docmap can leave repository files untouched. Workspace runtime can also live in the companion. Project-local shared directories and user commands retain their normal write behavior; companion placement is not a write sandbox. See `npx -y alignfirst setup guide companion` for the user-facing procedure and [the upgrade runbook](upgrading-multi-stack-workspaces.md) for retired settings.
 
 ## Registry and matching
 
