@@ -6,7 +6,7 @@ import { expect, it } from "vitest";
 import { packageRoot } from "./fixture.js";
 
 const repository = resolve(packageRoot, "../..");
-const assets = join(repository, "skills/alignfirst-setup-guide/assets");
+const assets = join(repository, "skills/aligndev-openclaw-setup/assets");
 const examples = join(repository, "packages/alignfirst/templates/setup/examples");
 const cli = join(repository, "packages/alignfirst/bin/alignfirst.mjs");
 

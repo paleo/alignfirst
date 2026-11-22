@@ -83,7 +83,7 @@ Keep native-agent stores and protected resources outside this tree. OpenClaw con
 
 ## Skills and instructions
 
-The setup guide and `sharp-writing` under `~/.agents/skills/` feed both OpenClaw and the delegated coding agent. OpenClaw's managed `~/.openclaw/skills/` holds no skill: the playbook ships in `aligndev` and prints through `aligndev guide`. That directory stays locked so the assistant cannot install a skill there. The commands below protect both trees from service-account writes: admin ownership and modes prevent content changes; the immutable flag on each root prevents its removal or replacement. Both agents can still read the files. `~/.openclaw` stays writable for gateway state.
+`sharp-writing` under `~/.agents/skills/` feeds both OpenClaw and the delegated coding agent. OpenClaw's managed `~/.openclaw/skills/` holds no skill: the playbook ships in `aligndev` and prints through `aligndev guide`. That directory stays locked so the assistant cannot install a skill there. The commands below protect both trees from service-account writes: admin ownership and modes prevent content changes; the immutable flag on each root prevents its removal or replacement. Both agents can still read the files. `~/.openclaw` stays writable for gateway state.
 
 ```sh
 sudo chown -Rh {{SERVER_ADMIN_USER}}:{{SERVER_ADMIN_USER}} /home/{{SERVICE_USER}}/.agents

@@ -138,12 +138,10 @@ A protected native `settings.json` cannot save interactive preferences outside m
 
 ### Skills and Optional Subagents
 
-**Role: operator**, before hardening. Install shared skills into their canonical `~/.agents/skills` root; Pi discovers it natively, including with a custom agent directory. Avoid native symlink aliases that the deployment's managed-path validation rejects.
+**Role: operator**, before hardening. Install the shared skill `sharp-writing` into its canonical `~/.agents/skills` root; Pi discovers it natively, including with a custom agent directory. Avoid native symlink aliases that the deployment's managed-path validation rejects.
 
 ```sh
 sudo -i -u {{SERVICE_USER}} -- bash -lc '
-  npx -y skills add https://github.com/paleo/alignfirst --global --yes \
-    --agent universal --skill alignfirst-setup-guide < /dev/null
   npx -y skills add https://github.com/paleo/skills --global --yes \
     --agent universal --skill sharp-writing < /dev/null
 '

@@ -56,7 +56,7 @@ For every skill it updates, `npx skills update` drops a symlink at `~/.openclaw/
 
 ## Shared skills live under `~/.agents/skills`
 
-The setup guide and `sharp-writing` install once under `~/.agents/skills/`. OpenClaw loads only its `agents.defaults.skills` allowlist, including `alignfirst-setup-guide` for project creation. The coding agent receives the shared skills through its own tier. `skills remove` deletes a shared skill for both.
+`sharp-writing` installs once under `~/.agents/skills/`. OpenClaw loads only the skills its `agents.defaults.skills` allowlist names. The coding agent receives the shared skills through its own tier. `skills remove` deletes a shared skill for both.
 
 ## Moving a project
 

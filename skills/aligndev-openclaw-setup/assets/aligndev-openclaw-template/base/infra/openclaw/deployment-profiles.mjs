@@ -198,8 +198,8 @@ function settingsObject(value, keys, path) {
       migration =
         "code.defaultProfiles is retired; manually move needed preferences to referenced " +
         "matching-agent profiles' default: true (omit singleton flags), remove the map and keep " +
-        "profile names unchanged. See skills/alignfirst-setup-guide/references/" +
-        "alignfirst-upgrade.md#convert-aligndev-profile-defaults";
+        'profile names unchanged. See "Convert AlignDev Profile Defaults" in ' +
+        "`alignfirst setup guide upgrade`.";
     else if (
       path === "code" &&
       ["agent", "defaultModel", "models", "skipPermissions", "unset"].includes(key)

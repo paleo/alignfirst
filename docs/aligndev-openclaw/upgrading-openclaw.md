@@ -41,7 +41,7 @@ git clone --quiet --depth=1 --branch v<version> https://github.com/openclaw/open
 - Search the new release's changelog, `CHANGELOG/<version>.md` in the clone, including `by default`. Channel defaults such as `allowBots` can appear there without a config-help change.
 - Diff the surfaces our documentation describes: `git -C .local/openclaw diff v<old> v<new> --stat -- src/agents src/commands`, then the files behind any suspicious stat line.
 - Re-verify the claims of [openclaw-context-engineering.md](./openclaw-context-engineering.md) against the new tag; the document names its source files and verification baselines. Doctor does not flag silent behavior shifts such as a narrowed subagent bootstrap.
-- Compare the deployment template's workspace files (`skills/alignfirst-setup-guide/assets/aligndev-openclaw-template/base/infra/openclaw/workspace/`) with `WORKSPACE_BOOTSTRAP_FILENAMES` in `src/agents/workspace-bootstrap-policy.ts`. Remove retired files from the template and its `chattr` lists.
+- Compare the deployment template's workspace files (`skills/aligndev-openclaw-setup/assets/aligndev-openclaw-template/base/infra/openclaw/workspace/`) with `WORKSPACE_BOOTSTRAP_FILENAMES` in `src/agents/workspace-bootstrap-policy.ts`. Remove retired files from the template and its `chattr` lists.
 - Diff the config help between the tags: `git -C .local/openclaw diff v<old> v<new> -- 'src/config/schema.help.*.ts'`. Look for defaults that enable background work, telemetry or hidden tool schemas; see [Propagate](#propagate-to-the-deployment-template). The changelog and doctor can miss these changes.
 - Recheck the public plugin tool/hook context, routing helpers, state-root resolver, and session-binding APIs required by `@alignfirst/service-openclaw-plugin`. Load it from an ordinary external path; an allowlist is not an official-plugin trust grant.
 - Recheck which plugin registration supplies a turn's tool factories and which runs its tool hooks (`src/agents/runtime-plugins.ts`). Cover the split documented in [the plugin's state-sharing contract](./openclaw-plugin.md#what-the-plugin-does); a single-registration test missed it.
@@ -76,7 +76,7 @@ Doctor is the upstream migration detector: it flags retired workspace files, ret
 
 ```sh
 cd aligndev-openclaw-tests
-template=../skills/alignfirst-setup-guide/assets/aligndev-openclaw-template
+template=../skills/aligndev-openclaw-setup/assets/aligndev-openclaw-template
 cp -r workspace /tmp/doctor-harness
 cp -r $template/base/infra/openclaw/workspace /tmp/doctor-template
 cp $template/variants/surfaces/slack/infra/openclaw/workspace/AGENTS.md /tmp/doctor-template/
@@ -119,9 +119,9 @@ npm run env:down
 
 ## Propagate to the deployment template
 
-The deployment guide installs the latest stable release without deployment version pins. Derive launcher prerequisites from installed metadata. When the release retires a config key the seed sets, delete or replace the line. When it retires a workspace file or changes operator-visible behavior, update the setup-guide template: it describes a fresh install on the current release, so retired files and keys leave it, and the consumers' own runbooks carry the migration. When it turns on a background behavior or hides a tool the playbook calls, add the opt-out to `base/infra/openclaw/seed/common.sh` and to `aligndev-openclaw-tests/openclaw.json`, which carry the same opt-outs. Bump the `version` in the skill's `SKILL.md`.
+The deployment guide installs the latest stable release without deployment version pins. Derive launcher prerequisites from installed metadata. When the release retires a config key the seed sets, delete or replace the line. When it retires a workspace file or changes operator-visible behavior, update the deployment template of the `aligndev-openclaw-setup` skill: it describes a fresh install on the current release, so retired files and keys leave it, and the consumers' own runbooks carry the migration. When it turns on a background behavior or hides a tool the playbook calls, add the opt-out to `base/infra/openclaw/seed/common.sh` and to `aligndev-openclaw-tests/openclaw.json`, which carry the same opt-outs. Bump the `version` in the skill's `SKILL.md`.
 
-Every other changed default stays out of the seed. The rendered repository states the rule in [`docs/configuration.md`](../../skills/alignfirst-setup-guide/assets/aligndev-openclaw-template/base/docs/configuration.md): a pin needs a stated policy, and preserving previous behavior is not one. The opt-outs above hold their policies: no autonomous model spend, no telemetry ping, and a handoff and reply contract visible on every turn.
+Every other changed default stays out of the seed. The rendered repository states the rule in [`docs/configuration.md`](../../skills/aligndev-openclaw-setup/assets/aligndev-openclaw-template/base/docs/configuration.md): a pin needs a stated policy, and preserving previous behavior is not one. The opt-outs above hold their policies: no autonomous model spend, no telemetry ping, and a handoff and reply contract visible on every turn.
 
 ## Known audit exceptions
 

@@ -75,7 +75,7 @@ The consumer-owned `Dockerfile` (dropped by `init`) does:
 4. `npx openclaw plugins registry --refresh` so the gateway sees the loaded channels.
 5. Optional consumer customizations (extra system packages, skills install, etc.).
 
-The AlignDev consumer installs no managed skill: the playbook comes from the mounted monorepo through `aligndev guide`. Test-owned setup-guide links under `/home/assistant/.agents/skills/` and `.claude/skills/` resolve to the mounted checkout's `skills/alignfirst-setup-guide`. No GitHub-fetched guide or published older workspace kernel participates in acceptance. The image also runs `openclaw update repair` and `openclaw doctor --fix` to settle the plugin state OpenClaw defers since 2026.9.6.
+The AlignDev consumer installs no skill, and its `agents.defaults.skills` allowlist is empty. The playbook comes from the mounted monorepo through `aligndev guide`, and the setup guide through `alignfirst setup guide`, both through the checkout's CLI wrappers. No GitHub-fetched guide or published older workspace kernel participates in acceptance. The image also runs `openclaw update repair` and `openclaw doctor --fix` to settle the plugin state OpenClaw defers since 2026.9.6.
 
 `openclaw-test run` does **not** rebuild. Re-run `npm run env:build` after edits to `openclaw.json` or the consumer `Dockerfile`, or after bumping any `@alignfirst/openclaw-*` dependency.
 

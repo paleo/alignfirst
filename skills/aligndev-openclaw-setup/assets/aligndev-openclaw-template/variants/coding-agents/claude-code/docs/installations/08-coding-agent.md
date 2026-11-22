@@ -97,13 +97,11 @@ Trusting `~/projects` once covers every project cloned under it; `aligndev code`
 
 ### Skills
 
-**Role: operator**, as the service account, after [Authenticate](#authenticate). Install canonical shared skills with `--agent universal`, then copy them into every inventoried Claude store. Managed native symlinks are rejected by the deployment policy, so do not use the CLI's `--agent claude-code` alias tier for this service account. The delegated agent needs no protocol skill: `aligndev code` names the `alignfirst guide` command in its prompt, and a prepared project runs `alignfirst context` from its instruction file. `< /dev/null` on every `skills add`: its interactive UI reads stdin and would swallow the rest of the heredoc.
+**Role: operator**, as the service account, after [Authenticate](#authenticate). Install the canonical shared skill `sharp-writing` with `--agent universal`, then copy it into every inventoried Claude store. Managed native symlinks are rejected by the deployment policy, so do not use the CLI's `--agent claude-code` alias tier for this service account. The delegated agent needs no protocol skill: `aligndev code` names the `alignfirst guide` command in its prompt, and a prepared project runs `alignfirst context` from its instruction file. `< /dev/null` on every `skills add`: its interactive UI reads stdin and would swallow the rest of the heredoc.
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -l <<'EOS'
 set -eo pipefail
-npx -y skills add https://github.com/paleo/alignfirst --global --yes \
-  --agent universal --skill alignfirst-setup-guide < /dev/null
 npx -y skills add https://github.com/paleo/skills --global --yes \
   --agent universal --skill sharp-writing < /dev/null
 /usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
@@ -112,11 +110,9 @@ npx -y skills add https://github.com/paleo/skills --global --yes \
   jq -r '.stores[] | select(.agent == "claude") | .skillsDir' |
   while IFS= read -r target; do
     mkdir -p "$target"
-    for skill in alignfirst-setup-guide sharp-writing; do
-      test ! -L "$target/$skill"
-      mkdir -p "$target/$skill"
-      rsync -a --delete "$HOME/.agents/skills/$skill/" "$target/$skill/"
-    done
+    test ! -L "$target/sharp-writing"
+    mkdir -p "$target/sharp-writing"
+    rsync -a --delete "$HOME/.agents/skills/sharp-writing/" "$target/sharp-writing/"
   done
 EOS
 ```

@@ -23,7 +23,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const repository = fileURLToPath(new URL("../../", import.meta.url));
 const source = join(
   repository,
-  "skills/alignfirst-setup-guide/assets/aligndev-openclaw-template/base/infra/openclaw",
+  "skills/aligndev-openclaw-setup/assets/aligndev-openclaw-template/base/infra/openclaw",
 );
 
 // Every privileged command is a fixture-owned rejecting double. Node's root check is rewritten

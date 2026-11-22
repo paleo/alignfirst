@@ -205,9 +205,8 @@ function warnUnknownSetting(path: string, key: string): void {
     migration =
       "code.defaultProfiles is retired: manually move each needed preference to its referenced " +
       "matching-agent profile's default: true (omit singleton flags), remove the map and " +
-      "keep profile names unchanged. See " +
-      "https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/" +
-      "references/alignfirst-upgrade.md#convert-aligndev-profile-defaults";
+      'keep profile names unchanged. See "Convert AlignDev Profile Defaults" in ' +
+      "`npx -y alignfirst setup guide upgrade`.";
   } else if (path === "code" && RETIRED_CODE_KEYS.includes(key)) {
     migration =
       "Retired launch setting: move it into code.profiles and select one with code.profile " +

@@ -300,7 +300,7 @@ function assertSetupGuideDelegation(
   if (protocolPrompt !== undefined) {
     throw new Error(`creation delegated through a protocol: ${JSON.stringify(protocolPrompt)}`);
   }
-  if (!prompts.some((prompt) => /alignfirst-setup-guide/iu.test(prompt))) {
+  if (!prompts.some((prompt) => /setup guide assistant-project/u.test(prompt))) {
     throw new Error(
       `creation did not delegate through the setup guide: ${JSON.stringify(prompts)}`,
     );

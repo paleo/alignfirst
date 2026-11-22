@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 
 const template = fileURLToPath(
   new URL(
-    "../../skills/alignfirst-setup-guide/assets/aligndev-openclaw-template/",
+    "../../skills/aligndev-openclaw-setup/assets/aligndev-openclaw-template/",
     import.meta.url,
   ),
 );
