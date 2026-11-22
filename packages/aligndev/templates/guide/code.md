@@ -329,10 +329,10 @@ T2 - Is that a good design? We need the cleanest code possible.
 T3 - Yes, it should be optional."
 ```
 
-A question your reply skips or answers partially stays open under its topic. Accept a whole round only once your user has settled every decision that is theirs: "All recommendations accepted, except T3: <what to do instead>."
+A question your reply skips or answers partially stays open under its topic. Accept a whole round only once your user has settled every decision that is theirs: "All recommendations accepted, except T3: <what to do instead>." That phrase accepts the agent's recommendations. When your user accepted a recommendation of yours that departs from the agent's, state that answer under its topic.
 
 **Technical questions** — architecture, patterns, existing behavior, anything answerable by reading the code. Never escalate these to the user. Push the agent to investigate: *"Explore the codebase to find out, and give me your opinion."*, *"Do not rush. Take the time to fully understand the situation first."*, *"What would be the elegant, proper, simple yet robust solution?"*, *"Check if a similar pattern is already implemented elsewhere in the codebase."*
 
-**Functional or UX questions** — product behavior, user-facing decisions, business rules. These need human judgement: escalate to your user, then relay the answer.
+**Functional or UX questions** — product behavior, user-facing decisions, business rules. These need human judgement: escalate to your user under the agent's topic number, as "Questions for the user" in `{{GUIDE}} working-session` describes, then relay the answer.
 
 When in doubt, ask the agent to explore first. Escalate only when the question truly cannot be answered from the codebase.
