@@ -1,5 +1,11 @@
 # @alignfirst/pi-background
 
+## 0.1.4
+
+### Patch Changes
+
+- 91c08f2: Fixed process cleanup failing with "Invalid /proc stat." when an unrelated process exits during the scan.
+
 ## 0.1.3
 
 ### Patch Changes

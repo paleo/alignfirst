@@ -1,5 +1,18 @@
 # aligndev
 
+## 0.32.0
+
+### Minor Changes
+
+- 91c08f2: Gave the assistant the `❓ T1` topic convention for its questions to the user; a question escalated from the agent keeps the agent's topic number.
+- e5e9e26: Moved the playbook's project preparation to the `alignfirst setup` guide and `alignfirst companion register --item`; the `alignfirst-setup-guide` skill is no longer needed. OpenClaw deployments use the new `aligndev-openclaw-setup` skill.
+
+### Patch Changes
+
+- 0696775: Renamed the guide's heredoc delimiter from `ALIGNDEV_MESSAGE` to `END_ALIGNDEV_MESSAGE`, so it reads as the end of the message.
+- Updated dependencies [e5e9e26]
+  - @alignfirst/workspace@0.42.2
+
 ## 0.31.1
 
 ### Patch Changes
