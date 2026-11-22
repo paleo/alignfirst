@@ -13,6 +13,7 @@ import { errorMessage } from "./errors.js";
 import {
   arrayOf,
   boolean,
+  type Check,
   literal,
   matching,
   nonblankString,
@@ -34,45 +35,6 @@ export const CONFIG_DIRECTORY_VARIABLES = {
 
 const environmentName = matching(/^[A-Za-z_][A-Za-z0-9_]*$/);
 const environmentShape = record(nulFreeString, environmentName);
-const quotaShape = object<QuotaSettings>(
-  {
-    source: literal("claude", "codex", "none"),
-    configDir: optional(directoryValue),
-    env: optional(environmentShape),
-    unset: optional(arrayOf(environmentName)),
-  },
-  warnUnknownSetting,
-);
-const profileShape = object<CodingProfile>(
-  {
-    agent: literal(...CODING_AGENTS),
-    default: optional(boolean),
-    configDir: optional(directoryValue),
-    defaultModel: optional(nonblankString),
-    models: optional(arrayOf(nonblankString)),
-    modelAliases: optional(record(nonblankString, nonblankString)),
-    skipPermissions: optional(boolean),
-    env: optional(environmentShape),
-    unset: optional(arrayOf(environmentName)),
-    quota: optional(quotaShape),
-  },
-  warnUnknownSetting,
-);
-const codeShape = object<CodeSettings>(
-  {
-    profile: optional(nonblankString),
-    profiles: optional(record(profileShape, nonblankString)),
-  },
-  warnUnknownSetting,
-);
-const configShape = object<ConfigFile>(
-  {
-    platform: optional(literal(...PLATFORMS)),
-    projectsRoot: optional(nonEmptyString),
-    code: optional(codeShape),
-  },
-  warnUnknownSetting,
-);
 const RETIRED_CODE_KEYS = ["agent", "defaultModel", "models", "skipPermissions", "unset"];
 
 export type Platform = (typeof PLATFORMS)[number];
@@ -127,9 +89,10 @@ interface ConfigFile {
   code?: CodeSettings;
 }
 
-export function loadConfig(home: string): LoadedConfig {
+/** `alignfirst` is the caller's alignfirst command form, cited by migration hints. */
+export function loadConfig(home: string, alignfirst: string): LoadedConfig {
   const path = join(home, ".alignfirst", "aligndev.settings.json");
-  const value = existsSync(path) ? parseConfigFile(path) : absentConfig(home);
+  const value = existsSync(path) ? parseConfigFile(path, alignfirst) : absentConfig(home);
   const code = value.code ?? {};
   for (const [name, profile] of Object.entries(code.profiles ?? {})) {
     const field = `code.profiles[${JSON.stringify(name)}]`;
@@ -174,7 +137,7 @@ function absentConfig(home: string): ConfigFile {
   return {};
 }
 
-function parseConfigFile(path: string): ConfigFile {
+function parseConfigFile(path: string, alignfirst: string): ConfigFile {
   let text: string;
   try {
     text = readFileSync(path, "utf8");
@@ -187,10 +150,53 @@ function parseConfigFile(path: string): ConfigFile {
   } catch {
     throw invalidConfig(path, "must contain valid JSON");
   }
-  return parseShape(configShape, value, (detail) => invalidConfig(path, detail));
+  return parseShape(configShape(alignfirst), value, (detail) => invalidConfig(path, detail));
 }
 
-function warnUnknownSetting(path: string, key: string): void {
+function configShape(alignfirst: string): Check<ConfigFile> {
+  const warn = (path: string, key: string) => warnUnknownSetting(path, key, alignfirst);
+  const quotaShape = object<QuotaSettings>(
+    {
+      source: literal("claude", "codex", "none"),
+      configDir: optional(directoryValue),
+      env: optional(environmentShape),
+      unset: optional(arrayOf(environmentName)),
+    },
+    warn,
+  );
+  const profileShape = object<CodingProfile>(
+    {
+      agent: literal(...CODING_AGENTS),
+      default: optional(boolean),
+      configDir: optional(directoryValue),
+      defaultModel: optional(nonblankString),
+      models: optional(arrayOf(nonblankString)),
+      modelAliases: optional(record(nonblankString, nonblankString)),
+      skipPermissions: optional(boolean),
+      env: optional(environmentShape),
+      unset: optional(arrayOf(environmentName)),
+      quota: optional(quotaShape),
+    },
+    warn,
+  );
+  const codeShape = object<CodeSettings>(
+    {
+      profile: optional(nonblankString),
+      profiles: optional(record(profileShape, nonblankString)),
+    },
+    warn,
+  );
+  return object<ConfigFile>(
+    {
+      platform: optional(literal(...PLATFORMS)),
+      projectsRoot: optional(nonEmptyString),
+      code: optional(codeShape),
+    },
+    warn,
+  );
+}
+
+function warnUnknownSetting(path: string, key: string, alignfirst: string): void {
   const quoted = JSON.stringify(key).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (character) =>
     character
       .split("")
@@ -205,9 +211,8 @@ function warnUnknownSetting(path: string, key: string): void {
     migration =
       "code.defaultProfiles is retired: manually move each needed preference to its referenced " +
       "matching-agent profile's default: true (omit singleton flags), remove the map and " +
-      "keep profile names unchanged. See " +
-      "https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/" +
-      "references/alignfirst-upgrade.md#convert-aligndev-profile-defaults";
+      'keep profile names unchanged. See "Convert AlignDev Profile Defaults" in ' +
+      `\`${alignfirst} setup guide upgrade\`.`;
   } else if (path === "code" && RETIRED_CODE_KEYS.includes(key)) {
     migration =
       "Retired launch setting: move it into code.profiles and select one with code.profile " +

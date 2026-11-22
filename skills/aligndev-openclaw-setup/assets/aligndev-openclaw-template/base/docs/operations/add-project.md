@@ -1,0 +1,159 @@
+---
+title: Add a Project
+read_when:
+  - opening a repository to the assistant
+  - a fresh clone's workspace setup or dev server fails
+---
+
+# Add a Project
+
+**Operator.** Read the projects guide first. Every project is a direct child of `~/projects`, and the
+clone uses the service account's git access from `03`. Before onboarding Pi, agree on a dedicated parent containing the clone and all future worktrees. Verify the workspace's actual layout against it. If the direct-child inventory layout prevents that boundary, arrange a compatible layout and discovery policy with the operator before cloning; do not silently trust all `~/projects`.
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev guide project'
+```
+
+## Clone and prepare
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc 'git -C ~/projects clone <repository-url>'
+```
+
+Prepare the clone by following `npx -y alignfirst setup guide assistant-project`.
+The preparation writes the bootstrap section and `alignfirst.json` or `alignfirst.jsonc`, and configures docmap, workspace, and
+an explicitly referenced assistant guide (commonly `DEVELOPERS.md`). Read it with `alignfirst assistant-instructions`; use `locations.assistantInstructionsFile` from the config report for edits. It installs no AlignFirst skill.
+
+<!-- TEAM_PLANS_SECTION -->
+## Work-files repository
+
+The service account keeps its work-files clone beside the projects. Clone it with the service account's
+credentials when it is missing:
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc '
+if [ ! -d ~/projects/{{PLANS_CLONE_NAME}}/.git ]; then
+  git -C ~/projects clone {{PLANS_REPOSITORY_URL}} {{PLANS_CLONE_NAME}}
+fi
+'
+```
+
+From the new project root, link the work-files folder configured in the selected project settings:
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc '
+cd ~/projects/<repo>
+alignfirst plans setup ~/projects/{{PLANS_CLONE_NAME}}
+'
+```
+
+Without a usable link, `workspace setup` aborts on `alignfirst plans check`.
+<!-- TEAM_PLANS_SECTION -->
+
+## Select a provisioned profile
+
+The deployment default is `code.profile`. To route this project elsewhere, edit the service account's `~/.alignfirst/companions/registry.json`, preserving existing entries, `dir` and `items`. A profile-only entry is valid:
+
+```json
+{
+  "projects": {
+    "~/projects/<repo>": { "aligndev": { "profile": "<provisioned-profile>" } }
+  }
+}
+```
+
+Use the real main-worktree path, not a linked worktree. A selection alone creates no companion and relocates no work files. The registry stays service-writable; it can choose any provisioned account. Both the registry and AlignDev settings are service-writable routing, not account authorization.
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && alignfirst config --json && aligndev guide code'
+```
+
+Confirm the effective profile, native directory and model without printing credentials. An explicit `--profile` overrides the registry. Changing a profile on resume must retain the native agent/session and selected account's conversation; it never copies sessions or silently starts another. Pi also requires the recorded real cwd.
+
+### Pi parent trust
+
+Repeat for every Pi profile that may serve this project. Validate its inventory path and retain its original null/string selection; shared paths may have distinct invocation modes. Before hardening, use a service login shell with the same routing. After hardening, use this interactive maintenance window, reproducing any additional profile `env`/`unset` and credential routing:
+
+```sh
+sudo /usr/local/sbin/alignfirst-assistant-maintenance agent-config -- \
+  bash -l -s -- <pi-profile> <approved-parent> <<'EOS'
+set -eo pipefail
+settings="$HOME/.alignfirst/aligndev.settings.json"
+/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
+  "$settings" "$HOME" "$settings" >/dev/null
+launch=$(jq -ce --arg name "$1" '.code.profiles[$name] | select(.agent == "pi")' "$settings")
+store=$(/usr/bin/node -e '
+  const {resolve, dirname} = require("node:path");
+  const value = JSON.parse(process.argv[1]).configDir;
+  console.log(value === null ? resolve(process.env.HOME, ".pi/agent") :
+    value.startsWith("~/") ? resolve(process.env.HOME, value.slice(2)) :
+    resolve(dirname(process.argv[2]), value));' "$launch" "$settings")
+if jq -e '.configDir == null' <<<"$launch" >/dev/null; then
+  unset PI_CODING_AGENT_DIR
+else
+  export PI_CODING_AGENT_DIR="$store"
+fi
+cd "$2"
+exec pi < /dev/tty
+EOS
+```
+
+Run `/trust`, select **Trust**, then exit and restart Pi. From an immediate child, **Trust parent folder** is equivalent. Record the canonical approved parent in the onboarding report. Saved decisions live in `<agent-dir>/trust.json`; the nearest decision wins. Verify a future worktree beneath that parent after restart. Never add `--approve` or set `defaultProjectTrust: "always"`. Future project resources inherit the decision; trust is not an OS sandbox or protection against project modifications.
+
+The maintenance window leaves the gateway stopped. Restart it only after successful policy restoration.
+
+## Claim ports
+
+A portless project needs no claim. For a dev-server with ports, calculate
+`size = port names × expected concurrent workspaces`, then reserve the complete project block:
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc '
+aligndev project free-ports --size <size>
+'
+```
+
+When the projects directory declares several ranges, inspect `aligndev guide project` and pass `--range <code>` for the project kind. This is a lookup, not a reservation. Record first/last only in the selected merged configuration's `devServer.ports`, whether project- or companion-owned.
+
+## Check the inventory
+
+After writing the merged configuration, prepare usable effective plans and selected runtime storage. Only project-local runtime requires ignored, untracked `.local-wt/`; companion runtime creates no checkout directory or link. Before workspace setup, run the read-only inventory gate:
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project doctor'
+```
+
+Stop when it reports an error. Resolve every configuration, discovery, and port conflict first.
+
+## Set up the workspace
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && alignfirst workspace setup'
+```
+
+<!-- DEV_SERVER_GATEWAY_SECTION -->
+The plain `workspace setup` above is enough for a project reachable through the gateway: its
+run-file patches read `REMOTE_DEV_DOMAIN` from `environment.d/common.conf`.
+<!-- DEV_SERVER_GATEWAY_SECTION -->
+
+## Smoke test
+
+Bring the dev server up, probe the URL it prints, bring it down, then inspect the discovered project:
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && alignfirst dev up'
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:<port>/
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && alignfirst dev down'
+sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project status ~/projects/<repo>'
+```
+
+## Remove
+
+Remove every linked workspace through the project's workspace command, then delete the clone. The
+next listing no longer shows it:
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && alignfirst workspace remove <workspace>'
+sudo -H -u {{SERVICE_USER}} bash -lc 'rm -rf ~/projects/<repo>'
+sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project list'
+```

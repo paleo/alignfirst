@@ -160,7 +160,7 @@ function observed() {
 
 describe("independent quota configuration", () => {
   it("uses each native profile's finalized coding environment when quota is omitted", () => {
-    const config = loadConfig(home);
+    const config = loadConfig(home, "alignfirst");
     for (const [profile, store] of [
       ["a", nativeA],
       ["b", nativeB],
@@ -181,7 +181,7 @@ describe("independent quota configuration", () => {
       const variable = agent === "claude" ? "CLAUDE_CONFIG_DIR" : "CODEX_HOME";
       const caller = Object.freeze({ ...env, [variable]: nativeB });
       settings({ profiles: { a: { agent, configDir: null, unset: ["TOKEN"] } } });
-      const code = resolveCodeConfig(loadConfig(home), caller);
+      const code = resolveCodeConfig(loadConfig(home, "alignfirst"), caller);
       const quota = resolveQuotaConfig(code, caller);
       expect(quota).toEqual({ source: agent, env: code.childEnv });
       if (quota.source === "none") throw new Error("unexpected disabled quota");
@@ -223,7 +223,7 @@ describe("independent quota configuration", () => {
         });
         const path = join(home, ".alignfirst/aligndev.settings.json");
         const bytes = readFileSync(path);
-        const config = loadConfig(home);
+        const config = loadConfig(home, "alignfirst");
         const stored = config.code.profiles?.a;
         Object.freeze(stored?.unset);
         Object.freeze(stored?.quota?.unset);
@@ -286,7 +286,7 @@ describe("independent quota configuration", () => {
         CODEX_THREAD_ID: "parent",
       };
       const original = { ...caller };
-      const code = resolveCodeConfig(loadConfig(home), caller);
+      const code = resolveCodeConfig(loadConfig(home, "alignfirst"), caller);
       const quota = resolveQuotaConfig(code, caller);
       expect(quota.source).toBe("codex");
       if (quota.source === "none") throw new Error("unexpected disabled quota");
@@ -321,7 +321,7 @@ describe("independent quota configuration", () => {
         },
       },
     });
-    const code = resolveCodeConfig(loadConfig(home), env);
+    const code = resolveCodeConfig(loadConfig(home, "alignfirst"), env);
     const quota = resolveQuotaConfig(code, env);
     expect(quota).toEqual({
       source: "claude",
@@ -345,7 +345,9 @@ describe("independent quota configuration", () => {
       },
     });
     const caller = { ...env, CODEX_HOME: nativeB };
-    expect(resolveQuotaConfig(resolveCodeConfig(loadConfig(home), caller), caller)).toEqual({
+    expect(
+      resolveQuotaConfig(resolveCodeConfig(loadConfig(home, "alignfirst"), caller), caller),
+    ).toEqual({
       source: "codex",
       env: expect.objectContaining({ CODEX_HOME: nativeB }),
     });
@@ -371,7 +373,9 @@ describe("independent quota configuration", () => {
     });
     expect(result.stdout).toContain("Codex quota\n5 hours: 15% used");
     expect(result.stdout).not.toContain("fixture-secret");
-    expect(resolveCodeConfig(loadConfig(home), env).childEnv.PI_CODING_AGENT_DIR).toBe(nativeA);
+    expect(
+      resolveCodeConfig(loadConfig(home, "alignfirst"), env).childEnv.PI_CODING_AGENT_DIR,
+    ).toBe(nativeA);
     expect(records()).toHaveLength(0);
   });
 
@@ -461,7 +465,7 @@ describe("effective profiles through CLI launch and resume", () => {
   it.each([false, true])(
     "records inferred singleton/preferred profiles and preserves named resume: %s",
     async (multiple) => {
-      const profiles = loadConfig(home).code.profiles;
+      const profiles = loadConfig(home, "alignfirst").code.profiles;
       settings({
         profile: undefined,
         profiles: {

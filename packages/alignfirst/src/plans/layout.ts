@@ -50,7 +50,7 @@ export function assertPlansNotProjectTracked(
     `Effective .plans contains files tracked by this project's repository: ${trackedPath}.\n` +
       "Untrack and ignore these work files in their containing worktree, then commit " +
       `before retrying or running ${form} plans setup <clone-dir>.\n` +
-      `Companion work files: ${form} companion register, then set items[".plans"] to "companion" in the registry.`,
+      `Companion work files: ${form} companion register --item .plans=companion`,
   );
 }
 

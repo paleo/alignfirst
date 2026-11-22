@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import type { AgentToolCall, ScenarioContext } from "@alignfirst/openclaw-test";
 import {
   extractCodingPrompt,
@@ -16,14 +15,14 @@ import {
 import { waitForReport } from "./_lib/outbound.ts";
 import type { Step } from "./_lib/types.ts";
 import { LIFECYCLE_PROJECT_PARENT, NOVA_PROJECT_PATH } from "./_lib/project-fixtures.ts";
-import { waitForFile } from "./_lib/request-file.ts";
 import { resetFixtures } from "./_lib/reset-fixture.ts";
 import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstrap.ts";
 
 const PROJECT = "nova";
 const PORTS_PER_WORKSPACE = "2";
 const MAX_WORKSPACES = "4";
-const REQUEST_PATH = `${NOVA_PROJECT_PATH}/.plans/side-1/A1-request.md`;
+// Relative to the effective plans: creation selects companion plans, outside the runner's mounts.
+const REQUEST_FILE = "side-1/A1-request.md";
 
 // Reliability note (2026-08-23, claude-sonnet-5): across seven stabilization
 // runs this scenario never exceeded 50% on Discord (Slack ended 2/2). Creation
@@ -43,7 +42,7 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
       if (isCodingProtocolPrompt(prompt)) {
         throw new Error(`project creation used an AlignFirst protocol: ${prompt.slice(0, 200)}`);
       }
-      const capturedRequest = await readFile(REQUEST_PATH, "utf8").catch(() => "");
+      const capturedRequest = await readCreationRequest(scenario);
       if (!hasCompleteCreationRequest(capturedRequest)) {
         throw new Error("project bootstrap started before the side-1 request reservation");
       }
@@ -69,7 +68,8 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
         "Bootstrap complete in the main worktree. Created: package.json, pnpm-lock.yaml, " +
         "app.mjs, home-page.mjs, comparables.mjs, export-handler.mjs, app.test.mjs, " +
         "README.md, DEVELOPERS.md, docs/, scripts/workspace/ (workspace tooling), local.env.example, " +
-        ".local/, .gitignore and a merged alignfirst.json. This minimal scaffold is deliberate and " +
+        ".local/, .gitignore and a merged alignfirst.json declaring the frontend and api ports. " +
+        "This minimal scaffold is deliberate and " +
         "complete — nothing else is required before the initial commit on main."
       );
     },
@@ -90,7 +90,7 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
       `Réserve ${PORTS_PER_WORKSPACE} ports par workspace pour ${MAX_WORKSPACES} workspaces. ` +
       "Tu peux procéder jusqu'au commit initial sur main.",
   );
-  const capturedRequest = await waitForFile(REQUEST_PATH, 120_000);
+  const capturedRequest = await waitForCreationRequest(ctx, 120_000);
   if (!hasCompleteCreationRequest(capturedRequest)) {
     throw new Error(`side-1 creation request omitted details: ${JSON.stringify(capturedRequest)}`);
   }
@@ -143,6 +143,35 @@ async function configureGitIdentity(ctx: ScenarioContext): Promise<void> {
     ["git", "config", "--global", "user.email", "myassistant@example.test"],
     "deployment Git author email",
   );
+}
+
+async function waitForCreationRequest(ctx: ScenarioContext, timeoutMs: number): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const request = await readCreationRequest(ctx);
+    if (request !== "") return request;
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+  throw new Error(`the ${REQUEST_FILE} creation request did not appear within ${timeoutMs}ms`);
+}
+
+/** The request in nova's effective plans, or "" while the project or the file is absent. */
+async function readCreationRequest(ctx: ScenarioContext): Promise<string> {
+  const result = await ctx.execInGateway(
+    [
+      "node",
+      "-e",
+      "const fs=require('node:fs');const cp=require('node:child_process');" +
+        "const [cwd,file]=process.argv.slice(1);try{" +
+        "const config=JSON.parse(cp.execFileSync('alignfirst',['config','--json'],{cwd,encoding:'utf8',stdio:['ignore','pipe','ignore']}));" +
+        "process.stdout.write(fs.readFileSync(config.locations['.plans'].path+'/'+file,'utf8'));}catch{}",
+      NOVA_PROJECT_PATH,
+      REQUEST_FILE,
+    ],
+    { timeoutMs: 30_000 },
+  );
+  if (result.exitCode !== 0) throw new Error(`creation request read failed: ${result.stderr}`);
+  return result.stdout;
 }
 
 function hasCompleteCreationRequest(request: string): boolean {
@@ -235,11 +264,14 @@ async function copyBootstrapTemplate(ctx: ScenarioContext): Promise<void> {
       "sh",
       "-c",
       `cp -R /opt/aligndev-openclaw-tests/fixtures/template/. "${NOVA_PROJECT_PATH}/" && ` +
-        `mkdir -p "${NOVA_PROJECT_PATH}/.local" "${NOVA_PROJECT_PATH}/.plans" && ` +
+        `mkdir -p "${NOVA_PROJECT_PATH}/.local" && ` +
         `node --input-type=module -e 'import fs from "node:fs"; ` +
         `import { patchDevServerRange } from "/opt/openclaw-test/scripts/fixture-personalization.ts"; ` +
         `const p = "${NOVA_PROJECT_PATH}/alignfirst.json"; ` +
-        `fs.writeFileSync(p, patchDevServerRange(fs.readFileSync(p, "utf8"), 6600, 6607));'`,
+        `const m = JSON.parse(patchDevServerRange(fs.readFileSync(p, "utf8"), 6600, 6607)); ` +
+        // The request asks for two ports per workspace.
+        `m.devServer.ports.declare = ["frontend", "api"]; ` +
+        `fs.writeFileSync(p, JSON.stringify(m, null, 2) + "\\n");'`,
     ],
     { timeoutMs: 30_000 },
   );
@@ -300,7 +332,7 @@ function assertSetupGuideDelegation(
   if (protocolPrompt !== undefined) {
     throw new Error(`creation delegated through a protocol: ${JSON.stringify(protocolPrompt)}`);
   }
-  if (!prompts.some((prompt) => /alignfirst-setup-guide/iu.test(prompt))) {
+  if (!prompts.some((prompt) => /setup guide assistant-project/u.test(prompt))) {
     throw new Error(
       `creation did not delegate through the setup guide: ${JSON.stringify(prompts)}`,
     );

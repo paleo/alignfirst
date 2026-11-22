@@ -79,7 +79,7 @@ Unique tags isolate names, not CPU, RAM, disk or build cache. Agree on a resourc
 
 ## Configuration
 
-Use only Terra (`openai/gpt-6.1-terra`) for conversation-model tests. This version has not yet been validated by live scenarios; the dated acceptance records below describe earlier runs. The judge runs `openrouter/anthropic/claude-haiku-5.5` on `OPENROUTER_API_KEY`. The Anthropic, Qwen and GLM providers in `openclaw.json` stay as examples at their latest model versions; the runner drops a provider whose key is empty.
+Use only Terra (`openai/gpt-6.1-terra`) for conversation-model tests. The static catalog of the pinned OpenClaw 2026.10.9 predates this model, so `openclaw.json` declares it under `models.providers.openai.models`; without that row, the first turn fails with `Unknown model`. The judge runs `openrouter/anthropic/claude-haiku-5.5` on `OPENROUTER_API_KEY`. The Anthropic, Qwen and GLM providers in `openclaw.json` stay as examples at their latest model versions; the runner drops a provider whose key is empty.
 
 - `OPENCLAW_WORKSPACE_DIR=./workspace` — the `myassistant` workspace, bind-mounted into the gateway. Workspace edits iterate live.
 - `OPENCLAW_CODEX_HOME` — absolute path to a file-backed Codex home. Required for `openai/gpt-6.1-terra`. The gateway mounts it read-only and imports its ChatGPT/Codex credential into the disposable `main` agent's OpenClaw auth store at startup; no OpenAI Platform API key is required. Create a dedicated login so test authentication is isolated from the main Codex session:
@@ -199,6 +199,17 @@ Select `CODING_AGENT=claude` or `CODING_AGENT=pi` for the other children as need
 
 **Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A11` → `ABC-0110`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01`, listed in [`workspace/USER.md`](../../aligndev-openclaw-tests/workspace/USER.md). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
 
+### side-38 acceptance — 2026-11-22
+
+Terra with the declared model row, Haiku through OpenRouter as judge, one Slack iteration on one worker:
+
+| Case | Result | Artifact run under `aligndev-openclaw-tests/artifacts/` |
+| --- | --- | --- |
+| A12 project creation | Passed | `2026-11-22T11-56-01-510Z` |
+| A24 missing plans | Passed | `2026-11-22T12-06-24-889Z` |
+
+The diagnostic runs exposed three scenario defects, now fixed. A12 read the creation request from project plans, while creation now selects companion plans. Its mock bootstrap declared one port where the request asks for two per workspace. The A24 and A25 mock rejected a follow-up delegation in the ticket worktree. A25 was not rerun.
+
 ### side-29 acceptance — 2026-10-21
 
 The final selected Slack cells used Terra and Haiku through OpenRouter, one iteration each:
@@ -280,7 +291,7 @@ This harness vendors the **local** sources of the four generic `@alignfirst/open
 
 The dependencies are `file:vendor/<pkg>.tgz`; [`scripts/vendor-packages.mjs`](../../aligndev-openclaw-tests/scripts/vendor-packages.mjs) builds each package and `npm pack`s it into `vendor/` (gitignored). The Docker build context is `aligndev-openclaw-tests/`, so the tarballs must live in `aligndev-openclaw-tests/vendor/`.
 
-`npm run env:build` chains `vendor` → `npm install` (refreshing `package-lock.json`) → `openclaw-test env build`, so a source edit in any vendored package is picked up on the next build. Run `npm run vendor` before a standalone `npm install`; the tarballs must exist for resolution. For offline helper checks only, run these two steps without `env:build`, Docker or credential access. Use cached packages with `npm install --offline` when available. Gateway acceptance uses this checkout's built CLI and test-owned skill links into its setup-guide assets, never a GitHub-fetched guide or published older workspace dependency.
+`npm run env:build` chains `vendor` → `npm install` (refreshing `package-lock.json`) → `openclaw-test env build`, so a source edit in any vendored package is picked up on the next build. Run `npm run vendor` before a standalone `npm install`; the tarballs must exist for resolution. For offline helper checks only, run these two steps without `env:build`, Docker or credential access. Use cached packages with `npm install --offline` when available. Gateway acceptance uses this checkout's built CLIs, which also serve the setup guide, never a GitHub-fetched guide or published older workspace dependency.
 
 The plugin is explicitly allowlisted, loaded from its installed package path, and exposes optional tool `thread_handoff`. Slack uses `replyToMode: "off"`; Discord remains non-automatic. Both surface IDs map to their native receipt contract in `plugins.entries.alignfirst-service.config.channelSurfaces`.
 

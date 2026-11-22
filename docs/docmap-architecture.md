@@ -108,4 +108,4 @@ Tests live in `packages/docmap/test/docmap.test.ts` and use fixture directories 
 
 ## Authoring Guide and Setup
 
-The authoring conventions (frontmatter contract, naming, workflow) ship with the CLI as `templates/guide.md`: `docmap --guide` prints that file, rendered with the project's package-manager prefix. Project setup — bootstrapping a `docs/` tree, wiring docmap into a repo, and migrating existing docs or skills — lives in the separate `alignfirst-setup-guide` skill, distributed outside the npm package.
+The authoring conventions (frontmatter contract, naming, workflow) ship with the CLI as `templates/guide.md`: `docmap --guide` prints that file, rendered with the project's package-manager prefix. Project setup — bootstrapping a `docs/` tree, wiring docmap into a repo, and migrating existing docs or skills — lives in the `docmap` topics of the AlignFirst setup guide: `alignfirst setup guide docmap`.

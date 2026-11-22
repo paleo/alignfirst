@@ -45,44 +45,32 @@ AlignFirst stores the work files of a ticket, such as specifications, plans and 
 
 ## Set up a project (with your agent)
 
-Install the alignfirst-setup-guide skill:
-
-```sh
-npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
-```
-
-Then ask your agent:
+Ask your agent:
 
 ```text
-Use your alignfirst-setup-guide skill. What AlignFirst tooling could we add in this project?
+Run `npx -y alignfirst setup`. What AlignFirst tooling could we add in this project?
 ```
 
-The guide installs the selected components and configures the repository. You can remove the setup-guide skill once setup is complete.
+The guide installs the selected components and configures the repository.
 
 ## Set up a project manually
 
-1. Create `.plans/` and ignore it. It must stay untracked by the project's repository:
+1. From the main-worktree root, run `setup init` with the project's conventions:
 
    ```sh
-   mkdir .plans
-   echo .plans >> .gitignore
+   npx -y alignfirst setup init \
+     --ticket-pattern '^[A-Z]+-\d+$' \
+     --default-branch main \
+     --branch-template '{TICKET_ID}/{slug-1-3-words}' \
+     --commit-style conventionalCommit \
+     --commit-ticket-reference bracketed
    ```
 
-2. Load the project context. Add this section to the project's `AGENTS.md`, as its first `##` section:
+   It writes `alignfirst.json` ([format](https://github.com/paleo/alignfirst/blob/main/packages/alignfirst/templates/setup/topics/configuration.md)), creates `.plans/` and ignores it, and adds the bootstrap section to `AGENTS.md`. `npx -y alignfirst setup init --help` lists the flags.
 
-   ```markdown
-   ## Start every session with the project context
+2. Check the bootstrap section. `npx -y alignfirst setup instructions` reports its status and prints the canonical text.
 
-   Run `npx -y alignfirst context` from the repository root as your first command, whatever the task. It prints the project conventions, the documentation map, and the AlignFirst protocols.
-
-   ### Conventions
-
-   - Ticket IDs: `^[A-Z]+-\d+$`, such as `ABC-123`.
-   - Branch names: `{TICKET_ID}/{slug-1-3-words}`.
-   - Commits: `type: [TICKET_ID] summary`.
-   ```
-
-   `alignfirst.json` or `alignfirst.jsonc` is optional ([schema](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/alignfirst-skills-setup.md#with-alignfirstjson)). With it, `alignfirst context` prints the conventions, so omit the `### Conventions` sub-section.
+Without `alignfirst.json`, a `### Conventions` sub-section under the bootstrap section of `AGENTS.md` remains supported.
 
 ## CLI commands
 
@@ -93,7 +81,8 @@ The guide installs the selected components and configures the repository. You ca
 - `docmap` — Browse project documentation.
 - `conventions` — Print the effective project conventions.
 - `context` — Print project conventions, the documentation map and protocol aliases.
-- `companion register` — Register the current project in the companion registry. `--dir` sets its companion directory; `--create-dir` also creates it.
+- `setup` — Report the project's AlignFirst state and print the setup guide. `setup guide <topic>` prints a topic, `setup init` adopts the protocols, `setup instructions` checks or writes the bootstrap section.
+- `companion register` — Register the current project in the companion registry. `--dir` sets its companion directory; `--create-dir` also creates it. `--default-location` sets the registration's default location; `--item <name>=<location>` sets one item and is repeatable.
 - `companion unregister` — Remove the current project from the companion registry. `--remove-dir` also removes its companion directory.
 - `config` — Report the effective project configuration, the companion directory and the location of each AlignFirst file.
 - `assistant-instructions` — Print project guidance and explicitly configured assistant instructions.
@@ -119,16 +108,16 @@ One selected `alignfirst.json`/`.jsonc` holds `schemaVersion: 1`, optional URI-v
 
 The legacy `developerInstructions` key remains readable in configuration and companion registry items. Reads warn and expose `assistantInstructionsFile` without rewriting either file. A defined `assistantInstructionsFile` takes precedence, including when invalid; invalid canonical values fail validation. The legacy `developer-instructions` command prints the same output as `assistant-instructions` and warns.
 
-External owners adopt through setup and run teardown before their own deletion. Failed cleanup retains identity for retry. See [workspace setup](https://github.com/paleo/alignfirst/blob/main/skills/alignfirst-setup-guide/references/workspace-setup.md) and [the clean-break upgrade runbook](https://github.com/paleo/alignfirst/blob/main/docs/upgrading-multi-stack-workspaces.md) before converting old wrappers/settings/state.
+External owners adopt through setup and run teardown before their own deletion. Failed cleanup retains identity for retry. See [workspace setup](https://github.com/paleo/alignfirst/blob/main/packages/alignfirst/templates/setup/topics/workspace.md) and [the clean-break upgrade runbook](https://github.com/paleo/alignfirst/blob/main/docs/upgrading-multi-stack-workspaces.md) before converting old wrappers/settings/state.
 
 ## Companion directories
 
 A companion directory holds a project's AlignFirst files (`alignfirst.json`/`.jsonc`, `.plans`, `docs`, project instructions) outside its repository. Protocols and Docmap can leave repository files untouched; runtime can also live externally. `defaultLocation` supplies per-registration placement below explicit item settings. Logical `assistantInstructionsFile` selects the reference root; `workspaceRuntime` uses companion storage only when effectively companion, while project/auto stays local. Ordinary auto selects existing companion files, then project files, then the companion destination. Commands, generated application files and shared directories may still write project files. Each project has its own, declared in `~/.alignfirst/companions/registry.json`.
 
-Ensure the alignfirst-setup-guide skill is installed, then ask your agent:
+Ask your agent:
 
 ```text
-Use your alignfirst-setup-guide skill. Set up AlignFirst in this project without touching the repository.
+Run `npx -y alignfirst setup`. Use a companion directory, no footprint please.
 ```
 
 The same registry can select a named AlignDev profile without a companion:
@@ -147,13 +136,7 @@ Edit this selection by hand. A profile-only entry leaves project files in place,
 
 ### Loading the AlignFirst context
 
-If you can't edit the project's `AGENTS.md` file, add this section to your global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the equivalent), with the project's path:
-
-```markdown
-## AlignFirst - Start every session with the project context
-
-When you work on the project `/path/to/a/project`, run `npx -y alignfirst context` as your first command, whatever the task.
-```
+If you can't edit the project's `AGENTS.md` file, add an AlignFirst section to your global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or the equivalent). When the project's companion registration has `defaultLocation: "companion"`, `npx -y alignfirst setup instructions` prints that section with the project's path.
 
 ### Global skill diagnostics
 
@@ -161,17 +144,11 @@ When you work on the project `/path/to/a/project`, run `npx -y alignfirst contex
 
 ## Upgrade from v1, v2, or v3
 
-Install the setup-guide skill and ask your agent to run its upgrade route:
-
-```sh
-npx skills add https://github.com/paleo/alignfirst --global --skill alignfirst-setup-guide
-```
+Ask your agent:
 
 ```text
-Use your alignfirst-setup-guide skill. Upgrade AlignFirst in this project.
+Run `npx -y alignfirst setup`. Upgrade AlignFirst in this project.
 ```
-
-You can remove the setup-guide skill once the upgrade is complete.
 
 ## License
 

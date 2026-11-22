@@ -18,12 +18,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { renderPiLauncher } from "../../skills/alignfirst-setup-guide/assets/aligndev-openclaw-template/base/infra/openclaw/node-runtime/pi-launcher.mjs";
+import { renderPiLauncher } from "../../skills/aligndev-openclaw-setup/assets/aligndev-openclaw-template/base/infra/openclaw/node-runtime/pi-launcher.mjs";
 
 const repository = fileURLToPath(new URL("../../", import.meta.url));
 const runtime = join(
   repository,
-  "skills/alignfirst-setup-guide/assets/aligndev-openclaw-template/base/infra/openclaw/node-runtime",
+  "skills/aligndev-openclaw-setup/assets/aligndev-openclaw-template/base/infra/openclaw/node-runtime",
 );
 const host = join(repository, "node_modules/@earendil-works/pi-coding-agent");
 const guard = join(repository, "scripts/test/fixtures/deployment-deny-network.mjs");

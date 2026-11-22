@@ -24,10 +24,10 @@ Wait for approval before changing registration, selection, or directories. Do no
 
 After approval:
 
-1. If no companion is registered, run `{{ALIGNFIRST}} companion register` from PROJECT_PATH. This also preserves a profile-only registration.
-2. Reread `{{ALIGNFIRST}} config --json`. Retain `companion.dir` and `companion.key`; use the reported key exactly.
-3. Read `~/.alignfirst/companions/registry.json` before editing. Its project entries live under `projects`. Edit only `projects[companion.key]`, setting `items[".plans"]` to `"companion"` within that entry. Use the key reported by config, not a guessed key or a new top-level `items` object. Preserve all other fields, item settings, profile selections, and entries.
-4. Reread `{{ALIGNFIRST}} config --json`. Verify that `locations[".plans"].in` is `"companion"` and its path is the selected companion's `.plans`. Create that directory if missing, preserving existing contents. Do not create a worktree `.plans` link for companion plans.
-5. Run `{{ALIGNFIRST}} plans check --json` again from PROJECT_PATH, and from any already selected worktree, then resume the interrupted operation.
+1. Select companion plans from PROJECT_PATH with one command. It registers the companion when needed, and keeps an existing registration's directory, profile selection and other items.
+   - Project creation, or onboarding that prepares the repository on a branch: run `{{ALIGNFIRST}} companion register --default-location project --item .plans=companion`. The configuration and the other files the preparation writes then stay in the project.
+   - Any other case: run `{{ALIGNFIRST}} companion register --item .plans=companion`.
+2. Reread `{{ALIGNFIRST}} config --json`. Verify that `locations[".plans"].in` is `"companion"` and its path is the selected companion's `.plans`. Create that directory if missing, preserving existing contents. Do not create a worktree `.plans` link for companion plans.
+3. Run `{{ALIGNFIRST}} plans check --json` again from PROJECT_PATH, and from any already selected worktree, then resume the interrupted operation.
 
 This is the sole assistant preparation procedure. `{{ALIGNFIRST}} workspace setup` and coding launches validate work files; they do not authorize this selection or provision missing plans.

@@ -1,9 +1,3 @@
-import {
-  packageCommand,
-  readLaunchEvidence,
-  renderCommand,
-  resolveInvocation,
-} from "@alignfirst/docmap/invocation";
 import { existsSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -29,17 +23,13 @@ import {
   type ProjectLayout,
   renderItemLocation,
 } from "../project-layout.js";
+import { type InspectionLine as DoctorLine, inspectGlobalSkills } from "../inspection.js";
 import {
-  COMMAND_SKILLS,
-  findInstalledSkill,
-  type InstalledSkill,
-  resolveSkillRoots,
-} from "../skills.js";
-
-interface DoctorLine {
-  level: "ok" | "info" | "warn" | "error";
-  text: string;
-}
+  describeInstructions,
+  describeLegacySections,
+  type InstructionReport,
+  inspectInstructions,
+} from "../setup/instruction-status.js";
 
 export function runDoctor(ctx: CommandContext, args: string[]): number {
   const usage = `Usage: ${ctx.form} doctor\n`;
@@ -70,9 +60,10 @@ export function runDoctor(ctx: CommandContext, args: string[]): number {
     },
   ]);
   writeSection(ctx, "Git", () => inspectGit(ctx, resolved));
+  writeSection(ctx, "Instructions", () => inspectInstructionFiles(ctx));
   writeSection(ctx, "Work files", () => inspectPlans(ctx));
   writeSection(ctx, "Docmap", () => inspectDocmap(ctx));
-  writeSection(ctx, "Skills", () => inspectSkills(ctx));
+  writeSection(ctx, "Skills", () => inspectGlobalSkills(ctx));
   return 0;
 }
 
@@ -164,6 +155,19 @@ function inspectGit(
   return [{ level: "ok", text: `default branch ${branch.name} (${source})` }];
 }
 
+function inspectInstructionFiles(ctx: CommandContext): DoctorLine[] {
+  const report = inspectInstructions(ctx);
+  return [
+    { level: instructionLevel(report), text: describeInstructions(ctx, report) },
+    ...describeLegacySections(ctx, report).map((text): DoctorLine => ({ level: "warn", text })),
+  ];
+}
+
+function instructionLevel({ status }: InstructionReport): DoctorLine["level"] {
+  if (status === "current" || status === "global") return "ok";
+  return status === "absent" ? "info" : "warn";
+}
+
 function inspectPlans(ctx: CommandContext): DoctorLine[] {
   const mode = resolvePlansMode(ctx.cwd, layoutOf(ctx).locations[".plans"], ctx.form, ctx.home);
   if (mode.kind === "shared" && findStoppedRebase(mode.repoToplevel) !== undefined)
@@ -204,71 +208,4 @@ function readDocmapVersion(): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function inspectSkills(ctx: CommandContext): DoctorLine[] {
-  const roots = resolveSkillRoots(ctx);
-  const invocation =
-    ctx.invocation ??
-    resolveInvocation(
-      { packageName: "alignfirst", binaryName: "alignfirst" },
-      { ...readLaunchEvidence(), env: ctx.env, cwd: ctx.cwd },
-    );
-  const update = renderCommand(
-    packageCommand(invocation, { packageName: "skills", binaryName: "skills" }, "skills"),
-    ["update", "--global", "--yes"],
-  );
-  const alignfirst = findInstalledSkill(roots, "alignfirst");
-  const alignfirstLine: DoctorLine =
-    alignfirst === undefined
-      ? { level: "ok", text: "alignfirst none" }
-      : describeInstalledSkill("alignfirst", alignfirst, update);
-  const aligndevLine = describeAligndevSkill(findInstalledSkill(roots, "aligndev"));
-  const commands = COMMAND_SKILLS.map((name) => ({
-    name,
-    installed: findInstalledSkill(roots, name),
-  }));
-  if (commands.every(({ installed }) => installed === undefined))
-    return [alignfirstLine, aligndevLine, { level: "ok", text: "no command skill installed" }];
-  return [
-    alignfirstLine,
-    aligndevLine,
-    ...commands.map((command) => describeCommandSkill(command, update)),
-  ];
-}
-
-function describeAligndevSkill(installed: InstalledSkill | undefined): DoctorLine {
-  if (installed === undefined) return { level: "info", text: "aligndev none" };
-  return { level: "info", text: `aligndev ${installed.version ?? "unknown"} (${installed.root})` };
-}
-
-interface CommandSkill {
-  name: string;
-  installed: InstalledSkill | undefined;
-}
-
-function describeCommandSkill({ name, installed }: CommandSkill, update: string): DoctorLine {
-  if (installed === undefined) return { level: "warn", text: `${name} missing` };
-  return describeInstalledSkill(name, installed, update);
-}
-
-function describeInstalledSkill(
-  name: string,
-  installed: InstalledSkill,
-  update: string,
-): DoctorLine {
-  const version = installed.version ?? "unknown";
-  const major = majorOf(installed.version);
-  if (major === undefined || major < 4)
-    return {
-      level: "warn",
-      text: `${name} ${version} predates v4; update: ${update}`,
-    };
-  return { level: "ok", text: `${name} ${version} (${installed.root})` };
-}
-
-function majorOf(version: string | undefined): number | undefined {
-  if (version === undefined) return;
-  const match = /^(\d+)\./.exec(version);
-  return match === null ? undefined : Number(match[1]);
 }

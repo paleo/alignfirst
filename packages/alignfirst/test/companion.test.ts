@@ -162,6 +162,44 @@ describe("companion register", () => {
     });
   });
 
+  it("sets selections on an existing registration and keeps its other settings", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { home, project } = makeHome();
+    const entry = {
+      dir: "custom",
+      items: { docs: "project" },
+      aligndev: { profile: "work" },
+      extra: { nested: true },
+    };
+    writeRegistry(home, { projects: { "~/projects/app": entry } });
+    const result = await runMain(
+      ["companion", "register", "--default-location", "companion", "--item", ".plans=companion"],
+      { cwd: project, home },
+    );
+    expect(result.code).toBe(0);
+    expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({
+      projects: {
+        "~/projects/app": {
+          ...entry,
+          defaultLocation: "companion",
+          items: { docs: "project", ".plans": "companion" },
+        },
+      },
+    });
+  });
+
+  it("rejects --item _aligndev=project and leaves the registry unchanged", async () => {
+    const { home, project } = makeHome();
+    writeRegistry(home, { projects: { "~/projects/app": { dir: "custom" } } });
+    const before = readFileSync(registryOf(home), "utf-8");
+    const result = await runMain(["companion", "register", "--item", "_aligndev=project"], {
+      cwd: project,
+      home,
+    });
+    expect(result.code).toBe(1);
+    expect(readFileSync(registryOf(home), "utf-8")).toBe(before);
+  });
+
   it("creates the companion with --create-dir, even when registered", async () => {
     const { home, project } = makeHome();
     await runMain(["companion", "register"], { cwd: project, home });
@@ -252,6 +290,22 @@ describe("companion register", () => {
     const result = await runMain(["companion", "register"], { cwd: root, home });
     expect(result.code).toBe(1);
     expect(existsSync(join(home, ".alignfirst"))).toBe(false);
+  });
+
+  it("refuses to move the workspace storage while it owns resources", async () => {
+    const { home, project } = makeHome();
+    mkdirSync(join(project, ".plans"));
+    writeFileSync(join(project, ".git", "info", "exclude"), "/.plans\n/.local-wt/\n");
+    const setup = await runMain(["workspace", "setup"], { cwd: project, home });
+    expect(setup.code, setup.stderr).toBe(0);
+    const move = ["companion", "register", "--default-location", "companion"];
+    const refused = await runMain(move, { cwd: project, home });
+    expect(refused.code).toBe(1);
+    expect(existsSync(registryOf(home))).toBe(false);
+    expect((await runMain(["workspace", "teardown"], { cwd: project, home })).code).toBe(0);
+    const moved = await runMain(move, { cwd: project, home });
+    expect(moved.code, moved.stderr).toBe(0);
+    expect(resolveProjectLayout(project, home).storage.in).toBe("companion");
   });
 });
 

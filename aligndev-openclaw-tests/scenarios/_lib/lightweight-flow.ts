@@ -36,9 +36,18 @@ export async function runLightweightApprovalCase(
     prepareLightweightFixture({repo: ${JSON.stringify(NIMBUS_PROJECT_PATH)}, plans: ${JSON.stringify(mode)}});`,
   );
   const before = await snapshot(ctx);
+  let ticketWorktree: string | undefined;
   const coding = setupCodingAgentMock(ctx, {
     onPrompt: async (gateway, cwd, prompt) => {
       assert.notEqual(cwd, NIMBUS_PROJECT_PATH, "coding requires an already-created worktree");
+      if (ticketWorktree !== undefined) {
+        // A follow-up, such as a manual check, need not repeat the ticket ID.
+        assert.equal(cwd, ticketWorktree, "follow-up delegation left the ticket worktree");
+        return (
+          "Ran `node -e \"import('./label.mjs').then((m) => console.log(m.label))\"`: " +
+          "it printed Download. No file changed, nothing pushed."
+        );
+      }
       assert.match(prompt, /side-1/);
       const outcome = await gatewayNode(
         gateway,
@@ -67,6 +76,7 @@ export async function runLightweightApprovalCase(
         console.log('Changed label to Download; npm test passed (1 test). '+(noCommit?'Left uncommitted.':'Committed locally.')+' No server or push.');
       `,
       );
+      ticketWorktree = cwd;
       return outcome.trim();
     },
   });

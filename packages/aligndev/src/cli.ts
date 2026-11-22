@@ -55,8 +55,9 @@ export async function main(options?: MainOptions): Promise<number> {
     return 1;
   }
   try {
-    if (command === "code") return await runCode(tokens, () => loadConfig(ctx.home), ctx);
-    const config = loadConfig(ctx.home);
+    if (command === "code")
+      return await runCode(tokens, () => loadConfig(ctx.home, ctx.forms.alignfirst), ctx);
+    const config = loadConfig(ctx.home, ctx.forms.alignfirst);
     if (command === "project") return runProject(tokens, config, ctx);
     return runGuide(tokens, config, ctx);
   } catch (error) {

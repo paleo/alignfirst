@@ -2,9 +2,16 @@ import { parseArgs } from "node:util";
 import { CliError } from "../cli-error.js";
 import type { CommandContext } from "../context.js";
 import { parseCommandArgs } from "../parse-args.js";
-import { registerCompanion, unregisterCompanion } from "../project-layout.js";
+import {
+  ITEM_NAMES,
+  type ItemName,
+  registerCompanion,
+  unregisterCompanion,
+} from "../project-layout.js";
 
 const HELP_OPTION = { help: { type: "boolean", short: "h", default: false } } as const;
+const HELP_WIDTH = 100;
+const OPTION_INDENT = " ".repeat(16);
 
 export async function runCompanion(ctx: CommandContext, args: string[]): Promise<number> {
   const [command, ...rest] = args;
@@ -29,18 +36,30 @@ export async function runCompanion(ctx: CommandContext, args: string[]): Promise
 
 function companionUsage(ctx: CommandContext): string {
   return `Usage:
-  ${ctx.form} companion register [--dir <path>] [--create-dir]
+  ${ctx.form} companion register [--dir <path>] [--create-dir] [--default-location <location>]
+      [--item <name>=<location>]...
   ${ctx.form} companion unregister [--remove-dir [--force]]
 `;
 }
 
 async function runRegister(ctx: CommandContext, args: string[]): Promise<number> {
+  const itemHelp = wrapHelp(
+    `Set one item, keeping the others. Repeatable. Names: ${ITEM_NAMES.join(", ")}. ` +
+      "_aligndev accepts companion or auto.",
+    OPTION_INDENT,
+  );
   const usage = `Usage: ${ctx.form} companion register [--dir <path>] [--create-dir]
+    [--default-location <location>] [--item <name>=<location>]...
 
 Registers the current project in ~/.alignfirst/companions/registry.json as { "dir": <path> },
-with every item on "auto", preserving any profile selection. An existing companion is kept. Fails when the companion
-directory is or contains ~/.alignfirst/companions or the home directory, or when it is, contains
-or is inside the project or the companion directory of another key.
+preserving any profile selection. Every item starts on "auto"; --default-location and --item
+change the selections of a new or an existing registration. An existing registration keeps its
+companion directory.
+
+Fails when the companion directory is or contains ~/.alignfirst/companions or the home
+directory, or when it is, contains or is inside the project or the companion directory of
+another key. Also fails when the selections move the workspace storage while it still holds
+workspace resources or incomplete cleanup.
 
 Options:
   --dir <path>  The companion directory, written as given: absolute, ~/..., or relative to
@@ -49,6 +68,11 @@ Options:
                 from the registered directory.
   --create-dir  Create the companion directory when it is missing. Without it, the commands
                 that write an item there create it.
+  --default-location <location>
+                Set the registration's defaultLocation: project, companion or auto. It applies
+                to every item without its own selection.
+  --item <name>=<location>
+${itemHelp}
 `;
   const { values } = parseCommandArgs(usage, () =>
     parseArgs({
@@ -56,15 +80,22 @@ Options:
       options: {
         dir: { type: "string" },
         "create-dir": { type: "boolean", default: false },
+        "default-location": { type: "string" },
+        item: { type: "string", multiple: true },
         ...HELP_OPTION,
       },
       strict: true,
     } as const),
   );
   if (printedHelp(ctx, values.help, usage)) return 0;
+  const selections = {
+    defaultLocation: values["default-location"],
+    items: parseItemOptions(values.item ?? [], usage),
+  };
   const registration = await registerCompanion(ctx.cwd, ctx.home, {
     dir: values.dir,
     createDir: values["create-dir"],
+    ...selections,
   });
   ctx.stdout.write(
     registration.added
@@ -74,7 +105,38 @@ Options:
   const state = registration.created ? " (created)" : registration.exists ? "" : " (missing)";
   ctx.stdout.write(`Companion: ${registration.dir}${state}\n`);
   ctx.stdout.write(`Next: write the items at the paths \`${ctx.form} config\` reports.\n`);
+  writeSelections(ctx, selections);
   return 0;
+}
+
+/** Parses repeated `<name>=<location>` options; the registry shape validates the locations. */
+export function parseItemOptions(
+  options: string[],
+  usage: string,
+): Partial<Record<ItemName, string>> {
+  const items: Partial<Record<ItemName, string>> = {};
+  for (const option of options) {
+    const separator = option.indexOf("=");
+    const name = ITEM_NAMES.find((candidate) => candidate === option.slice(0, separator));
+    if (separator === -1 || name === undefined)
+      throw new CliError(
+        `Invalid --item "${option}": expected <name>=<location> with a name among ${ITEM_NAMES.join(", ")}.\n\n${usage}`,
+      );
+    items[name] = option.slice(separator + 1);
+  }
+  return items;
+}
+
+function writeSelections(
+  ctx: CommandContext,
+  {
+    defaultLocation,
+    items,
+  }: { defaultLocation?: string; items: Partial<Record<ItemName, string>> },
+): void {
+  if (defaultLocation !== undefined) ctx.stdout.write(`Default location: ${defaultLocation}\n`);
+  for (const [name, location] of Object.entries(items))
+    ctx.stdout.write(`Item ${name}: ${location}\n`);
 }
 
 async function runUnregister(ctx: CommandContext, args: string[]): Promise<number> {
@@ -126,4 +188,19 @@ Options:
 function printedHelp(ctx: CommandContext, help: boolean, usage: string): boolean {
   if (help) ctx.stdout.write(usage);
   return help;
+}
+
+/** Wraps `text` into lines of at most `HELP_WIDTH` characters, each starting with `indent`. */
+function wrapHelp(text: string, indent: string): string {
+  const lines: string[] = [];
+  let line = indent;
+  for (const word of text.split(" ")) {
+    if (line !== indent && line.length + 1 + word.length > HELP_WIDTH) {
+      lines.push(line);
+      line = indent;
+    }
+    line += line === indent ? word : ` ${word}`;
+  }
+  lines.push(line);
+  return lines.join("\n");
 }

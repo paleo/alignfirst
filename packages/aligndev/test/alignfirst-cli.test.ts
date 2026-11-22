@@ -22,7 +22,7 @@ const warnings = [
 ];
 const privateMessages = [
   "Warning: ignoring unknown .alignfirst.json setting plans.extra. Remove it or check its spelling.",
-  'Warning: /project/.alignfirst.json: plans.folder is deprecated; rename it to plans.repositoryFolder. See "Rename the Work-Files Folder Setting" in the setup guide\'s alignfirst-upgrade reference.',
+  'Warning: /project/.alignfirst.json: plans.folder is deprecated; rename it to plans.repositoryFolder. See "Rename the Work-Files Folder Setting" in `alignfirst setup guide upgrade`.',
   "private-child-stderr-value",
   "Warning: private-child-warning-value",
   "Error: private-child-error-value",

@@ -12,7 +12,7 @@ read_when:
 
 # Workspace Package Architecture
 
-For the consumer-facing blueprint — concepts, config fields, the CLI surface, and how to adapt the system to a repository — see the [workspace setup blueprint](../skills/alignfirst-setup-guide/references/workspace-setup.md). This document covers package internals and edge-case behavior that don't belong in that guide.
+For the consumer-facing blueprint — concepts, config fields, the CLI surface, and how to adapt the system to a repository — run `npx -y alignfirst setup guide workspace` ([template](../packages/alignfirst/templates/setup/topics/workspace.md)). This document covers package internals and edge-case behavior that don't belong in that guide.
 
 ## Configuration and host ownership
 

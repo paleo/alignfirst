@@ -19,6 +19,7 @@ import { runDoctor } from "./commands/doctor.js";
 import { runDocmap } from "./commands/docmap.js";
 import { runGuide } from "./commands/guide.js";
 import { runPlans } from "./commands/plans.js";
+import { runSetup } from "./commands/setup.js";
 import { runSync } from "./commands/sync.js";
 import { runDevCommand, runWorkspaceCommand } from "./commands/workspace.js";
 import { runTicket } from "./commands/ticket.js";
@@ -78,7 +79,7 @@ export async function main(options?: MainOptions): Promise<number> {
       ctx.stdout.write(renderHelp(ctx));
       return 0;
     }
-    if (!["config", "doctor", "workspace", "dev"].includes(command)) {
+    if (!["config", "doctor", "setup", "workspace", "dev"].includes(command)) {
       ctx.projectConfig = resolveProjectConfig(layoutOf(ctx));
     }
     const code = await dispatch(ctx, command, args);
@@ -110,6 +111,10 @@ Usage:
   ${ctx.form} conventions
   ${ctx.form} context
   ${ctx.form} assistant-instructions
+  ${ctx.form} setup
+  ${ctx.form} setup guide [<topic>]
+  ${ctx.form} setup init [options]
+  ${ctx.form} setup instructions [--write] [--file <path>]
   ${ctx.form} companion register | unregister
   ${ctx.form} config [--json]
   ${ctx.form} doctor
@@ -153,6 +158,8 @@ function dispatch(ctx: CommandContext, command: string, args: string[]): number 
       return runConfig(ctx, args);
     case "doctor":
       return runDoctor(ctx, args);
+    case "setup":
+      return runSetup(ctx, args);
     default:
       throw new CliError(`Error: unknown command "${command}".\n\n${renderHelp(ctx)}`);
   }

@@ -1,0 +1,40 @@
+# Upgrade from a Project Skill
+
+Remove the legacy standalone agent-skill installation while preserving project instructions and custom skills. Continue with `{{CMD}} setup guide upgrade-v3` after these steps.
+
+Commands are Unix-style. Adapt them for another shell.
+
+## Locate the Installation
+
+Find every project skill root containing `alignfirst/SKILL.md`. Common roots are `.agents/skills/`, `.claude/skills/`, `.codex/skills/`, `.github/skills/`, `.cursor/skills/`, `.gemini/skills/` and `.agent/skills/`. Ignore dependencies and generated output.
+
+When the current skills CLI owns the installation, run `{{SKILLS}} remove alignfirst --yes </dev/null` so it removes canonical links and updates the lock state. Otherwise, remove only the detected legacy `alignfirst` and `technical-documentation-authoring` directories. Do not delete unrelated skills.
+
+## Remove Legacy Commands
+
+Remove only known AlignFirst command files from existing project directories:
+
+- `.claude/commands/{al,alspec,alplan,aldescription,almerge,alreview,alread}.md`
+- `.codex/prompts/{al,alspec,alplan,aldescription,almerge,alreview,alread}.md`
+- `.github/prompts/{al,alspec,alplan,aldescription,almerge,alreview,alread}.prompt.md`
+- `.cursor/commands/{al,alspec,alplan,aldescription,almerge,alreview,alread}.md`
+- `.agent/workflows/{al,alspec,alplan,aldescription,almerge,alreview,alread}.md`
+
+These paths are legacy cleanup targets, not current installation locations.
+
+## Migrate Work Files and Instructions
+
+1. If only `_plans/` exists, rename it to `.plans/`. If both exist, move `_plans/` to `.plans/_plans-archives/`. Remove `.plans/.gitkeep`.
+2. Replace repository references to `_plans` with `.plans`.
+3. Remove `_plans` ignore rules. Replace the old shared-file block (`.plans/**`, `!.plans/**/` and `!.plans/**/*.shared.md`) with `.plans`. Untrack committed `*.shared.md` files and report them.
+4. In `AGENTS.md` or `CLAUDE.md`, preserve project conventions while removing references to deleted legacy skills and paths. Remove sections that become empty.
+
+## Preserve Remaining Custom Skills
+
+List the remaining directories under every detected project skill root. If custom skills remain, follow `{{CMD}} setup guide docmap-migrate-skills` only when the user wants to migrate them; otherwise leave them untouched.
+
+## Finish the Upgrade
+
+Continue with `{{CMD}} setup guide upgrade-v3` for the project configuration, the stub skills and the current commands.
+
+Summarize the removed legacy files, the plan migration, the preserved custom skills, and the scope and agents that received the CLI-backed AlignFirst skills.

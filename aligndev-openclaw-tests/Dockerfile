@@ -111,11 +111,6 @@ COPY --chown=assistant:assistant projects-fixture/template/ /opt/aligndev-opencl
 RUN cd /opt/aligndev-openclaw-tests/fixtures/template && \
     pnpm install --frozen-lockfile
 
-# Test-owned skill links resolve to the mounted checkout, never a fetched guide.
-RUN mkdir -p /home/assistant/.agents/skills /home/assistant/.claude/skills && \
-    ln -s /opt/alignfirst/skills/alignfirst-setup-guide /home/assistant/.agents/skills/alignfirst-setup-guide && \
-    ln -s /opt/alignfirst/skills/alignfirst-setup-guide /home/assistant/.claude/skills/alignfirst-setup-guide
-
 USER root
 RUN corepack install --global pnpm@12.14.0
 USER assistant

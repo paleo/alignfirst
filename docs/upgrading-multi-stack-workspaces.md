@@ -9,4 +9,4 @@ read_when:
 
 # Upgrading Multi-Stack Workspaces
 
-Follow the canonical [upgrade runbook](../skills/alignfirst-setup-guide/references/upgrading-multi-stack-workspaces.md), shipped with the installable AlignFirst setup skill. It covers resource accounting, old-tool cleanup, configuration conversion and coordinated cutover.
+Run `npx -y alignfirst setup guide upgrade-workspaces` and follow the runbook it prints. It covers resource accounting, old-tool cleanup, configuration conversion and coordinated cutover.

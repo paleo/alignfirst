@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 const repository = fileURLToPath(new URL("../../", import.meta.url));
 const template = join(
   repository,
-  "skills/alignfirst-setup-guide/assets/aligndev-openclaw-template",
+  "skills/aligndev-openclaw-setup/assets/aligndev-openclaw-template",
 );
 const networkGuard = fileURLToPath(
   new URL("fixtures/deployment-deny-network.mjs", import.meta.url),

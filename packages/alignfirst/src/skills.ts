@@ -1,3 +1,9 @@
+import {
+  type InvocationCommand,
+  packageCommand,
+  readLaunchEvidence,
+  resolveInvocation,
+} from "@alignfirst/docmap/invocation";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -66,4 +72,15 @@ function readSkillVersion(path: string): string | undefined {
   const metadata = /^metadata:\s*\r?\n((?:^[ \t]+.*(?:\r?\n|$))*)/m.exec(frontmatter)?.[1];
   if (metadata === undefined) return;
   return /^\s+version:\s*"?([^"\r\n]+)"?\s*$/m.exec(metadata)?.[1]?.trim();
+}
+
+/** The `skills` package launcher, through the package runner that launched this CLI. */
+export function skillsCommand(ctx: CommandContext): InvocationCommand {
+  const invocation =
+    ctx.invocation ??
+    resolveInvocation(
+      { packageName: "alignfirst", binaryName: "alignfirst" },
+      { ...readLaunchEvidence(), env: ctx.env, cwd: ctx.cwd },
+    );
+  return packageCommand(invocation, { packageName: "skills", binaryName: "skills" }, "skills");
 }

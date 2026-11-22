@@ -4,7 +4,7 @@ description: "Collaborative problem-solving protocols. Read when the user names 
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "4.0.0"
+  version: "4.0.1"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -13,3 +13,5 @@ Follow the requested protocol if its guide is already in context. Otherwise, run
 Protocol aliases: `alspec` → `spec`, `alplan` → `plan`, `al` or `AAD` → `aad`, `almerge` → `merge`, `alreview` → `review`, `aldescription` → `description`. The `alcatchup` alias runs `npx -y alignfirst ticket --catchup` and then follows the user's instructions; `alcatchupaad` and `alcatchupspec` run it before the `aad` or `spec` protocol.
 
 When no protocol is specified, run `npx -y alignfirst guide` to choose one. For workflow explanations, run `npx -y alignfirst guide overview`.
+
+To install, configure or upgrade AlignFirst tooling in a project, run `npx -y alignfirst setup` and follow it.
