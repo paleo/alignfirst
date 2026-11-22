@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { CliError } from "../cli-error.js";
@@ -121,11 +121,14 @@ function inspectWorkFiles(ctx: CommandContext, root: string): string[] {
 }
 
 /**
- * Without a trailing slash: in a linked worktree a shared directory is a symlink, and Git rejects
- * `<link>/` as a pathspec "beyond a symbolic link".
+ * The trailing slash lets a directory-only rule match an absent directory. A symlink goes without
+ * it: in a linked worktree a shared directory is a symlink, and Git rejects `<link>/` as a pathspec
+ * "beyond a symbolic link".
  */
-function ignoreState(root: string, path: string): string {
-  const { status, stderr } = spawnSync("git", ["-C", root, "check-ignore", "-q", "--", path], {
+function ignoreState(root: string, dirName: string): string {
+  const isLink = lstatSync(join(root, dirName), { throwIfNoEntry: false })?.isSymbolicLink();
+  const pathspec = isLink ? dirName : `${dirName}/`;
+  const { status, stderr } = spawnSync("git", ["-C", root, "check-ignore", "-q", "--", pathspec], {
     encoding: "utf-8",
   });
   if (status === 0) return "ignored";

@@ -15,9 +15,11 @@ import { assertMainWorktreeRoot, gitOutput, gitSucceeds } from "../git.js";
 import { assertPlansNotProjectTracked } from "../plans/layout.js";
 import { validateProjectConfig } from "../project-config.js";
 import {
+  type CompanionRegistrationOptions,
   type ItemName,
   layoutOf,
   type ProjectLayout,
+  previewCompanionRegistration,
   registerCompanion,
 } from "../project-layout.js";
 import {
@@ -54,7 +56,6 @@ export async function runSetupInit(ctx: CommandContext, options: SetupInitOption
   const config = validateInit(ctx, options);
   await applyCompanion(ctx, options);
   const layout = layoutOf(ctx);
-  assertPlansNotProjectTracked(ctx.cwd, layout.locations[".plans"], ctx.form);
   writeConfiguration(ctx, layout, config, options.conventions);
   createPlansDirectory(ctx, layout);
   addIgnoreRules(ctx, layout, options.gitExclude);
@@ -74,7 +75,8 @@ function validateInit(ctx: CommandContext, options: SetupInitOptions): Record<st
     throw new CliError("--commit-ticket-reference requires --commit-style.");
   const config = buildConfig(conventions);
   validateProjectConfig(config, "setup init options");
-  layoutOf(ctx);
+  const layout = expectedLayout(ctx, options);
+  assertPlansNotProjectTracked(ctx.cwd, layout.locations[".plans"], ctx.form);
   return config;
 }
 
@@ -106,25 +108,40 @@ function definedFields(fields: Record<string, unknown>): Record<string, unknown>
   return entries.length === 0 ? undefined : Object.fromEntries(entries);
 }
 
-async function applyCompanion(ctx: CommandContext, options: SetupInitOptions): Promise<void> {
-  const { defaultLocation, items } = options;
-  if (defaultLocation === undefined) {
-    writeStep(ctx, "Companion", "skipped");
-    return;
+/** The layout after the companion step. */
+function expectedLayout(ctx: CommandContext, options: SetupInitOptions): ProjectLayout {
+  const selections = companionSelections(options);
+  if (selections === undefined) return layoutOf(ctx);
+  try {
+    return previewCompanionRegistration(ctx.cwd, ctx.home, selections);
+  } catch (error) {
+    rethrowAsCliError(error);
   }
-  const registration = await registerCompanion(ctx.cwd, ctx.home, {
-    createDir: false,
-    defaultLocation,
-    items,
-  }).catch(rethrowAsCliError);
-  ctx.layout = undefined;
-  const status = registration.added ? "created" : registration.updated ? "updated" : "unchanged";
-  writeStep(ctx, "Companion", status, registration.dir);
+}
+
+function companionSelections(options: SetupInitOptions): CompanionRegistrationOptions | undefined {
+  const { defaultLocation, items } = options;
+  if (defaultLocation === undefined) return;
+  return { createDir: false, defaultLocation, items };
 }
 
 function rethrowAsCliError(error: unknown): never {
   if (error instanceof CliError) throw error;
   throw new CliError(errorMessage(error));
+}
+
+async function applyCompanion(ctx: CommandContext, options: SetupInitOptions): Promise<void> {
+  const selections = companionSelections(options);
+  if (selections === undefined) {
+    writeStep(ctx, "Companion", "skipped");
+    return;
+  }
+  const registration = await registerCompanion(ctx.cwd, ctx.home, selections).catch(
+    rethrowAsCliError,
+  );
+  ctx.layout = undefined;
+  const status = registration.added ? "created" : registration.updated ? "updated" : "unchanged";
+  writeStep(ctx, "Companion", status, registration.dir);
 }
 
 function writeConfiguration(
@@ -206,7 +223,7 @@ function applyInstructions(ctx: CommandContext, enabled: boolean): void {
     writeStep(ctx, "Instructions", "unchanged", describeInstructions(ctx, report));
     return;
   }
-  writeStep(ctx, "Instructions", "created", writeBootstrapSection(ctx, report.root, undefined));
+  writeStep(ctx, "Instructions", "created", writeBootstrapSection(ctx, report.root));
 }
 
 /** `detail` is the path, or the instruction status when unchanged. */

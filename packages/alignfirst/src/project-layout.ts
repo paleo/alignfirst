@@ -1,6 +1,7 @@
 import { configFamilyExists, resolveConfigFamily } from "@alignfirst/workspace/config";
 import {
   inspectKnownWorkspaceState,
+  type KnownWorkspaceState,
   withRegistryLock,
   resolveWorkspaceStorage,
   type WorkspaceStorage,
@@ -205,6 +206,20 @@ export function resolveProjectLayout(cwd: string, home: string): ProjectLayout {
     registry && mainWorktree !== undefined
       ? findEntry(registry, mainWorktree, realHome)
       : undefined;
+  return layoutForEntry(cwd, { registry, entry, mainWorktree, realHome });
+}
+
+interface LayoutSource {
+  registry: Registry | undefined;
+  entry: RegistryEntry | undefined;
+  mainWorktree: string | undefined;
+  realHome: string;
+}
+
+function layoutForEntry(
+  cwd: string,
+  { registry, entry, mainWorktree, realHome }: LayoutSource,
+): ProjectLayout {
   const companion = registry && entry ? resolveCompanion(registry, entry, realHome) : null;
   const root = projectRoot(cwd);
   const alignfirst = locateConfigFamily(root, companion);
@@ -583,7 +598,8 @@ export interface CompanionRegistrationOptions {
 /**
  * Registers the main worktree of `cwd` with every item on `"auto"`, unless it is registered, then
  * applies the selections. Creates the registry when it is missing, and the companion directory
- * with `createDir`.
+ * with `createDir`. A change of workspace storage requires the current storage to hold no
+ * workspace resources: its runtime lock stays held until the registry is written.
  */
 export async function registerCompanion(
   cwd: string,
@@ -591,16 +607,99 @@ export async function registerCompanion(
   options: CompanionRegistrationOptions,
 ): Promise<CompanionRegistration> {
   requireMainWorktree(cwd);
-  return withCompanionRegistryLock(registryPath(home), () =>
+  const path = registryPath(home);
+  const first = await withCompanionRegistryLock(path, () =>
     registerCompanionLocked(cwd, home, options),
   );
+  if ("registration" in first) return first.registration;
+  const current = first.storageMoveFrom;
+  const second = await withWorkspaceState(current, (state) => {
+    if (state.requiresCleanup)
+      throw new CliError(
+        "The current workspace storage still owns workspace resources or incomplete cleanup. Complete teardown/removal under the current selection before moving workspaceRuntime.",
+      );
+    return withCompanionRegistryLock(path, () =>
+      registerCompanionLocked(cwd, home, options, current),
+    );
+  });
+  if ("registration" in second) return second.registration;
+  throw new CliError("The companion selection changed concurrently. Retry.");
 }
 
+/** The layout that `registerCompanion` would produce with these options, without any change. */
+export function previewCompanionRegistration(
+  cwd: string,
+  home: string,
+  options: CompanionRegistrationOptions,
+): ProjectLayout {
+  const plan = planRegistration(cwd, home, options);
+  return layoutForEntry(cwd, {
+    registry: plan.registry,
+    entry: { key: plan.entry.key, project: plan.project },
+    mainWorktree: plan.mainWorktree,
+    realHome: plan.realHome,
+  });
+}
+
+type LockedRegistration =
+  | { registration: CompanionRegistration }
+  | { storageMoveFrom: WorkspaceStorage };
+
+/**
+ * Writes nothing and returns the current storage when the selections move the workspace storage
+ * away from a storage other than `inspected`.
+ */
 function registerCompanionLocked(
   cwd: string,
   home: string,
   options: CompanionRegistrationOptions,
-): CompanionRegistration {
+  inspected?: WorkspaceStorage,
+): LockedRegistration {
+  const plan = planRegistration(cwd, home, options);
+  const { registry, existing, entry } = plan;
+  const current = workspaceStorageOf(plan.mainWorktree, existing);
+  const selected = workspaceStorageOf(plan.mainWorktree, { ...entry, project: plan.project });
+  if (
+    current.registryDir !== selected.registryDir &&
+    current.registryDir !== inspected?.registryDir
+  )
+    return { storageMoveFrom: current };
+  const original = registry.raw.projects[entry.key];
+  const rawProject = withSelections({ ...original, dir: entry.project.dir }, options);
+  const changed = JSON.stringify(rawProject) !== JSON.stringify(original);
+  if (changed) writeRegistry(registry, { ...registry.raw.projects, [entry.key]: rawProject });
+  const created = options.createDir && !pathExists(entry.dir);
+  if (created) mkdirSync(entry.dir, { recursive: true });
+  return {
+    registration: {
+      registry: registry.path,
+      key: entry.key,
+      added: existing === undefined,
+      updated: existing !== undefined && changed,
+      dir: entry.dir,
+      exists: pathExists(entry.dir),
+      created,
+    },
+  };
+}
+
+interface RegistrationPlan {
+  mainWorktree: string;
+  realHome: string;
+  registry: Registry;
+  /** The registration holding a companion, before the change. */
+  existing: CompanionEntry | undefined;
+  /** The registration to write, before the selections. */
+  entry: CompanionEntry;
+  /** The registration after the selections. */
+  project: RegistryProject;
+}
+
+function planRegistration(
+  cwd: string,
+  home: string,
+  options: CompanionRegistrationOptions,
+): RegistrationPlan {
   const mainWorktree = requireMainWorktree(cwd);
   const realHome = realOrResolved(home);
   const registry = readRegistry(home) ?? {
@@ -616,29 +715,15 @@ function registerCompanionLocked(
       : { ...registered, dir: companionDir(registered.project.dir, realHome) };
   if (existing && options.dir !== undefined) assertRegisteredDir(existing, options.dir, realHome);
   const entry = existing ?? newEntry(registry, mainWorktree, realHome, options.dir, registered);
-  assertValidSelections(registry, entry, options);
-  const original = registry.raw.projects[entry.key];
-  const rawProject = withSelections({ ...original, dir: entry.project.dir }, options);
-  const changed = JSON.stringify(rawProject) !== JSON.stringify(original);
-  if (changed) writeRegistry(registry, { ...registry.raw.projects, [entry.key]: rawProject });
-  const created = options.createDir && !pathExists(entry.dir);
-  if (created) mkdirSync(entry.dir, { recursive: true });
-  return {
-    registry: registry.path,
-    key: entry.key,
-    added: existing === undefined,
-    updated: existing !== undefined && changed,
-    dir: entry.dir,
-    exists: pathExists(entry.dir),
-    created,
-  };
+  const project = selectedProject(registry, entry, options);
+  return { mainWorktree, realHome, registry, existing, entry, project };
 }
 
-function assertValidSelections(
+function selectedProject(
   registry: Registry,
   entry: CompanionEntry,
   { defaultLocation, items }: CompanionRegistrationOptions,
-): void {
+): RegistryProject {
   const updated = {
     ...entry.project,
     ...(defaultLocation === undefined ? {} : { defaultLocation }),
@@ -650,6 +735,29 @@ function assertValidSelections(
     (detail) => new CliError(`Invalid companion selection for ${entry.key}: ${detail}`),
   );
   assertValidItems(registry, effectiveItems(project), entry);
+  return project;
+}
+
+function workspaceStorageOf(
+  mainWorktree: string,
+  companion: CompanionEntry | undefined,
+): WorkspaceStorage {
+  const inCompanion =
+    companion !== undefined && effectiveItems(companion.project).workspaceRuntime === "companion";
+  return resolveWorkspaceStorage(
+    { in: inCompanion ? "companion" : "project", mainWorktree, companionDir: companion?.dir },
+    mainWorktree,
+  );
+}
+
+/** Inspects the storage under its runtime lock, held while `use` runs. */
+async function withWorkspaceState<T>(
+  storage: WorkspaceStorage,
+  use: (state: KnownWorkspaceState) => T | Promise<T>,
+): Promise<T> {
+  const run = () => use(inspectKnownWorkspaceState(storage.mainWorktree, storage.registryDir));
+  if (!pathExists(storage.registryDir)) return run();
+  return withRegistryLock(storage.mainWorktree, storage.registryDir, run);
 }
 
 /** Merges the selections into the raw entry, so its unknown and obsolete settings survive. */
@@ -820,11 +928,7 @@ export async function unregisterCompanion(
   });
   try {
     const layout = resolveProjectLayout(cwd, home);
-    const inspect = () =>
-      inspectKnownWorkspaceState(layout.storage.mainWorktree, layout.storage.registryDir);
-    const state = pathExists(layout.storage.registryDir)
-      ? await withRegistryLock(layout.storage.mainWorktree, layout.storage.registryDir, inspect)
-      : inspect();
+    const state = await withWorkspaceState(layout.storage, (inspected) => inspected);
     if (state.requiresCleanup)
       throw new CliError(
         "Companion still owns workspace resources or incomplete cleanup. Complete teardown/removal under the current selection before unregistering, including with --force.",

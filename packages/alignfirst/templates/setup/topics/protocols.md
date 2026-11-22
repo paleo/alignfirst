@@ -48,7 +48,7 @@ The command is idempotent. It validates everything before the first change, then
 
 1. **Companion.** Registers the companion when `--default-location` is given.
 2. **Configuration.** Writes `alignfirst.json` when the selected location holds no configuration file: `schemaVersion: 1`, the conventions given as flags, and `plans` with `autoArchive: true`. A flag left out leaves its field out. An existing configuration stays unchanged, and the command warns about the flags it did not apply; edit the file by hand instead (`{{CMD}} setup guide configuration`).
-3. **Work files.** Creates the effective `.plans` directory when it is missing. Plans tracked by the product repository fail this step; see `{{CMD}} setup guide work-files`.
+3. **Work files.** Creates the effective `.plans` directory when it is missing. When the product repository tracks files in it, the command fails before any change; see `{{CMD}} setup guide work-files`.
 4. **Ignore rules.** Ignores `.plans` when it resolves inside the project, and `.local-wt/` when the workspace runtime is project-local, each only when Git does not already ignore it.
 5. **Instructions.** Inserts the bootstrap section, as `{{CMD}} setup instructions --write` does.
 
@@ -60,7 +60,7 @@ The bootstrap section in `AGENTS.md` or `CLAUDE.md` makes every session start wi
 
 | Status | Action |
 | --- | --- |
-| `absent` | Run `{{CMD}} setup instructions --write`. It inserts the section before the first `##` heading, after the title and introduction, in `AGENTS.md`, else in an existing `CLAUDE.md`, else in a new `AGENTS.md`. `--file <path>` selects another target. |
+| `absent` | Run `{{CMD}} setup instructions --write`. It inserts the section before the first `##` heading, after the title and introduction, in `AGENTS.md`, else in an existing `CLAUDE.md`, else in a new `AGENTS.md`. `--file AGENTS.md` or `--file CLAUDE.md` forces the target. |
 | `current` | Nothing. |
 | `differs` | Edit the section by hand so that its heading and its command paragraph match the canonical text. Keep the project's additions in the section. |
 | `ambiguous` | Several sections mention `alignfirst context`, or a mention sits outside a `##` section. Merge them into one canonical section at one of the listed locations. |

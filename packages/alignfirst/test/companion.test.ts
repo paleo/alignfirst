@@ -291,6 +291,22 @@ describe("companion register", () => {
     expect(result.code).toBe(1);
     expect(existsSync(join(home, ".alignfirst"))).toBe(false);
   });
+
+  it("refuses to move the workspace storage while it owns resources", async () => {
+    const { home, project } = makeHome();
+    mkdirSync(join(project, ".plans"));
+    writeFileSync(join(project, ".git", "info", "exclude"), "/.plans\n/.local-wt/\n");
+    const setup = await runMain(["workspace", "setup"], { cwd: project, home });
+    expect(setup.code, setup.stderr).toBe(0);
+    const move = ["companion", "register", "--default-location", "companion"];
+    const refused = await runMain(move, { cwd: project, home });
+    expect(refused.code).toBe(1);
+    expect(existsSync(registryOf(home))).toBe(false);
+    expect((await runMain(["workspace", "teardown"], { cwd: project, home })).code).toBe(0);
+    const moved = await runMain(move, { cwd: project, home });
+    expect(moved.code, moved.stderr).toBe(0);
+    expect(resolveProjectLayout(project, home).storage.in).toBe("companion");
+  });
 });
 
 describe("companion unregister", () => {

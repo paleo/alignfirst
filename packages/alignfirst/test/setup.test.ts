@@ -90,6 +90,23 @@ describe("setup init", () => {
     expect(git(project, "status", "--porcelain", "--ignored")).toBe("");
   });
 
+  it("validates the work files after the companion step before registering", async () => {
+    const { root, home, project } = makeCompanionProject({});
+    dirs.push(root);
+    const registry = join(home, ".alignfirst", "companions", "registry.json");
+    rmSync(registry);
+    mkdirSync(join(project, ".plans"));
+    writeFileSync(join(project, ".plans", "notes.md"), "tracked\n");
+    git(project, "add", ".plans");
+    git(project, "commit", "--quiet", "-m", "track plans");
+    const result = await runMain(["setup", "init", "--default-location", "project"], {
+      cwd: project,
+      home,
+    });
+    expect(result.code).toBe(1);
+    expect(existsSync(registry)).toBe(false);
+  });
+
   it("keeps the bytes of an existing configuration", async () => {
     const project = makeProject();
     const config = '{\n  "schemaVersion": 1 }\n';
@@ -107,6 +124,31 @@ describe("setup init", () => {
     expect(result.code).toBe(0);
     expect(existsSync(join(project, ".gitignore"))).toBe(false);
     expect(git(project, "check-ignore", "--", ".plans", ".local-wt/")).toBe(".plans\n.local-wt/");
+  });
+});
+
+describe("setup instructions", () => {
+  it("refuses a --file the diagnosis does not read, and writes nothing", async () => {
+    const project = makeProject();
+    const result = await runMain(
+      ["setup", "instructions", "--write", "--file", ".claude/CLAUDE.md"],
+      { cwd: project },
+    );
+    expect(result.code).toBe(1);
+    expect(git(project, "status", "--porcelain", "--ignored")).toBe("");
+  });
+
+  it("writes the section to the root file named by --file", async () => {
+    const project = makeProject();
+    writeFileSync(join(project, "AGENTS.md"), "# Agents\n");
+    const result = await runMain(["setup", "instructions", "--write", "--file", "CLAUDE.md"], {
+      cwd: project,
+    });
+    expect(result.code).toBe(0);
+    expect(readFileSync(join(project, "AGENTS.md"), "utf-8")).toBe("# Agents\n");
+    expect((await runMain(["setup", "instructions"], { cwd: project })).stdout).toMatch(
+      /^Location: CLAUDE\.md:\d+$/m,
+    );
   });
 });
 
@@ -153,6 +195,13 @@ describe("setup", () => {
 });
 
 describe("setup state report", () => {
+  it("reports the directory-only .local-wt/ rule as ignored before the directory exists", async () => {
+    const project = makeProject();
+    writeFileSync(join(project, ".gitignore"), ".local-wt/\n");
+    const result = await runMain(["setup"], { cwd: project });
+    expect(result.stdout).toMatch(/^- Workspace: .*\.local-wt\/ ignored\b/m);
+  });
+
   it("reports a shared .local symlink in a linked worktree as ignored", async () => {
     const project = makeProject();
     writeFileSync(join(project, ".gitignore"), ".local\n");

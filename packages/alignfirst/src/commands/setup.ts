@@ -11,6 +11,7 @@ import {
   inspectInstructions,
   renderBootstrapSection,
   renderGlobalBootstrapSection,
+  instructionFilePath,
   writeBootstrapSection,
 } from "../setup/instruction-status.js";
 import type { BootstrapLocation } from "../setup/instructions.js";
@@ -148,7 +149,7 @@ function runInstructions(ctx: CommandContext, args: string[]): number {
   const usage = `Usage: ${ctx.form} setup instructions [--write] [--file <path>]
 
 Diagnoses the bootstrap section of AGENTS.md and CLAUDE.md. With --write, inserts it when it is
-absent, and changes nothing otherwise. --file overrides the target file.
+absent, and changes nothing otherwise. --file selects AGENTS.md or CLAUDE.md at the root.
 `;
   const { values } = parseCommandArgs(usage, () =>
     parseArgs({
@@ -168,8 +169,10 @@ absent, and changes nothing otherwise. --file overrides the target file.
   if (values.file !== undefined && !values.write)
     throw new CliError(`--file requires --write.\n\n${usage}`);
   const report = inspectInstructions(ctx);
+  const target =
+    values.file === undefined ? undefined : instructionFilePath(ctx, report.root, values.file);
   if (values.write && report.status === "absent") {
-    const path = writeBootstrapSection(ctx, report.root, values.file);
+    const path = writeBootstrapSection(ctx, report.root, target);
     ctx.stdout.write(`Status: absent\nInserted the bootstrap section in ${path}.\n`);
     return 0;
   }

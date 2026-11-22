@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
+import { CliError } from "../cli-error.js";
 import type { CommandContext } from "../context.js";
 import { displayPath } from "../format.js";
 import { findMainWorktree } from "../git.js";
@@ -58,16 +59,31 @@ export function renderGlobalBootstrapSection(ctx: CommandContext, root: string):
   );
 }
 
+/** Accepts only the root files the diagnosis reads, so a written section is never missed. */
+export function instructionFilePath(ctx: CommandContext, root: string, file: string): string {
+  const path = resolve(ctx.cwd, file);
+  const name = basename(path);
+  const dir = dirname(path);
+  if (
+    INSTRUCTION_FILES.some((allowed) => allowed === name) &&
+    existsSync(dir) &&
+    realpathSync(dir) === realpathSync(root)
+  )
+    return join(root, name);
+  throw new CliError(
+    `--file must name ${INSTRUCTION_FILES.map((name) => join(root, name)).join(" or ")}.`,
+  );
+}
+
 /**
- * Inserts the canonical section in `file`, else `AGENTS.md` when it exists, else an existing
+ * Inserts the canonical section in `path`, else `AGENTS.md` when it exists, else an existing
  * `CLAUDE.md`, else a new `AGENTS.md`. Returns the written path.
  */
 export function writeBootstrapSection(
   ctx: CommandContext,
   root: string,
-  file: string | undefined,
+  path = defaultTarget(root),
 ): string {
-  const path = file === undefined ? defaultTarget(root) : resolve(ctx.cwd, file);
   const content = existsSync(path) ? readFileSync(path, "utf-8") : "";
   writeFileSync(path, insertSection(content, renderBootstrapSection(ctx)));
   return path;

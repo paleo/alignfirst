@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   closeSync,
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -26,6 +27,7 @@ const LOCAL_BINS = {
   aligndev: join(ROOT, "packages/aligndev/bin/aligndev.mjs"),
 };
 const RUN_TIMEOUT_MS = 30 * 60 * 1000;
+const CREDENTIALS_FILE = ".credentials.json";
 const PROMPT_PREFIX = "Run `npx -y alignfirst setup` first.";
 // Copied from packages/aligndev/src/code/run-agent.ts, plus the Claude Code harness variables
 // that would make the child behave as a nested session.
@@ -97,7 +99,12 @@ function main() {
 
 function checkPrerequisites() {
   if (!process.env.CLAUDE_CONFIG_DIR) fail("CLAUDE_CONFIG_DIR is not set.");
+  if (!existsSync(hostCredentials())) fail(`${hostCredentials()} is missing: log in first.`);
   if (!existsSync(ALIGNFIRST_DIST)) fail(`${ALIGNFIRST_DIST} is missing: run npm run build.`);
+}
+
+function hostCredentials() {
+  return join(process.env.CLAUDE_CONFIG_DIR, CREDENTIALS_FILE);
 }
 
 function fail(message) {
@@ -170,7 +177,15 @@ function replyInSandbox(sandbox, message) {
 
 function createSandbox(name, host) {
   const sandbox = sandboxAt(mkdtempSync(join(tmpdir(), `alignfirst-setup-trial-${name}-`)), host);
-  for (const path of [sandbox.home, sandbox.bin, sandbox.project, sandbox.out]) mkdirSync(path);
+  for (const path of [
+    sandbox.home,
+    sandbox.bin,
+    sandbox.project,
+    sandbox.out,
+    sandbox.claudeConfig,
+  ])
+    mkdirSync(path);
+  copyFileSync(hostCredentials(), join(sandbox.claudeConfig, CREDENTIALS_FILE));
   writeGitConfig(sandbox.home);
   writeNpxShim(sandbox.bin, host);
   return sandbox;
@@ -183,6 +198,7 @@ function sandboxAt(dir, host) {
     bin: join(dir, "bin"),
     project: join(dir, "project"),
     out: join(dir, "out"),
+    claudeConfig: join(dir, "claude-config"),
   };
   return { ...sandbox, env: agentEnvironment(sandbox, host) };
 }
@@ -243,6 +259,7 @@ function agentEnvironment(sandbox, host) {
   return {
     ...env,
     HOME: sandbox.home,
+    CLAUDE_CONFIG_DIR: sandbox.claudeConfig,
     PATH: [sandbox.bin, ...callerPath].join(delimiter),
     npm_config_cache: host.npmCache,
   };

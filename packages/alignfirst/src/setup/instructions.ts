@@ -164,17 +164,21 @@ function normalize(text: string): string {
 
 /**
  * Inserts the section before the first heading of level 2 or deeper outside a code fence, or
- * appends it when there is none.
+ * appends it when there is none. Keeps the file's CRLF line endings.
  */
 export function insertSection(content: string, section: string): string {
-  const block = section.trim();
-  if (content.trim() === "") return `${block}\n`;
+  const eol = content.includes("\r\n") ? "\r\n" : "\n";
+  const block = section.trim().replaceAll(/\r?\n/g, eol);
+  if (content.trim() === "") return `${block}${eol}`;
   const { lines, headings } = scanLines(content);
   const target = headings.find(({ level }) => level >= 2);
-  if (target === undefined) return `${content.trimEnd()}\n\n${block}\n`;
-  const before = lines.slice(0, target.index).join("\n").trimEnd();
-  const after = lines.slice(target.index).join("\n");
-  return before === "" ? `${block}\n\n${after}` : `${before}\n\n${block}\n\n${after}`;
+  if (target === undefined) return `${content.trimEnd()}${eol}${eol}${block}${eol}`;
+  const before = lines.slice(0, target.index).join(eol).trimEnd();
+  const after = lines.slice(target.index).join(eol);
+  const separator = `${eol}${eol}`;
+  return before === ""
+    ? `${block}${separator}${after}`
+    : `${before}${separator}${block}${separator}${after}`;
 }
 
 /** Skips a leading YAML frontmatter and fenced code blocks. */

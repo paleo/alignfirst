@@ -33,6 +33,7 @@ The registration's `defaultLocation` applies to every item. An explicit item ove
 - `.alignfirst-instructions` holds `context.md`, described in step 4.
 - `assistantInstructionsFile` selects the root for the configuration's relative reference. Without a reference, its location is null; no file name is discovered.
 - `workspaceRuntime` uses external storage only when it is effectively `companion`. `project` and `auto` always keep the runtime local, whether or not a directory exists.
+  A selection that moves the runtime is refused while the current storage holds workspace resources. Tear down or remove those workspaces first.
 - `docs` holds the Docmap tree.
 - `.plans` holds the work files.
 - `_aligndev` accepts `companion` or `auto`. Explicit `companion` stores sessions in the companion, shaped like plans. `auto` follows the effective plans. When unset, a `companion` default stores sessions in the companion; otherwise sessions follow the plans. Companion sessions with `auto` plans are rejected, because creating them would change the plans selection.

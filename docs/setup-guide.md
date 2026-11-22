@@ -79,7 +79,7 @@ The OpenClaw material is a separate skill, `skills/aligndev-openclaw-setup/`, di
 
 `scripts/setup-trial.mjs` checks the guide against a coding agent that knows nothing of its implementation. It is a manual check, outside CI. Run it after a substantial change to the entry guide or a topic.
 
-Each scenario gets a sandbox under the system temp directory: a fixture project, a throwaway `HOME`, and an `npx` shim that maps `alignfirst` and `aligndev` to the local build and delegates everything else to the real `npx`. The script launches `claude -p` in the fixture with a prompt that opens with "Run `npx -y alignfirst setup` first.", then stops it after 30 minutes.
+Each scenario gets a sandbox under the system temp directory: a fixture project, a throwaway `HOME`, a Claude Code configuration directory, and an `npx` shim that maps `alignfirst` and `aligndev` to the local build and delegates everything else to the real `npx`. The script launches `claude -p` in the fixture with a prompt that opens with "Run `npx -y alignfirst setup` first.", then stops it after 30 minutes.
 
 | Scenario | Fixture | Request |
 | --- | --- | --- |
@@ -89,7 +89,7 @@ Each scenario gets a sandbox under the system temp directory: a fixture project,
 | `companion` | Node repository, one commit | A companion directory, no footprint |
 | `new-project` | Empty directory | AlignFirst and a Node, Express, React and TypeScript stack |
 
-Prerequisites: run `npm run build`, and set `CLAUDE_CONFIG_DIR` to the Claude Code configuration whose login the trial uses. The agent also loads that configuration's global instructions and skills, which can color its behavior. The script removes `ANTHROPIC_API_KEY` and the variables of a parent agent session.
+Prerequisites: run `npm run build`, and set `CLAUDE_CONFIG_DIR` to the Claude Code configuration whose login the trial uses. The sandbox configuration receives a copy of its `.credentials.json` and nothing else, so the agent loads no global instructions or skills. The script removes `ANTHROPIC_API_KEY` and the variables of a parent agent session.
 
 ```sh
 node scripts/setup-trial.mjs --check            # the shim, then a one-line claude -p
@@ -100,6 +100,6 @@ node scripts/setup-trial.mjs --reply <sandbox> "<answer>"
 
 A guide that requires approval makes the agent stop with a question. `--reply` answers it: it resumes the agent's session in that sandbox, and suffixes the new transcript and result with `-2`, `-3` and so on. It refreshes the other outputs.
 
-The script prints each sandbox path. Its `out/` directory holds `transcript.jsonl` (the agent's stream), `result.md` (its final answer), `git-status.txt`, `tree.txt` (the project and `home/.alignfirst/`), and the local CLI's `setup.txt` and `doctor.txt`. Sandboxes are kept; delete them by hand.
+The script prints each sandbox path. Its `out/` directory holds `transcript.jsonl` (the agent's stream), `result.md` (its final answer), `git-status.txt`, `tree.txt` (the project and `home/.alignfirst/`), and the local CLI's `setup.txt` and `doctor.txt`. Sandboxes are kept, each with a copy of the credentials; delete them by hand.
 
-Each agent run consumes the subscription quota of that configuration, and runs with permission prompts bypassed inside its sandbox. The throwaway `HOME` catches home-relative writes, such as a global `skills add`. Absolute paths, the npm cache, `CLAUDE_CONFIG_DIR` and the machine's processes stay reachable: an agent may write under `/tmp` or run `pkill -f vite`.
+Each agent run consumes the subscription quota of that configuration, and runs with permission prompts bypassed inside its sandbox. The throwaway `HOME` catches home-relative writes, such as a global `skills add`, and the sandbox configuration catches writes to the global Claude Code instructions. Absolute paths, the npm cache and the machine's processes stay reachable: an agent may write under `/tmp` or run `pkill -f vite`.

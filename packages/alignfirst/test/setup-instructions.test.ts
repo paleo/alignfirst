@@ -68,15 +68,20 @@ describe("insertSection", () => {
     [
       "before the first heading of level 2 or deeper",
       "# Project\n\nIntro.\n\n```\n## not a heading\n```\n\n### Build\n\nnpm run build\n",
-      "# Project\n\nIntro.\n\n```\n## not a heading\n```\n\nSECTION\n\n### Build\n\nnpm run build\n",
+      "# Project\n\nIntro.\n\n```\n## not a heading\n```\n\nSECTION\nLINE\n\n### Build\n\nnpm run build\n",
     ],
     [
       "at the end without such a heading",
       "# Project\n\nIntro.\n",
-      "# Project\n\nIntro.\n\nSECTION\n",
+      "# Project\n\nIntro.\n\nSECTION\nLINE\n",
     ],
-    ["alone in an empty file", "", "SECTION\n"],
+    ["alone in an empty file", "", "SECTION\nLINE\n"],
+    [
+      "with the file's CRLF line endings",
+      "# Project\r\n\r\nIntro.\r\n\r\n## Build\r\n",
+      "# Project\r\n\r\nIntro.\r\n\r\nSECTION\r\nLINE\r\n\r\n## Build\r\n",
+    ],
   ])("inserts %s", (_case, content, expected) => {
-    expect(insertSection(content, "SECTION\n")).toBe(expected);
+    expect(insertSection(content, "SECTION\nLINE\n")).toBe(expected);
   });
 });

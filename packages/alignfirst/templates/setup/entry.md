@@ -13,7 +13,7 @@ The project state above is the inspection: rely on it instead of probing the rep
 - Paseo: `{{CMD}} setup guide paseo`.
 - A project an assistant will work on: `{{CMD}} setup guide assistant-project`.
 - Claude Code, Codex or a persistent Pi session as the AlignDev assistant: `{{CMD}} setup guide coding-agent-assistant`.
-- An OpenClaw assistant: install the `aligndev-openclaw-setup` skill with `npx -y skills add https://github.com/paleo/alignfirst --global --skill aligndev-openclaw-setup`, then follow it.
+- An OpenClaw assistant: install the `aligndev-openclaw-setup` skill with `npx -y skills add https://github.com/paleo/alignfirst --global --skill aligndev-openclaw-setup --yes </dev/null`, then follow it.
 - An upgrade, or any legacy signal in the report: `{{CMD}} setup guide upgrade`.
 
 When the user names AlignDev without saying where the assistant runs, ask whether it is an OpenClaw assistant or a coding agent.
