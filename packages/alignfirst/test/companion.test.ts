@@ -162,6 +162,44 @@ describe("companion register", () => {
     });
   });
 
+  it("sets selections on an existing registration and keeps its other settings", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { home, project } = makeHome();
+    const entry = {
+      dir: "custom",
+      items: { docs: "project" },
+      aligndev: { profile: "work" },
+      extra: { nested: true },
+    };
+    writeRegistry(home, { projects: { "~/projects/app": entry } });
+    const result = await runMain(
+      ["companion", "register", "--default-location", "companion", "--item", ".plans=companion"],
+      { cwd: project, home },
+    );
+    expect(result.code).toBe(0);
+    expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({
+      projects: {
+        "~/projects/app": {
+          ...entry,
+          defaultLocation: "companion",
+          items: { docs: "project", ".plans": "companion" },
+        },
+      },
+    });
+  });
+
+  it("rejects --item _aligndev=project and leaves the registry unchanged", async () => {
+    const { home, project } = makeHome();
+    writeRegistry(home, { projects: { "~/projects/app": { dir: "custom" } } });
+    const before = readFileSync(registryOf(home), "utf-8");
+    const result = await runMain(["companion", "register", "--item", "_aligndev=project"], {
+      cwd: project,
+      home,
+    });
+    expect(result.code).toBe(1);
+    expect(readFileSync(registryOf(home), "utf-8")).toBe(before);
+  });
+
   it("creates the companion with --create-dir, even when registered", async () => {
     const { home, project } = makeHome();
     await runMain(["companion", "register"], { cwd: project, home });

@@ -7,6 +7,7 @@ import { packageRoot } from "./fixture.js";
 
 const repository = resolve(packageRoot, "../..");
 const assets = join(repository, "skills/alignfirst-setup-guide/assets");
+const examples = join(repository, "packages/alignfirst/templates/setup/examples");
 const cli = join(repository, "packages/alignfirst/bin/alignfirst.mjs");
 
 it("publishes manifest examples accepted by the production CLI without consumer dependencies", () => {
@@ -17,7 +18,7 @@ it("publishes manifest examples accepted by the production CLI without consumer 
     mkdirSync(home);
     mkdirSync(project);
     for (const { directory, filename, portRange } of [
-      { directory: assets, filename: "alignfirst.json", portRange: { first: 8100, last: 8199 } },
+      { directory: examples, filename: "alignfirst.json", portRange: { first: 8100, last: 8199 } },
       {
         directory: join(assets, "aligndev-openclaw-template/base"),
         filename: "alignfirst.jsonc",
@@ -47,7 +48,7 @@ it("publishes manifest examples accepted by the production CLI without consumer 
           hasDevServer: portRange !== null,
         },
       });
-      if (directory === assets) {
+      if (directory === examples) {
         expect(report.config.devServer.maxConcurrentDevServers).toEqual({
           env: "PROJECT_DEV_LIMIT",
           default: 5,

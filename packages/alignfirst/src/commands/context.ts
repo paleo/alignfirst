@@ -17,7 +17,8 @@ export function runContext(ctx: CommandContext, args: string[]): number {
   writeProjectInstructions(ctx);
   ctx.stdout.write(`\n${renderWorkspaceGuidance(ctx)}`);
   const code = layoutOf(ctx).locations.docs.exists ? writeDocmapSection(ctx) : 0;
-  ctx.stdout.write(`\n${renderProtocolsSection(ctx)}`);
+  ctx.stdout.write(`\n${renderContextTemplate(ctx, "protocols.md")}`);
+  ctx.stdout.write(`\n${renderContextTemplate(ctx, "setup.md")}`);
   return code;
 }
 
@@ -36,9 +37,9 @@ function writeDocmapSection(ctx: CommandContext): number {
   return runDocmap(ctx, [], { showRootCommandInShortHelp: false });
 }
 
-function renderProtocolsSection(ctx: CommandContext): string {
+function renderContextTemplate(ctx: CommandContext, name: string): string {
   const template = readFileSync(
-    new URL("../../templates/context/protocols.md", import.meta.url),
+    new URL(`../../templates/context/${name}`, import.meta.url),
     "utf-8",
   );
   return renderCommandForm(template, ctx.form);

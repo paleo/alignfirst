@@ -30,6 +30,7 @@ import { findMainWorktree, gitOutput, optionalRepositoryId } from "./git.js";
 import {
   literal,
   integerBetween,
+  isPlainObject,
   nonEmptyString,
   object,
   optional,
@@ -561,6 +562,8 @@ export interface CompanionRegistration {
   key: string;
   /** A companion was added, including to an existing profile-only entry. */
   added: boolean;
+  /** The selections changed an existing companion registration. */
+  updated: boolean;
   /** Absolute. */
   dir: string;
   exists: boolean;
@@ -571,11 +574,16 @@ export interface CompanionRegistrationOptions {
   /** The `dir` of a new entry, as written; defaults to the companion name. */
   dir?: string;
   createDir: boolean;
+  /** Sets the registration's `defaultLocation`; validated by the registry shape. */
+  defaultLocation?: string;
+  /** Sets these items and keeps the others; values are validated by the registry shape. */
+  items?: Partial<Record<ItemName, string>>;
 }
 
 /**
- * Registers the main worktree of `cwd` with every item on `"auto"`, unless it is registered.
- * Creates the registry when it is missing, and the companion directory with `createDir`.
+ * Registers the main worktree of `cwd` with every item on `"auto"`, unless it is registered, then
+ * applies the selections. Creates the registry when it is missing, and the companion directory
+ * with `createDir`.
  */
 export async function registerCompanion(
   cwd: string,
@@ -607,16 +615,55 @@ function registerCompanionLocked(
       ? undefined
       : { ...registered, dir: companionDir(registered.project.dir, realHome) };
   if (existing && options.dir !== undefined) assertRegisteredDir(existing, options.dir, realHome);
-  const entry = existing ?? addEntry(registry, mainWorktree, realHome, options.dir, registered);
+  const entry = existing ?? newEntry(registry, mainWorktree, realHome, options.dir, registered);
+  assertValidSelections(registry, entry, options);
+  const original = registry.raw.projects[entry.key];
+  const rawProject = withSelections({ ...original, dir: entry.project.dir }, options);
+  const changed = JSON.stringify(rawProject) !== JSON.stringify(original);
+  if (changed) writeRegistry(registry, { ...registry.raw.projects, [entry.key]: rawProject });
   const created = options.createDir && !pathExists(entry.dir);
   if (created) mkdirSync(entry.dir, { recursive: true });
   return {
     registry: registry.path,
     key: entry.key,
     added: existing === undefined,
+    updated: existing !== undefined && changed,
     dir: entry.dir,
     exists: pathExists(entry.dir),
     created,
+  };
+}
+
+function assertValidSelections(
+  registry: Registry,
+  entry: CompanionEntry,
+  { defaultLocation, items }: CompanionRegistrationOptions,
+): void {
+  const updated = {
+    ...entry.project,
+    ...(defaultLocation === undefined ? {} : { defaultLocation }),
+    ...(items === undefined ? {} : { items: { ...entry.project.items, ...items } }),
+  };
+  const project = parseShape(
+    registryProjectValue,
+    updated,
+    (detail) => new CliError(`Invalid companion selection for ${entry.key}: ${detail}`),
+  );
+  assertValidItems(registry, effectiveItems(project), entry);
+}
+
+/** Merges the selections into the raw entry, so its unknown and obsolete settings survive. */
+function withSelections(
+  raw: RawRegistryProject,
+  { defaultLocation, items }: CompanionRegistrationOptions,
+): RawRegistryProject {
+  const rawItems = isPlainObject(raw.items) ? raw.items : {};
+  return {
+    ...raw,
+    ...(defaultLocation === undefined ? {} : { defaultLocation }),
+    ...(items === undefined || Object.keys(items).length === 0
+      ? {}
+      : { items: { ...rawItems, ...items } }),
   };
 }
 
@@ -640,7 +687,7 @@ function checkDirOption(dirOption: string): string {
   return parseShape(dirValue, dirOption, (detail) => new CliError(`Invalid --dir: ${detail}`));
 }
 
-function addEntry(
+function newEntry(
   registry: Registry,
   mainWorktree: string,
   realHome: string,
@@ -653,8 +700,6 @@ function addEntry(
   const project: RegistryProject = { ...registered?.project, dir: dirValue };
   const dir = companionDir(dirValue, realHome);
   assertCompanionDirBounds(registry, { key, project, dir }, mainWorktree, realHome);
-  const rawProject = { ...registry.raw.projects[key], dir: dirValue };
-  writeRegistry(registry, { ...registry.raw.projects, [key]: rawProject });
   return { key, project, dir };
 }
 
