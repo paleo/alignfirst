@@ -1,5 +1,11 @@
 # @alignfirst/workspace
 
+## 0.42.2
+
+### Patch Changes
+
+- e5e9e26: Pointed the error for the retired `ports.names` and `ports.mainWorktree` keys at `alignfirst setup guide upgrade`.
+
 ## 0.42.1
 
 ### Patch Changes
