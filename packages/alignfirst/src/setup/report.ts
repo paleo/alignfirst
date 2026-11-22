@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -8,7 +9,6 @@ import { errorMessage } from "../errors.js";
 import {
   gitOutput,
   gitOutputOrUndefined,
-  gitSucceeds,
   linkedMainWorktree,
   optionalRepositoryId,
 } from "../git.js";
@@ -120,8 +120,17 @@ function inspectWorkFiles(ctx: CommandContext, root: string): string[] {
   return [`local (${plans.path}), ${ignoreState(root, ".plans")}`];
 }
 
+/**
+ * Without a trailing slash: in a linked worktree a shared directory is a symlink, and Git rejects
+ * `<link>/` as a pathspec "beyond a symbolic link".
+ */
 function ignoreState(root: string, path: string): string {
-  return gitSucceeds(root, "check-ignore", "-q", "--", path) ? "ignored" : "not ignored";
+  const { status, stderr } = spawnSync("git", ["-C", root, "check-ignore", "-q", "--", path], {
+    encoding: "utf-8",
+  });
+  if (status === 0) return "ignored";
+  if (status === 1) return "not ignored";
+  return `ignore state unknown (${stderr.split("\n", 1)[0] || `git exited with ${status}`})`;
 }
 
 function inspectDocs(ctx: CommandContext): string[] {
@@ -134,13 +143,8 @@ function inspectWorkspace(ctx: CommandContext, root: string): string[] {
   const config = layout.projectConfig?.config;
   const declared = config?.workspace !== undefined || config?.devServer !== undefined;
   const facts = [declared ? "recipe declared" : "no recipe"];
-  if (layout.storage.in === "project") facts.push(`.local-wt/ ${ignoreState(root, ".local-wt/")}`);
-  if (existsSync(join(root, ".local"))) {
-    const listed = config?.workspace?.sharedDirs?.includes(".local") === true;
-    facts.push(
-      `.local/ ${ignoreState(root, ".local/")}, ${listed ? "listed" : "not listed"} in workspace.sharedDirs`,
-    );
-  }
+  if (layout.storage.in === "project") facts.push(`.local-wt/ ${ignoreState(root, ".local-wt")}`);
+  if (existsSync(join(root, ".local"))) facts.push(`.local/ ${ignoreState(root, ".local")}`);
   return [facts.join("; ")];
 }
 

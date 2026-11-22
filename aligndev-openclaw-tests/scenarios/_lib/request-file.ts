@@ -16,7 +16,7 @@ export async function waitForCapturedRequest(
   return file;
 }
 
-export async function waitForFile(path: string, timeoutMs: number): Promise<string> {
+async function waitForFile(path: string, timeoutMs: number): Promise<string> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {

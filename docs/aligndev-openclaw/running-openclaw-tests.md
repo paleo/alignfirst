@@ -79,7 +79,7 @@ Unique tags isolate names, not CPU, RAM, disk or build cache. Agree on a resourc
 
 ## Configuration
 
-Use only Terra (`openai/gpt-6.1-terra`) for conversation-model tests. This version has not yet been validated by live scenarios; the dated acceptance records below describe earlier runs. The judge runs `openrouter/anthropic/claude-haiku-5.5` on `OPENROUTER_API_KEY`. The Anthropic, Qwen and GLM providers in `openclaw.json` stay as examples at their latest model versions; the runner drops a provider whose key is empty.
+Use only Terra (`openai/gpt-6.1-terra`) for conversation-model tests. The static catalog of the pinned OpenClaw 2026.10.9 predates this model, so `openclaw.json` declares it under `models.providers.openai.models`; without that row, the first turn fails with `Unknown model`. The judge runs `openrouter/anthropic/claude-haiku-5.5` on `OPENROUTER_API_KEY`. The Anthropic, Qwen and GLM providers in `openclaw.json` stay as examples at their latest model versions; the runner drops a provider whose key is empty.
 
 - `OPENCLAW_WORKSPACE_DIR=./workspace` — the `myassistant` workspace, bind-mounted into the gateway. Workspace edits iterate live.
 - `OPENCLAW_CODEX_HOME` — absolute path to a file-backed Codex home. Required for `openai/gpt-6.1-terra`. The gateway mounts it read-only and imports its ChatGPT/Codex credential into the disposable `main` agent's OpenClaw auth store at startup; no OpenAI Platform API key is required. Create a dedicated login so test authentication is isolated from the main Codex session:
@@ -198,6 +198,17 @@ CODING_AGENT=codex npm run e2e -- --channel slack-mock A09-code-agent-contract
 Select `CODING_AGENT=claude` or `CODING_AGENT=pi` for the other children as needed; channel/model repetition adds no coverage to that contract. Clear a previous `CODING_AGENT_MODELS` override or set it to include the selected child's contract model.
 
 **Ticket-id convention:** scenario `A<S>` uses `ABC-0<S>N` (`A1` → `ABC-010`, `A2` → `ABC-020`, …; `A11` → `ABC-0110`). The mechanical mapping is a leak signal: while running `A<S>`, any `ABC-0<X>N` with `X ≠ S` is bleed from another scenario. The test sender is `ROBIN01`, listed in [`workspace/USER.md`](../../aligndev-openclaw-tests/workspace/USER.md). A5's `aurora` is deliberately **not** a fixture name (unknown-project path).
+
+### side-38 acceptance — 2026-11-22
+
+Terra with the declared model row, Haiku through OpenRouter as judge, one Slack iteration on one worker:
+
+| Case | Result | Artifact run under `aligndev-openclaw-tests/artifacts/` |
+| --- | --- | --- |
+| A12 project creation | Passed | `2026-11-22T11-56-01-510Z` |
+| A24 missing plans | Passed | `2026-11-22T12-06-24-889Z` |
+
+The diagnostic runs exposed three scenario defects, now fixed. A12 read the creation request from project plans, while creation now selects companion plans. Its mock bootstrap declared one port where the request asks for two per workspace. The A24 and A25 mock rejected a follow-up delegation in the ticket worktree. A25 was not rerun.
 
 ### side-29 acceptance — 2026-10-21
 

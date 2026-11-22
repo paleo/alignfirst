@@ -1,5 +1,13 @@
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -141,6 +149,21 @@ describe("setup", () => {
     expect(result.stdout).toContain(
       "- Global skills: on disk; the session's skill list shows availability\n  - alignfirst none\n",
     );
+  });
+});
+
+describe("setup state report", () => {
+  it("reports a shared .local symlink in a linked worktree as ignored", async () => {
+    const project = makeProject();
+    writeFileSync(join(project, ".gitignore"), ".local\n");
+    git(project, "add", ".gitignore");
+    git(project, "commit", "--quiet", "-m", "ignore .local");
+    mkdirSync(join(project, ".local"));
+    const linked = join(dirname(project), "linked");
+    git(project, "worktree", "add", "--quiet", "-b", "linked", linked);
+    symlinkSync(join(project, ".local"), join(linked, ".local"));
+    const result = await runMain(["setup"], { cwd: linked });
+    expect(result.stdout).toMatch(/^- Workspace: .*\.local\/ ignored$/m);
   });
 });
 

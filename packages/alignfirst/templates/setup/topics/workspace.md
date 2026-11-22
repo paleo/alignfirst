@@ -32,7 +32,7 @@ Preserve and repair conflicting or redirected registry state before retrying.
 
 ### Shared `.local`
 
-When `.local/` exists and Git ignores it, list it explicitly in `workspace.sharedDirs`; the report shows both facts. First verify that `git ls-files -- .local` is empty, and report any tracked or staged conflict before proceeding. Preserve the other entries, and never create `.local` just to list it. Explicit sharing cannot override the plans and runtime policies.
+Setup shares main's untracked `.local/` by default; `workspace.sharedDirs` does not list it. A tracked `.local` stays branch-local. When `.local/` exists, the report shows whether Git ignores it. Before adding an ignore rule, verify that `git ls-files -- .local` is empty, and report any tracked or staged conflict. Never create `.local`.
 
 ## Configuration
 

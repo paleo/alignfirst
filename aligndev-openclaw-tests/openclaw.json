@@ -48,7 +48,25 @@
       "openai": {
         "agentRuntime": { "id": "openclaw" },
         "baseUrl": "https://chatgpt.com/backend-api/codex",
-        "api": "openai-chatgpt-responses"
+        "api": "openai-chatgpt-responses",
+        "models": [
+          {
+            "id": "gpt-6.1-terra",
+            "name": "GPT-6.1 Terra",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1050000,
+            "contextTokens": 272000,
+            "maxTokens": 128000,
+            "thinkingLevelMap": { "off": null, "minimal": "low", "xhigh": "xhigh", "max": "max" },
+            "compat": {
+              "supportsReasoningEffort": true,
+              "supportedReasoningEfforts": ["low", "medium", "high", "xhigh", "max"],
+              "supportsTemperature": false,
+              "codeMode": "preferred"
+            }
+          }
+        ]
       },
       "custom-anthropic": {
         "agentRuntime": { "id": "openclaw" },
