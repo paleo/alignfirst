@@ -126,9 +126,9 @@ describe("catchup launch", () => {
       "/bin/bash",
       [
         "-c",
-        '"$1" "$2" code new --catchup --message-file - <<\'ALIGNDEV_MESSAGE\'\n' +
+        '"$1" "$2" code new --catchup --message-file - <<\'END_ALIGNDEV_MESSAGE\'\n' +
           message +
-          "ALIGNDEV_MESSAGE\n",
+          "END_ALIGNDEV_MESSAGE\n",
         "aligndev-test",
         process.execPath,
         ALIGNDEV_BIN,
