@@ -5,6 +5,7 @@ read_when:
   - releasing packages to npm
   - verifying the provenance of a published tarball
   - managing the trusted-publisher bindings or the release environment
+  - changing the CI jobs or the required checks of `main`
 ---
 
 # Releasing
@@ -14,7 +15,7 @@ Stable releases publish from GitHub Actions through npm trusted publishing (OIDC
 ## Flow
 
 1. A PR authors a changeset (see [writing-a-changeset.md](writing-a-changeset.md)) and is squash-merged into `main`.
-2. `.github/workflows/release.yml` runs on the push. Its `version` job creates or updates the **release: version packages** PR, which applies the pending changesets to the manifests and changelogs. CI skips its jobs on that PR's branch, `changeset-release/main`.
+2. `.github/workflows/release.yml` runs on the push. Its `version` job creates or updates the **release: version packages** PR, which applies the pending changesets to the manifests and changelogs. The job pushes the PR's branch, `changeset-release/main`, with the default `GITHUB_TOKEN`, so the PR's CI run waits for a click on **Approve and run**. That run passes without building or testing; see [Required checks](#required-checks).
 3. Merging that PR pushes the bumped versions to `main`. The `check` job now finds versions absent from the registry and enables the `publish` job.
 4. `publish` is bound to the `release` environment, so it waits for one approval. After approval it builds, tests, strips the `scripts` field from the workspace manifests, and runs `changeset publish`. npm attaches a provenance attestation to each tarball. The action then pushes git tags and creates the GitHub releases.
 5. `verify` waits 15 minutes, then installs the freshly published versions in an empty directory, runs `npm audit signatures`, and asserts that each version carries a provenance attestation. The wait is the `verify` environment's timer: npm's CDN keeps serving a stale packument for several minutes after a publish, and a job held by a wait timer occupies no runner.
@@ -22,6 +23,12 @@ Stable releases publish from GitHub Actions through npm trusted publishing (OIDC
 A push that publishes nothing — a feature merge, a docs-only merge — leaves `check` reporting no pending version, so no approval is ever requested.
 
 The publish job uses Node 26 and npm `12.2.0` for trusted publishing and automatic OIDC provenance. npm 12 blocks dependency lifecycle scripts by default; the root manifest records version-scoped approvals for the reviewed build dependencies. Locally, use `npx --yes --package=npm@12.2.0 npm <command>` rather than upgrading a global installation.
+
+## Required checks
+
+The ruleset `main` requires the checks `test (24)`, `test (26)` and `node-22`, with no bypass. On `changeset-release/main`, the CI jobs run, but every step carries `if: env.RELEASE_PR != 'true'`, so each job reports success at once. A new step in `test` or `node-22` needs the same condition.
+
+Keep the skip at step level. A job-level `if` reports a skipped matrix job as a single `test` check: `test (24)` and `test (26)` never report, and the Version Packages PR stays blocked.
 
 ## Verifying provenance
 

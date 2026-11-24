@@ -8,41 +8,57 @@ on:
 permissions:
   contents: read
 
+# The Version Packages PR only bumps versions and changelogs. Its jobs skip every step, so the
+# required checks still report under their names and pass.
+env:
+  RELEASE_PR: ${{ github.head_ref == 'changeset-release/main' }}
+
 jobs:
   test:
-    # The Version Packages PR only bumps versions and changelogs.
-    if: github.head_ref != 'changeset-release/main'
     runs-on: ubuntu-latest
     strategy:
       matrix:
         node: [24, 26]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - if: env.RELEASE_PR != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: env.RELEASE_PR != 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node }}
-      - run: npm ci
-      - run: npm run build
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm test
-      - run: npm run test:integration --workspace @alignfirst/pi-background --workspace @alignfirst/workspace --workspace aligndev
+      - if: env.RELEASE_PR != 'true'
+        run: npm ci
+      - if: env.RELEASE_PR != 'true'
+        run: npm run build
+      - if: env.RELEASE_PR != 'true'
+        run: npm run typecheck
+      - if: env.RELEASE_PR != 'true'
+        run: npm run lint
+      - if: env.RELEASE_PR != 'true'
+        run: npm test
+      - if: env.RELEASE_PR != 'true'
+        run: npm run test:integration --workspace @alignfirst/pi-background --workspace @alignfirst/workspace --workspace aligndev
 
   node-22:
-    # The Version Packages PR only bumps versions and changelogs.
-    if: github.head_ref != 'changeset-release/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - if: env.RELEASE_PR != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: env.RELEASE_PR != 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-      - name: Install monorepo dependencies on a supported OpenClaw runtime
+      - if: env.RELEASE_PR != 'true'
+        name: Install monorepo dependencies on a supported OpenClaw runtime
         run: npm ci
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - if: env.RELEASE_PR != 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-      - name: Build invocation provider before CLI consumers
+      - if: env.RELEASE_PR != 'true'
+        name: Build invocation provider before CLI consumers
         run: npm run build --workspace @alignfirst/docmap --workspace @alignfirst/workspace && npm run build --workspace alignfirst --workspace aligndev --workspace @alignfirst/pi-subagent --workspace @alignfirst/pi-background
-      - run: npm test --workspace @alignfirst/docmap --workspace alignfirst --workspace aligndev --workspace @alignfirst/workspace --workspace @alignfirst/pi-subagent --workspace @alignfirst/pi-background
-      - run: npm run test:integration --workspace @alignfirst/pi-background --workspace @alignfirst/workspace --workspace aligndev
+      - if: env.RELEASE_PR != 'true'
+        run: npm test --workspace @alignfirst/docmap --workspace alignfirst --workspace aligndev --workspace @alignfirst/workspace --workspace @alignfirst/pi-subagent --workspace @alignfirst/pi-background
+      - if: env.RELEASE_PR != 'true'
+        run: npm run test:integration --workspace @alignfirst/pi-background --workspace @alignfirst/workspace --workspace aligndev
