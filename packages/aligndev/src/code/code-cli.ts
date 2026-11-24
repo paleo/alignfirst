@@ -1039,10 +1039,10 @@ Config (~/.alignfirst/aligndev.settings.json):
                         falls through. The assistant's profile has the assistant's harness
                         (ALIGNDEV_ASSISTANT_HARNESS, else the detected coding agent, else openclaw
                         under OPENCLAW_SHELL=exec) and a configDir matching the session's native
-                        directory variable: omitted matches anything, null an unset variable, a
-                        path the same directory. A historical resume without a recorded profile
-                        uses the built-ins of the assistant's harness unless a named selection
-                        replaces them.
+                        directory variable: null an unset variable, a path the same directory,
+                        omitted anything when no null or path profile matches. A historical
+                        resume without a recorded profile uses the built-ins of the assistant's
+                        harness unless a named selection replaces them.
   Model default         ${defaultModel ?? "native default"} (new only). Resume retains and validates its model.
                         One configured alias expands before native model handling.
 

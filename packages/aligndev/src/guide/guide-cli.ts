@@ -49,11 +49,13 @@ export function runGuide(
   ctx: ProjectsCallerContext,
 ): number {
   try {
-    const platform = platformOf(resolveAssistantHarness(ctx.env).harness);
     const args = parseGuideArgs(tokens);
-    ctx.stdout.write(
-      args.help ? renderUsage(ctx.forms) : `${renderTopic(args, platform, config, ctx)}\n`,
-    );
+    if (args.help) {
+      ctx.stdout.write(renderUsage(ctx.forms));
+      return 0;
+    }
+    const platform = platformOf(resolveAssistantHarness(ctx.env).harness);
+    ctx.stdout.write(`${renderTopic(args, platform, config, ctx)}\n`);
     return 0;
   } catch (error) {
     ctx.stderr.write(`${errorMessage(error)}\n`);

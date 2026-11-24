@@ -11,10 +11,12 @@ interface AllocatedPortRange {
   start: number;
 }
 
-// The lowest block of `size` ports inside the inventory's range that overlaps no project range.
-export function findFreeBlock(inventory: ProjectInventory, size: number): PortRange {
-  const available = inventory.portRange;
-  if (available === null) throw new Error("free-ports requires portRange in the aligndev config.");
+// The lowest block of `size` ports inside `available` that overlaps no project range.
+export function findFreeBlock(
+  inventory: ProjectInventory,
+  available: PortRange,
+  size: number,
+): PortRange {
   const occupied = inventory.projects.flatMap(({ portRange }) =>
     portRange === undefined ? [] : [allocatedRange(portRange)],
   );

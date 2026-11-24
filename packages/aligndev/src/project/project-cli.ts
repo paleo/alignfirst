@@ -67,7 +67,9 @@ function runProjectCommand(ctx: ProjectsContext, args: ProjectsArgs): number {
     return 0;
   }
   if (args.command === "doctor") return inspectProjectInventory(ctx, args);
-  if (args.command === "free-ports") requirePortRange(ctx.config);
+  if (args.command === "free-ports" && args.size !== undefined) {
+    return showFreePorts(ctx, args, args.size);
+  }
   const inventory = scanProjects(ctx, args);
   if (args.command === "list") {
     ctx.stdout.write(args.json ? renderProjectListJson(inventory) : renderProjectList(inventory));
@@ -78,12 +80,14 @@ function runProjectCommand(ctx: ProjectsContext, args: ProjectsArgs): number {
     ctx.stdout.write(args.json ? renderProjectStatusJson(details) : renderProjectStatus(details));
     return 0;
   }
-  if (args.command === "free-ports" && args.size !== undefined) {
-    const range = findFreeBlock(inventory, args.size);
-    ctx.stdout.write(args.json ? renderPortRangeJson(range) : `${formatRange(range)}\n`);
-    return 0;
-  }
   throw new Error("Invalid aligndev project command");
+}
+
+function showFreePorts(ctx: ProjectsContext, args: ProjectsArgs, size: number): number {
+  const available = requirePortRange(ctx.config);
+  const range = findFreeBlock(scanProjects(ctx, args), available, size);
+  ctx.stdout.write(args.json ? renderPortRangeJson(range) : `${formatRange(range)}\n`);
+  return 0;
 }
 
 function renderUsage(aligndev: string): string {

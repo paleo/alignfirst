@@ -105,8 +105,11 @@ describe("the assistant's harness in the guide", () => {
     expect(result.stdout).toBe("");
   });
 
-  it("documents ALIGNDEV_ASSISTANT_HARNESS in the guide help", async () => {
-    const result = await runGuide(makeFixture(), ["--help"]);
+  it("shows the guide help even with an invalid ALIGNDEV_ASSISTANT_HARNESS", async () => {
+    const result = await runGuide(makeFixture(), ["--help"], {
+      env: { ALIGNDEV_ASSISTANT_HARNESS: "openclow" },
+    });
+    expect(result.code, result.stderr).toBe(0);
     expect(result.stdout).toContain("ALIGNDEV_ASSISTANT_HARNESS");
   });
 });

@@ -422,6 +422,14 @@ test("inventory requires one enabled openclaw profile naming an enabled coding p
   });
 });
 
+test("inventory reports a fallbackProfile reference without any profiles", () => {
+  withFixture("codex", "slack", {}, (fixture) => {
+    fixture.settings.code = { fallbackProfile: "missing" };
+    saveSettings(fixture);
+    assert.match(assertInventoryRejected(fixture), /code\.fallbackProfile/u);
+  });
+});
+
 test("inventory validates every flag and counts enabled defaults only", () => {
   withFixture("codex", "slack", {}, (fixture) => {
     const original = structuredClone(fixture.settings);

@@ -68,7 +68,7 @@ export function inventoryProfiles(settingsFile, serviceHome, deployedSettingsFil
   // A disabled profile is absent for the CLI: its shape is validated, nothing else.
   const enabled = Object.entries(profiles).filter(([, profile]) => profile.disabled !== true);
   const coding = enabled.filter(([, profile]) => profile.harness !== "openclaw");
-  validateReferences(settings.code, enabled, settingsFile);
+  validateReferences(settings.code, profiles, enabled, settingsFile);
   validateDefaults(coding, settingsFile);
   const selectedName = deploymentDefault(enabled, settingsFile);
   const stores = [];
@@ -321,11 +321,11 @@ function validateLaunchFields(value, path) {
 }
 
 // A named reference never falls through: it must name an enabled coding profile.
-function validateReferences(code, enabled, settingsFile) {
+function validateReferences(code, profiles, enabled, settingsFile) {
   const check = (origin, name) => {
-    const profile = code.profiles[name];
+    const profile = profiles[name];
     let reason;
-    if (!Object.hasOwn(code.profiles, name)) reason = "a missing profile";
+    if (!Object.hasOwn(profiles, name)) reason = "a missing profile";
     else if (profile.disabled === true) reason = "a disabled profile";
     else if (profile.harness === "openclaw") reason = "an openclaw profile";
     if (reason !== undefined)

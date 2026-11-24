@@ -16,6 +16,7 @@ import {
   boolean,
   type Check,
   integerBetween,
+  isPlainObject,
   literal,
   matching,
   nonblankString,
@@ -240,7 +241,7 @@ function profileShape(warn: (path: string, key: string) => void): Check<Profile>
     warn,
   );
   return (value, path, warningPath = path) => {
-    if (typeof value !== "object" || value === null) return codingShape(value, path, warningPath);
+    if (!isPlainObject(value)) return codingShape(value, path, warningPath);
     const harness = "harness" in value ? value.harness : undefined;
     if (harness === "openclaw") {
       for (const key of CODING_ONLY_PROFILE_KEYS) {
@@ -548,7 +549,8 @@ function automaticProfile(
 }
 
 // The enabled profile of the assistant's harness whose configDir matches the session's native
-// directory: omitted matches anything, null an unset variable, a path the same directory.
+// directory. An exact match (null for an unset variable, a path for the same directory) wins;
+// profiles with an omitted configDir match any session and apply only without an exact match.
 function codingAssistantProfile(
   config: LoadedConfig,
   env: NodeJS.ProcessEnv,
@@ -556,9 +558,10 @@ function codingAssistantProfile(
 ): NamedProfile<CodingProfile> | undefined {
   const variable = env[CONFIG_DIRECTORY_VARIABLES[harness]];
   const directory = variable === "" ? undefined : variable;
-  const candidates = enabledCodingProfiles(config).filter(
-    ({ profile }) => profile.harness === harness && describesSession(profile.configDir, directory),
-  );
+  const own = enabledCodingProfiles(config).filter(({ profile }) => profile.harness === harness);
+  const exact = own.filter(({ profile }) => matchesDirectory(profile.configDir, directory));
+  const candidates =
+    exact.length > 0 ? exact : own.filter(({ profile }) => profile.configDir === undefined);
   if (candidates.length < 2) return candidates[0];
   const preferred = candidates.find(({ profile }) => profile.default === true);
   if (preferred !== undefined) return preferred;
@@ -569,11 +572,11 @@ function codingAssistantProfile(
   );
 }
 
-function describesSession(
+function matchesDirectory(
   configDir: string | null | undefined,
   directory: string | undefined,
 ): boolean {
-  if (configDir === undefined) return true;
+  if (configDir === undefined) return false;
   if (configDir === null) return directory === undefined;
   return directory !== undefined && resolve(configDir) === resolve(directory);
 }

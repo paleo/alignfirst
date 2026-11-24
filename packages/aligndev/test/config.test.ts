@@ -468,6 +468,27 @@ describe("profile resolution", () => {
   });
 
   it.each([
+    ["~/elsewhere", "anywhere"],
+    [undefined, "unset"],
+    ["~/work", "work"],
+  ])("prefers an exact configDir match over a default omitted one: %j", (variable, expected) => {
+    const home = makeHome({
+      code: {
+        profiles: {
+          anywhere: { harness: "claude", default: true },
+          unset: { harness: "claude", configDir: null },
+          work: { harness: "claude", configDir: "~/work" },
+        },
+      },
+    });
+    const env = {
+      CLAUDECODE: "1",
+      ...(variable === undefined ? {} : { CLAUDE_CONFIG_DIR: variable.replace("~", home) }),
+    };
+    expect(resolveCodeConfig(loadConfig(home, "alignfirst"), env).profile).toBe(expected);
+  });
+
+  it.each([
     ["codex", "CODEX_HOME", { CODEX_THREAD_ID: "t" }],
     ["pi", "PI_CODING_AGENT_DIR", { AI_AGENT: "pi" }],
   ] as const)("reads the %s session's own directory variable", (harness, variable, marker) => {
