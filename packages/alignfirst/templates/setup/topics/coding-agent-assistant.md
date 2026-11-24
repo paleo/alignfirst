@@ -57,6 +57,8 @@ For Pi, prefer provider-qualified `modelAliases` targets. Exact IDs pin a model;
 
 Without a nonempty profile `models`, Pi accepts any nonblank selector, and Claude and Codex accept their built-in names plus configured aliases. A nonempty list replaces the accepted names. New sessions use the profile's `defaultModel`, else the native default.
 
+A nonempty profile `efforts` replaces the harness's built-in effort levels and bounds what `--effort` accepts. New sessions use the profile's `defaultEffort`, which must be one of the accepted levels, else the native default. A resume keeps its recorded effort. Under Pi, an effort overrides a thinking suffix of the model selector.
+
 Resume retains and validates its recorded user-facing model, ignoring profile defaults. Disallowed names require `--model`; null keeps the native conversation model. Current alias mappings apply even to retained names. The selected native account must contain the original conversation; cross-agent resumes fail, and Pi requires the recorded real directory. No fallback account or replacement conversation is accepted.
 
 The [`aligndev` README](https://github.com/paleo/alignfirst/tree/main/packages/aligndev#configuration) documents every profile field and the independent quota settings. Omitted quota uses a native Claude or Codex profile's effective environment. For Pi, follow "Optional quota setup for Pi" below. Quota selection follows new-session precedence, needs no ticket or `.plans`, and never changes the agent.

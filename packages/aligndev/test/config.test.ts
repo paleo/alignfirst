@@ -188,6 +188,7 @@ describe("settings shape", () => {
     { default: true },
     { configDir: null },
     { models: [] },
+    { defaultEffort: "high" },
     { env: {} },
     { quota: { source: "none" } },
   ])("rejects coding-agent keys on an openclaw profile %j", (extra) => {
@@ -217,6 +218,8 @@ describe("settings shape", () => {
     ],
     [profileConfig({ harness: "pi", models: [" "] }), "models"],
     [profileConfig({ harness: "pi", defaultModel: " " }), "defaultModel"],
+    [profileConfig({ harness: "pi", efforts: [" "] }), "efforts"],
+    [profileConfig({ harness: "pi", defaultEffort: " " }), "defaultEffort"],
     [profileConfig({ harness: "pi", modelAliases: { " ": "x" } }), "modelAliases"],
     [profileConfig({ harness: "pi", modelAliases: { x: " " } }), "modelAliases"],
     [profileConfig({ harness: "pi", env: { "bad-name": "x" } }), "env"],
@@ -789,6 +792,30 @@ describe("profile resolution", () => {
     expect(resolveCodeConfig(loadConfig(home, "alignfirst"), {}).defaultModel).toBe(
       " provider/model:high ",
     );
+  });
+
+  it.each([{}, { disabled: true }])(
+    "rejects a defaultEffort outside the harness's built-in levels %j",
+    (extra) => {
+      const home = makeHome(
+        profileConfig({ harness: "claude", defaultEffort: "minimal", ...extra }),
+      );
+      expect(() => loadConfig(home, "alignfirst")).toThrow(Error);
+    },
+  );
+
+  it("checks defaultEffort against the profile's own efforts when nonempty", () => {
+    const home = makeHome(
+      profileConfig({ harness: "claude", defaultEffort: "deep", efforts: ["quick", "deep"] }),
+    );
+    expect(loadConfig(home, "alignfirst").code.profiles?.test).toMatchObject({
+      defaultEffort: "deep",
+    });
+    writeConfig(
+      home,
+      profileConfig({ harness: "claude", defaultEffort: "high", efforts: ["deep"] }),
+    );
+    expect(() => loadConfig(home, "alignfirst")).toThrow(Error);
   });
 
   it.each([

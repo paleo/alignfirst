@@ -21,6 +21,7 @@ import {
 import { validateEffectivePlans } from "../project/plans.js";
 import { type CodingAgent, createAgentAdapter } from "./coding-agent.js";
 import { readMachineId } from "./machine-id.js";
+import { resolveEfforts } from "./efforts.js";
 import { expandModelAlias, type ExecutableModelResolver, resolveModels } from "./models.js";
 import { describeNativeStorage } from "./native-context.js";
 import { buildPrompt, PROTOCOLS } from "./prompt.js";
@@ -50,6 +51,7 @@ const SESSION_OPTIONS = {
   ticket: { type: "string" },
   message: { type: "string", short: "m" },
   model: { type: "string" },
+  effort: { type: "string" },
   profile: { type: "string" },
   meta: { type: "string" },
   quiet: { type: "boolean" },
@@ -112,6 +114,7 @@ export interface SessionArgs {
   messageFile?: string;
   message?: string;
   model?: string;
+  effort?: string;
   meta?: string;
   quiet?: boolean;
 }
@@ -150,12 +153,13 @@ export async function runCode(
     });
     if (command.kind === "quota") return await showQuota(ctx, code);
     const models = resolveModels(code.harness, code.models, code.modelAliases);
+    const efforts = resolveEfforts(code.harness, code.efforts);
     if (command.kind === "help") {
-      ctx.stdout.write(renderHelp(code, models, ctx.forms));
+      ctx.stdout.write(renderHelp(code, models, efforts, ctx.forms));
       return 0;
     }
     loadMessage(command.args, ctx.cwd);
-    const validationError = validateSessionArgs(command.args, models);
+    const validationError = validateSessionArgs(command.args, models, efforts);
     if (validationError) {
       ctx.stderr.write(`${validationError}\n`);
       return 1;
@@ -317,6 +321,7 @@ function renderSessionStatus(
     `agent: ${frontmatter.agent ?? ""}`,
     `profile: ${frontmatter.profile ?? ""}`,
     `model: ${frontmatter.model ?? ""}`,
+    `effort: ${frontmatter.effort ?? ""}`,
     `status: ${frontmatter.status}`,
     `pid: ${frontmatter.pid ?? ""}`,
     `machineId: ${frontmatter.machineId ?? ""}`,
@@ -410,6 +415,7 @@ function parseNewCommand(tokens: string[]): CodeCommand {
       messageFile: values["message-file"],
       message: values.message,
       model: values.model,
+      effort: values.effort,
       meta: values.meta,
     },
   };
@@ -440,6 +446,7 @@ function parseResumeCommand(tokens: string[]): CodeCommand {
       messageFile: values["message-file"],
       message: values.message,
       model: values.model,
+      effort: values.effort,
       meta: values.meta,
     },
   };
@@ -463,6 +470,7 @@ function parseBareCommand(tokens: string[], kind: "quota" | "help"): CodeCommand
 export function validateSessionArgs(
   args: SessionArgs,
   models: readonly string[] | undefined,
+  efforts: readonly string[],
 ): string | undefined {
   const isNew = args.resume === undefined;
   const hasMessage = args.message !== undefined && args.message.trim() !== "";
@@ -474,6 +482,9 @@ export function validateSessionArgs(
     if (models !== undefined && !models.includes(args.model)) {
       return `Error: --model must be one of: ${models.join(", ")}.`;
     }
+  }
+  if (args.effort !== undefined && !efforts.includes(args.effort)) {
+    return `Error: --effort must be one of: ${efforts.join(", ")}.`;
   }
   if (args.protocol === undefined && !hasMessage && args.catchup !== true) {
     return "Error: --message is required when --protocol is not specified.";
@@ -544,6 +555,7 @@ async function runSession(
   }
 
   const model = selectModel(args, code, previous);
+  const effort = selectEffort(args, code, previous);
   const now = new Date();
   const ticket = args.noTicket ? reserveSideTicket(alignfirstCommand, cwd, env) : resolvedTicket;
   if (ticket !== undefined && !args.noTicket && args.resume === undefined) {
@@ -569,6 +581,7 @@ async function runSession(
       agent,
       profile: code.profile,
       model,
+      effort,
       now,
       realCwd: tree.cwd,
       ticket,
@@ -609,6 +622,7 @@ async function runSession(
     cwd,
     sessionFilePath,
     executableModel,
+    effort,
     catchupContent,
     contextContent,
     alignfirst: forms.alignfirst,
@@ -826,12 +840,30 @@ function selectModel(
   return model;
 }
 
+// A null recorded effort retains the native default; profile defaults are new-only.
+function selectEffort(
+  args: SessionArgs,
+  code: CodeConfig,
+  previous: SessionRecord | undefined,
+): string | undefined {
+  if (args.effort !== undefined) return args.effort;
+  if (args.resume === undefined) return code.defaultEffort;
+  const effort = previous?.frontmatter.effort ?? undefined;
+  if (effort !== undefined && !resolveEfforts(code.harness, code.efforts).includes(effort)) {
+    throw new Error(
+      "Error: retained session effort is not accepted by the selected profile; supply --effort with an accepted replacement.",
+    );
+  }
+  return effort;
+}
+
 interface FrontmatterInput {
   args: SessionArgs;
   agent: CodingAgent;
   profile: string | null;
   // The model name chosen by `selectModel`, before alias resolution.
   model: string | undefined;
+  effort: string | undefined;
   now: Date;
   realCwd: string;
   ticket: string | undefined;
@@ -847,6 +879,7 @@ function buildFrontmatter(input: FrontmatterInput): SessionFrontmatter {
     protocol: args.protocol ?? null,
     ticket: ticket ?? null,
     model: input.model ?? null,
+    effort: input.effort ?? null,
     sessionId: args.resume ?? null,
     command: formatCommand(args),
     meta: args.meta ?? null,
@@ -874,6 +907,7 @@ function formatCommand(args: SessionArgs): string {
   if (args.noTicket) parts.push("--no-ticket");
   if (args.catchup === true) parts.push("--catchup");
   if (args.model !== undefined) parts.push("--model", args.model);
+  if (args.effort !== undefined) parts.push("--effort", args.effort);
   if (args.profile !== undefined) parts.push("--profile", JSON.stringify(args.profile));
   if (args.messageFile !== undefined) {
     parts.push("--message-file", JSON.stringify(args.messageFile));
@@ -893,6 +927,7 @@ export interface RunInput {
   cwd: string;
   sessionFilePath: string;
   executableModel: string | undefined;
+  effort: string | undefined;
   catchupContent?: string;
   contextContent?: string;
   // The alignfirst command form the agent is told to run.
@@ -917,6 +952,7 @@ export function buildRunConfig(input: RunInput): RunConfig {
     resume: args.resume,
     quiet: args.quiet,
     executableModel: input.executableModel,
+    effort: input.effort,
     skipPermissions: code.skipPermissions,
     additionalDirectories:
       code.harness !== "pi" && !code.skipPermissions && report.companion !== null
@@ -936,9 +972,10 @@ function createMissingCompanion(report: ProjectReport) {
 function renderHelp(
   code: CodeConfig,
   models: readonly string[] | undefined,
+  efforts: readonly string[],
   forms: CommandForms,
 ): string {
-  const { harness: agent, profile, defaultModel } = code;
+  const { harness: agent, profile, defaultModel, defaultEffort } = code;
   const { aligndev, alignfirst } = forms;
   const permissionMode =
     agent === "pi"
@@ -949,7 +986,9 @@ function renderHelp(
   const modelBehavior =
     agent === "codex"
       ? "Codex aliases astra, sol, terra, and luna resolve on demand; configured full slugs pass through."
-      : `${agent === "pi" ? "Pi native selectors (including provider/model:thinking)" : "Claude model values"} pass through unchanged.`;
+      : agent === "pi"
+        ? "Pi native selectors (including provider/model:thinking) pass through unchanged. --effort overrides a thinking suffix of the model selector."
+        : "Claude model values pass through unchanged.";
   const modelPolicy =
     models === undefined ? "Any nonblank pi-native selector" : `One of ${models.join(", ")}`;
   const requires = `Requires: the AlignFirst CLI through \`${forms.alignfirst}\`, for the project layout, side\ntickets and the delegated protocols.`;
@@ -995,6 +1034,9 @@ Options (new, resume):
   --model <model>       ${modelPolicy}. A new session defaults to
                         profile.defaultModel, else to the coding agent's default. A resume keeps the
                         session's model.
+  --effort <level>      One of ${efforts.join(", ")}. A new session defaults to
+                        profile.defaultEffort, else to the coding agent's default. A resume keeps the
+                        session's effort.
   --meta "..."          Opaque handoff string, stored verbatim in the session file frontmatter
                         (\`meta:\`). aligndev never interprets it; a later reader of the session file
                         (e.g. the caller reporting the run's outcome) can use it.
@@ -1008,8 +1050,8 @@ Config (~/.alignfirst/aligndev.settings.json):
   Effective profile: ${profile ?? "(built-in)"}; agent's harness: ${agent}.
   code.profiles         Complete named profiles, without inheritance. harness (required): claude,
                         codex, pi or openclaw. Other keys: defaultAgentProfile, disabled, default,
-                        configDir, env, unset, defaultModel, models, modelAliases, skipPermissions,
-                        quota.
+                        configDir, env, unset, defaultModel, models, modelAliases, defaultEffort,
+                        efforts, skipPermissions, quota.
   profile.defaultAgentProfile
                         The profile a session delegates to when this profile is the assistant's
                         profile; omitted means the profile itself. Followed once.
@@ -1045,6 +1087,7 @@ Config (~/.alignfirst/aligndev.settings.json):
                         harness unless a named selection replaces them.
   Model default         ${defaultModel ?? "native default"} (new only). Resume retains and validates its model.
                         One configured alias expands before native model handling.
+  Effort default        ${defaultEffort ?? "native default"} (new only). Resume retains and validates its effort.
 
 Native configuration: ${describeNativeStorage(code)}.
 Login must use the same effective environment as the child: apply profile unset/env/configDir,

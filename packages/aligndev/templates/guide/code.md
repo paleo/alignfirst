@@ -180,6 +180,7 @@ Don't reconstruct what happened: no re-running the agent, no `git` archaeology t
 | `--message-file <path>` | Read a UTF-8 message file; `-` reads stdin. Mutually exclusive with `--message`. |
 | `--catchup` | Load the ticket history before the protocol and message. `new` only, requires a ticket. Alone, it returns a short synthesis. |
 | `--model <model>` | {{MODEL_POLICY}}. A new session defaults to {{DEFAULT_MODEL}}; a resume keeps the session's model. Prefer the default (omit the flag). |
+| `--effort <level>` | {{EFFORT_POLICY}}. A new session defaults to {{DEFAULT_EFFORT}}; a resume keeps the session's effort. Prefer the default (omit the flag). |
 {{#openclaw}}
 | `--meta "..."` | Opaque handoff string stored verbatim in the session file's `meta:` frontmatter. `{{ALIGNDEV}} code` never reads it — it's for you to stash context the run's later reader needs (e.g. where to report the outcome). |
 {{/openclaw}}
@@ -195,7 +196,7 @@ The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. The profile's no
 `{{ALIGNDEV}} code status` seals a `running` record only when its `machineId` matches this installation and its pid is conclusively gone or reused. Foreign, legacy and uncertain records stay `running`; a sealed run reports `status: failed`, `exitReason: terminated`. `{{ALIGNDEV}} code quota` works without a `.plans` directory and does not start a coding session. Its output belongs to the selected native quota CLI's account; account pairing with the coding child is not verified.
 {{/openclaw}}
 {{#codingAgent}}
-The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. A nonempty profile `models` list replaces its accepted model list. Pi has no finite allowlist by default: native selectors pass through unchanged, preferably `provider/model`, with optional thinking suffix. For a Pi child without `--model`, a new run uses profile `defaultModel`, else Pi's own default; a resume retains and validates its recorded model. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
+The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. A nonempty profile `models` list replaces its accepted model list. Pi has no finite allowlist by default: native selectors pass through unchanged, preferably `provider/model`, with optional thinking suffix; `--effort` overrides that suffix. For a Pi child without `--model`, a new run uses profile `defaultModel`, else Pi's own default; a resume retains and validates its recorded model. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
 
 `{{ALIGNDEV}} code status` seals a `running` record only when its `machineId` matches this installation and its pid is conclusively gone or reused. Foreign, legacy and uncertain records stay `running`; a sealed run reports `status: failed`, `exitReason: terminated`. `{{ALIGNDEV}} code quota` needs no `.plans` and starts no session. Its output belongs to the selected native quota CLI's account; account pairing with the coding child is not verified.
 {{/codingAgent}}
@@ -294,12 +295,16 @@ Stop AAD now. Start a spec instead (alignfirst).
 
 Two fresh sessions: one reviews, one fixes.
 
-1. **Review** — `{{ALIGNDEV}} code new --protocol review --ticket AB-123`. The agent reviews the current branch against the base branch and writes a review file; its path is in the run's result. The base defaults to the repository's default branch; override it via `--message "Base branch: \`develop\`"`. Retain the session id.
+1. **Review** — `{{ALIGNDEV}} code new --protocol review --ticket AB-123`. The agent reviews the current branch against the base branch and writes a review file; its path is in the run's result. Retain the session id.
+   - **Options** — the message carries them, as in `--message "Light review. Starting commit: \`<sha>\`."`:
+     - `Base branch: \`develop\`.` — the default is the repository's default branch.
+     - `Starting commit: \`<sha>\`.` — the review covers the commits added after it. A review file names the commit it reviewed on its `Reviewed commit` line: pass that commit to have the later ones reviewed.
+     - `Light review.` or `Regular review.` — the form. A light review is a single pass by the review session; a regular one runs four reviewers. Without a form, the agent takes the light review for a minor change and the regular one otherwise.
    - **Follow up** (someone else's branch, its author pushed fixes) — `{{ALIGNDEV}} code resume <sessionId> --message "Fixes have been pushed, please check."`, in the review session, with the author's replies to the review appended when there are any. The agent checks its findings against the new commits and reports which are resolved and which remain. A new review session would start over.
 2. **Fix** (optional, always in a fresh session — never in the review session) — `{{ALIGNDEV}} code new --protocol aad --ticket AB-123 --message "Here is a code review: \`.plans/AB-123/B1-review.md\`. What should we fix?"`. Send this message as it is, pointed at wherever the review lives: the review file, or the PR/MR whose comments carry it. The agent challenges the findings and proposes fixes; decide together what to fix, as in any AAD session. The goal is the project's code quality, and a finding is not an order: welcome a fix or an expansion that cleans things up, refuse one that adds complexity; simplicity wins. The agent then implements and writes a summary file.
-3. **Recheck** (recommended after fixes) — resume the original review session without a protocol. Point at the fix summary and list unchanged findings with a few words of rationale each. Ask the reviewer to check the fixes, look for regressions they introduced, and assess those decisions. You decide what to do with its feedback.
+3. **Recheck** (when the fix session fixed an Important finding or went beyond the findings) — once the fixes are committed, resume the original review session without a protocol. Point at the fix summary and list unchanged findings with a few words of rationale each. Ask the reviewer to check the fixes, look for regressions they introduced, and assess those decisions. Ask it to then set the `Reviewed commit` line of its review file to the commit it checked. You decide what to do with its feedback.
 
-Skip the fix step when the review is informational.
+Skip the fix step when the review is informational or has no finding. A review with nits alone still gets it: many nits improve the code.
 
 ## Catch up on a ticket
 

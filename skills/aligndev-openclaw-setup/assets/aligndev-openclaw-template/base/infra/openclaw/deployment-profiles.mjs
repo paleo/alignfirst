@@ -33,6 +33,8 @@ const codingOnlyProfileKeys = [
   "defaultModel",
   "models",
   "modelAliases",
+  "defaultEffort",
+  "efforts",
   "skipPermissions",
   "env",
   "unset",
@@ -293,6 +295,13 @@ function validateLaunchFields(value, path) {
     throw new Error(`${path}.skipPermissions must be a boolean`);
   if (value.models !== undefined && (!Array.isArray(value.models) || !value.models.every(nonblank)))
     throw new Error(`${path}.models must be an array of nonblank strings`);
+  if (value.defaultEffort !== undefined && !nonblank(value.defaultEffort))
+    throw new Error(`${path}.defaultEffort must be a nonblank string`);
+  if (
+    value.efforts !== undefined &&
+    (!Array.isArray(value.efforts) || !value.efforts.every(nonblank))
+  )
+    throw new Error(`${path}.efforts must be an array of nonblank strings`);
   if (
     value.modelAliases !== undefined &&
     (!isObject(value.modelAliases) ||

@@ -155,7 +155,7 @@ For multiple accounts and independent quota sources:
 
 A Claude Code session without `CLAUDE_CONFIG_DIR` is described by `claude-personal` and delegates to `codex-personal`. A session whose `CLAUDE_CONFIG_DIR` is `~/.claude-work` is described by `claude-work` and delegates to it. A Pi assistant delegates to `pi-codex`; `pi-anthropic` is disabled.
 
-The Pi targets illustrate native shorthand; availability depends on Pi's catalog and account. Exact provider-qualified IDs pin a model. Provider-qualified fuzzy selectors and thinking suffixes pass unchanged to Pi, which owns their resolution. AlignDev neither guesses providers nor implements newest-family ordering.
+The Pi targets illustrate native shorthand; availability depends on Pi's catalog and account. Exact provider-qualified IDs pin a model. Provider-qualified fuzzy selectors and thinking suffixes pass unchanged to Pi, which owns their resolution. `--effort` and `defaultEffort` override a thinking suffix. AlignDev neither guesses providers nor implements newest-family ordering.
 
 On an account shared by OpenClaw and coding-agent sessions:
 
@@ -193,6 +193,16 @@ A coding-agent profile accepts:
 - `defaultModel` — new-session default, validated against accepted names. Omission uses the native default.
 - `models` — a nonempty list replaces accepted names. Otherwise Claude accepts `fable`, `opus`, `sonnet`, `haiku`, Codex accepts `astra`, `sol`, `terra`, `luna`, and both add configured alias names. Pi accepts every nonblank selector. An empty list adds no override.
 - `modelAliases` — one-step user-facing name → native selector mappings. Validate the chosen name first, expand once, then apply native handling. A Codex alias target such as `sol` still resolves through its bundled catalog.
+- `efforts` — a nonempty list replaces the harness's built-in effort levels and bounds what AlignDev passes. An empty list adds no override. Entries are free strings, so a level AlignDev does not know can be listed.
+- `defaultEffort` — pins new sessions to one of the accepted levels. Without it, a session launched without `--effort` runs at the native default, which AlignDev does not read.
+
+  | Harness | Built-in levels | Native argument |
+  | --- | --- | --- |
+  | `claude` | `low`, `medium`, `high`, `xhigh`, `max` | `--effort <level>` |
+  | `codex` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` | `-c model_reasoning_effort="<level>"` |
+  | `pi` | `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` | `--thinking <level>` |
+
+  The level reaches the native CLI unchanged. AlignDev checks no level against the model: Claude falls back to a supported level, Pi clamps it, and Codex passes it through.
 - `skipPermissions` — defaults to false. Claude uses `--permission-mode auto`, or `--dangerously-skip-permissions`; Codex uses `--sandbox workspace-write`, or `--dangerously-bypass-approvals-and-sandbox`. Pi ignores this setting.
 - `quota` — independent native usage reader: `source` is `claude`, `codex`, or `none`, with optional `configDir`, `env`, `unset`. `none` disables quota and accepts no other recognized options. Omitted quota uses a native Claude/Codex profile's coding environment; Pi requires an explicit source.
 
@@ -222,7 +232,7 @@ The agent inherits the caller environment without what a package launcher inject
 
 ### Resume
 
-Resume requires the same native agent and, for Pi, the same real directory. A selected account must contain the native conversation; failure never falls back to an old profile or accepts a new conversation. `--model` overrides the recorded user-facing model; otherwise that name is retained and validated under the current profile. A disallowed retained name requires an explicit replacement; a recorded null keeps the native conversation's model. Profile defaults apply only to new sessions. Retained aliases use the selected profile's current mappings, so changing a mapping can change the native target. Session metadata records profile, agent, chosen name, native ID and cwd; historical records with blank or missing profiles read as null. Unless `--profile` or a project registry selection replaces null, resume uses the built-ins of the assistant's harness, ignoring configured profiles and flags, and records null in the new run. An `openclaw` or unrecognized harness fails. Original records remain unchanged. A deleted recorded name needs `--profile` or a project replacement; automatic selection cannot rescue it. Status reads durable metadata even when launch settings are invalid or a profile has been deleted.
+Resume requires the same native agent and, for Pi, the same real directory. A selected account must contain the native conversation; failure never falls back to an old profile or accepts a new conversation. `--model` overrides the recorded user-facing model; otherwise that name is retained and validated under the current profile. A disallowed retained name requires an explicit replacement; a recorded null keeps the native conversation's model. `--effort` likewise overrides the recorded effort; otherwise it is retained and validated under the current profile, and a recorded null keeps the native default. AlignDev passes the effective effort on every run, new or resumed. Profile defaults apply only to new sessions. Retained aliases use the selected profile's current mappings, so changing a mapping can change the native target. Session metadata records profile, agent, chosen name, native ID and cwd; historical records with blank or missing profiles read as null. Unless `--profile` or a project registry selection replaces null, resume uses the built-ins of the assistant's harness, ignoring configured profiles and flags, and records null in the new run. An `openclaw` or unrecognized harness fails. Original records remain unchanged. A deleted recorded name needs `--profile` or a project replacement; automatic selection cannot rescue it. Status reads durable metadata even when launch settings are invalid or a profile has been deleted.
 
 ### Retired Keys
 

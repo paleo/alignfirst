@@ -23,6 +23,7 @@ import {
   type SessionArgs,
   validateSessionArgs,
 } from "../../src/code/code-cli.js";
+import { resolveEfforts } from "../../src/code/efforts.js";
 import { readMachineId } from "../../src/code/machine-id.js";
 import { CLAUDE_DEFAULT_MODELS } from "../../src/code/models.js";
 import {
@@ -75,7 +76,7 @@ function validate(
   tokens: string[],
   models: readonly string[] = CLAUDE_DEFAULT_MODELS,
 ): string | undefined {
-  return validateSessionArgs(parse(tokens), models);
+  return validateSessionArgs(parse(tokens), models, resolveEfforts("claude", undefined));
 }
 
 function makeHome(config?: object): string {
@@ -275,6 +276,12 @@ describe("validateSessionArgs", () => {
     expect(validate(["new", "--message", "go", "--model", "opus"], models)).toBeDefined();
   });
 
+  it("rejects an effort outside the accepted levels, on new and on resume", () => {
+    expect(validate(["new", "--message", "go", "--effort", "minimal"])).toBeDefined();
+    expect(validate(["resume", "s", "--message", "m", "--effort", "minimal"])).toBeDefined();
+    expect(validate(["new", "--message", "go", "--effort", "high"])).toBeUndefined();
+  });
+
   it("requires --message when no protocol", () => {
     expect(validate(["new"])).toBeDefined();
     expect(validate(["resume", "s"])).toBeDefined();
@@ -339,6 +346,7 @@ describe("status", () => {
       protocol: "review",
       ticket,
       model: null,
+      effort: null,
       sessionId: "sess-42",
       command: "aligndev code new --protocol review --ticket 1",
       meta: null,
@@ -552,7 +560,7 @@ describe("status", () => {
       }),
     ).toBe(0);
     expect(stdout.text()).toContain(
-      "sessionFile: .plans/1/_aligndev/run.md\nsessionId: sess-42\nagent: claude\nprofile: \nmodel: \nstatus: failed\n",
+      "sessionFile: .plans/1/_aligndev/run.md\nsessionId: sess-42\nagent: claude\nprofile: \nmodel: \neffort: \nstatus: failed\n",
     );
     expect(stdout.text()).toContain(`pid: ${child.pid}\nmachineId: ${readMachineId(dir)}\n`);
     expect(stdout.text()).toContain("exitReason: terminated\n");
@@ -766,6 +774,7 @@ describe("resolveTicket", () => {
         protocol: "spec",
         ticket: "30",
         model: null,
+        effort: null,
         sessionId: "abc",
         command: "aligndev code new --protocol spec --ticket 30 --message go",
         meta: null,
@@ -845,6 +854,7 @@ describe("buildRunConfig", () => {
       cwd: "/proj",
       sessionFilePath: "/proj/.plans/_aligndev/s.md",
       executableModel: undefined,
+      effort: undefined,
       alignfirst: "alignfirst",
       ...overrides,
     });
@@ -953,6 +963,7 @@ describe("launch guards", () => {
       protocol: "spec",
       ticket: "30",
       model: null,
+      effort: null,
       sessionId: null,
       command: "aligndev code new --protocol spec --ticket 30 --message go",
       meta: null,
@@ -1290,15 +1301,14 @@ describe("model selection", () => {
     plans = join(project, ".plans");
     mkdirSync(plans, { recursive: true });
     writeConfig(home, {
-      code: { harness: "claude", defaultModel: "sonnet" },
+      code: { harness: "claude", defaultModel: "sonnet", defaultEffort: "low" },
     });
     fake = installFakeClaude(base);
   });
   afterEach(() => rmSync(base, { recursive: true, force: true }));
 
-  // Runs `aligndev code` and returns the `--model` value the agent received, if any.
-  async function launch(tokens: string[]): Promise<string | undefined> {
-    const code = await main({
+  function run(tokens: string[]): Promise<number> {
+    return main({
       argv: ["node", "aligndev", "code", ...tokens],
       cwd: project,
       env: { PATH: fake.path, HOME: home },
@@ -1308,9 +1318,13 @@ describe("model selection", () => {
       stderr: makeSink(),
       modelResolver: async (_agent, model) => model,
     });
-    expect(code).toBe(0);
+  }
+
+  // Runs `aligndev code` and returns the value of `option` the agent received, if any.
+  async function launch(tokens: string[], option = "--model"): Promise<string | undefined> {
+    expect(await run(tokens)).toBe(0);
     const { args } = fake.received();
-    const index = args.indexOf("--model");
+    const index = args.indexOf(option);
     return index === -1 ? undefined : args[index + 1];
   }
 
@@ -1358,6 +1372,49 @@ describe("model selection", () => {
     );
     expect(await launch(["resume", "abc", "-m", "more"])).toBeUndefined();
     expect(newestFrontmatter().model).toBeNull();
+  });
+
+  it("starts a new session with the profile defaultEffort and records it", async () => {
+    expect(await launch(["new", "-m", "go"], "--effort")).toBe("low");
+    expect(newestFrontmatter()).toMatchObject({
+      effort: "low",
+      command: 'aligndev code new --message "go"',
+    });
+  });
+
+  it("lets --effort override the profile defaultEffort", async () => {
+    expect(await launch(["new", "-m", "go", "--effort", "max"], "--effort")).toBe("max");
+    expect(newestFrontmatter()).toMatchObject({
+      effort: "max",
+      command: 'aligndev code new --effort max --message "go"',
+    });
+  });
+
+  it("resumes with the effort of the session's latest run, not the profile defaultEffort", async () => {
+    writeInitialSessionFile(
+      join(plans, "_aligndev", "latest.md"),
+      statusFrontmatter({ sessionId: "abc", profile: "test", effort: "high" }),
+    );
+    expect(await launch(["resume", "abc", "-m", "more"], "--effort")).toBe("high");
+    expect(newestFrontmatter().effort).toBe("high");
+  });
+
+  it("resumes without an effort flag when the latest run recorded none", async () => {
+    writeInitialSessionFile(
+      join(plans, "_aligndev", "latest.md"),
+      statusFrontmatter({ sessionId: "abc", profile: "test", effort: null }),
+    );
+    expect(await launch(["resume", "abc", "-m", "more"], "--effort")).toBeUndefined();
+    expect(newestFrontmatter().effort).toBeNull();
+  });
+
+  it("refuses to resume with a recorded effort the profile no longer accepts", async () => {
+    writeInitialSessionFile(
+      join(plans, "_aligndev", "latest.md"),
+      statusFrontmatter({ sessionId: "abc", profile: "test", effort: "minimal" }),
+    );
+    expect(await run(["resume", "abc", "-m", "more"])).toBe(1);
+    expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(1);
   });
 });
 
@@ -2120,6 +2177,7 @@ function statusFrontmatter(overrides: Partial<SessionFrontmatter>): SessionFront
     protocol: "review",
     ticket: null,
     model: null,
+    effort: null,
     sessionId: "sess-42",
     command: "aligndev code new --protocol review",
     meta: null,

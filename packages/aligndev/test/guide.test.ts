@@ -33,6 +33,7 @@ describe("renderCodeGuide", () => {
       forms: GLOBAL_FORMS,
       harness: "claude",
       models: ["sonnet", "haiku"],
+      efforts: [],
     });
     expect(guide).toContain("sonnet");
     expect(guide).toContain("haiku");
@@ -55,7 +56,12 @@ describe("guide code profile table", () => {
             defaultModel: "opus",
             modelAliases: { fast: "haiku" },
           },
-          local: { harness: "pi", modelAliases: { quick: "openai/luna" } },
+          local: {
+            harness: "pi",
+            modelAliases: { quick: "openai/luna" },
+            efforts: ["shallow", "deep"],
+            defaultEffort: "deep",
+          },
           off: { harness: "codex", disabled: true },
           assistant: { harness: "openclaw", defaultAgentProfile: "work" },
         },
@@ -68,7 +74,16 @@ describe("guide code profile table", () => {
       .map((line) => line.split(" | ").map((cell) => cell.replace(/^\| | \|$/g, "")))
       .filter((cells) => PROFILE_NAMES.includes(cells[0]));
     expect(rows).toEqual([
-      ["`work`", "claude", "no", "yes", expect.stringContaining("`fast`"), "`opus`"],
+      [
+        "`work`",
+        "claude",
+        "no",
+        "yes",
+        expect.stringContaining("`fast`"),
+        "`opus`",
+        "`low`, `medium`, `high`, `xhigh`, `max`",
+        "native default",
+      ],
       [
         "`local`",
         "pi",
@@ -76,6 +91,8 @@ describe("guide code profile table", () => {
         "no",
         expect.stringMatching(/native selector.*`quick`/),
         expect.any(String),
+        "`shallow`, `deep`",
+        "`deep`",
       ],
     ]);
   });

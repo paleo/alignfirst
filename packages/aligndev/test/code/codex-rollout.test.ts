@@ -64,6 +64,7 @@ describe("Codex rollout child HOME isolation", () => {
       sessionFilePath: join(root, "unused.md"),
       cwd: childHome,
       executableModel: undefined,
+      effort: undefined,
       skipPermissions: false,
       additionalDirectories: [],
       env,

@@ -61,6 +61,7 @@ describe("command forms", () => {
       forms,
       harness: "pi",
       models: undefined,
+      efforts: [],
     });
     const row = guide.split("\n").find((line) => line.startsWith('{"action":"start"'));
     expect(JSON.parse(row ?? "").command).toContain(`${self} code new`);
@@ -107,6 +108,7 @@ describe("command forms", () => {
         forms,
         harness: "pi",
         models: undefined,
+        efforts: [],
       });
       const row = guide.split("\n").find((line) => line.startsWith('{"action":"start"'));
       const parsed = JSON.parse(row ?? "");

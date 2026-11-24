@@ -587,7 +587,7 @@ _Note: Before every code review, always start by updating both the base branch a
 
 A code review is the review workflow from the delegation guide: a fresh agent session (`review` protocol) writes a review file, then an optional fix step runs in a second fresh session, never in the review session. What to do with the review file depends on the case:
 
-- **Wrapping up your own work** — before creating a MR/PR, run the review and fix steps automatically: decide the fixes with the agent in the AAD discussion. Consider returning to the review session afterward, as the delegation guide describes. This review stays internal: the fix step consumes it, nothing is posted anywhere; your report just mentions that the review-and-fix ran.
+- **Wrapping up your own work** — "Reviewing your own work" below decides whether the review runs. When it does, run the review and fix steps automatically: decide the fixes with the agent in the AAD discussion, then recheck when the delegation guide calls for it. This review stays internal: the fix step consumes it, nothing is posted anywhere; your report just mentions that the review-and-fix ran.
 - **The user asks to review a PR/MR** (e.g. a teammate's branch) — follow the PR/MR review sequence below.
 - **The user asks to review a branch or workspace** — check for an open PR/MR on that branch first; if one exists, follow the PR/MR review sequence. Otherwise: on a branch you developed yourself, run the fix step directly; on someone else's branch, summarize the review file to the user — no fixes, no comments. Take the TICKET_ID from the branch name; ask the user when it carries none.
 
@@ -600,6 +600,17 @@ The PR/MR review sequence:
 5. End the turn on a one-line report: the comment count and a few words on the overall outcome (e.g. "Posted 6 comments on the MR — solid branch, two real bugs.").
 
 The fix step is also how you process a review that arrives from outside — a teammate's review comments on your PR/MR, a review file the user points at. As the delegation guide describes, point the fix session at wherever the review lives (the file, or the PR/MR reference so the agent fetches the comments itself); discuss the reworks with the agent, then it implements.
+
+### Reviewing your own work
+
+A review the user asked for always runs, on the whole branch, in the form they name if any. One you start yourself costs several agent runs, so it follows the unreviewed change: the commits added since the branch's last review, or the whole branch against its base when it was never reviewed. The ticket's latest review file names the reviewed commit, on its `Reviewed commit` line. A review file without that line counts as never reviewed. Measure a never-reviewed branch with `git diff --shortstat <base branch>...HEAD`. On a reviewed branch, add up the lines that `git log --first-parent --no-merges --format= --shortstat <reviewed commit>..HEAD` prints: it counts the branch's own commits and leaves out the merged base-branch commits.
+
+- **Small and low-risk** — skip the review, and give the reason in your report. Small is roughly under 50 changed lines, generated files and lockfiles aside. Low-risk is wording, documentation, styling, a configuration value, or an isolated fix that a test covers.
+- **Anything else** — run the review workflow. Its scope and its form go in the message, as the delegation guide describes:
+  - **Scope** — on a reviewed branch, pass the reviewed commit as the starting commit. Have the whole branch reviewed instead when the new commits rework what was reviewed, or dwarf it.
+  - **Form** — the agent chooses by default: the light review for a minor change, the regular one otherwise. Name the form when you know more than the diff shows: `Regular review.` for a small change where a mistake would be costly, `Light review.` for a larger one that is minor, such as a mechanical rename.
+
+Decide before creating a MR/PR, and again after each change added to an existing one.
 
 ### Following up on a review
 
@@ -620,7 +631,7 @@ The author of a branch you reviewed pushes fixes and asks you to check them, or 
 
 You are the judge of when the ticket's scope is done — a ticket can span several coding sessions, so no single run completion decides it. When you judge it done, create the MR/PR without asking.
 
-Before creating it: the applicable checks pass (see "Tests, lint, build"), and you exercised the change manually (see "Always test the work manually"). Then run the review workflow with its fix step (see "Code review" above) — automatic, part of creating any MR/PR.
+Before creating it: the applicable checks pass (see "Tests, lint, build"), and you exercised the change manually (see "Always test the work manually"). Then review the branch as "Reviewing your own work" decides, without asking.
 
 After creating the MR/PR (via `{{ALIGNDEV}} code`):
 
