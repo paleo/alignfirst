@@ -60,6 +60,7 @@ describe("guide command", () => {
     const light = await runMain(["guide", "review", "--reviewer", "light"], { cwd });
     const perspective = await runMain(["guide", "review", "--reviewer", "quality"], { cwd });
     expect(light.code).toBe(0);
+    expect(light.stdout).toContain("# Light Code Review");
     expect(light.stdout).not.toContain(firstLine(perspective.stdout));
   });
 

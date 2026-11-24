@@ -603,7 +603,7 @@ The fix step is also how you process a review that arrives from outside — a te
 
 ### Reviewing your own work
 
-A review the user asked for always runs, on the whole branch, in the form they name if any. One you start yourself costs several agent runs, so it follows the unreviewed change: the commits added since the branch's last review, or the whole branch against its base when it was never reviewed. The ticket's latest review file names the reviewed commit, on its `Reviewed commit` line. Measure the change with `git diff --shortstat <reviewed commit or base branch>...HEAD`.
+A review the user asked for always runs, on the whole branch, in the form they name if any. One you start yourself costs several agent runs, so it follows the unreviewed change: the commits added since the branch's last review, or the whole branch against its base when it was never reviewed. The ticket's latest review file names the reviewed commit, on its `Reviewed commit` line. A review file without that line counts as never reviewed. Measure a never-reviewed branch with `git diff --shortstat <base branch>...HEAD`. On a reviewed branch, add up the lines that `git log --first-parent --no-merges --format= --shortstat <reviewed commit>..HEAD` prints: it counts the branch's own commits and leaves out the merged base-branch commits.
 
 - **Small and low-risk** — skip the review, and give the reason in your report. Small is roughly under 50 changed lines, generated files and lockfiles aside. Low-risk is wording, documentation, styling, a configuration value, or an isolated fix that a test covers.
 - **Anything else** — run the review workflow. Its scope and its form go in the message, as the delegation guide describes:
