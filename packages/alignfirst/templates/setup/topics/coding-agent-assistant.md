@@ -1,6 +1,6 @@
 # A Coding Agent as the Assistant
 
-Claude Code, Codex or a persistent Pi session can act as the AlignFirst assistant on one project: the repository where its session starts. It follows the `aligndev` playbook and delegates through `aligndev code`. The parent host and the selected child are independent. No OpenClaw deployment is needed.
+Claude Code, Codex or a persistent Pi session can act as the AlignFirst assistant on one project: the repository where its session starts. It follows the `aligndev` playbook and delegates through `aligndev code`. The assistant's harness and the agent's harness are independent. No OpenClaw deployment is needed.
 
 Supported systems: Linux and macOS, and Windows through WSL.
 
@@ -14,21 +14,26 @@ Retired wrappers, settings or state require `{{CMD}} setup guide upgrade-workspa
 
 ## 2. Configure `aligndev` (recommended)
 
-Without settings, one detected parent kind supplies built-in child defaults. For a minimal singleton setup, write `~/.alignfirst/aligndev.settings.json`:
+Without settings, the agent runs with the built-in defaults of the assistant's harness. To configure profiles, write `~/.alignfirst/aligndev.settings.json`:
 
 ```json
 {
   "code": {
-    "profiles": { "claude-personal": { "agent": "claude" } }
+    "profiles": {
+      "claude-personal": { "harness": "claude", "defaultAgentProfile": "codex-personal" },
+      "codex-personal": { "harness": "codex" }
+    }
   }
 }
 ```
 
-A profile's required `agent` selects the child: `claude`, `codex` or `pi`, independently of the parent's launch tool. Profiles are complete, without inheritance. The example selects `claude-personal` for a Claude parent or with no detected parent. Another detected kind keeps its own built-ins when no profile matches. With several profiles matching one detected kind, set one matching profile's `default: true` or make a named choice. Omitted and false flags are equivalent; at most one true flag per agent is allowed. A flag never chooses between agent kinds. No parent with several profiles, or several detected kinds, requires a named choice.
+A profile's required `harness` is `claude`, `codex` or `pi`. Profiles are complete, without inheritance. A profile with `"disabled": true` is ignored.
 
-New-session, help, `guide code` and quota selection is `--profile` → actual-cwd project registry selection → global `code.profile` → automatic resolution. Named choices bypass detection; `code.profile` can deliberately choose a different child kind. Resume inserts its latest recorded named profile before the global selection. A deleted recorded name requires an explicit or project replacement. Historical null or missing profiles use detected built-ins unless an explicit, project or global selection replaces them; counts and flags never trigger inference there. The original transcript stays unchanged. Help, guide and quota share the resolver outside Git and `.plans`. Status reads durable metadata without validating launch settings.
+The assistant's profile is the enabled profile that describes the session: it has the assistant's harness, and its `configDir` is compatible with the session's native directory variable. An omitted `configDir` matches any session, `null` matches an unset variable, and a path matches the same directory. Among several candidates, the one with `default: true` wins; without it, the launch fails and lists the candidates. At most one `default: true` per harness is allowed. The assistant's profile launches the agent itself, or delegates to the profile named by its `defaultAgentProfile`. In the example, a Claude Code session delegates to Codex through `codex-personal`; a Codex session matches `codex-personal` and delegates to Codex too.
 
-Unknown or obsolete settings keys are ignored with value-free warnings on stderr. Recognized invalid values and duplicate defaults still fail. The CLI never rewrites settings or applies retired launch or default-map semantics. For existing settings, follow the sections "Convert AlignDev Launch Settings" and "Convert AlignDev Profile Defaults" of `{{CMD}} setup guide upgrade`.
+New-session, help, `guide code` and quota selection is `--profile` → actual-cwd project registry selection → on resume, the latest recorded named profile → the assistant's profile or its `defaultAgentProfile` → the built-ins of the assistant's harness. `code.fallbackProfile` replaces the built-ins only when the assistant's harness is OpenClaw or unrecognized, such as a shell outside any coding agent. `ALIGNDEV_ASSISTANT_HARNESS` forces the assistant's harness for one invocation. A named reference that is missing, disabled or an `openclaw` profile fails. A deleted recorded name requires an explicit or project replacement. Historical null or missing profiles use the built-ins of the assistant's harness unless an explicit or project selection replaces them. The original transcript stays unchanged. Help, guide and quota share the resolver outside Git and `.plans`. Status reads durable metadata without validating launch settings.
+
+Unknown or obsolete settings keys are ignored with value-free warnings on stderr. Recognized invalid values and duplicate defaults still fail. The CLI never rewrites settings or applies retired launch or default-map semantics. For existing settings, follow the sections "Convert AlignDev Launch Settings", "Convert AlignDev Profile Defaults" and "Convert AlignDev Harness Settings" of `{{CMD}} setup guide upgrade`.
 
 ### Native-directory selection
 
@@ -46,7 +51,7 @@ A string or null `configDir` conflicts with its matching native variable in `env
 
 Profiles can supply literal non-secret `env` values and remove inherited variables with `unset`. No shell expansion occurs. Credentials remain in native stores or provisioned process environments. A variable cannot appear in both fields.
 
-Before login, reproduce the child's effective environment and cwd: apply `unset`, `env` and `configDir`, including HOME, PATH and credential routing. Help and guides identify storage-variable origins without printing their values. A bare login in another shell may select another account.
+Before login, reproduce the agent's effective environment and cwd: apply `unset`, `env` and `configDir`, including HOME, PATH and credential routing. Help and guides identify storage-variable origins without printing their values. A bare login in another shell may select another account.
 
 For Pi, prefer provider-qualified `modelAliases` targets. Exact IDs pin a model; fuzzy native selectors and thinking suffixes pass unchanged to Pi. For example, separate `pi-codex` and `pi-anthropic` profiles can map `sol` to `openai/sol` and `opus` to `anthropic/opus`, using separately provisioned native configurations. AlignDev never infers their providers or account identity. Targets are illustrative and depend on the native catalog. One alias expands after validating the chosen name, without recursion.
 
@@ -54,7 +59,7 @@ Without a nonempty profile `models`, Pi accepts any nonblank selector, and Claud
 
 Resume retains and validates its recorded user-facing model, ignoring profile defaults. Disallowed names require `--model`; null keeps the native conversation model. Current alias mappings apply even to retained names. The selected native account must contain the original conversation; cross-agent resumes fail, and Pi requires the recorded real directory. No fallback account or replacement conversation is accepted.
 
-The [`aligndev` README](https://github.com/paleo/alignfirst/tree/main/packages/aligndev#configuration) documents every profile field and the independent quota settings. Omitted quota uses a native Claude or Codex profile's effective environment. For Pi, follow "Optional quota setup for Pi" below. Quota selection follows new-session precedence, needs no ticket or `.plans`, and never changes the coding child.
+The [`aligndev` README](https://github.com/paleo/alignfirst/tree/main/packages/aligndev#configuration) documents every profile field and the independent quota settings. Omitted quota uses a native Claude or Codex profile's effective environment. For Pi, follow "Optional quota setup for Pi" below. Quota selection follows new-session precedence, needs no ticket or `.plans`, and never changes the agent.
 
 ### Credentials
 
@@ -63,17 +68,16 @@ Check whether the developer's shell exports `ANTHROPIC_API_KEY` (Claude Code) or
 ```json
 {
   "code": {
-    "profile": "claude-personal",
     "profiles": {
       "claude-personal": {
-        "agent": "claude", "unset": ["ANTHROPIC_API_KEY"]
+        "harness": "claude", "unset": ["ANTHROPIC_API_KEY"]
       }
     }
   }
 }
 ```
 
-For a Pi child, start `pi` under the account and configuration the child will use and run `/login <provider>`, or configure the provider's credentials. Pi uses its native credential precedence; the Claude and Codex environment-key rules above do not apply. Inspect only credential-variable names, never values. Saved project trust must cover the execution directory and the required project resources; do not force `--approve` to bypass missing trust.
+For a Pi agent, start `pi` under the account and configuration the agent will use and run `/login <provider>`, or configure the provider's credentials. Pi uses its native credential precedence; the Claude and Codex environment-key rules above do not apply. Inspect only credential-variable names, never values. Saved project trust must cover the execution directory and the required project resources; do not force `--approve` to bypass missing trust.
 
 ### Optional quota setup for Pi
 
@@ -93,10 +97,9 @@ Codex CLI is not required to run Pi, including Pi's ChatGPT subscription route. 
    ```json
    {
      "code": {
-       "profile": "pi-quota",
        "profiles": {
          "pi-quota": {
-           "agent": "pi",
+           "harness": "pi",
            "quota": {
              "source": "codex",
              "configDir": "~/.codex-pi-quota",
@@ -108,7 +111,7 @@ Codex CLI is not required to run Pi, including Pi's ChatGPT subscription route. 
    }
    ```
 
-   Explicit quota starts from the original caller environment, applies only quota's own `unset`, `env` and source-specific `configDir`, then strips parent-session identities. Pi profile overrides are not copied. The path and validation rules of the coding profile apply. Choose `quota.configDir` only when needed. Omission inherits the quota source's variable independently from the original caller; quota `env` or `unset` may change it. Null deliberately removes `CODEX_HOME` for Codex or `CLAUDE_CONFIG_DIR` for Claude. A string sets explicit storage, as in this custom-account example. Coding and explicit-quota directory resets do not affect each other; neither selects Pi's store. For an ordinary Claude quota source, `{ "source": "claude" }` needs no directory field.
+   Explicit quota starts from the original caller environment, applies only quota's own `unset`, `env` and source-specific `configDir`, then strips the assistant session's identities. Pi profile overrides are not copied. The path and validation rules of the coding profile apply. Choose `quota.configDir` only when needed. Omission inherits the quota source's variable independently from the original caller; quota `env` or `unset` may change it. Null deliberately removes `CODEX_HOME` for Codex or `CLAUDE_CONFIG_DIR` for Claude. A string sets explicit storage, as in this custom-account example. Coding and explicit-quota directory resets do not affect each other; neither selects Pi's store. For an ordinary Claude quota source, `{ "source": "claude" }` needs no directory field.
 
    For Claude subscription quota, replace the quota object with `{ "source": "claude", "configDir": "~/.claude-pi-quota", "unset": ["ANTHROPIC_API_KEY"] }`. To disable quota, use only `{ "source": "none" }`, without other quota fields, including `configDir: null`.
 4. **Authenticate the native CLI separately.** The human completes login under the same OS user, cwd and effective environment or configuration directory as the quota query. Reproduce quota's `unset`, `env` and `configDir`, including HOME, PATH and any credential routing. Pi's `auth.json` and `/login` credentials are not imported into Codex or Claude Code. Never copy tokens between their stores.
@@ -142,7 +145,7 @@ Without a skill, add the "AlignDev" section from the [`aligndev` README](https:/
 
 ### Claude Code launch timeout
 
-For a Claude Code parent, recommend merging this into `~/.claude/settings.json` to allow delegated runs beyond two hours:
+When the assistant's harness is Claude Code, recommend merging this into `~/.claude/settings.json` to allow delegated runs beyond two hours:
 
 ```json
 {
@@ -152,7 +155,7 @@ For a Claude Code parent, recommend merging this into `~/.claude/settings.json` 
 }
 ```
 
-Preserve existing settings and other `env` entries. If the parent uses `CLAUDE_CONFIG_DIR`, use that directory's `settings.json`. This raises the Bash timeout ceiling to 24 hours. Launches still need an explicit `timeout` set to the maximum stated by the parent's Bash tool, alongside `run_in_background`. Restart Claude Code after changing the setting.
+Preserve existing settings and other `env` entries. If the assistant's session uses `CLAUDE_CONFIG_DIR`, use that directory's `settings.json`. This raises the Bash timeout ceiling to 24 hours. Launches still need an explicit `timeout` set to the maximum stated by the assistant's Bash tool, alongside `run_in_background`. Restart Claude Code after changing the setting.
 
 ### Paseo
 
@@ -162,8 +165,8 @@ When the user uses Paseo, follow `{{CMD}} setup guide paseo`.
 
 The skill supplies instructions only. Neither extension installs it, the CLI, profiles or the other extension. Obtain approval before a global installation:
 
-- **Pi parent assistant:** `pi install npm:@alignfirst/pi-background`. This generic tool runs the ordinary quoted `aligndev code` command; the playbook supplies `--quiet`, a unique run identity, result retrieval and workflow decisions.
-- **Pi coding child:** `pi install npm:@alignfirst/pi-subagent` in that child's environment, for isolated plan and review assignments. The assistant still delegates through `aligndev code`, never directly through `subagent`.
+- **Pi as the assistant's harness:** `pi install npm:@alignfirst/pi-background`. This generic tool runs the ordinary quoted `aligndev code` command; the playbook supplies `--quiet`, a unique run identity, result retrieval and workflow decisions.
+- **Pi as the agent's harness:** `pi install npm:@alignfirst/pi-subagent` in the agent's environment, for isolated plan and review assignments. The assistant still delegates through `aligndev code`, never directly through `subagent`.
 
 Install both when both roles use Pi. Before installing the packaged subagent replacement, identify any existing extension registering `subagent` and obtain explicit approval to disable it through `pi config`. Do not overwrite the local extension or profiles, or load both implementations. Reload after installation; `/reload` cancels active jobs and subagents.
 
@@ -171,10 +174,10 @@ Install current stable packages and inspect their declared Pi peer and Node runt
 
 ## 5. Start the assistant
 
-Start the host in the project's repository and invoke `/aligndev` in Claude Code, `$aligndev` in Codex, or `/skill:aligndev` in Pi. The skill runs `npx -y aligndev guide`; no global AlignDev CLI installation is required. Confirm skill discovery and the requested tools without changing trust or settings merely to test them.
+Start the assistant's harness in the project's repository and invoke `/aligndev` in Claude Code, `$aligndev` in Codex, or `/skill:aligndev` in Pi. The skill runs `npx -y aligndev guide`; no global AlignDev CLI installation is required. Confirm skill discovery and the requested tools without changing trust or settings merely to test them.
 
 ## Permissions
 
-Claude Code and Codex parents use their established elevation: request escalated permissions in Codex, or disable Claude Code's sandbox for the launch when it is enabled. The developer approves those requests because the child needs network access and writes outside the project.
+As the assistant's harness, Claude Code and Codex use their established elevation: request escalated permissions in Codex, or disable Claude Code's sandbox for the launch when it is enabled. The developer approves those requests because the agent needs network access and writes outside the project.
 
 Pi and both extensions use ordinary OS permissions. The cwd controls discovery, not filesystem isolation. Saved project trust controls resource loading, not tool access. A profile's `skipPermissions` has no effect on Pi. The CLI prepares companions and injects project context; the generic tool only honors the command and cwd.

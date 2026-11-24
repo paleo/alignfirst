@@ -377,7 +377,7 @@ The agent reads the project's instructions, documentation and work files on its 
 Launching a background run ends the turn: the closing message is the launch acknowledgement, and the report moves to the run's completion turn. Each further run launched from that turn moves the report again.
 {{/openclaw}}
 {{#codingAgent}}
-Launching a background run ends the turn on its acknowledgement; the report moves to the run's completion, handled as the delegation guide describes for your parent host. A child's completed turn does not complete the whole request.
+Launching a background run ends the turn on its acknowledgement; the report moves to the run's completion, handled as the delegation guide describes for your harness. The agent's completed turn does not complete the whole request.
 {{/codingAgent}}
 
 ### The plan is not a gate

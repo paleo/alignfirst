@@ -33,6 +33,7 @@ When `skills-lock.json` is present, inspect it through the current skills CLI. I
 - Standalone project skill: follow `{{CMD}} setup guide upgrade-v2`.
 - Full-content protocol skills or `plans-share`: follow `{{CMD}} setup guide upgrade-v3`.
 - Retired workspace files or registries: follow `{{CMD}} setup guide upgrade-workspaces`.
+- AlignDev settings with `platform`, `code.profile` or a profile `agent`, or a `.alignfirst-projects.json` marker: apply "Convert AlignDev Harness Settings" below.
 - CLI-backed skills: keep the current skills. Set `plans.autoArchive: true` in the selected `alignfirst.json` or `alignfirst.jsonc`; the user can remove it after the upgrade to opt out. If `plans-share` artifacts remain, apply the cleanup, command sweep and check of `{{CMD}} setup guide upgrade-v3`.
 - No detected installation: follow `{{CMD}} setup guide protocols`.
 
@@ -76,11 +77,11 @@ On an AlignDev OpenClaw host, the operator migrates during `update-assistant.md`
 
 ## Convert AlignDev Launch Settings
 
-When `aligndev.settings.json` contains direct `code.agent`, `code.defaultModel`, `code.models`, `code.skipPermissions` or `code.unset`, convert them manually to preserve the intended launch behavior. The CLI ignores retired fields with warnings on stderr and performs no automatic conversion. Recognized invalid values still fail. Preserve top-level `platform` and `projectsRoot`.
+When `aligndev.settings.json` contains direct `code.agent`, `code.defaultModel`, `code.models`, `code.skipPermissions` or `code.unset`, convert them manually to preserve the intended launch behavior. The CLI ignores retired fields with warnings on stderr and performs no automatic conversion. Recognized invalid values still fail. Preserve top-level `projectsRoot`.
 
-1. Choose a nonblank profile name. Move all former launch fields into `code.profiles.<name>`, including the required `agent`.
-2. Set `code.profile` to that name for a global child selection. Alternatively, omit it to infer a sole matching profile, or set one profile's `default: true` per agent when several match.
-3. If different accounts are intended, provision separate native stores and set each profile's `configDir` (`CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `PI_CODING_AGENT_DIR`). `~/` uses the configured home; relative paths use the settings directory. Authenticate with the child's effective environment and cwd, applying the profile's `unset`, `env` and `configDir`, including HOME, PATH and credential routing. Native directory variables in `env` also select storage; a bare login in another shell may use another account. Never copy conversations or credentials between accounts to make resume work.
+1. Choose a nonblank profile name. Move all former launch fields into `code.profiles.<name>`; `code.agent` becomes the required `harness`.
+2. A session of the same harness selects that profile as the assistant's profile. To select it from another harness, follow step 2 of "Convert AlignDev Harness Settings".
+3. If different accounts are intended, provision separate native stores and set each profile's `configDir` (`CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `PI_CODING_AGENT_DIR`). `~/` uses the configured home; relative paths use the settings directory. Authenticate with the agent's effective environment and cwd, applying the profile's `unset`, `env` and `configDir`, including HOME, PATH and credential routing. Native directory variables in `env` also select storage; a bare login in another shell may use another account. Never copy conversations or credentials between accounts to make resume work.
 4. Review project registry selections and run `aligndev guide code --profile <name>`. Profile selection alone needs no companion or `.plans`. Obtain approval before changing any user's real settings or native account state.
 
 For example, convert:
@@ -94,19 +95,18 @@ to:
 ```json
 {
   "code": {
-    "profile": "claude-personal",
     "profiles": {
       "claude-personal": {
-        "agent": "claude", "defaultModel": "opus", "unset": ["ANTHROPIC_API_KEY"]
+        "harness": "claude", "defaultModel": "opus", "unset": ["ANTHROPIC_API_KEY"]
       }
     }
   }
 }
 ```
 
-New-session precedence is explicit → project → global → automatic resolution. Resume inserts its recorded named profile before global resolution. Historical blank or missing profiles read as null and keep detected built-ins unless an explicit, project or global selection replaces them; configured counts and flags do not trigger inference. No or multiple detected parents still fail, and the original transcript stays unchanged. A deleted recorded profile requires a higher-precedence selection. Resume requires the same agent and native conversation identity; Pi also requires its recorded real cwd. Current profile mappings resolve retained aliases, so their native targets can change. A disallowed retained model requires an explicit `--model`, never an automatic profile-default switch. Null keeps the native conversation model. Status remains readable when launch references or model defaults are no longer valid.
+New-session precedence is explicit → project → recorded named profile on resume → the assistant's profile → the built-ins of the assistant's harness, as `{{CMD}} setup guide coding-agent-assistant` details. Historical blank or missing profiles read as null and use the built-ins of the assistant's harness unless an explicit or project selection replaces them. An OpenClaw or unrecognized harness still fails there, and the original transcript stays unchanged. A deleted recorded profile requires a higher-precedence selection. Resume requires the same agent and native conversation identity; Pi also requires its recorded real cwd. Current profile mappings resolve retained aliases, so their native targets can change. A disallowed retained model requires an explicit `--model`, never an automatic profile-default switch. Null keeps the native conversation model. Status remains readable when launch references or model defaults are no longer valid.
 
-On an OpenClaw host, convert the private admin repository and the deployed settings together through controlled maintenance, preserving the writable service AlignFirst home (see "Keep the Service AlignFirst Home Writable"). Upgrade `seed.sh`, the inventory and policy helpers, the maintenance and backup scripts and the runbooks together. Install both helpers root-owned under `/opt/<service-user>/libexec` before invoking the new wrapper. Every deployment child and enabled explicit native quota source needs `configDir: null` for native defaults or a string for explicit storage; omission is invalid. Inventory all profiles, not just the global selection. Preserve existing strings during this migration; changing the directory-selection mode requires separate operator confirmation. Run the rendered `update-assistant.md` sequence before restarting. For Pi, retain the approved writable `auth.json` and adjacent-lock exception, and regenerate the protected launcher after npm-prefix hardening is restored. The deployment and harness profile migrations are separate integrations; do not install a profile-aware CLI over unconverted templates.
+On an OpenClaw host, convert the private admin repository and the deployed settings together through controlled maintenance, preserving the writable service AlignFirst home (see "Keep the Service AlignFirst Home Writable"). Upgrade `seed.sh`, the inventory and policy helpers, the maintenance and backup scripts and the runbooks together. Install both helpers root-owned under `/opt/<service-user>/libexec` before invoking the new wrapper. Every deployment coding profile and enabled explicit native quota source needs `configDir: null` for native defaults or a string for explicit storage; omission is invalid. Inventory all profiles. Preserve existing strings during this migration; changing the directory-selection mode requires separate operator confirmation. Run the rendered `update-assistant.md` sequence before restarting. For Pi, retain the approved writable `auth.json` and adjacent-lock exception, and regenerate the protected launcher after npm-prefix hardening is restored. The deployment and harness profile migrations are separate integrations; do not install a profile-aware CLI over unconverted templates.
 
 ## Review AlignDev Native-Directory Selection
 
@@ -124,8 +124,8 @@ When re-rendering Pi, replace `PI_CONFIG_DIR` with `PI_CONFIG_DIR_JSON` (raw JSO
 
 When `aligndev.settings.json` contains `code.defaultProfiles`, convert it manually to preserve the needed preferences. Any presence, including an empty or null map or a map alongside new flags, is ignored with a warning on stderr. The map never supplies defaults. Unknown keys at each fixed settings, profile and quota shape are also ignored with warnings; recognized invalid values and duplicate true flags still fail. Profile, environment and alias dictionaries remain maps. Neither the CLI nor the deployment inventory rewrites settings.
 
-1. For each old entry, set `default: true` on its referenced matching-agent profile when a preference is needed. Omit the flag when that agent has only one profile. False and omitted have the same meaning.
-2. Leave at most one true flag per agent. Different agents may each have a preference. A flag is per-agent selection metadata; `code.profile` remains the global named child choice.
+1. For each old entry, set `default: true` on its referenced profile of that harness when a preference is needed. Omit the flag when that harness has only one profile. False and omitted have the same meaning.
+2. Leave at most one true flag per harness. Different harnesses may each have a preference. A flag only breaks a tie between candidates for the assistant's profile.
 3. Remove `code.defaultProfiles`. Keep profile names unchanged so project references and named resumes remain valid.
 4. Validate with `aligndev guide code --profile <name>` for every profile. Obtain approval before editing real settings or native account state; the CLI never rewrites them.
 
@@ -136,9 +136,9 @@ Before:
   "code": {
     "defaultProfiles": { "claude": "work", "pi": "solo" },
     "profiles": {
-      "work": { "agent": "claude", "configDir": "~/.claude-work" },
-      "personal": { "agent": "claude", "configDir": "~/.claude" },
-      "solo": { "agent": "pi", "configDir": "~/.pi/agent" }
+      "work": { "harness": "claude", "configDir": "~/.claude-work" },
+      "personal": { "harness": "claude", "configDir": "~/.claude" },
+      "solo": { "harness": "pi", "configDir": "~/.pi/agent" }
     }
   }
 }
@@ -150,21 +150,60 @@ After:
 {
   "code": {
     "profiles": {
-      "work": { "agent": "claude", "default": true, "configDir": "~/.claude-work" },
-      "personal": { "agent": "claude", "configDir": "~/.claude" },
-      "solo": { "agent": "pi", "configDir": "~/.pi/agent" }
+      "work": { "harness": "claude", "default": true, "configDir": "~/.claude-work" },
+      "personal": { "harness": "claude", "configDir": "~/.claude" },
+      "solo": { "harness": "pi", "configDir": "~/.pi/agent" }
     }
   }
 }
 ```
 
-For new sessions, help, guide and quota, automatic resolution selects the sole profile matching one detected parent, or its unique true flag among several matches. Without a match, it uses that parent's built-ins; another agent's profile never overrides it. Without a parent, exactly one total profile is inferable. Several detected kinds always require a named choice. Flags cannot resolve absent or ambiguous agent-kind detection.
+For new sessions, help, guide and quota, the assistant's profile is the sole profile matching the session, or the true flag among several matches. Without a match, the built-ins of the assistant's harness apply; another harness's profile never overrides them. An OpenClaw or unrecognized harness uses `code.fallbackProfile` instead. Flags never choose between harnesses.
 
-Unique-profile inference is an intentional behavior change. New runs that previously used built-ins may now use configured native storage, models, environment and permission settings. Review those settings before launching.
+Automatic profile matching is an intentional behavior change. New runs that previously used built-ins may now use configured native storage, models, environment and permission settings. Review those settings before launching.
 
-Historical null or missing-profile resumes are separate: without an explicit, project or global replacement, they still detect the parent and use only built-ins, ignoring configured counts and flags. The new record keeps null and the original transcript remains unchanged. Named resumes keep their recorded name ahead of changed global settings or flags; a deleted recorded name requires an explicit or project replacement.
+Historical null or missing-profile resumes are separate: without an explicit or project replacement, they use only the built-ins of the assistant's harness, ignoring configured profiles and flags. The new record keeps null and the original transcript remains unchanged. Named resumes keep their recorded name ahead of the assistant's profile and flags; a deleted recorded name requires an explicit or project replacement.
 
-On an OpenClaw host, update the private admin repository and the deployed settings through controlled maintenance, preserving the writable service AlignFirst home (see "Keep the Service AlignFirst Home Writable"). An explicit valid `code.profile` remains mandatory even with one profile or a true flag. Preserve all native-store isolation and Pi authentication exceptions; upgrade the inventory helper and retain seed validation of every profile.
+On an OpenClaw host, update the private admin repository and the deployed settings through controlled maintenance, preserving the writable service AlignFirst home (see "Keep the Service AlignFirst Home Writable"). The `openclaw` profile's `defaultAgentProfile` names the coding profile, as "Convert AlignDev Harness Settings" describes. Preserve all native-store isolation and Pi authentication exceptions; upgrade the inventory helper and retain seed validation of every profile.
+
+## Convert AlignDev Harness Settings
+
+AlignDev resolves the assistant's harness at each invocation and no longer reads project markers. When `aligndev.settings.json` contains `platform`, `code.profile` or a profile `agent`, or when a `.alignfirst-projects.json` exists, convert once. The CLI ignores `platform` and `code.profile` with warnings on stderr and fails on a profile without `harness`.
+
+1. Remove `platform`. `ALIGNDEV_ASSISTANT_HARNESS` forces the assistant's harness for one invocation.
+2. Replace `code.profile`. When a profile describes the assistant, set its `defaultAgentProfile` to the former value. On an OpenClaw account, add an `openclaw` profile whose `defaultAgentProfile` names the coding profile. For sessions without a recognized harness, set `code.fallbackProfile`.
+3. Rename `agent` to `harness` in every profile, then run `aligndev guide code --profile <name>` for each coding profile.
+4. Move the marker's range to `portRange` in the aligndev settings, and check that every project's `devServer.ports` fits in it. Delete each `.alignfirst-projects.json`, then run `aligndev project doctor`. Policy text that a marker description carried, such as allowed directories or approvals, moves to the deployment's own instructions.
+
+Before:
+
+```json
+{
+  "platform": "openclaw",
+  "projectsRoot": "~/projects",
+  "code": {
+    "profile": "service-pi",
+    "profiles": { "service-pi": { "agent": "pi", "configDir": null } }
+  }
+}
+```
+
+After:
+
+```json
+{
+  "projectsRoot": "~/projects",
+  "portRange": { "first": 28000, "last": 28599 },
+  "code": {
+    "profiles": {
+      "openclaw": { "harness": "openclaw", "defaultAgentProfile": "service-pi" },
+      "service-pi": { "harness": "pi", "configDir": null }
+    }
+  }
+}
+```
+
+On an AlignDev OpenClaw host, port the settings and project changes of the current `aligndev-openclaw-setup` template to the admin repository, then re-seed through controlled maintenance, preserving the writable service AlignFirst home (see "Keep the Service AlignFirst Home Writable").
 
 ## Rename the AlignDev Message-Tool Topics
 
