@@ -17,6 +17,7 @@ const BASE: RunConfig = {
   sessionFilePath: "/tmp/x.md",
   cwd: "/proj",
   executableModel: undefined,
+  effort: undefined,
   skipPermissions: false,
   additionalDirectories: [],
   env: {},
@@ -44,6 +45,16 @@ describe("Codex argv", () => {
       "workspace-write",
       "--model",
       "gpt-6.1-terra",
+      "resume",
+      "thread-1",
+      "-",
+    ]);
+  });
+
+  it("passes the effort as a TOML string override, before resume", () => {
+    expect(buildCodexArgs({ ...BASE, resume: "thread-1", effort: "high" }).slice(-5)).toEqual([
+      "-c",
+      'model_reasoning_effort="high"',
       "resume",
       "thread-1",
       "-",

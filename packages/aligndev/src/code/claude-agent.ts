@@ -29,6 +29,7 @@ export function buildClaudeArgs(config: RunConfig): string[] {
   for (const dir of config.additionalDirectories) args.push("--add-dir", dir);
   if (config.resume !== undefined) args.push("--resume", config.resume);
   if (config.executableModel !== undefined) args.push("--model", config.executableModel);
+  if (config.effort !== undefined) args.push("--effort", config.effort);
   return args;
 }
 

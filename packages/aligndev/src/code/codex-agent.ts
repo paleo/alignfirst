@@ -30,6 +30,9 @@ export function buildCodexArgs(config: RunConfig): string[] {
   // store it, so a resume passes it again.
   for (const dir of config.additionalDirectories) args.push("--add-dir", dir);
   if (config.executableModel !== undefined) args.push("--model", config.executableModel);
+  // The value is parsed as TOML: a JSON string literal is a valid TOML basic string.
+  if (config.effort !== undefined)
+    args.push("-c", `model_reasoning_effort=${JSON.stringify(config.effort)}`);
   if (config.resume !== undefined) args.push("resume", config.resume);
   args.push("-");
   return args;

@@ -13,6 +13,7 @@ const BASE: RunConfig = {
   sessionFilePath: "/tmp/x.md",
   cwd: "/proj",
   executableModel: undefined,
+  effort: undefined,
   skipPermissions: false,
   additionalDirectories: [],
   env: {},
@@ -46,6 +47,12 @@ describe("Claude adapter", () => {
       "--model",
       "opus",
     ]);
+  });
+
+  it("passes the effort as --effort after the model", () => {
+    expect(buildClaudeArgs({ ...BASE, executableModel: "opus", effort: "high" }).slice(-4)).toEqual(
+      ["--model", "opus", "--effort", "high"],
+    );
   });
 
   it("puts --add-dir after the permission flags, followed only by options", () => {

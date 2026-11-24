@@ -663,7 +663,7 @@ function isPiWrapperCall(call: CodingAgentCall): boolean {
   const args = call.argv;
   if (args[0] !== "--mode" || args[1] !== "json" || call.stdin.trim() === "") return false;
   let index = 2;
-  for (const flag of ["--model", "--session"]) {
+  for (const flag of ["--model", "--thinking", "--session"]) {
     if (args[index] !== flag) continue;
     const value = args[index + 1];
     if (value === undefined || value.trim() === "" || value.startsWith("--")) return false;

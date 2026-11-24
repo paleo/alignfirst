@@ -8,6 +8,7 @@ const BASE: RunConfig = {
   sessionFilePath: "/tmp/run.md",
   cwd: "/project",
   executableModel: undefined,
+  effort: undefined,
   skipPermissions: false,
   additionalDirectories: [],
   env: {},
@@ -54,6 +55,27 @@ describe("pi adapter", () => {
         additionalDirectories: ["/companion"],
       }),
     ).toEqual(["--mode", "json", "--model", "provider/model:high", "--session", "full-session-id"]);
+  });
+
+  it("passes the effort as --thinking between --model and --session", () => {
+    const { adapter } = fixture();
+    expect(
+      adapter.buildArgs({
+        ...BASE,
+        resume: "full-session-id",
+        executableModel: "provider/model:low",
+        effort: "high",
+      }),
+    ).toEqual([
+      "--mode",
+      "json",
+      "--model",
+      "provider/model:low",
+      "--thinking",
+      "high",
+      "--session",
+      "full-session-id",
+    ]);
   });
 
   it("renders authoritative text once, concise tools and the final meaningful message", () => {

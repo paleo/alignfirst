@@ -34,6 +34,7 @@ export function createPiAdapter(): AgentAdapter {
 function buildPiArgs(config: RunConfig): string[] {
   const args = ["--mode", "json"];
   if (config.executableModel !== undefined) args.push("--model", config.executableModel);
+  if (config.effort !== undefined) args.push("--thinking", config.effort);
   if (config.resume !== undefined) args.push("--session", config.resume);
   return args;
 }

@@ -18,6 +18,7 @@ export interface SessionFrontmatter {
   protocol: string | null;
   ticket: string | null;
   model: string | null;
+  effort: string | null;
   sessionId: string | null;
   command: string;
   // Opaque caller-supplied handoff string (`aligndev code --meta`). aligndev never interprets it; it exists
@@ -361,6 +362,7 @@ export function parseFrontmatter(block: string): SessionFrontmatter {
     protocol: map.protocol ?? null,
     ticket: map.ticket ?? null,
     model: map.model ?? null,
+    effort: map.effort ?? null,
     sessionId: map.sessionId ?? null,
     command: map.command ?? "",
     meta: map.meta ?? null,

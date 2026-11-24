@@ -59,6 +59,7 @@ function makeFrontmatter(overrides?: Partial<SessionFrontmatter>): SessionFrontm
     protocol: "spec",
     ticket: "29",
     model: null,
+    effort: null,
     sessionId: null,
     command: "aligndev code new --protocol spec --ticket 29",
     meta: null,
@@ -147,8 +148,9 @@ describe("frontmatter serialization", () => {
     expect(parseFrontmatter(block).agent).toBe("pi");
   });
 
-  it("reads omitted historical profile/agent/machine fields as null", () => {
+  it("reads omitted historical profile/agent/machine/effort fields as null", () => {
     expect(parseFrontmatter("status: succeeded").machineId).toBeNull();
+    expect(parseFrontmatter("status: succeeded").effort).toBeNull();
     expect(parseFrontmatter("status: succeeded").agent).toBeNull();
     expect(parseFrontmatter("status: succeeded").profile).toBeNull();
     expect(

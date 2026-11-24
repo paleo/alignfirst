@@ -180,6 +180,7 @@ Don't reconstruct what happened: no re-running the agent, no `git` archaeology t
 | `--message-file <path>` | Read a UTF-8 message file; `-` reads stdin. Mutually exclusive with `--message`. |
 | `--catchup` | Load the ticket history before the protocol and message. `new` only, requires a ticket. Alone, it returns a short synthesis. |
 | `--model <model>` | {{MODEL_POLICY}}. A new session defaults to {{DEFAULT_MODEL}}; a resume keeps the session's model. Prefer the default (omit the flag). |
+| `--effort <level>` | {{EFFORT_POLICY}}. A new session defaults to {{DEFAULT_EFFORT}}; a resume keeps the session's effort. Prefer the default (omit the flag). |
 {{#openclaw}}
 | `--meta "..."` | Opaque handoff string stored verbatim in the session file's `meta:` frontmatter. `{{ALIGNDEV}} code` never reads it — it's for you to stash context the run's later reader needs (e.g. where to report the outcome). |
 {{/openclaw}}
@@ -195,7 +196,7 @@ The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. The profile's no
 `{{ALIGNDEV}} code status` seals a `running` record only when its `machineId` matches this installation and its pid is conclusively gone or reused. Foreign, legacy and uncertain records stay `running`; a sealed run reports `status: failed`, `exitReason: terminated`. `{{ALIGNDEV}} code quota` works without a `.plans` directory and does not start a coding session. Its output belongs to the selected native quota CLI's account; account pairing with the coding child is not verified.
 {{/openclaw}}
 {{#codingAgent}}
-The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. A nonempty profile `models` list replaces its accepted model list. Pi has no finite allowlist by default: native selectors pass through unchanged, preferably `provider/model`, with optional thinking suffix. For a Pi child without `--model`, a new run uses profile `defaultModel`, else Pi's own default; a resume retains and validates its recorded model. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
+The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. A nonempty profile `models` list replaces its accepted model list. Pi has no finite allowlist by default: native selectors pass through unchanged, preferably `provider/model`, with optional thinking suffix; `--effort` overrides that suffix. For a Pi child without `--model`, a new run uses profile `defaultModel`, else Pi's own default; a resume retains and validates its recorded model. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
 
 `{{ALIGNDEV}} code status` seals a `running` record only when its `machineId` matches this installation and its pid is conclusively gone or reused. Foreign, legacy and uncertain records stay `running`; a sealed run reports `status: failed`, `exitReason: terminated`. `{{ALIGNDEV}} code quota` needs no `.plans` and starts no session. Its output belongs to the selected native quota CLI's account; account pairing with the coding child is not verified.
 {{/codingAgent}}

@@ -355,7 +355,7 @@ for (const argv of [
   });
 }
 
-test("Pi validates optional native model and session, and requires stdin", () => {
+test("Pi validates optional native model, thinking and session, and requires stdin", () => {
   const call: CodingAgentCall = {
     agent: "pi",
     cwd: "/fixture",
@@ -365,6 +365,8 @@ test("Pi validates optional native model and session, and requires stdin", () =>
   assert.equal(isAlignfirstWrapperCall(call), true);
   assert.equal(extractCodingPrompt(call), PROMPT);
   assert.equal(isAlignfirstWrapperCall({ ...call, stdin: "  " }), false);
+  const withThinking = [...call.argv.slice(0, 4), "--thinking", "high", ...call.argv.slice(4)];
+  assert.equal(isAlignfirstWrapperCall({ ...call, argv: withThinking }), true);
 });
 
 // Parser-only permutations (duplicate headers, invalid message blocks, usage fields, retries and

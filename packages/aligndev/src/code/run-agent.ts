@@ -45,6 +45,7 @@ export interface RunConfig {
   resume?: string;
   quiet?: boolean;
   executableModel: string | undefined;
+  effort: string | undefined;
   skipPermissions: boolean;
   // Writable directories besides the working directory, e.g. the project's companion.
   additionalDirectories: readonly string[];

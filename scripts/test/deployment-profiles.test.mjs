@@ -691,6 +691,8 @@ test("inventory and real CLI still reject malformed recognized fields alongside 
       { skipPermissions: "yes" },
       { models: "sol" },
       { modelAliases: { custom: 3 } },
+      { efforts: "high" },
+      { defaultEffort: " " },
       { env: { CUSTOM: 3 } },
       { unset: "CUSTOM" },
       { env: { CUSTOM: "value" }, unset: ["CUSTOM"] },

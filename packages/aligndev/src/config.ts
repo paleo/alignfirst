@@ -8,6 +8,7 @@ import {
   resolveAssistantHarness,
 } from "./assistant-harness.js";
 import { CODING_AGENTS, type CodingAgent, createAgentAdapter } from "./code/coding-agent.js";
+import { resolveEfforts } from "./code/efforts.js";
 import { resolveModels } from "./code/models.js";
 import { buildAgentEnv } from "./code/run-agent.js";
 import { errorMessage } from "./errors.js";
@@ -47,6 +48,8 @@ const CODING_ONLY_PROFILE_KEYS = [
   "defaultModel",
   "models",
   "modelAliases",
+  "defaultEffort",
+  "efforts",
   "skipPermissions",
   "env",
   "unset",
@@ -81,6 +84,8 @@ export interface CodingProfile {
   defaultModel?: string;
   models?: string[];
   modelAliases?: Record<string, string>;
+  defaultEffort?: string;
+  efforts?: string[];
   skipPermissions?: boolean;
   env?: Record<string, string>;
   unset?: string[];
@@ -125,6 +130,7 @@ export function loadConfig(home: string, alignfirst: string): LoadedConfig {
     if (profile.harness === "openclaw") continue;
     const field = `code.profiles[${JSON.stringify(name)}]`;
     validateEnvironment(profile, profile.harness, field, path);
+    checkDefaultEffort(profile, field, path);
     if (typeof profile.configDir === "string")
       profile.configDir = resolvePath(profile.configDir, home, path);
     if (profile.quota !== undefined) {
@@ -225,6 +231,8 @@ function profileShape(warn: (path: string, key: string) => void): Check<Profile>
       defaultModel: optional(nonblankString),
       models: optional(arrayOf(nonblankString)),
       modelAliases: optional(record(nonblankString, nonblankString)),
+      defaultEffort: optional(nonblankString),
+      efforts: optional(arrayOf(nonblankString)),
       skipPermissions: optional(boolean),
       env: optional(environmentShape),
       unset: optional(arrayOf(environmentName)),
@@ -611,6 +619,13 @@ function checkDefaultModel(code: CodingProfile, path: string, profile: string | 
     path,
     `code.profiles[${JSON.stringify(profile)}].defaultModel must be one of: ${models.join(", ")}`,
   );
+}
+
+function checkDefaultEffort(profile: CodingProfile, field: string, path: string): void {
+  if (profile.defaultEffort === undefined) return;
+  const efforts = resolveEfforts(profile.harness, profile.efforts);
+  if (efforts.includes(profile.defaultEffort)) return;
+  throw invalidConfig(path, `${field}.defaultEffort must be one of: ${efforts.join(", ")}`);
 }
 
 export function requireProjectsRoot(config: LoadedConfig): ProjectsRoot {
