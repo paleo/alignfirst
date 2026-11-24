@@ -1,7 +1,7 @@
 import { type CodeConfig, CONFIG_DIRECTORY_VARIABLES } from "../config.js";
 
 export function describeNativeStorage(code: CodeConfig): string {
-  const variable = CONFIG_DIRECTORY_VARIABLES[code.agent];
+  const variable = CONFIG_DIRECTORY_VARIABLES[code.harness];
   const directory =
     code.configDir === null
       ? `${variable}: unset by configDir: null; native defaults apply`

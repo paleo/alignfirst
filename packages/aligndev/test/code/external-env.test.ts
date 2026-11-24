@@ -14,6 +14,9 @@ import {
   resolveQuotaConfig,
 } from "../../src/config.js";
 
+// The caller is a Codex session: the tests name the profile they exercise.
+const SELECTED = { explicit: "test" };
+
 let root: string;
 let shim: string;
 let bin: string;
@@ -48,12 +51,8 @@ describe("external native environment boundary", () => {
   it("removes repeated and nested launcher shims while preserving PATH order and empty entries", () => {
     const other = makeShim("bun-node-1000-fedcba321");
     const path = ["", shim, bin, other, shim, "", bin].join(delimiter);
-    const env = buildAgentEnv({ PATH: path, NODE: bin, npm_node_execpath: process.execPath }, []);
-    expect(env).toEqual({
-      PATH: ["", bin, "", bin].join(delimiter),
-      NODE: bin,
-      npm_node_execpath: process.execPath,
-    });
+    const env = buildAgentEnv({ PATH: path, NODE: bin }, []);
+    expect(env).toEqual({ PATH: ["", bin, "", bin].join(delimiter), NODE: bin });
   });
 
   it("identifies the older uid-less shim layout and bunx executable target", () => {
@@ -92,6 +91,58 @@ describe("external native environment boundary", () => {
     },
   );
 
+  it("removes what a package launcher injected and keeps uppercase npm settings", () => {
+    const projectBin = join(root, "project", "node_modules", ".bin");
+    const launcher = {
+      PATH: [
+        projectBin,
+        join(root, "node_modules", ".bin/"),
+        join(root, "npm", "node-gyp-bin"),
+        bin,
+      ].join(delimiter),
+      NODE: process.execPath,
+      npm_node_execpath: process.execPath,
+      npm_config_user_agent: "npm/11.0.0",
+      npm_lifecycle_event: "start",
+      INIT_CWD: root,
+      NPM_TOKEN: "token",
+      NPM_CONFIG_REGISTRY: "https://registry.example",
+    };
+    expect(buildAgentEnv(launcher, [])).toEqual({
+      PATH: bin,
+      NPM_TOKEN: "token",
+      NPM_CONFIG_REGISTRY: "https://registry.example",
+    });
+  });
+
+  it("keeps NODE when it differs from npm's runtime, and bin directories after the leading run", () => {
+    const projectBin = join(root, "project", "node_modules", ".bin");
+    const path = [bin, projectBin].join(delimiter);
+    expect(
+      buildAgentEnv({ PATH: path, NODE: bin, npm_node_execpath: process.execPath }, []),
+    ).toEqual({
+      PATH: path,
+      NODE: bin,
+    });
+  });
+
+  it("removes the assistant's harness request but keeps OPENCLAW_SHELL", () => {
+    const env = buildAgentEnv(
+      { ALIGNDEV_ASSISTANT_HARNESS: "openclaw", OPENCLAW_SHELL: "exec" },
+      [],
+    );
+    expect(env).toEqual({ OPENCLAW_SHELL: "exec" });
+  });
+
+  it("applies a profile env after the launcher cleanup", () => {
+    const code = resolveCodeConfig(
+      config({ harness: "claude", env: { INIT_CWD: "profile", npm_config_cache: "profile" } }),
+      { INIT_CWD: root, npm_config_cache: root },
+      SELECTED,
+    );
+    expect(code.childEnv).toMatchObject({ INIT_CWD: "profile", npm_config_cache: "profile" });
+  });
+
   it("handles absent and empty PATH without introducing a default", () => {
     expect(buildAgentEnv({}, [])).toEqual({});
     expect(buildAgentEnv({ PATH: "" }, [])).toEqual({ PATH: "" });
@@ -111,12 +162,17 @@ describe("external native environment boundary", () => {
   it.each(["claude", "codex", "pi"] as const)(
     "cleans the %s profile baseline and retains explicit coding PATH configuration",
     (agent) => {
-      const code = resolveCodeConfig(config({ agent }), caller);
+      const code = resolveCodeConfig(config({ harness: agent }), caller, SELECTED);
       expect(code.childEnv.PATH).toBe(bin);
-      const deliberate = resolveCodeConfig(config({ agent, env: { PATH: shim } }), caller);
+      const deliberate = resolveCodeConfig(
+        config({ harness: agent, env: { PATH: shim } }),
+        caller,
+        SELECTED,
+      );
       expect(deliberate.childEnv.PATH).toBe(shim);
       expect(
-        resolveCodeConfig(config({ agent, unset: ["PATH"] }), caller).childEnv.PATH,
+        resolveCodeConfig(config({ harness: agent, unset: ["PATH"] }), caller, SELECTED).childEnv
+          .PATH,
       ).toBeUndefined();
     },
   );
@@ -127,7 +183,7 @@ describe("external native environment boundary", () => {
       for (const mode of ["inherit", "override", "unset"] as const) {
         const code = resolveCodeConfig(
           config({
-            agent: "pi",
+            harness: "pi",
             env: { PATH: shim },
             quota: {
               source,
@@ -136,6 +192,7 @@ describe("external native environment boundary", () => {
             },
           }),
           caller,
+          SELECTED,
         );
         const quota = resolveQuotaConfig(code, caller);
         if (quota.source === "none") throw new Error("unexpected disabled quota");
@@ -172,14 +229,14 @@ if (process.argv[2] === "debug") {
 console.log(JSON.stringify({subtype: "success", result: "Current session: 25% used"}));
 `,
     );
-    const code = resolveCodeConfig(config({ agent: "codex" }), caller);
+    const code = resolveCodeConfig(config({ harness: "codex" }), caller, SELECTED);
     await expect(
       createExecutableModelResolver()("codex", "sol", { cwd: root, env: code.childEnv }),
     ).resolves.toBe("gpt-9-sol");
     const reader = createQuotaReader(undefined, 2000);
     for (const source of ["claude", "codex"] as const) {
       const quota = resolveQuotaConfig(
-        resolveCodeConfig(config({ agent: source }), caller),
+        resolveCodeConfig(config({ harness: source }), caller, SELECTED),
         caller,
       );
       if (quota.source === "none") throw new Error("unexpected disabled quota");
@@ -201,8 +258,7 @@ function makeShim(name: string): string {
 function config(profile: CodingProfile): LoadedConfig {
   return {
     path: join(root, "settings.json"),
-    platform: "codingAgent",
-    code: { profile: "test", profiles: { test: profile } },
+    code: { fallbackProfile: "test", profiles: { test: profile } },
   };
 }
 

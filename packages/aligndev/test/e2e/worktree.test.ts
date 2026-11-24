@@ -456,7 +456,7 @@ function makeFixture(mode: string): Fixture {
       plans = sessions;
     }
   }
-  writeConfig(home, { code: { agent: "claude", defaultModel: "haiku" } });
+  writeConfig(home, { code: { harness: "claude", defaultModel: "haiku" } });
   const alignfirstShim = join(bin, "alignfirst");
   writeFileSync(alignfirstShim, `#!${childRuntime}\nimport(${JSON.stringify(alignfirst)});\n`, {
     mode: 0o755,

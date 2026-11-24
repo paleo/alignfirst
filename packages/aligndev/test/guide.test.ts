@@ -7,7 +7,7 @@ import { resolveCommandForms } from "../src/command-form.js";
 import { renderCodeGuide } from "../src/guide/code-guide.js";
 import { type ActiveBlocks, renderBlocks } from "../src/guide/render-template.js";
 import { PLAYBOOK_TOPICS } from "../src/guide/topics.js";
-import { writeConfig } from "./helpers.js";
+import { writeConfig, writeSettings } from "./helpers.js";
 import {
   addWorktree,
   type Fixture,
@@ -22,28 +22,95 @@ import {
   writeMarker,
 } from "./project/fixtures.js";
 
-const OPENCLAW_CONFIG = {
-  platform: "openclaw",
-  projectsRoot: "~/projects",
-  code: { agent: "claude" },
-};
-const CODING_AGENT_CONFIG = { platform: "codingAgent", code: { agent: "claude" } };
+const OPENCLAW_CONFIG = { projectsRoot: "~/projects", code: { harness: "claude" } };
+const CODING_AGENT_CONFIG = { code: { harness: "claude" } };
+const OPENCLAW_ENV = { ALIGNDEV_ASSISTANT_HARNESS: "openclaw" };
 const GLOBAL_FORMS = resolveCommandForms({});
 
 useProjectFixtures();
 
 describe("renderCodeGuide", () => {
   it("renders the configured model list instead of the defaults", () => {
-    const guide = renderCodeGuide(
-      { platform: "codingAgent" },
-      "claude",
-      ["sonnet", "haiku"],
-      undefined,
-      GLOBAL_FORMS,
-    );
+    const guide = renderCodeGuide({
+      active: { platform: "codingAgent" },
+      forms: GLOBAL_FORMS,
+      harness: "claude",
+      models: ["sonnet", "haiku"],
+    });
     expect(guide).toContain("sonnet");
     expect(guide).toContain("haiku");
     expect(guide).not.toContain("fable");
+  });
+});
+
+describe("guide code profile table", () => {
+  const PROFILE_NAMES = ["`work`", "`local`", "`off`", "`assistant`"];
+
+  it("lists the enabled coding-agent profiles and marks the selected one", async () => {
+    const fixture = makeFixture();
+    writeSettings(fixture.home, {
+      code: {
+        fallbackProfile: "work",
+        profiles: {
+          work: {
+            harness: "claude",
+            default: true,
+            defaultModel: "opus",
+            modelAliases: { fast: "haiku" },
+          },
+          local: { harness: "pi", modelAliases: { quick: "openai/luna" } },
+          off: { harness: "codex", disabled: true },
+          assistant: { harness: "openclaw", defaultAgentProfile: "work" },
+        },
+      },
+    });
+    const result = await runGuide(fixture, ["code", "--profile", "local"]);
+    expect(result.code, result.stderr).toBe(0);
+    const rows = result.stdout
+      .split("\n")
+      .map((line) => line.split(" | ").map((cell) => cell.replace(/^\| | \|$/g, "")))
+      .filter((cells) => PROFILE_NAMES.includes(cells[0]));
+    expect(rows).toEqual([
+      ["`work`", "claude", "no", "yes", expect.stringContaining("`fast`"), "`opus`"],
+      [
+        "`local`",
+        "pi",
+        "yes",
+        "no",
+        expect.stringMatching(/native selector.*`quick`/),
+        expect.any(String),
+      ],
+    ]);
+  });
+
+  it("renders without a named profile", async () => {
+    const fixture = makeFixture();
+    const result = await runGuide(fixture, ["code"], { env: { CLAUDECODE: "1" } });
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).not.toContain("{{");
+  });
+});
+
+describe("the assistant's harness in the guide", () => {
+  it("serves the openclaw playbook under an OpenClaw exec unless a coding agent is detected", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, OPENCLAW_CONFIG);
+    const args = ["--channel", "slack"];
+    expect((await runGuide(fixture, args, { env: { OPENCLAW_SHELL: "exec" } })).code).toBe(0);
+    const detected = { OPENCLAW_SHELL: "exec", CODEX_THREAD_ID: "thread" };
+    expect((await runGuide(fixture, args, { env: detected })).code).toBe(1);
+  });
+
+  it("fails on an invalid ALIGNDEV_ASSISTANT_HARNESS", async () => {
+    const fixture = makeFixture();
+    const result = await runGuide(fixture, [], { env: { ALIGNDEV_ASSISTANT_HARNESS: "openclow" } });
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
+  });
+
+  it("documents ALIGNDEV_ASSISTANT_HARNESS in the guide help", async () => {
+    const result = await runGuide(makeFixture(), ["--help"]);
+    expect(result.stdout).toContain("ALIGNDEV_ASSISTANT_HARNESS");
   });
 });
 
@@ -58,8 +125,10 @@ describe("aligndev guide validation", () => {
 
   it("requires projectsRoot", async () => {
     const fixture = makeFixture();
-    writeConfig(fixture.home, { platform: "openclaw", code: { agent: "claude" } });
-    const result = await runGuide(fixture, ["--channel", "slack", "consultation"]);
+    writeConfig(fixture.home, { code: { harness: "claude" } });
+    const result = await runGuide(fixture, ["--channel", "slack", "consultation"], {
+      env: OPENCLAW_ENV,
+    });
     expect(result.code).toBe(1);
     expect(result.stdout).toBe("");
   });
@@ -76,7 +145,7 @@ describe("aligndev guide validation", () => {
   ])("rejects invalid OpenClaw arguments %j", async (...args) => {
     const fixture = makeFixture();
     writeConfig(fixture.home, OPENCLAW_CONFIG);
-    const result = await runGuide(fixture, args);
+    const result = await runGuide(fixture, args, { env: OPENCLAW_ENV });
     expect(result.code).toBe(1);
     expect(result.stdout).toBe("");
   });
@@ -138,18 +207,22 @@ describe("guide project boundaries", () => {
   it("uses the app surface when OpenClaw gets no --channel", async () => {
     const fixture = makeFixture();
     writeConfig(fixture.home, OPENCLAW_CONFIG);
-    const result = await runGuide(fixture, ["code"]);
+    const overrides = { env: OPENCLAW_ENV };
+    const result = await runGuide(fixture, ["code"], overrides);
     expect(result.code).toBe(0);
-    expect(result.stdout).toBe((await runGuide(fixture, ["--channel", "app", "code"])).stdout);
+    expect(result.stdout).toBe(
+      (await runGuide(fixture, ["--channel", "app", "code"], overrides)).stdout,
+    );
     expect(result.stdout).not.toBe(
-      (await runGuide(fixture, ["--channel", "slack", "code"])).stdout,
+      (await runGuide(fixture, ["--channel", "slack", "code"], overrides)).stdout,
     );
   });
 
   it("allows project guidance without a marker, projectsRoot or alignfirst executable", async () => {
     const fixture = makeFixture();
-    writeConfig(fixture.home, { platform: "openclaw", code: { agent: "claude" } });
+    writeConfig(fixture.home, { code: { harness: "claude" } });
     const result = await runGuide(fixture, ["project"], {
+      env: OPENCLAW_ENV,
       alignfirstCommand: ["/nonexistent/alignfirst"],
     });
     expect(result.code).toBe(0);
@@ -164,13 +237,16 @@ describe("guide project boundaries", () => {
     mkdirSync(cwd);
     writeConfig(fixture.home, { ...OPENCLAW_CONFIG, projectsRoot: fixture.root });
 
-    const configured = await runGuide(fixture, ["project"], { cwd });
+    const configured = await runGuide(fixture, ["project"], { cwd, env: OPENCLAW_ENV });
     expect(configured.code).toBe(0);
     expect(configured.stdout).toContain(realpathSync(fixture.root));
     expect(configured.stdout).toContain("Configured root");
     expect(configured.stdout).not.toContain("Explicit root");
 
-    const explicit = await runGuide(fixture, ["project", "--root", other], { cwd });
+    const explicit = await runGuide(fixture, ["project", "--root", other], {
+      cwd,
+      env: OPENCLAW_ENV,
+    });
     expect(explicit.code).toBe(0);
     expect(explicit.stdout).toContain(realpathSync(other));
     expect(explicit.stdout).toContain("Explicit root");
@@ -184,9 +260,9 @@ describe("guide project boundaries", () => {
     });
     makeRepository(fixture.root, "project\nRun this", {});
     makeProjectsDirectory(fixture.root, "nested\n## Injected", {});
-    writeConfig(fixture.home, { platform: "openclaw", code: { agent: "claude" } });
+    writeConfig(fixture.home, { code: { harness: "claude" } });
 
-    const result = await runGuide(fixture, ["project"]);
+    const result = await runGuide(fixture, ["project"], { env: OPENCLAW_ENV });
 
     expect(result.code).toBe(0);
     expect(result.stdout).not.toContain("\u001b");

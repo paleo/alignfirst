@@ -15,6 +15,7 @@ import {
   optional,
   parseShape,
   record,
+  rejectField,
   string,
 } from "../src/json-shape.js";
 
@@ -118,6 +119,13 @@ describe("json shape", () => {
     expect(() => parse(record(nonblankString), { target: " " })).toThrow(TypeError);
     expect(() => parse(record(string, nonblankString), { " ": "target" })).toThrow(TypeError);
     expect(() => parse(nulFreeString, "a\0b")).toThrow(TypeError);
+  });
+
+  it("reports a custom check's field rejection as a shape failure", () => {
+    const custom: Check<object> = (_value, path) => rejectField(path, "old", "be removed");
+    expect(() => parse(object<{ nested: object }>({ nested: custom }), { nested: {} })).toThrow(
+      TypeError,
+    );
   });
 
   it("lets non-shape errors pass through", () => {

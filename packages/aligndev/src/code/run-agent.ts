@@ -34,6 +34,7 @@ const ASSISTANT_SESSION_VARIABLES = [
   "PI_PROVIDER",
   "PI_MODEL",
   "PI_REASONING_LEVEL",
+  "ALIGNDEV_ASSISTANT_HARNESS",
 ];
 
 export interface RunConfig {
@@ -299,18 +300,41 @@ export function buildAgentEnv(
   return { ...env, ...required };
 }
 
+// Removes what a package launcher (npm, npx, a Bun runner) injected into the caller environment.
 function externalProcessBaseline(baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const env = { ...baseEnv };
-  if (env.PATH === undefined) return env;
+  if (env.NODE !== undefined && env.NODE === env.npm_node_execpath) delete env.NODE;
+  removeBunShims(env);
+  for (const name of Object.keys(env)) if (name.startsWith("npm_")) delete env[name];
+  delete env.INIT_CWD;
+  if (env.PATH !== undefined) env.PATH = withoutLeadingLauncherBins(env.PATH);
+  return env;
+}
+
+function removeBunShims(env: NodeJS.ProcessEnv): void {
+  if (env.PATH === undefined) return;
   const entries = env.PATH.split(delimiter);
   const shims = new Set(entries.filter(isBunRuntimeShim));
-  if (shims.size === 0) return env;
+  if (shims.size === 0) return;
   env.PATH = entries.filter((entry) => !shims.has(entry)).join(delimiter);
   for (const name of ["NODE", "npm_node_execpath"]) {
     const value = env[name];
     if (value !== undefined && shims.has(value)) delete env[name];
   }
-  return env;
+}
+
+// npm prepends the package bin directories, then its node-gyp shim directory, to PATH.
+function withoutLeadingLauncherBins(path: string): string {
+  const entries = path.split(delimiter);
+  const first = entries.findIndex((entry) => !isLauncherBin(entry));
+  return (first === -1 ? [] : entries.slice(first)).join(delimiter);
+}
+
+function isLauncherBin(entry: string): boolean {
+  const directory = entry.replace(/[\\/]+$/, "");
+  return (
+    basename(directory) === "node-gyp-bin" || /(?:^|[\\/])node_modules[\\/]\.bin$/.test(directory)
+  );
 }
 
 function isBunRuntimeShim(directory: string): boolean {

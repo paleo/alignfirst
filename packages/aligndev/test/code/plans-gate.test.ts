@@ -20,7 +20,7 @@ describe("coding launch plans gate", () => {
     async (command) => {
       const fixture = makeFixture();
       const repo = makeRepository(fixture.root, "app");
-      writeConfig(fixture.home, { code: { agent: "pi" } });
+      writeConfig(fixture.home, { code: { harness: "pi" } });
       const sessions = join(repo, ".plans", "_aligndev");
       mkdirSync(sessions, { recursive: true });
       const file = join(sessions, "stale.md");

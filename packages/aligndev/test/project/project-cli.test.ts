@@ -55,8 +55,7 @@ describe("projects command surface", () => {
     const cwd = join(fixture.base, "elsewhere");
     mkdirSync(cwd);
     writeConfig(fixture.home, {
-      platform: "openclaw",
-      code: { agent: "claude" },
+      code: { harness: "claude" },
       projectsRoot: fixture.root,
     });
 
@@ -75,8 +74,7 @@ describe("projects command surface", () => {
     mkdirSync(projects);
     writeFileSync(join(projects, ".alignfirst-projects.json"), "{}\n");
     writeConfig(fixture.home, {
-      platform: "openclaw",
-      code: { agent: "claude" },
+      code: { harness: "claude" },
       projectsRoot: "~/projects",
     });
 

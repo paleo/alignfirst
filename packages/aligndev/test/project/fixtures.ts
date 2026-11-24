@@ -73,7 +73,7 @@ export async function runAligndev(
   const stderr = makeSink();
   const home = overrides.home ?? fixture.home;
   // Under `npm test`, npm sets its user agent: the guides would print the npx forms. A coding agent
-  // running the tests would be detected as the selected agent.
+  // or an OpenClaw exec running the tests would set the assistant's harness.
   const {
     npm_config_user_agent: _userAgent,
     npm_execpath: _npmExecpath,
@@ -85,6 +85,8 @@ export async function runAligndev(
     CODEX_THREAD_ID: _codex,
     PI_CODING_AGENT: _pi,
     AI_AGENT: _agent,
+    OPENCLAW_SHELL: _openclaw,
+    ALIGNDEV_ASSISTANT_HARNESS: _harness,
     ...baseEnv
   } = process.env;
   const env = { ...baseEnv, HOME: home };

@@ -16,7 +16,7 @@ const NPX_ENV = {
   npm_lifecycle_event: "npx",
 };
 
-const CONFIG = { platform: "codingAgent", code: { agent: "claude" } };
+const CONFIG = { code: { harness: "claude" } };
 
 const homes: string[] = [];
 
@@ -56,7 +56,12 @@ describe("command forms", () => {
     const forms = resolveCommandForms(env, { runtime, env, cwd: "/tmp", executable: "/runtime" });
     expect(forms.aligndev).toBe(self);
     expect([forms.counterpart.executable, ...forms.counterpart.args]).toEqual(counterpart);
-    const guide = renderCodeGuide({ platform: "codingAgent" }, "pi", undefined, undefined, forms);
+    const guide = renderCodeGuide({
+      active: { platform: "codingAgent" },
+      forms,
+      harness: "pi",
+      models: undefined,
+    });
     const row = guide.split("\n").find((line) => line.startsWith('{"action":"start"'));
     expect(JSON.parse(row ?? "").command).toContain(`${self} code new`);
   });
@@ -97,7 +102,12 @@ describe("command forms", () => {
       expect(forms.alignfirst).toBe(
         manager === "bun" ? "bunx --bun alignfirst" : "npx -y alignfirst",
       );
-      const guide = renderCodeGuide({ platform: "codingAgent" }, "pi", undefined, undefined, forms);
+      const guide = renderCodeGuide({
+        active: { platform: "codingAgent" },
+        forms,
+        harness: "pi",
+        models: undefined,
+      });
       const row = guide.split("\n").find((line) => line.startsWith('{"action":"start"'));
       const parsed = JSON.parse(row ?? "");
       expect(parsed.command).toContain(forms.aligndev);

@@ -96,7 +96,7 @@ describe("coding-agent selection", () => {
 
   it("rejects an invalid agent in the config", async () => {
     const stderr = makeSink();
-    const home = makeHome({ platform: "codingAgent", code: { agent: "other" } });
+    const home = makeHome({ code: { harness: "other" } });
     expect(
       await main({ argv: ["node", "aligndev", "code", "--help"], env: {}, home, stderr }),
     ).toBe(1);
@@ -111,7 +111,7 @@ describe("coding-agent selection", () => {
       await main({
         argv: ["node", "aligndev", "code", "--help"],
         env: {},
-        home: makeHome({ platform: "codingAgent", code: { agent: "codex" } }),
+        home: makeHome({ code: { harness: "codex" } }),
         stdout,
         modelResolver,
       }),
@@ -121,8 +121,7 @@ describe("coding-agent selection", () => {
   it("renders the configured model list", async () => {
     const stdout = makeSink();
     const home = makeHome({
-      platform: "codingAgent",
-      code: { agent: "claude", models: ["sonnet", "haiku"] },
+      code: { harness: "claude", models: ["sonnet", "haiku"] },
     });
     expect(
       await main({ argv: ["node", "aligndev", "code", "--help"], env: {}, home, stdout }),
@@ -323,7 +322,7 @@ describe("status", () => {
   let sessionFilePath: string;
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "aligndev-status-"));
-    writeConfig(dir, { platform: "codingAgent", code: { agent: "claude" } });
+    writeConfig(dir, { code: { harness: "claude" } });
     sessionFilePath = join(dir, ".plans", "1", "_aligndev", "run.md");
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -374,7 +373,7 @@ describe("status", () => {
   it.each([
     "bad json",
     JSON.stringify({ code: { agent: "claude" } }),
-    JSON.stringify({ code: { profile: "gone", profiles: {} } }),
+    JSON.stringify({ code: { fallbackProfile: "gone", profiles: {} } }),
   ])("reads status without loading invalid settings: %s", async (settings) => {
     const settingsPath = join(dir, ".alignfirst", "aligndev.settings.json");
     writeFileSync(settingsPath, settings);
@@ -724,7 +723,7 @@ describe("quota", () => {
         argv: ["node", "aligndev", "code", "quota"],
         cwd: tmpdir(),
         env: { KEEP: "yes" },
-        home: makeHome({ platform: "codingAgent", code: { agent: "claude", unset: ["SECRET"] } }),
+        home: makeHome({ code: { harness: "claude", unset: ["SECRET"] } }),
         stdout,
         modelResolver,
         quotaReader,
@@ -747,7 +746,7 @@ describe("quota", () => {
       await main({
         argv: ["node", "aligndev", "code", "quota"],
         env: {},
-        home: makeHome({ platform: "codingAgent", code: { agent: "codex" } }),
+        home: makeHome({ code: { harness: "codex" } }),
         stderr,
         quotaReader,
       }),
@@ -830,7 +829,7 @@ describe("resolveTicket", () => {
 
 describe("buildRunConfig", () => {
   const CODE: CodeConfig = {
-    agent: "claude",
+    harness: "claude",
     profile: null,
     childEnv: {},
     skipPermissions: false,
@@ -942,7 +941,7 @@ describe("launch guards", () => {
     mkdirSync(plans);
     realCwd = realpathSync(dir);
     home = join(dir, "home");
-    writeConfig(home, { platform: "codingAgent", code: { agent: "claude" } });
+    writeConfig(home, { code: { harness: "claude" } });
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -950,7 +949,7 @@ describe("launch guards", () => {
     return {
       status: "running",
       agent: "claude",
-      profile: null,
+      profile: "test",
       protocol: "spec",
       ticket: "30",
       model: null,
@@ -1094,8 +1093,7 @@ describe("launch guards", () => {
     const modelResolver = vi.fn(async () => "gpt-6.1-terra");
     const stderr = makeSink();
     const otherHome = makeHome({
-      platform: "codingAgent",
-      code: { agent: "claude", models: ["terra"] },
+      code: { harness: "claude", models: ["terra"] },
     });
     const code = await main({
       argv: ["node", "aligndev", "code", "resume", "abc", "--message", "go", "--model", "terra"],
@@ -1114,7 +1112,7 @@ describe("launch guards", () => {
   it("sanitizes injected model-discovery failures on every output surface", async () => {
     const stdout = makeSink();
     const stderr = makeSink();
-    const codexHome = makeHome({ platform: "codingAgent", code: { agent: "codex" } });
+    const codexHome = makeHome({ code: { harness: "codex" } });
     const code = await main({
       argv: ["node", "aligndev", "code", "new", "--message", "go", "--model", "terra"],
       cwd: dir,
@@ -1292,8 +1290,7 @@ describe("model selection", () => {
     plans = join(project, ".plans");
     mkdirSync(plans, { recursive: true });
     writeConfig(home, {
-      platform: "codingAgent",
-      code: { agent: "claude", defaultModel: "sonnet" },
+      code: { harness: "claude", defaultModel: "sonnet" },
     });
     fake = installFakeClaude(base);
   });
@@ -1339,11 +1336,16 @@ describe("model selection", () => {
   it("resumes with the model of the session's latest run, not the profile defaultModel", async () => {
     writeInitialSessionFile(
       join(plans, "_aligndev", "old.md"),
-      statusFrontmatter({ sessionId: "abc", model: "opus", startedAt: "2026-08-29T10:00:00.000Z" }),
+      statusFrontmatter({
+        sessionId: "abc",
+        profile: "test",
+        model: "opus",
+        startedAt: "2026-08-29T10:00:00.000Z",
+      }),
     );
     writeInitialSessionFile(
       join(plans, "_aligndev", "latest.md"),
-      statusFrontmatter({ sessionId: "abc", model: "haiku" }),
+      statusFrontmatter({ sessionId: "abc", profile: "test", model: "haiku" }),
     );
     expect(await launch(["resume", "abc", "-m", "more"])).toBe("haiku");
     expect(newestFrontmatter().model).toBe("haiku");
@@ -1352,7 +1354,7 @@ describe("model selection", () => {
   it("resumes without a model flag when the latest run recorded none", async () => {
     writeInitialSessionFile(
       join(plans, "_aligndev", "latest.md"),
-      statusFrontmatter({ sessionId: "abc", model: null }),
+      statusFrontmatter({ sessionId: "abc", profile: "test", model: null }),
     );
     expect(await launch(["resume", "abc", "-m", "more"])).toBeUndefined();
     expect(newestFrontmatter().model).toBeNull();
@@ -1365,7 +1367,7 @@ describe("companion projects", () => {
   beforeEach(() => {
     base = mkdtempSync(join(tmpdir(), "aligndev-companion-"));
     home = join(base, "home");
-    writeConfig(home, { platform: "codingAgent", code: { agent: "claude" } });
+    writeConfig(home, { code: { harness: "claude" } });
   });
   afterEach(() => rmSync(base, { recursive: true, force: true }));
 
@@ -1672,7 +1674,7 @@ describe("quiet execution", () => {
     project = join(base, "project");
     plans = join(project, ".plans");
     mkdirSync(plans, { recursive: true });
-    writeConfig(home, { code: { agent: "claude" } });
+    writeConfig(home, { code: { harness: "claude" } });
   });
   afterEach(() => rmSync(base, { recursive: true, force: true }));
 
@@ -1834,7 +1836,7 @@ describe("pi launches", () => {
     project = join(base, "project");
     plans = join(project, ".plans");
     mkdirSync(plans, { recursive: true });
-    writeConfig(home, { code: { agent: "pi" } });
+    writeConfig(home, { code: { harness: "pi" } });
     fake = installFakePi(base);
   });
 
@@ -1874,7 +1876,7 @@ describe("pi launches", () => {
       result: "private pi answer",
     });
     writeConfig(home, {
-      code: { agent: "pi", models: [selected, "other/model"], defaultModel: "other/model" },
+      code: { harness: "pi", models: [selected, "other/model"], defaultModel: "other/model" },
     });
     const resumed = await launch(["resume", "pi-session", "-m", "more", "--quiet"]);
     expect(resumed.code, resumed.stderr).toBe(0);
@@ -1912,7 +1914,7 @@ describe("pi launches", () => {
       const result = await launch(["new", "-m", "go", "--model", model]);
       expect(result.code).toBe(1);
     }
-    writeConfig(home, { code: { agent: "pi", models: ["provider/model"] } });
+    writeConfig(home, { code: { harness: "pi", models: ["provider/model"] } });
     expect((await launch(["new", "-m", "go", "--model", "terra"])).code).toBe(1);
     expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(0);
   });
@@ -1922,7 +1924,7 @@ describe("pi launches", () => {
     mkdirSync(other);
     writeInitialSessionFile(
       join(plans, "_aligndev", "original.md"),
-      statusFrontmatter({ agent: "pi", sessionId: "pi-session", cwd: other }),
+      statusFrontmatter({ agent: "pi", profile: "test", sessionId: "pi-session", cwd: other }),
     );
     const result = await launch(["resume", "pi-session", "-m", "more"]);
     expect(result.code).toBe(1);

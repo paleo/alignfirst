@@ -96,6 +96,11 @@ function bracketPath(path: string, segment: string): string {
   return `${path === "" ? "value" : path}[${segment}]`;
 }
 
+// Lets a custom check fail on a field of the object at `path`, as the built-in checks do.
+export function rejectField(path: string, key: string, expectation: string): never {
+  throw shapeError(childPath(path, key), expectation);
+}
+
 function shapeError(path: string, expectation: string): Error {
   return new ShapeError(`${path === "" ? "value" : path} must ${expectation}`);
 }

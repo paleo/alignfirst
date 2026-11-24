@@ -1,5 +1,5 @@
 import type { CommandForms } from "../command-form.js";
-import { PLATFORMS, type Platform } from "../config.js";
+import { PLATFORMS, type Platform } from "../assistant-harness.js";
 import { readTemplate } from "../templates.js";
 
 export const SURFACES = ["slack", "discord", "app"] as const;
