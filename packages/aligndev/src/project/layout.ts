@@ -1,6 +1,6 @@
 import { describeAlignfirst, forwardSettingsWarnings, runAlignfirst } from "../alignfirst-cli.js";
 import { errorMessage } from "../errors.js";
-import type { PortRange } from "./markers.js";
+import type { PortRange } from "./ports.js";
 
 export type ItemName =
   | "alignfirst"

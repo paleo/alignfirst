@@ -1,12 +1,24 @@
 import { parseArgs } from "node:util";
 
+import {
+  ASSISTANT_HARNESS_VARIABLE,
+  HARNESSES,
+  type Platform,
+  platformOf,
+  resolveAssistantHarness,
+} from "../assistant-harness.js";
 import { resolveModels } from "../code/models.js";
 import { describeNativeStorage } from "../code/native-context.js";
 import type { CommandForms } from "../command-form.js";
-import { type LoadedConfig, requireProjectsRoot, resolveCodeConfig } from "../config.js";
+import {
+  enabledCodingProfiles,
+  type LoadedConfig,
+  requireProjectsRoot,
+  resolveCodeConfig,
+} from "../config.js";
 import { errorMessage } from "../errors.js";
 import { readProjectReport } from "../project/layout.js";
-import { type ProjectsCallerContext, renderProjectsGuideForRoot } from "../project/project-cli.js";
+import type { ProjectsCallerContext } from "../project/project-cli.js";
 import { renderCodeGuide } from "./code-guide.js";
 import {
   type ActiveBlocks,
@@ -27,7 +39,6 @@ import {
 interface GuideArgs {
   topic?: string;
   channel?: Surface;
-  root?: string;
   profile?: string;
   help: boolean;
 }
@@ -39,7 +50,12 @@ export function runGuide(
 ): number {
   try {
     const args = parseGuideArgs(tokens);
-    ctx.stdout.write(args.help ? renderUsage(ctx.forms) : `${renderTopic(args, config, ctx)}\n`);
+    if (args.help) {
+      ctx.stdout.write(renderUsage(ctx.forms));
+      return 0;
+    }
+    const platform = platformOf(resolveAssistantHarness(ctx.env).harness);
+    ctx.stdout.write(`${renderTopic(args, platform, config, ctx)}\n`);
     return 0;
   } catch (error) {
     ctx.stderr.write(`${errorMessage(error)}\n`);
@@ -52,7 +68,6 @@ function parseGuideArgs(tokens: string[]): GuideArgs {
     args: tokens,
     options: {
       channel: { type: "string" },
-      root: { type: "string" },
       profile: { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
@@ -61,16 +76,12 @@ function parseGuideArgs(tokens: string[]): GuideArgs {
   });
   if (positionals.length > 1) throw new Error("Error: `aligndev guide` takes at most one topic.");
   const [topic] = positionals;
-  if (values.root !== undefined && topic !== "project") {
-    throw new Error("Error: --root is valid only with `aligndev guide project`.");
-  }
   if (values.profile !== undefined && topic !== "code") {
     throw new Error("Error: --profile is valid only with `aligndev guide code`.");
   }
   return {
     topic,
     channel: parseChannel(values.channel),
-    root: values.root,
     profile: values.profile,
     help: values.help,
   };
@@ -83,16 +94,20 @@ function parseChannel(value: string | undefined): Surface | undefined {
 
 function renderUsage(forms: CommandForms): string {
   return `Usage:
-  ${forms.aligndev} guide [--channel <slack|discord|app>] [<topic>] [--root <path>] [--profile <name>]
+  ${forms.aligndev} guide [--channel <slack|discord|app>] [<topic>] [--profile <name>]
   ${forms.aligndev} guide --help
 
-Without a topic, prints the dispatcher; with --channel alone, the surface's playbook. On the openclaw
-platform, every playbook topic requires --channel, code defaults to --channel app, and project
-rejects it. The working-session and channel-handling topics print after the playbook.
+The assistant's harness selects the playbook: ${ASSISTANT_HARNESS_VARIABLE} (${HARNESSES.join(", ")})
+when set, else the detected coding agent, else openclaw under OPENCLAW_SHELL=exec.
+
+Without a topic, prints the dispatcher; with --channel alone, the surface's playbook. When the
+assistant's harness is openclaw, every playbook topic requires --channel, code defaults to
+--channel app, and project rejects it. The working-session and channel-handling topics print
+after the playbook.
 
 Topics:
   code        The delegation guide for \`${forms.aligndev} code\`.
-  project     The projects guide, openclaw only. --root overrides projectsRoot in the aligndev settings.
+  project     The projects guide, openclaw only.
 
 Playbook topics, by context:
   thread (openclaw, --channel slack|discord): ${PLAYBOOK_TOPICS.thread.join(", ")}
@@ -101,13 +116,18 @@ Playbook topics, by context:
 `;
 }
 
-function renderTopic(args: GuideArgs, config: LoadedConfig, ctx: ProjectsCallerContext): string {
-  assertChannelUse(args, config);
+function renderTopic(
+  args: GuideArgs,
+  platform: Platform,
+  config: LoadedConfig,
+  ctx: ProjectsCallerContext,
+): string {
+  assertChannelUse(args, platform);
   const { topic, channel } = args;
-  if (topic === "project" && config.platform === "openclaw") {
-    return renderProjectsGuideForRoot({ ...ctx, projectsRoot: config.projectsRoot }, args.root);
+  if (topic === "project" && platform === "openclaw") {
+    return renderGuideTemplate("project.md", { platform: "openclaw" }, ctx.forms);
   }
-  const active: ActiveBlocks = { platform: config.platform, surface: channel };
+  const active: ActiveBlocks = { platform, surface: channel };
   if (topic === undefined) {
     const name = channel === undefined ? PLAYBOOK_DISPATCHER : PLAYBOOK;
     return renderPlaybookTemplate(name, active, config, ctx.forms);
@@ -116,10 +136,10 @@ function renderTopic(args: GuideArgs, config: LoadedConfig, ctx: ProjectsCallerC
   return renderPlaybookTopic(topic, active, config, ctx);
 }
 
-function assertChannelUse({ topic, channel }: GuideArgs, config: LoadedConfig): void {
-  if (config.platform === "codingAgent") {
+function assertChannelUse({ topic, channel }: GuideArgs, platform: Platform): void {
+  if (platform === "codingAgent") {
     if (channel !== undefined) {
-      throw new Error("Error: --channel is valid only on the openclaw platform.");
+      throw new Error("Error: --channel is valid only when the assistant's harness is openclaw.");
     }
     return;
   }
@@ -130,7 +150,9 @@ function assertChannelUse({ topic, channel }: GuideArgs, config: LoadedConfig): 
     return;
   }
   if (topic !== undefined && topic !== "code" && channel === undefined) {
-    throw new Error("Error: --channel is required with a playbook topic on the openclaw platform.");
+    throw new Error(
+      "Error: --channel is required with a playbook topic when the assistant's harness is openclaw.",
+    );
   }
 }
 
@@ -149,16 +171,16 @@ function renderCodeTopic(
   const report = readProjectReport(ctx.alignfirstCommand, ctx.cwd, ctx.env);
   if ("error" in report) throw new Error(report.error);
   const code = resolveCodeConfig(config, ctx.env, { project: report.aligndev, explicit: profile });
-  const models = resolveModels(code.agent, code.models, code.modelAliases);
-  return renderCodeGuide(
+  return renderCodeGuide({
     active,
-    code.agent,
-    models,
-    code.defaultModel,
-    ctx.forms,
-    code.profile,
-    describeNativeStorage(code),
-  );
+    forms: ctx.forms,
+    harness: code.harness,
+    models: resolveModels(code.harness, code.models, code.modelAliases),
+    defaultModel: code.defaultModel,
+    profile: code.profile,
+    nativeStorage: describeNativeStorage(code),
+    profiles: enabledCodingProfiles(config),
+  });
 }
 
 // An entry topic prints after the playbook.
@@ -196,7 +218,7 @@ function renderPlaybookTemplate(
   forms: CommandForms,
 ): string {
   const template = `playbook/${name}.md`;
-  if (config.platform === "codingAgent") return renderGuideTemplate(template, active, forms);
+  if (active.platform === "codingAgent") return renderGuideTemplate(template, active, forms);
   return renderGuideTemplate(template, active, forms, {
     PROJECTS_ROOT: requireProjectsRoot(config).written,
   });

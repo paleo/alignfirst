@@ -95,7 +95,7 @@ load_modules() {
 load_deployment_profiles() {
   DEPLOYMENT_PROFILES=$(node "$DIR/deployment-profiles.mjs" \
     "$DIR/aligndev.settings.json" "$HOME" "$ALIGNDEV_CONFIG_FILE")
-  if [ "$(jq -r '.agent' <<<"$DEPLOYMENT_PROFILES")" != "$coding_agent_kind" ]; then
+  if [ "$(jq -r '.harness' <<<"$DEPLOYMENT_PROFILES")" != "$coding_agent_kind" ]; then
     echo "[seed] deployment profiles do not match the coding-agent overlay" >&2
     exit 1
   fi
@@ -112,7 +112,7 @@ configure_deployment_agents() {
     INSTRUCTION_FILE=$(jq -r '.instructionFile' <<<"$store")
     CODING_AGENT_CONFIG_DIR=$(jq -r '.configDir' <<<"$store")
     configure_coding_agent
-  done < <(jq -c --arg agent "$coding_agent_kind" '.stores[] | select(.agent == $agent)' \
+  done < <(jq -c --arg harness "$coding_agent_kind" '.stores[] | select(.harness == $harness)' \
     <<<"$DEPLOYMENT_PROFILES")
 }
 
@@ -179,11 +179,11 @@ install_aligndev_config() {
   if ! cmp -s "$DIR/aligndev.settings.json" "$ALIGNDEV_CONFIG_FILE"; then
     install -m 644 "$DIR/aligndev.settings.json" "$ALIGNDEV_CONFIG_FILE"
   fi
-  # Explicit overrides avoid the seed cwd's project-registry selection. Validate every profile,
-  # including profiles reachable only through --profile or an editable project registry.
+  # Explicit overrides avoid the seed cwd's project-registry selection. Validate every enabled
+  # coding profile, including profiles reachable only through --profile or a project registry.
   local profile
   while IFS= read -r profile; do
-    aligndev guide code --profile "$profile" >/dev/null
+    ALIGNDEV_ASSISTANT_HARNESS=openclaw npx -y aligndev guide code --profile "$profile" >/dev/null
   done < <(jq -r '.profiles[]' <<<"$DEPLOYMENT_PROFILES")
 }
 
@@ -204,7 +204,7 @@ verify() {
 audit_secrets() {
   echo "[seed] secrets audit"
   # Not `--check`: it fails on every finding, including the info-level LEGACY_RESIDUE that a
-  # provider OAuth login (04-openclaw.md § 10) always produces. Fail on the actionable counters.
+  # provider OAuth login (04-openclaw.md § 9) always produces. Fail on the actionable counters.
   openclaw secrets audit --json | node -e '
     const report = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
     const summary = report.summary;

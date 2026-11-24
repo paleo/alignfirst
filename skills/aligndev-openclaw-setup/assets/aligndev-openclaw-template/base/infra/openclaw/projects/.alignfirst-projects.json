@@ -1,4 +1,0 @@
-{
-  "description": "Every project is a direct child of ~/projects. Adding a project is an operator's decision: ask before creating one.{{PLANS_CLONE_NOTE}}",
-  "portRanges": [{ "first": {{PORT_RANGE_FIRST}}, "last": {{PORT_RANGE_LAST}} }]
-}

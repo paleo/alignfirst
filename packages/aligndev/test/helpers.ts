@@ -12,16 +12,17 @@ export interface Sink {
   text(): string;
 }
 
-// Single-profile fixture builder: `code` is the profile body, emitted under code.profiles.test.
+// Single-profile fixture builder: `code` is the profile body, emitted under code.profiles.test and
+// named by code.fallbackProfile. A detected coding agent selects its built-ins over the fallback.
 // Temporary home/HOME values keep native settings and the companion registry test-local.
 export function writeConfig(
   home: string,
-  config: { platform?: string; projectsRoot?: string; code?: object },
+  config: { projectsRoot?: string; code?: object },
 ): string {
   const { code, ...settings } = config;
   return writeSettings(home, {
     ...settings,
-    ...(code === undefined ? {} : { code: { profile: "test", profiles: { test: code } } }),
+    ...(code === undefined ? {} : { code: { fallbackProfile: "test", profiles: { test: code } } }),
   });
 }
 

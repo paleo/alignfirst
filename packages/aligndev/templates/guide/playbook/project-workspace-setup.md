@@ -50,7 +50,7 @@ The workplace is the first case that matches:
 
 1. **The user's request or instructions name the place** — a directory, a branch, a workspace: work there. For a directory, apply Step 4's existing-workplace preparation, post its banner and go to Step 5. For a branch, Step 4 finds or attaches that branch rather than choosing another ticket branch.
 2. **The session's branch carries TICKET_ID** — work in place. Skip the setup signal and branch selection: apply Step 4's existing-workplace preparation, post the `[WORKSPACE]` banner with the session's worktree and branch, then go to Step 5.
-3. **The session's worktree is a fresh harness worktree** — a linked worktree (its `git rev-parse --git-common-dir` is not its own `.git`) with a clean tree, on a branch that carries no ticket ID or on a detached HEAD, with no commit beyond the default branch: after `git fetch`, `git rev-list --count origin/<default>..HEAD` is `0`. OpenClaw (branch `openclaw/<name>`) and coding-agent hosts create such worktrees. Work in place on the ticket branch, without asking. First run Step 4's two checks for TICKET_ID. A status request never creates a branch: with no ticket branch, it ends as sub-path 3 of Step 4 does. Otherwise:
+3. **The session's worktree is a fresh harness worktree** — a linked worktree (its `git rev-parse --git-common-dir` is not its own `.git`) with a clean tree, on a branch that carries no ticket ID or on a detached HEAD, with no commit beyond the default branch: after `git fetch`, `git rev-list --count origin/<default>..HEAD` is `0`. OpenClaw (branch `openclaw/<name>`) and coding-agent harnesses create such worktrees. Work in place on the ticket branch, without asking. First run Step 4's two checks for TICKET_ID. A status request never creates a branch: with no ticket branch, it ends as sub-path 3 of Step 4 does. Otherwise:
    - The ticket branch has a registered workspace: use that workspace, as sub-path 1 of Step 4. The fresh worktree stays unused.
    - The ticket branch exists without a workspace: run `git switch <branch>` in the session's worktree.
    - No ticket branch: run `git switch -c {TICKET_ID}/{1-3-words} origin/<default>` in the session's worktree.
@@ -214,7 +214,7 @@ The workspace is ready. Announce what you're about to do in one line and do it. 
 When the work is an `{{ALIGNDEV}} code` run, launch it as the delegation guide describes: background `exec` with `timeoutSeconds: 0`, then end the turn on the acknowledgement. Call nothing on the `{{ALIGNDEV}} code` session before the chained turn wakes you, whatever the `exec` acknowledgement suggests.
 {{/openclaw}}
 {{#codingAgent}}
-When the work is an `{{ALIGNDEV}} code` run, launch it as the delegation guide describes for your parent host, then end the launch turn on the acknowledgement.
+When the work is an `{{ALIGNDEV}} code` run, launch it as the delegation guide describes for your harness, then end the launch turn on the acknowledgement.
 {{/codingAgent}}
 
 Ask only when you genuinely can't proceed — the request is ambiguous enough that two readings lead to different work, or it turns on a product decision that isn't yours to make.

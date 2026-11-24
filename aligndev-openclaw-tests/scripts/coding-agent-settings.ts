@@ -1,5 +1,6 @@
-export const HARNESS_PROFILE = "harness";
+export const MOCK_AGENT_PROFILE = "mock-agent";
 export const PI_CONTRACT_MODEL = "openai/gpt-6.1-terra";
+export const SETTINGS_PORT_RANGE: PortRange = { first: 6500, last: 7700 };
 
 export type CodingAgent = "claude" | "codex" | "pi";
 
@@ -8,27 +9,36 @@ export interface CodingAgentEnvironment {
   CODING_AGENT_MODELS?: string;
 }
 
-export interface HarnessSettings {
-  platform: "openclaw";
+export interface PortRange {
+  first: number;
+  last: number;
+}
+
+export interface MockAgentSettings {
   projectsRoot: string;
+  portRange: PortRange;
   code: {
-    profile: string;
-    profiles: Record<string, { agent: CodingAgent; models?: string[] }>;
+    profiles: {
+      openclaw: { harness: "openclaw"; defaultAgentProfile: string };
+      [MOCK_AGENT_PROFILE]: { harness: CodingAgent; models?: string[] };
+    };
   };
 }
 
-export function buildCodingAgentSettings(env: CodingAgentEnvironment): HarnessSettings {
+export function buildCodingAgentSettings(env: CodingAgentEnvironment): MockAgentSettings {
   const agent = readConfiguredAgent(env);
   const models = (env.CODING_AGENT_MODELS ?? "")
     .split(",")
     .map((model) => model.trim())
     .filter((model) => model !== "");
   return {
-    platform: "openclaw",
     projectsRoot: "/home/assistant/projects",
+    portRange: { ...SETTINGS_PORT_RANGE },
     code: {
-      profile: HARNESS_PROFILE,
-      profiles: { [HARNESS_PROFILE]: { agent, ...(models.length > 0 ? { models } : {}) } },
+      profiles: {
+        openclaw: { harness: "openclaw", defaultAgentProfile: MOCK_AGENT_PROFILE },
+        [MOCK_AGENT_PROFILE]: { harness: agent, ...(models.length > 0 ? { models } : {}) },
+      },
     },
   };
 }

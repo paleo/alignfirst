@@ -135,7 +135,7 @@ configure_common() {
   # owner route never resolves to a group. Heartbeat reports must follow the ticket conversation,
   # which "last" targets.
   set_scalar agents.defaults.heartbeat.target "last"
-  # Stock prompt: it follows the job's scratch (04-openclaw.md § 7) and ends in NO_REPLY.
+  # Stock prompt: it follows the job's scratch (04-openclaw.md § 6) and ends in NO_REPLY.
   unset_key agents.defaults.heartbeat.prompt
   unset_key agents.defaults.heartbeat.isolatedSession
   unset_key agents.defaults.heartbeat.lightContext

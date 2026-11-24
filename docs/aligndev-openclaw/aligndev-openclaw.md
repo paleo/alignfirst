@@ -21,13 +21,13 @@ The [`@alignfirst/service-openclaw-plugin`](../../packages/service-openclaw-plug
    session to `aligndev guide --channel <surface> channel-handling`; each prints the surface's
    playbook first. The other topics own the runbooks for project workspace setup, project
    lifecycle and consultations, and the `message` tool per thread surface.
-   Project discovery comes from `aligndev guide project`; the delegation procedure comes from
+   Project discovery comes from `aligndev project list --json`; the delegation procedure comes from
    `aligndev guide --channel <surface> code` only when delegation starts.
 3. **Regression-test harness** —
    [`aligndev-openclaw-tests/`](../../aligndev-openclaw-tests/). This standalone Dockerised
    consumer drives the workspace through synthetic Discord and Slack channels and the gateway's app surface, `webchat`, and judges the result.
    It bind-mounts the workspace and the monorepo root into the gateway, so `aligndev` and `alignfirst` run from the checkout and `aligndev guide` prints the checkout's playbook.
-   The harness intercepts Claude Code, Codex and Pi delegated-agent subprocesses through a generated named profile. Its offline helper tests cover mock contracts; scenario and live deployment acceptance remain separate.
+   The harness intercepts the agent's Claude Code, Codex or Pi subprocesses through a generated `mock-agent` profile, which the generated `openclaw` profile names as its `defaultAgentProfile`. Its offline helper tests cover mock contracts; scenario and live deployment acceptance remain separate.
 
 ## How a turn flows
 
@@ -71,7 +71,7 @@ A managed project can keep its AlignFirst files in a companion directory, outsid
 
 ## A coding agent as the assistant
 
-The same templates serve a second platform, `codingAgent`: a Claude Code, Codex or persistent Pi session acting as the assistant on one project, the repository where it started. `aligndev guide` selects the platform from `platform` in the aligndev settings, and each template keeps context-specific paragraphs in fact blocks such as `{{#openclaw}}`, `{{#thread}}`, `{{#conversation}}` and `{{#codingAgent}}`. The `codingAgent` playbook has no surface, thread or project inventory; the `aligndev` skill starts it. [Shared templates](./writing-instructions-for-openclaw.md#shared-templates) gives the authoring rules, and the setup guide's [`coding-agent-assistant`](../../packages/alignfirst/templates/setup/topics/coding-agent-assistant.md) topic, printed by `alignfirst setup guide coding-agent-assistant`, the installation.
+The same templates serve a second platform, `codingAgent`: a Claude Code, Codex or persistent Pi session acting as the assistant on one project, the repository where it started. `aligndev guide` derives the platform from the assistant's harness at each invocation: `openclaw` under OpenClaw's exec runtime (`OPENCLAW_SHELL=exec`), `codingAgent` when it detects a coding agent. Each template keeps context-specific paragraphs in fact blocks such as `{{#openclaw}}`, `{{#thread}}`, `{{#conversation}}` and `{{#codingAgent}}`. The `codingAgent` playbook has no surface, thread or project inventory; the `aligndev` skill starts it. [Shared templates](./writing-instructions-for-openclaw.md#shared-templates) gives the authoring rules, and the setup guide's [`coding-agent-assistant`](../../packages/alignfirst/templates/setup/topics/coding-agent-assistant.md) topic, printed by `alignfirst setup guide coding-agent-assistant`, the installation.
 
 ## Reading order for maintainers
 
@@ -95,7 +95,7 @@ projects through the complete AlignDev contract.
 
 ### Native-directory selection
 
-Ordinary developer setup omits `configDir` to inherit the caller's native directory variable unless profile `env`/`unset` changes it. Deployments instead require null or a string for every coding profile and enabled explicit quota source. Generated service defaults use null, removing `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `PI_CODING_AGENT_DIR` so native defaults apply. Custom strings resolve and set the variable; even a string naming the default path remains an explicit selection.
+Ordinary developer setup omits `configDir` to inherit the caller's native directory variable unless profile `env`/`unset` changes it. Deployments instead require null or a string for every enabled coding profile and enabled explicit quota source. Generated service defaults use null, removing `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `PI_CODING_AGENT_DIR` so native defaults apply. Custom strings resolve and set the variable; even a string naming the default path remains an explicit selection.
 
 The inventory maps null to the native default beneath the service home and always emits an absolute filesystem path. Authentication/status, configuration/trust, package installation, readiness and update/recovery commands must read mode from the relevant named profile/quota settings, then unset or set the variable after login-shell initialization. Filesystem operations retain the inventory path. Stores deduplicated by path may still need different native invocation modes; coding and explicit quota selections remain independent.
 
@@ -113,4 +113,4 @@ The protected launcher derives the Pi entry and Node requirement from the instal
 
 After building `alignfirst` and `aligndev`, run `npm run test:deployment-templates`. The stdlib suite renders three agents × two surfaces with gateway/work-files options, checks default/custom and multi-profile inventory, JSON, dotfiles, script syntax, executable modes, real AlignDev validation and managed-block idempotence. Native tests preserve the original command-persistence/permission evidence with fake credentials, disposable state and network rejection; they also exercise no-model startup, native locks and neutral reserved resources. Rewritten maintenance fixtures use audited privileged-command doubles for success, failure, signals, partial unlock, snapshot restoration and backup mapping. Runtime fixtures prove project-tool Node selection and packed subagent reuse. These observations do not certify kernel ownership/immutable enforcement or real containment.
 
-OpenClaw remains the persistent parent and needs no `pi-background` to delegate. Production headless waiting remains unchanged and independently blocked under B7. Real service-user enforcement, OAuth login/renewal, reboot, recovery and channel-conversation acceptance remain unexecuted by this template work.
+OpenClaw remains the assistant's persistent harness and needs no `pi-background` to delegate. Production headless waiting remains unchanged and independently blocked under B7. Real service-user enforcement, OAuth login/renewal, reboot, recovery and channel-conversation acceptance remain unexecuted by this template work.

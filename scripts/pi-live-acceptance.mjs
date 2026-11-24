@@ -101,8 +101,7 @@ function run() {
     join(root, "home/.alignfirst/aligndev.settings.json"),
     JSON.stringify({
       code: {
-        profile: "pi-fixture",
-        profiles: { "pi-fixture": { agent: "pi", defaultModel: `${model}:low` } },
+        profiles: { "pi-fixture": { harness: "pi", defaultModel: `${model}:low` } },
       },
     }),
   );

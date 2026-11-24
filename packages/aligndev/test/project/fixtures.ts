@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,7 +15,7 @@ let originalGitConfig: string | undefined;
 
 export interface Fixture {
   base: string;
-  // A projects directory, also the default working directory.
+  // The scan root, also the default working directory.
   root: string;
   // The injected home, also `HOME` for alignfirst, without aligndev settings unless a test writes them.
   home: string;
@@ -53,14 +53,13 @@ export function useProjectFixtures(): void {
   });
 }
 
-export function makeFixture(marker?: object): Fixture {
+export function makeFixture(): Fixture {
   const base = mkdtempSync(join(tmpdir(), "aligndev-projects-"));
   fixtureDirs.push(base);
   const root = join(base, "projects");
   const home = join(base, "home");
   mkdirSync(root);
   mkdirSync(home);
-  if (marker !== undefined) writeMarker(root, marker);
   return { base, root, home };
 }
 
@@ -73,7 +72,7 @@ export async function runAligndev(
   const stderr = makeSink();
   const home = overrides.home ?? fixture.home;
   // Under `npm test`, npm sets its user agent: the guides would print the npx forms. A coding agent
-  // running the tests would be detected as the selected agent.
+  // or an OpenClaw exec running the tests would set the assistant's harness.
   const {
     npm_config_user_agent: _userAgent,
     npm_execpath: _npmExecpath,
@@ -85,6 +84,8 @@ export async function runAligndev(
     CODEX_THREAD_ID: _codex,
     PI_CODING_AGENT: _pi,
     AI_AGENT: _agent,
+    OPENCLAW_SHELL: _openclaw,
+    ALIGNDEV_ASSISTANT_HARNESS: _harness,
     ...baseEnv
   } = process.env;
   const env = { ...baseEnv, HOME: home };
@@ -99,13 +100,6 @@ export async function runAligndev(
     stderr,
   });
   return { code, stdout: stdout.text(), stderr: stderr.text() };
-}
-
-export function makeProjectsDirectory(parent: string, name: string, marker: object): string {
-  const directory = join(parent, name);
-  mkdirSync(directory);
-  writeMarker(directory, marker);
-  return directory;
 }
 
 export function makeRepository(parent: string, name: string, config?: object): string {
@@ -166,17 +160,6 @@ export function execGit(cwd: string, ...args: string[]): string {
     encoding: "utf8",
     env: { ...process.env, GIT_CONFIG_GLOBAL: gitConfigPath },
   }).trim();
-}
-
-export function writeMarker(directory: string, marker: object): void {
-  writeFileSync(
-    join(directory, ".alignfirst-projects.json"),
-    `${JSON.stringify(marker, undefined, 2)}\n`,
-  );
-}
-
-export function readJson(path: string): unknown {
-  return JSON.parse(readFileSync(path, "utf8"));
 }
 
 export function range(first: number, last: number): { first: number; last: number } {

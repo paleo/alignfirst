@@ -31,7 +31,7 @@ const source = join(
 test("core inventory includes every coding/quota store and resolves deployed relative paths", () => {
   fixture((f) => {
     const inventory = f.inventory();
-    assert.equal(inventory.agent, "pi");
+    assert.equal(inventory.harness, "pi");
     assert.equal(inventory.profiles.length, 4);
     assert.deepEqual(
       inventory.stores.map((store) => store.configDir),
@@ -59,15 +59,15 @@ test("core refuses symlinks, hardlinks, overlaps, ambiguous environment and disc
   fixture((f) => {
     const original = structuredClone(f.settings);
     for (const profile of [
-      { agent: "pi", configDir: "~/.pi/agent/nested" },
-      { agent: "codex", configDir: "~/.pi/agent" },
-      { agent: "pi", configDir: "~/projects" },
-      { agent: "pi", configDir: "/tmp/external-store" },
-      { agent: "pi", configDir: "~/.pi/agent", env: { PI_CODING_AGENT_DIR: "elsewhere" } },
-      { agent: "pi", configDir: "~/.pi/agent", env: { HOME: "/elsewhere" } },
-      { agent: "pi", configDir: "~/.pi/agent", quota: { source: "codex" } },
-      { agent: "pi", configDir: " ~/.pi/agent " },
-      { agent: "pi", configDir: pathToFileURL(f.native).href },
+      { harness: "pi", configDir: "~/.pi/agent/nested" },
+      { harness: "codex", configDir: "~/.pi/agent" },
+      { harness: "pi", configDir: "~/projects" },
+      { harness: "pi", configDir: "/tmp/external-store" },
+      { harness: "pi", configDir: "~/.pi/agent", env: { PI_CODING_AGENT_DIR: "elsewhere" } },
+      { harness: "pi", configDir: "~/.pi/agent", env: { HOME: "/elsewhere" } },
+      { harness: "pi", configDir: "~/.pi/agent", quota: { source: "codex" } },
+      { harness: "pi", configDir: " ~/.pi/agent " },
+      { harness: "pi", configDir: pathToFileURL(f.native).href },
     ]) {
       f.settings.code.profiles.bad = profile;
       f.save();
@@ -681,7 +681,12 @@ test("private resolved inventory restores removed declarations and protects newl
         ...(variant === "removed-profile"
           ? {
               replaceDeployed: JSON.stringify({
-                code: { profile: "claude", profiles: { claude: f.settings.code.profiles.claude } },
+                code: {
+                  profiles: {
+                    openclaw: { harness: "openclaw", defaultAgentProfile: "claude" },
+                    claude: f.settings.code.profiles.claude,
+                  },
+                },
               }),
             }
           : {}),
@@ -1022,16 +1027,16 @@ function fixture(callback) {
       cpSync(join(infra, name), join(f.libexec, name));
     f.settings = {
       code: {
-        profile: "main",
         profiles: {
+          openclaw: { harness: "openclaw", defaultAgentProfile: "main" },
           main: {
-            agent: "pi",
+            harness: "pi",
             configDir: "~/.pi/agent",
             quota: { source: "codex", configDir: "~/.codex-quota" },
           },
-          shared: { agent: "pi", configDir: "~/.pi/agent" },
-          custom: { agent: "pi", default: true, configDir: "~/custom-pi" },
-          claude: { agent: "claude", default: true, configDir: "~/.claude" },
+          shared: { harness: "pi", configDir: "~/.pi/agent" },
+          custom: { harness: "pi", default: true, configDir: "~/custom-pi" },
+          claude: { harness: "claude", default: true, configDir: "~/.claude" },
         },
       },
     };

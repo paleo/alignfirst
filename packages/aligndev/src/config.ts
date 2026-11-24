@@ -2,11 +2,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
 import {
-  CODING_AGENTS,
-  type CodingAgent,
-  createAgentAdapter,
-  detectCodingAgents,
-} from "./code/coding-agent.js";
+  ASSISTANT_HARNESS_VARIABLE,
+  type AssistantHarness,
+  HARNESSES,
+  resolveAssistantHarness,
+} from "./assistant-harness.js";
+import { CODING_AGENTS, type CodingAgent, createAgentAdapter } from "./code/coding-agent.js";
 import { resolveModels } from "./code/models.js";
 import { buildAgentEnv } from "./code/run-agent.js";
 import { errorMessage } from "./errors.js";
@@ -14,6 +15,8 @@ import {
   arrayOf,
   boolean,
   type Check,
+  integerBetween,
+  isPlainObject,
   literal,
   matching,
   nonblankString,
@@ -23,10 +26,11 @@ import {
   optional,
   parseShape,
   record,
+  rejectField,
 } from "./json-shape.js";
 import type { AligndevProjectSettings } from "./project/layout.js";
+import type { PortRange } from "./project/ports.js";
 
-export const PLATFORMS = ["openclaw", "codingAgent"] as const;
 export const CONFIG_DIRECTORY_VARIABLES = {
   claude: "CLAUDE_CONFIG_DIR",
   codex: "CODEX_HOME",
@@ -36,13 +40,23 @@ export const CONFIG_DIRECTORY_VARIABLES = {
 const environmentName = matching(/^[A-Za-z_][A-Za-z0-9_]*$/);
 const environmentShape = record(nulFreeString, environmentName);
 const RETIRED_CODE_KEYS = ["agent", "defaultModel", "models", "skipPermissions", "unset"];
-
-export type Platform = (typeof PLATFORMS)[number];
+// Recognized keys of a coding-agent profile that an openclaw profile rejects.
+const CODING_ONLY_PROFILE_KEYS = [
+  "default",
+  "configDir",
+  "defaultModel",
+  "models",
+  "modelAliases",
+  "skipPermissions",
+  "env",
+  "unset",
+  "quota",
+];
 
 export interface LoadedConfig {
   path: string;
-  platform: Platform;
   projectsRoot?: ProjectsRoot;
+  portRange?: PortRange;
   code: CodeSettings;
 }
 
@@ -52,12 +66,16 @@ export interface ProjectsRoot {
 }
 
 export interface CodeSettings {
-  profile?: string;
-  profiles?: Record<string, CodingProfile>;
+  fallbackProfile?: string;
+  profiles?: Record<string, Profile>;
 }
 
+export type Profile = CodingProfile | OpenclawProfile;
+
 export interface CodingProfile {
-  agent: CodingAgent;
+  harness: CodingAgent;
+  defaultAgentProfile?: string;
+  disabled?: boolean;
   default?: boolean;
   configDir?: string | null;
   defaultModel?: string;
@@ -67,6 +85,13 @@ export interface CodingProfile {
   env?: Record<string, string>;
   unset?: string[];
   quota?: QuotaSettings;
+}
+
+// Describes an OpenClaw assistant; it launches nothing.
+export interface OpenclawProfile {
+  harness: "openclaw";
+  defaultAgentProfile: string;
+  disabled?: boolean;
 }
 
 export interface QuotaSettings {
@@ -84,8 +109,8 @@ export interface CodeConfig extends CodingProfile {
 }
 
 interface ConfigFile {
-  platform?: Platform;
   projectsRoot?: string;
+  portRange?: PortRange;
   code?: CodeSettings;
 }
 
@@ -94,9 +119,12 @@ export function loadConfig(home: string, alignfirst: string): LoadedConfig {
   const path = join(home, ".alignfirst", "aligndev.settings.json");
   const value = existsSync(path) ? parseConfigFile(path, alignfirst) : absentConfig(home);
   const code = value.code ?? {};
+  if (value.portRange !== undefined && value.portRange.first > value.portRange.last)
+    throw invalidConfig(path, "portRange.first must not exceed portRange.last");
   for (const [name, profile] of Object.entries(code.profiles ?? {})) {
+    if (profile.harness === "openclaw") continue;
     const field = `code.profiles[${JSON.stringify(name)}]`;
-    validateEnvironment(profile, profile.agent, field, path);
+    validateEnvironment(profile, profile.harness, field, path);
     if (typeof profile.configDir === "string")
       profile.configDir = resolvePath(profile.configDir, home, path);
     if (profile.quota !== undefined) {
@@ -114,7 +142,6 @@ export function loadConfig(home: string, alignfirst: string): LoadedConfig {
   }
   return {
     path,
-    platform: value.platform ?? "codingAgent",
     ...(value.projectsRoot === undefined
       ? {}
       : {
@@ -123,6 +150,7 @@ export function loadConfig(home: string, alignfirst: string): LoadedConfig {
             written: value.projectsRoot,
           },
         }),
+    ...(value.portRange === undefined ? {} : { portRange: value.portRange }),
     code,
   };
 }
@@ -155,6 +183,29 @@ function parseConfigFile(path: string, alignfirst: string): ConfigFile {
 
 function configShape(alignfirst: string): Check<ConfigFile> {
   const warn = (path: string, key: string) => warnUnknownSetting(path, key, alignfirst);
+  const codeShape = object<CodeSettings>(
+    {
+      fallbackProfile: optional(nonblankString),
+      profiles: optional(record(profileShape(warn), nonblankString)),
+    },
+    warn,
+  );
+  const portRangeShape = object<PortRange>(
+    { first: integerBetween(1, 65_535), last: integerBetween(1, 65_535) },
+    warn,
+  );
+  return object<ConfigFile>(
+    {
+      projectsRoot: optional(nonEmptyString),
+      portRange: optional(portRangeShape),
+      code: optional(codeShape),
+    },
+    warn,
+  );
+}
+
+// Dispatches on `harness`: an openclaw profile accepts only its own keys.
+function profileShape(warn: (path: string, key: string) => void): Check<Profile> {
   const quotaShape = object<QuotaSettings>(
     {
       source: literal("claude", "codex", "none"),
@@ -164,9 +215,11 @@ function configShape(alignfirst: string): Check<ConfigFile> {
     },
     warn,
   );
-  const profileShape = object<CodingProfile>(
+  const codingShape = object<CodingProfile>(
     {
-      agent: literal(...CODING_AGENTS),
+      harness: literal(...CODING_AGENTS),
+      defaultAgentProfile: optional(nonblankString),
+      disabled: optional(boolean),
       default: optional(boolean),
       configDir: optional(directoryValue),
       defaultModel: optional(nonblankString),
@@ -179,21 +232,39 @@ function configShape(alignfirst: string): Check<ConfigFile> {
     },
     warn,
   );
-  const codeShape = object<CodeSettings>(
+  const openclawShape = object<OpenclawProfile>(
     {
-      profile: optional(nonblankString),
-      profiles: optional(record(profileShape, nonblankString)),
+      harness: literal("openclaw"),
+      defaultAgentProfile: nonblankString,
+      disabled: optional(boolean),
     },
     warn,
   );
-  return object<ConfigFile>(
-    {
-      platform: optional(literal(...PLATFORMS)),
-      projectsRoot: optional(nonEmptyString),
-      code: optional(codeShape),
-    },
-    warn,
-  );
+  return (value, path, warningPath = path) => {
+    if (!isPlainObject(value)) return codingShape(value, path, warningPath);
+    const harness = "harness" in value ? value.harness : undefined;
+    if (harness === "openclaw") {
+      for (const key of CODING_ONLY_PROFILE_KEYS) {
+        if (Object.hasOwn(value, key))
+          rejectField(
+            path,
+            key,
+            "be removed: an openclaw profile accepts only harness, defaultAgentProfile and disabled",
+          );
+      }
+      return openclawShape(value, path, warningPath);
+    }
+    if (!HARNESSES.some((item) => item === harness)) {
+      rejectField(
+        path,
+        "harness",
+        harness === undefined && Object.hasOwn(value, "agent")
+          ? 'be set: rename "agent" to "harness"'
+          : `be one of ${HARNESSES.join(", ")}`,
+      );
+    }
+    return codingShape(value, path, warningPath);
+  };
 }
 
 function warnUnknownSetting(path: string, key: string, alignfirst: string): void {
@@ -207,7 +278,17 @@ function warnUnknownSetting(path: string, key: string, alignfirst: string): void
     ? `${path === "" ? "" : `${path}.`}${key}`
     : `${path === "" ? "settings" : path}[${quoted}]`;
   let migration = "Remove it or check its spelling.";
-  if (path === "code" && key === "defaultProfiles") {
+  if (path === "" && key === "platform") {
+    migration =
+      "platform is retired: the assistant's harness is resolved at each invocation " +
+      `(see ${ASSISTANT_HARNESS_VARIABLE}). Remove it.`;
+  } else if (path === "code" && key === "profile") {
+    migration =
+      "code.profile is retired: set defaultAgentProfile on the assistant's profile, " +
+      "or code.fallbackProfile. Remove it.";
+  } else if (path === "code.profiles[<entry>]" && key === "agent") {
+    migration = 'The profile key "agent" was renamed to "harness". Remove it.';
+  } else if (path === "code" && key === "defaultProfiles") {
     migration =
       "code.defaultProfiles is retired: manually move each needed preference to its referenced " +
       "matching-agent profile's default: true (omit singleton flags), remove the map and " +
@@ -215,7 +296,8 @@ function warnUnknownSetting(path: string, key: string, alignfirst: string): void
       `\`${alignfirst} setup guide upgrade\`.`;
   } else if (path === "code" && RETIRED_CODE_KEYS.includes(key)) {
     migration =
-      "Retired launch setting: move it into code.profiles and select one with code.profile " +
+      "Retired launch setting: move it into a profile under code.profiles, then select that " +
+      "profile with the assistant profile's defaultAgentProfile or code.fallbackProfile " +
       "(manual conversion required).";
   }
   console.warn(`Warning: ignoring unknown aligndev setting ${field}. ${migration}`);
@@ -264,13 +346,13 @@ export function resolveQuotaConfig(code: CodeConfig, callerEnv: NodeJS.ProcessEn
   const quota = code.quota;
   if (quota?.source === "none") return { source: "none" };
   if (quota === undefined) {
-    if (code.agent === "pi") {
+    if (code.harness === "pi") {
       throw new Error(
         "Pi account quota is unsupported without explicit configuration: " +
           "set quota.source to claude or codex, or none to disable it.",
       );
     }
-    return { source: code.agent, env: code.childEnv };
+    return { source: code.harness, env: code.childEnv };
   }
   return {
     source: quota.source,
@@ -298,108 +380,232 @@ export interface ProfileSelection {
   recorded?: string | null;
 }
 
+export interface NamedProfile<T extends Profile = Profile> {
+  name: string;
+  profile: T;
+}
+
 export function resolveCodeConfig(
   config: LoadedConfig,
   env: NodeJS.ProcessEnv,
   selection: ProfileSelection = {},
 ): CodeConfig {
+  const assistant = resolveAssistantHarness(env);
   validateReferences(config);
-  const name =
-    selection.explicit ?? selection.project?.profile ?? selection.recorded ?? config.code.profile;
-  let profile: CodingProfile;
-  let effectiveName = name;
-  if (name !== undefined) {
-    profile = referencedProfile(config, name, "selected profile");
-  } else if (selection.recorded === null) {
-    profile = { agent: detectAgent(config, env) };
-  } else {
-    const automatic = resolveAutomaticProfile(config, env);
-    profile = automatic.profile;
-    effectiveName = automatic.name;
-  }
-  checkDefaultModel(profile, config.path, effectiveName);
+  const { name, profile } = selectProfile(config, env, assistant, selection);
+  checkDefaultModel(profile, config.path, name);
   return {
     ...profile,
-    profile: effectiveName ?? null,
+    profile: name ?? null,
     skipPermissions: profile.skipPermissions ?? false,
     unset: profile.unset ?? [],
-    childEnv: buildNativeEnv(env, profile, profile.agent, createAgentAdapter(profile.agent).env),
+    childEnv: buildNativeEnv(
+      env,
+      profile,
+      profile.harness,
+      createAgentAdapter(profile.harness).env,
+    ),
   };
 }
 
 function validateReferences(config: LoadedConfig): void {
-  if (config.code.profile !== undefined)
-    referencedProfile(config, config.code.profile, "code.profile");
+  const enabled = enabledProfiles(config);
+  const coding = enabled.filter(isCodingProfile);
   for (const agent of CODING_AGENTS) {
-    const names = Object.entries(config.code.profiles ?? {})
-      .filter(([, profile]) => profile.agent === agent && profile.default === true)
-      .map(([name]) => JSON.stringify(name));
-    if (names.length > 1)
+    const defaults = coding.filter(
+      ({ profile }) => profile.harness === agent && profile.default === true,
+    );
+    if (defaults.length > 1)
       throw invalidConfig(
         config.path,
-        `multiple default: true profiles for ${agent}: ${names.join(", ")}; ` +
+        `multiple default: true profiles for ${agent}: ${quotedNames(defaults)}; ` +
           `leave only one default: true for ${agent}`,
       );
   }
+  const openclaw = enabled.filter(isOpenclawProfile);
+  if (openclaw.length > 1)
+    throw invalidConfig(
+      config.path,
+      `multiple enabled openclaw profiles: ${quotedNames(openclaw)}; keep only one enabled`,
+    );
+  for (const { name, profile } of enabled) {
+    if (profile.defaultAgentProfile !== undefined)
+      namedProfile(config, profile.defaultAgentProfile, defaultAgentOrigin(name));
+  }
+  if (config.code.fallbackProfile !== undefined)
+    namedProfile(config, config.code.fallbackProfile, "code.fallbackProfile");
 }
 
-function referencedProfile(config: LoadedConfig, name: string, field: string): CodingProfile {
+// A disabled profile is absent for the CLI.
+function enabledProfiles(config: LoadedConfig): NamedProfile[] {
+  return Object.entries(config.code.profiles ?? {})
+    .filter(([, profile]) => profile.disabled !== true)
+    .map(([name, profile]) => ({ name, profile }));
+}
+
+export function enabledCodingProfiles(config: LoadedConfig): NamedProfile<CodingProfile>[] {
+  return enabledProfiles(config).filter(isCodingProfile);
+}
+
+function isCodingProfile(entry: NamedProfile): entry is NamedProfile<CodingProfile> {
+  return entry.profile.harness !== "openclaw";
+}
+
+function isOpenclawProfile(entry: NamedProfile): entry is NamedProfile<OpenclawProfile> {
+  return entry.profile.harness === "openclaw";
+}
+
+function quotedNames(entries: NamedProfile[]): string {
+  return entries.map(({ name }) => JSON.stringify(name)).join(", ");
+}
+
+function defaultAgentOrigin(name: string): string {
+  return `code.profiles[${JSON.stringify(name)}].defaultAgentProfile`;
+}
+
+// `name` is undefined for the built-in defaults of a harness.
+interface SelectedProfile {
+  name?: string;
+  profile: CodingProfile;
+}
+
+function selectProfile(
+  config: LoadedConfig,
+  env: NodeJS.ProcessEnv,
+  assistant: AssistantHarness,
+  selection: ProfileSelection,
+): SelectedProfile {
+  const { explicit, project, recorded } = selection;
+  if (explicit !== undefined) return namedProfile(config, explicit, "--profile");
+  if (project?.profile !== undefined)
+    return namedProfile(config, project.profile, "the project registry selection");
+  if (typeof recorded === "string") return namedProfile(config, recorded, "the recorded profile");
+  if (recorded === null) return { profile: { harness: historicalHarness(assistant) } };
+  return automaticProfile(config, env, assistant);
+}
+
+// A named reference never falls through to another profile.
+function namedProfile(config: LoadedConfig, name: string, origin: string): SelectedProfile {
   const profile = Object.hasOwn(config.code.profiles ?? {}, name)
     ? config.code.profiles?.[name]
     : undefined;
+  const quoted = JSON.stringify(name);
   if (name.trim() === "" || profile === undefined) {
     throw invalidConfig(
       config.path,
-      `${field} references missing profile ${JSON.stringify(name)}; define it in code.profiles or select another --profile`,
+      `${origin} names missing profile ${quoted}; define it in code.profiles or select another profile`,
     );
   }
-  return profile;
+  if (profile.disabled === true) {
+    throw invalidConfig(
+      config.path,
+      `${origin} names disabled profile ${quoted}; enable it or select another profile`,
+    );
+  }
+  if (profile.harness === "openclaw") {
+    throw invalidConfig(
+      config.path,
+      `${origin} names openclaw profile ${quoted}, which launches no coding agent; ` +
+        "select a coding-agent profile",
+    );
+  }
+  return { name, profile };
 }
 
-function resolveAutomaticProfile(
-  config: LoadedConfig,
-  env: NodeJS.ProcessEnv,
-): { profile: CodingProfile; name?: string } {
-  const detected = detectCodingAgents(env);
-  const profiles = Object.entries(config.code.profiles ?? {});
-  if (detected.length === 0 && profiles.length === 1) {
-    const [name, profile] = profiles[0];
-    return { name, profile };
-  }
-  if (detected.length !== 1) throw selectionRequired(config, detected);
-  const agent = detected[0];
-  const matching = profiles.filter(([, profile]) => profile.agent === agent);
-  if (matching.length === 0) return { profile: { agent } };
-  const selected =
-    matching.length === 1 ? matching[0] : matching.find(([, p]) => p.default === true);
-  if (selected !== undefined) return { name: selected[0], profile: selected[1] };
-  throw invalidConfig(
-    config.path,
-    `multiple profiles for detected ${agent}: ${matching.map(([name]) => JSON.stringify(name)).join(", ")}; ` +
-      "select --profile, a project registry profile, code.profile, or set one matching " +
-      "profile's default: true",
+// A session recorded without a profile resumes on the built-ins of the assistant's harness.
+function historicalHarness(assistant: AssistantHarness): CodingAgent {
+  const { harness } = assistant;
+  if (harness !== undefined && harness !== "openclaw") return harness;
+  const reason =
+    harness === "openclaw" ? "the assistant's harness is openclaw" : unrecognizedHarness(assistant);
+  throw new Error(
+    "Error: a session without a recorded profile resumes with the built-ins of the assistant's " +
+      `harness, but ${reason}: select --profile or a project registry profile.`,
   );
 }
 
-function detectAgent(config: LoadedConfig, env: NodeJS.ProcessEnv): CodingAgent {
-  const detected = detectCodingAgents(env);
-  if (detected.length === 1) return detected[0];
-  throw selectionRequired(config, detected);
+function unrecognizedHarness({ detected }: AssistantHarness): string {
+  return detected.length > 1
+    ? `the assistant's harness is not recognized (several coding agents detected: ${detected.join(", ")})`
+    : "the assistant's harness is not recognized (no coding agent detected)";
 }
 
-function selectionRequired(config: LoadedConfig, detected: CodingAgent[]): Error {
-  const problem =
-    detected.length === 0
-      ? `no coding agent detected (${CODING_AGENTS.join(", ")})`
-      : `multiple coding agents detected (${detected.join(", ")})`;
-  return new Error(
-    `Error: ${problem}: select --profile, a project registry profile, or set "code.profile" in ${config.path}.`,
+function automaticProfile(
+  config: LoadedConfig,
+  env: NodeJS.ProcessEnv,
+  assistant: AssistantHarness,
+): SelectedProfile {
+  const { harness } = assistant;
+  if (harness === undefined) return fallbackProfile(config, assistant);
+  if (harness === "openclaw") {
+    const own = enabledProfiles(config).find(isOpenclawProfile);
+    if (own === undefined) return fallbackProfile(config, assistant);
+    return namedProfile(config, own.profile.defaultAgentProfile, defaultAgentOrigin(own.name));
+  }
+  const own = codingAssistantProfile(config, env, harness);
+  if (own === undefined) return { profile: { harness } };
+  const target = own.profile.defaultAgentProfile;
+  return target === undefined ? own : namedProfile(config, target, defaultAgentOrigin(own.name));
+}
+
+// The enabled profile of the assistant's harness whose configDir matches the session's native
+// directory. An exact match (null for an unset variable, a path for the same directory) wins;
+// profiles with an omitted configDir match any session and apply only without an exact match.
+function codingAssistantProfile(
+  config: LoadedConfig,
+  env: NodeJS.ProcessEnv,
+  harness: CodingAgent,
+): NamedProfile<CodingProfile> | undefined {
+  const variable = env[CONFIG_DIRECTORY_VARIABLES[harness]];
+  const directory = variable === "" ? undefined : variable;
+  const own = enabledCodingProfiles(config).filter(({ profile }) => profile.harness === harness);
+  const exact = own.filter(({ profile }) => matchesDirectory(profile.configDir, directory));
+  const candidates =
+    exact.length > 0 ? exact : own.filter(({ profile }) => profile.configDir === undefined);
+  if (candidates.length < 2) return candidates[0];
+  const preferred = candidates.find(({ profile }) => profile.default === true);
+  if (preferred !== undefined) return preferred;
+  throw invalidConfig(
+    config.path,
+    `several profiles describe this ${harness} session: ${quotedNames(candidates)}; ` +
+      "select --profile, a project registry profile, or set default: true on one of them",
+  );
+}
+
+function matchesDirectory(
+  configDir: string | null | undefined,
+  directory: string | undefined,
+): boolean {
+  if (configDir === undefined) return false;
+  if (configDir === null) return directory === undefined;
+  return directory !== undefined && resolve(configDir) === resolve(directory);
+}
+
+function fallbackProfile(config: LoadedConfig, assistant: AssistantHarness): SelectedProfile {
+  const fallback = config.code.fallbackProfile;
+  if (fallback !== undefined) return namedProfile(config, fallback, "code.fallbackProfile");
+  const reason =
+    assistant.harness === "openclaw"
+      ? "the assistant's harness is openclaw, without an enabled openclaw profile"
+      : unrecognizedHarness(assistant);
+  throw new Error(`Error: no coding-agent profile applies: ${reason}. ${fallbackRemedy(config)}`);
+}
+
+function fallbackRemedy(config: LoadedConfig): string {
+  const names = enabledCodingProfiles(config).map(({ name }) => JSON.stringify(name));
+  if (names.length === 1)
+    return `Add "fallbackProfile": ${names[0]} under code in ${config.path}, or pass --profile.`;
+  if (names.length > 1)
+    return `Set code.fallbackProfile in ${config.path} to one of ${names.join(", ")}, or pass --profile.`;
+  return (
+    `Define a coding-agent profile under code.profiles in ${config.path}, then set ` +
+    "code.fallbackProfile or pass --profile."
   );
 }
 
 function checkDefaultModel(code: CodingProfile, path: string, profile: string | undefined): void {
   if (code.defaultModel === undefined) return;
-  const models = resolveModels(code.agent, code.models, code.modelAliases);
+  const models = resolveModels(code.harness, code.models, code.modelAliases);
   if (models === undefined || models.includes(code.defaultModel)) return;
   throw invalidConfig(
     path,
@@ -410,4 +616,12 @@ function checkDefaultModel(code: CodingProfile, path: string, profile: string | 
 export function requireProjectsRoot(config: LoadedConfig): ProjectsRoot {
   if (config.projectsRoot !== undefined) return config.projectsRoot;
   throw new Error(`Error: projectsRoot is missing from the aligndev config ${config.path}.`);
+}
+
+export function requirePortRange(config: LoadedConfig): PortRange {
+  if (config.portRange !== undefined) return config.portRange;
+  throw new Error(
+    `Error: portRange is missing from the aligndev config ${config.path}: ` +
+      'add "portRange": { "first": <port>, "last": <port> }, the range for dev servers.',
+  );
 }

@@ -149,7 +149,7 @@ export async function runCode(
       recorded: previous?.frontmatter.profile,
     });
     if (command.kind === "quota") return await showQuota(ctx, code);
-    const models = resolveModels(code.agent, code.models, code.modelAliases);
+    const models = resolveModels(code.harness, code.models, code.modelAliases);
     if (command.kind === "help") {
       ctx.stdout.write(renderHelp(code, models, ctx.forms));
       return 0;
@@ -507,7 +507,7 @@ function isPathSafeTicket(ticket: string): boolean {
 }
 
 // `aligndev code` always runs the selected coding agent in the foreground and blocks until it exits.
-// The assistant backgrounds it with its own platform's facility (OpenClaw's `exec` tool, a coding
+// The assistant backgrounds it with its own harness's facility (OpenClaw's `exec` tool, a coding
 // agent's background task) — aligndev owns no backgrounding or callback of its own. The per-run session
 // file is the durable result handoff: on completion the frontmatter carries the session id and
 // status, and the `---- Result ----` block carries the outcome for a waking caller (or a human).
@@ -521,7 +521,7 @@ async function runSession(
   previous: SessionRecord | undefined,
 ): Promise<number> {
   const { cwd, env, stdout, stderr, forms, alignfirstCommand, modelResolver } = ctx;
-  const { agent } = code;
+  const { harness: agent } = code;
 
   const resolvedTicket = args.noTicket
     ? undefined
@@ -641,7 +641,7 @@ async function runSession(
 }
 
 function nativeContext(code: CodeConfig): string {
-  return `${code.agent} profile ${JSON.stringify(code.profile ?? "(built-in)")} (${describeNativeStorage(code)})`;
+  return `${code.harness} profile ${JSON.stringify(code.profile ?? "(built-in)")} (${describeNativeStorage(code)})`;
 }
 
 function authenticationInstruction(agent: CodingAgent): string {
@@ -814,7 +814,7 @@ function selectModel(
   if (args.model !== undefined) return args.model;
   if (args.resume === undefined) return code.defaultModel;
   const model = previous?.frontmatter.model ?? undefined;
-  const models = resolveModels(code.agent, code.models, code.modelAliases);
+  const models = resolveModels(code.harness, code.models, code.modelAliases);
   if (
     model !== undefined &&
     (model.trim() === "" || (models !== undefined && !models.includes(model)))
@@ -919,7 +919,7 @@ export function buildRunConfig(input: RunInput): RunConfig {
     executableModel: input.executableModel,
     skipPermissions: code.skipPermissions,
     additionalDirectories:
-      code.agent !== "pi" && !code.skipPermissions && report.companion !== null
+      code.harness !== "pi" && !code.skipPermissions && report.companion !== null
         ? [report.companion.dir]
         : [],
     env: code.childEnv,
@@ -938,7 +938,7 @@ function renderHelp(
   models: readonly string[] | undefined,
   forms: CommandForms,
 ): string {
-  const { agent, profile, defaultModel } = code;
+  const { harness: agent, profile, defaultModel } = code;
   const { aligndev, alignfirst } = forms;
   const permissionMode =
     agent === "pi"
@@ -1003,11 +1003,21 @@ ${requires}
 
 Config (~/.alignfirst/aligndev.settings.json):
   Unknown/obsolete keys are ignored with value-free warnings on stderr. Recognized invalid values
-  and duplicate defaults still fail. Settings are never rewritten. Retired direct launch keys and
-  code.defaultProfiles have no effect; convert them manually to profiles and profile.default flags.
-  code.profile          Global named profile. Effective profile: ${profile ?? "(built-in)"} (selected: ${agent}).
-  code.profiles         Complete named profiles: agent, default, configDir, env, unset,
-                        defaultModel, models, modelAliases, skipPermissions, quota. No inheritance.
+  and duplicate defaults still fail. Settings are never rewritten. Retired keys (platform,
+  code.profile, profile agent, direct launch keys, code.defaultProfiles) have no effect.
+  Effective profile: ${profile ?? "(built-in)"}; agent's harness: ${agent}.
+  code.profiles         Complete named profiles, without inheritance. harness (required): claude,
+                        codex, pi or openclaw. Other keys: defaultAgentProfile, disabled, default,
+                        configDir, env, unset, defaultModel, models, modelAliases, skipPermissions,
+                        quota.
+  profile.defaultAgentProfile
+                        The profile a session delegates to when this profile is the assistant's
+                        profile; omitted means the profile itself. Followed once.
+  profile.disabled      true hides the profile from the CLI; its shape is still validated.
+  openclaw profile      Describes an OpenClaw assistant and launches nothing. It accepts only
+                        harness, a required defaultAgentProfile and disabled. One at most.
+  code.fallbackProfile  Used when the assistant has no profile and its harness has no built-in
+                        defaults: openclaw, or an unrecognized harness.
   profile.configDir     Omit for ordinary setup: inherit the native directory variable unless
                         env/unset changes it; otherwise use native defaults. null deliberately
                         removes it for native-default mode. A string resolves and sets it,
@@ -1020,14 +1030,19 @@ Config (~/.alignfirst/aligndev.settings.json):
                         coding-profile overrides. Omitted Claude/Codex quota uses the coding
                         environment; pi requires an explicit source or none. none accepts no
                         other recognized fields, including configDir: null.
-  profile.default       Optional boolean preference for that agent; at most one true per agent.
-                        A sole matching profile is inferred without a flag. No matching profile
-                        uses detected built-ins. Without a parent, only a sole total profile is
-                        inferred; multiple parents require a named choice.
+  profile.default       Breaks a tie between several profiles matching the assistant's session;
+                        at most one true per harness.
   --profile <name>      Override for new, resume, quota and help (also guide code).
-                        Precedence: explicit > project > recorded named resume > global > automatic.
-                        Historical null/missing-profile resumes keep detected built-ins unless
-                        explicit/project/global selection replaces them; no automatic inference.
+  Selection             --profile > project registry > recorded named resume > the assistant
+                        profile's defaultAgentProfile, or that profile itself > built-ins of a
+                        claude, codex or pi harness > code.fallbackProfile. A named reference never
+                        falls through. The assistant's profile has the assistant's harness
+                        (ALIGNDEV_ASSISTANT_HARNESS, else the detected coding agent, else openclaw
+                        under OPENCLAW_SHELL=exec) and a configDir matching the session's native
+                        directory variable: null an unset variable, a path the same directory,
+                        omitted anything when no null or path profile matches. A historical
+                        resume without a recorded profile uses the built-ins of the assistant's
+                        harness unless a named selection replaces them.
   Model default         ${defaultModel ?? "native default"} (new only). Resume retains and validates its model.
                         One configured alias expands before native model handling.
 

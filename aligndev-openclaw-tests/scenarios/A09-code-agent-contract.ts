@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import type { ScenarioContext } from "@alignfirst/openclaw-test";
 import {
   type CodingAgent,
-  HARNESS_PROFILE,
+  MOCK_AGENT_PROFILE,
   PI_CONTRACT_MODEL,
   readConfiguredAgent,
 } from "../scripts/coding-agent-settings.ts";
@@ -81,8 +81,13 @@ async function readGatewayAgent(ctx: ScenarioContext): Promise<CodingAgent> {
   return readConfiguredAgent({ CODING_AGENT: result.stdout });
 }
 
+// The runner's exec is outside OpenClaw's exec runtime: name the assistant's harness.
 async function runAligndevCode(ctx: ScenarioContext, args: string[]): Promise<ExecResult> {
-  return ctx.execInGateway(["aligndev", "code", ...args], { cwd: PROJECT_DIR, timeoutMs: 60_000 });
+  return ctx.execInGateway(["aligndev", "code", ...args], {
+    cwd: PROJECT_DIR,
+    env: { ALIGNDEV_ASSISTANT_HARNESS: "openclaw" },
+    timeoutMs: 60_000,
+  });
 }
 
 interface SessionSnapshot {
@@ -128,7 +133,7 @@ function parseFrontmatter(content: string): Record<string, string> {
 function assertSucceededSession(session: SessionSnapshot, agent: CodingAgent, model: string): void {
   assertEqual(requiredFrontmatter(session, "ticket"), TICKET_ID, "session ticket");
   assertEqual(requiredFrontmatter(session, "agent"), agent, "session agent");
-  assertEqual(requiredFrontmatter(session, "profile"), HARNESS_PROFILE, "session profile");
+  assertEqual(requiredFrontmatter(session, "profile"), MOCK_AGENT_PROFILE, "session profile");
   assertEqual(requiredFrontmatter(session, "model"), model, "session user-facing model");
   assertEqual(requiredFrontmatter(session, "status"), "succeeded", "session status");
   assertEqual(requiredFrontmatter(session, "exitReason"), "completed", "session exit reason");
@@ -309,7 +314,7 @@ async function assertPiFailures(
     assertEqual(run.exitCode, exitCode, `${variant} process exit code`);
     const session = await readSession(ctx, run.stdout);
     assertEqual(requiredFrontmatter(session, "status"), "failed", `${variant} status`);
-    assertEqual(requiredFrontmatter(session, "profile"), HARNESS_PROFILE, `${variant} profile`);
+    assertEqual(requiredFrontmatter(session, "profile"), MOCK_AGENT_PROFILE, `${variant} profile`);
     assertEqual(requiredFrontmatter(session, "agent"), "pi", `${variant} agent`);
     assertEqual(requiredFrontmatter(session, "exitReason"), exitReason, `${variant} exit reason`);
     if (!session.result.includes(fragment)) {

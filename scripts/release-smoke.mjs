@@ -182,7 +182,6 @@ function verifyInvocationConsumers(root) {
   env.PATH = `${join(root, "node_modules/.bin")}${process.platform === "win32" ? ";" : ":"}${env.PATH}`;
   const project = join(root, "project");
   mkdirSync(project);
-  writeFileSync(join(root, ".alignfirst-projects.json"), "{}\n");
   execFileSync("git", ["init", "--quiet"], { cwd: project, env });
   const report = JSON.parse(
     execFileSync(

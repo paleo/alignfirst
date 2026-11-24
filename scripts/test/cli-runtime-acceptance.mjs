@@ -208,15 +208,14 @@ function externalNativeMatrix(npm) {
   writeFileSync(
     settings,
     JSON.stringify({
-      platform: "codingAgent",
       code: {
-        profile: "claude",
+        fallbackProfile: "claude",
         profiles: {
-          claude: { agent: "claude", defaultModel: "haiku" },
-          codex: { agent: "codex", defaultModel: "sol" },
-          explicitQuota: { agent: "claude", quota: { source: "codex" } },
+          claude: { harness: "claude", defaultModel: "haiku" },
+          codex: { harness: "codex", defaultModel: "sol" },
+          explicitQuota: { harness: "claude", quota: { source: "codex" } },
           explicitBun: {
-            agent: "claude",
+            harness: "claude",
             defaultModel: "haiku",
             env: { PATH: `${explicitBin}:${nativeBin}:${baseEnvironment.PATH}` },
           },
@@ -275,6 +274,7 @@ function externalNativeMatrix(npm) {
     env,
     runtime: "node",
   });
+  assertCleanAgentEnvironments(log);
   const guide = check("dollar-aligndev-guide", npm, ["run", "ad$&", "--", "guide", "code"], {
     cwd: project,
     env,
@@ -301,6 +301,12 @@ function externalNativeMatrix(npm) {
     assert.equal(record.runtime, "bun");
     assert.deepEqual(record.parentArgv.slice(0, 3), ["bunx", "--bun", "alignfirst"]);
   }
+}
+
+// Variables npm, Bun and Yarn scripts inject: the agent must not inherit them.
+function assertCleanAgentEnvironments(log) {
+  for (const record of readRecords(log))
+    assert.deepEqual(record.launcherVariables, [], `${record.executable} ${record.args.join(" ")}`);
 }
 
 function prepareProject() {
@@ -380,8 +386,8 @@ async function alignDevLifecycle() {
     join(home, ".alignfirst/aligndev.settings.json"),
     JSON.stringify({
       code: {
-        profile: "offline",
-        profiles: { offline: { agent: "claude", defaultModel: "haiku" } },
+        fallbackProfile: "offline",
+        profiles: { offline: { harness: "claude", defaultModel: "haiku" } },
       },
     }),
   );
@@ -396,11 +402,6 @@ async function alignDevLifecycle() {
   const ad = (label, args, options = {}) =>
     check(label, "bunx", ["--bun", "aligndev", ...args], { runtime: "bun", env, ...options });
   ad("aligndev-guide", ["guide", "code"], { contains: "bunx --bun alignfirst" });
-  ad("project-diagnostic", ["project", "list", "--json"], {
-    status: 1,
-    contains: "bunx --bun aligndev project init",
-  });
-  shell("emitted-project-init", "bunx --bun aligndev project init", "bun");
   ad("project-list", ["project", "list", "--json"]);
   af("unified-workspace-list", ["workspace", "list", "--json"]);
   const worktree = join(dirname(root), "aligndev-owned-worktree");

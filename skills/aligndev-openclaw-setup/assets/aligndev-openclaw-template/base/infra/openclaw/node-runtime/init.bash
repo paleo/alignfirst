@@ -19,5 +19,5 @@ if ! fnm_output=$(/usr/local/bin/fnm use --silent-if-unchanged 2>&1); then
   exit 1
 fi
 unset fnm_env fnm_output
-# Keep the audited launchers and protected CLIs ahead of the writable fnm runtime.
+# Keep the audited launchers, the coding agent and ctx7 ahead of the writable fnm runtime.
 export PATH="/opt/{{SERVICE_USER}}/bin:/home/{{SERVICE_USER}}/.npm-system-global/bin:$PATH"

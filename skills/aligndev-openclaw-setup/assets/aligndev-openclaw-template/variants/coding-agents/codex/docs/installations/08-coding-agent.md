@@ -39,7 +39,7 @@ set -o pipefail
 settings=infra/openclaw/aligndev.settings.json
 store=$(sudo /usr/bin/node infra/openclaw/deployment-profiles.mjs "$settings" \
   /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json | jq -er '.configDir') || exit 1
-native_default=$(jq -r '.code.profiles[.code.profile].configDir == null' "$settings")
+native_default=$(jq -r '.code as $c | $c.profiles[($c.profiles | to_entries[] | select(.value.harness == "openclaw" and .value.disabled != true) | .value.defaultAgentProfile)].configDir == null' "$settings")
 sudo -H -u {{SERVICE_USER}} bash -lc '
   if [ "$1" = true ]; then unset CODEX_HOME; else export CODEX_HOME="$2"; fi
   command -v codex && codex --version
@@ -65,7 +65,7 @@ set -o pipefail
 settings="$HOME/.alignfirst/aligndev.settings.json"
 store=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
   "$settings" "$HOME" "$settings" | jq -er '.configDir') || exit 1
-if jq -e '.code.profiles[.code.profile].configDir == null' "$settings" >/dev/null; then
+if jq -e '.code as $c | $c.profiles[($c.profiles | to_entries[] | select(.value.harness == "openclaw" and .value.disabled != true) | .value.defaultAgentProfile)].configDir == null' "$settings" >/dev/null; then
   unset CODEX_HOME
 else
   export CODEX_HOME="$store"
@@ -104,7 +104,7 @@ set -eo pipefail
 settings="$HOME/.alignfirst/aligndev.settings.json"
 /usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
   "$settings" "$HOME" "$settings" >/dev/null
-jq -c '.code.profiles[] | ., .quota? | select(.agent == "codex" or .source == "codex")' \
+jq -c '.code.profiles[] | select(.disabled != true) | ., .quota? | select(.harness == "codex" or .source == "codex")' \
   "$settings" | while IFS= read -r launch; do
     store=$(/usr/bin/node -e '
       const {resolve, dirname} = require("node:path");
@@ -149,7 +149,7 @@ set -eo pipefail
 settings="$HOME/.alignfirst/aligndev.settings.json"
 store=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
   "$settings" "$HOME" "$settings" | jq -er '.configDir')
-if jq -e '.code.profiles[.code.profile].configDir == null' "$settings" >/dev/null; then
+if jq -e '.code as $c | $c.profiles[($c.profiles | to_entries[] | select(.value.harness == "openclaw" and .value.disabled != true) | .value.defaultAgentProfile)].configDir == null' "$settings" >/dev/null; then
   unset CODEX_HOME
 else
   export CODEX_HOME="$store"
@@ -196,8 +196,8 @@ These host-side acceptance procedures are separate from offline template tests. 
 After the seed and the gateway start (`04-openclaw.md`):
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'aligndev code --help | grep selected'   # names codex as the agent
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'aligndev guide project >/dev/null && echo projects-ok'
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'ALIGNDEV_ASSISTANT_HARNESS=openclaw npx -y aligndev code --help | grep selected'   # names codex as the agent
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'ALIGNDEV_ASSISTANT_HARNESS=openclaw npx -y aligndev guide project >/dev/null && echo projects-ok'
 sudo -i -u {{SERVICE_USER}} -- bash -lc 'npx -y skills list -g --json'        # 2 skills
 ```
 

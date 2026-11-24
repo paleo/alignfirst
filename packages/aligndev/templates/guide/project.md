@@ -1,33 +1,51 @@
 # Projects guide
 
-A projects directory groups projects and optional nested projects directories. Its `.alignfirst-projects.json` marker contains an optional description and `portRanges`. Each range has `first`, `last`, and optional `code` and `description`. The entry without a code is the default; codes name the project kind a range serves. A directory without the marker is skipped as a projects directory. Nested markers may claim sub-ranges inside one nearest enclosing range.
+## The scan
 
-A project is a git main worktree, direct child of a projects directory. Its linked worktrees are listed as its workspaces. Other child directories, those that are not git repositories, appear under `others`.
+The inventory scans a root directory: `--root`, else `projectsRoot` in the aligndev settings, else the working directory. Each child directory is one of these:
 
-A project's AlignFirst files may live in its companion directory, the `dir` of its entry in the companion registry `~/.alignfirst/companions/registry.json`. `{{ALIGNDEV}} project status <path>` gives each location, including nullable `locations.assistantInstructionsFile`. Run `{{ALIGNFIRST}} assistant-instructions` from the selected worktree for its conventions and configured assistant guide.
+- A git main worktree is a project. The scan does not descend into it.
+- A linked worktree is a workspace of its project, listed by directory name under the project's `workspaces`.
+- Any other directory is a group, scanned in turn.
+
+`--max-depth <n>` limits the descent through groups; the root's children are at depth 1, and a project at depth `n` is found. The default is 5. Hidden directories and `node_modules` are skipped silently.
+
+## Skipped directories
+
+`skippedDirectories` lists what the scan saw but did not inventory. An entry there is not a project. Its `reason` is one of:
+
+- `outsideWorktree` — a linked worktree whose main worktree is outside the scan.
+- `workFilesRepository` — a repository holding another project's `.plans`, such as a work-files clone.
+- `symlink` — a symlinked directory, not followed.
+- `unreadable` — permission denied.
+- `maxDepth` — a group at the depth limit, not scanned.
+
+## Port ranges
+
+`portRange` in the aligndev settings is the machine's range for dev servers. Each project's range comes only from `devServer.ports` in its selected configuration.
+
+`{{ALIGNDEV}} project free-ports --size <n>` returns the lowest block of `n` ports inside `portRange` that overlaps no project range of the scan. The size is the project's port names × its expected concurrent workspaces. This is a lookup, not a reservation: the setup guide writes the returned block in the project's `devServer.ports`.
 
 ## Commands
 
 ```sh
-{{ALIGNDEV}} project list [--json] [--root <path>]
-{{ALIGNDEV}} project doctor [--root <path>]
-{{ALIGNDEV}} project status <path> [--json] [--root <path>]
-{{ALIGNDEV}} project init [--root <path>] [--description <text>] [--port-range [<code>=]<first>-<last>]...
-{{ALIGNDEV}} project free-ports --size <n> [--range <code>] [--json] [--root <path>]
-{{ALIGNDEV}} guide project [--root <path>]
+{{ALIGNDEV}} project list [--json] [--root <path>] [--max-depth <n>]
+{{ALIGNDEV}} project doctor [--root <path>] [--max-depth <n>]
+{{ALIGNDEV}} project status <path> [--json] [--root <path>] [--max-depth <n>]
+{{ALIGNDEV}} project free-ports --size <n> [--json] [--root <path>] [--max-depth <n>]
+{{ALIGNDEV}} guide project
 ```
 
-`--root` selects the projects directory. It defaults to `projectsRoot` in the aligndev settings, then to the working directory.
+`doctor` is a read-only health gate. It succeeds only when the scan completes without any issue; skipped directories do not fail it.
 
-`doctor` is a read-only health gate. It exits successfully only when discovery completes with no
-inventory issues.
+## Companion locations
 
-## Port claims
-
-Run `{{ALIGNDEV}} project free-ports --size <n>` with the size of the project's port range: port names × expected concurrent workspaces. The directory section identifies the range for each project kind. Pass `--range <code>` for a coded range; the default needs no flag. This is a lookup, not a reservation. The setup guide writes the returned block in the selected merged configuration's `devServer.ports`.
-
-Git main-worktree discovery identifies the project. The `alignfirst config --json` report supplies validated workspace metadata; project/companion conventions carry no duplicate port claim.
+A project's AlignFirst files may live in its companion directory, the `dir` of its entry in the companion registry `~/.alignfirst/companions/registry.json`. `{{ALIGNDEV}} project status <path>` gives each location, including nullable `locations.assistantInstructionsFile`. Run `{{ALIGNFIRST}} assistant-instructions` from the selected worktree for its conventions and configured assistant guide.
 
 ## Reported issues
 
-The listing reports invalid project configs, non-main root projects, an `alignfirst.json` or `alignfirst.jsonc` outside a git main worktree, project or nested-directory ranges outside their enclosing range, overlapping project ranges, and projects whose registry entries resolve to the same companion directory.
+- An invalid project configuration.
+- An `alignfirst.json` or `alignfirst.jsonc` in a directory outside a git main worktree. The scan still treats that directory as a group.
+- A project range outside `portRange`.
+- Two overlapping project ranges, anywhere in the scan.
+- Two projects whose registry entries resolve to the same companion directory.

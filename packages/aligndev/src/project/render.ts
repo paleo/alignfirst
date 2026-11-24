@@ -1,35 +1,31 @@
-import type { InventoryIssue, ProjectInventory } from "./discovery.js";
+import type { InventoryIssue, ProjectInventory, SkippedDirectory } from "./discovery.js";
 import { escapeAdditionalJsonCharacters, escapeControlCharacters, formatRange } from "./format.js";
 import type { CompanionReport, ItemLocation } from "./layout.js";
-import type { MarkerPortRange, PortRange } from "./markers.js";
+import type { PortRange } from "./ports.js";
 import type { ProjectDetails } from "./status.js";
 
 export function renderProjectList(inventory: ProjectInventory): string {
-  const lines = ["Projects:"];
+  const lines = [
+    `Root: ${renderOutputValue(inventory.root)}`,
+    `Port range: ${renderRange(inventory.portRange)}`,
+    "",
+    "Projects:",
+  ];
   if (inventory.projects.length === 0) lines.push("  (none)");
   for (const project of inventory.projects) {
     lines.push(
       `- Name: ${renderOutputValue(project.name)}`,
       `  Path: ${renderOutputValue(project.path)}`,
       `  Directory: ${renderOutputValue(project.directory)}`,
-      `  Port range: ${renderProjectRange(project.portRange, project.portRangeCode)}`,
+      `  Port range: ${renderRange(project.portRange)}`,
       `  AlignDev profile: ${renderNullableValue(project.description.aligndev?.profile ?? null)}`,
       `  Workspaces: ${renderValues(project.workspaces)}`,
     );
   }
-  lines.push("", "Directories:");
-  if (inventory.directories.length === 0) lines.push("  (none)");
-  for (const directory of inventory.directories) {
-    lines.push(`- Path: ${renderOutputValue(directory.path)}`);
-    if (directory.description !== undefined) {
-      lines.push(`  Description: ${renderOutputValue(directory.description)}`);
-    }
-    if (directory.portRanges === undefined) lines.push("  Port ranges: (none)");
-    else {
-      lines.push("  Port ranges:");
-      for (const range of directory.portRanges) lines.push(`    ${renderMarkerRange(range)}`);
-    }
-    lines.push(`  Others: ${renderValues(directory.others)}`);
+  lines.push("", "Skipped directories:");
+  if (inventory.skippedDirectories.length === 0) lines.push("  (none)");
+  for (const skipped of inventory.skippedDirectories) {
+    lines.push(`- ${renderSkippedDirectory(skipped)}`);
   }
   lines.push("", "Issues:");
   if (inventory.issues.length === 0) lines.push("  (none)");
@@ -39,39 +35,39 @@ export function renderProjectList(inventory: ProjectInventory): string {
   return `${lines.join("\n")}\n`;
 }
 
+function renderSkippedDirectory({ path, reason }: SkippedDirectory): string {
+  return `${renderOutputValue(path)} (${reason})`;
+}
+
 export function renderProjectListJson(inventory: ProjectInventory): string {
   const report = {
     root: inventory.root,
-    directories: inventory.directories.map((directory) => ({
-      path: directory.path,
-      description: directory.description ?? null,
-      portRanges: directory.portRanges ?? [],
-      others: directory.others,
-    })),
+    portRange: inventory.portRange,
     projects: inventory.projects.map((project) => ({
       name: project.name,
       path: project.path,
       directory: project.directory,
       portRange: project.portRange ?? null,
-      portRangeCode: project.portRangeCode ?? null,
       companion: project.description.companion,
       aligndev: project.description.aligndev,
       locations: project.description.locations,
       workspaces: project.workspaces,
     })),
+    skippedDirectories: inventory.skippedDirectories,
     issues: inventory.issues.map(({ path, message }) => ({ path, message })),
   };
   return renderJson(report);
 }
 
 export function renderProjectDoctor(inventory: ProjectInventory): string {
-  if (inventory.issues.length === 0) {
-    return (
-      `[ok] Project inventory: ${renderCount(inventory.projects.length, "project")}, ` +
-      `${renderCount(inventory.directories.length, "directory")}\n`
-    );
+  const lines =
+    inventory.issues.length === 0
+      ? [`[ok] Project inventory: ${renderCount(inventory.projects.length, "project")}`]
+      : inventory.issues.map(renderInventoryIssue);
+  for (const skipped of inventory.skippedDirectories) {
+    lines.push(`[info] Skipped directory: ${renderSkippedDirectory(skipped)}`);
   }
-  return `${inventory.issues.map(renderInventoryIssue).join("\n")}\n`;
+  return `${lines.join("\n")}\n`;
 }
 
 function renderCount(value: number, singular: string): string {
@@ -103,7 +99,7 @@ export function renderProjectStatus(details: ProjectDetails): string {
     `  Path: ${renderOutputValue(details.path)}`,
     `  Directory: ${renderOutputValue(details.directory)}`,
     `  Remote host: ${renderNullableValue(details.remoteHost)}`,
-    `  Port range: ${renderProjectRange(details.portRange ?? undefined, details.portRangeCode ?? undefined)}`,
+    `  Port range: ${renderRange(details.portRange)}`,
     `  Config source: ${details.configSource ?? "(none)"}`,
     `  Companion: ${renderCompanion(details.companion)}`,
     `  AlignDev profile: ${renderNullableValue(details.aligndev?.profile ?? null)}`,
@@ -151,20 +147,8 @@ function renderJson(value: unknown): string {
   return `${escapeAdditionalJsonCharacters(JSON.stringify(value, undefined, 2))}\n`;
 }
 
-function renderRange(range: PortRange | undefined): string {
-  return range === undefined ? "(none)" : formatRange(range);
-}
-
-function renderProjectRange(range: PortRange | undefined, code: string | undefined): string {
-  if (range === undefined) return "(none)";
-  return `${formatRange(range)}${code === undefined ? "" : ` (${code})`}`;
-}
-
-function renderMarkerRange(range: MarkerPortRange): string {
-  const code = range.code ?? "default";
-  const description =
-    range.description === undefined ? "" : ` — ${escapeControlCharacters(range.description)}`;
-  return `${formatRange(range)} (${code})${description}`;
+function renderRange(range: PortRange | null | undefined): string {
+  return range ? formatRange(range) : "(none)";
 }
 
 function renderValues(values: string[]): string {

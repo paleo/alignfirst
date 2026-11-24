@@ -11,7 +11,7 @@ import type {
   ConfigSource,
   ProjectLocations,
 } from "./layout.js";
-import type { PortRange } from "./markers.js";
+import type { PortRange } from "./ports.js";
 
 const URL_WITH_AUTHORITY = /^[A-Za-z][A-Za-z\d+.-]*:\/\//u;
 
@@ -21,7 +21,6 @@ export interface ProjectDetails {
   directory: string;
   remoteHost: string | null;
   portRange: PortRange | null;
-  portRangeCode: string | null;
   plansFolder: string | null;
   ticketIdPattern: string | null;
   configSource: ConfigSource | null;
@@ -43,8 +42,8 @@ export function getProjectStatus(inventory: ProjectInventory, projectPath: strin
   const project = inventory.projects.find((candidate) => candidate.path === path);
   if (project === undefined) {
     throw new Error(
-      `${path} is not a project of ${inventory.root}. Pass the main-worktree path of a git ` +
-        "repository in that projects directory.",
+      `${path} is not a project found by the scan of ${inventory.root}. Pass the main-worktree ` +
+        "path of a git repository under that root, within --max-depth.",
     );
   }
   return buildProjectDetails(project);
@@ -66,7 +65,6 @@ function buildProjectDetails(project: DiscoveredProject): ProjectDetails {
     directory: project.directory,
     remoteHost: readRemoteHost(project.path),
     portRange: project.portRange ?? null,
-    portRangeCode: project.portRangeCode ?? null,
     plansFolder: project.description.config?.plans?.repositoryFolder ?? null,
     ticketIdPattern: project.description.config?.conventions?.ticketIdPattern ?? null,
     configSource: project.description.source,

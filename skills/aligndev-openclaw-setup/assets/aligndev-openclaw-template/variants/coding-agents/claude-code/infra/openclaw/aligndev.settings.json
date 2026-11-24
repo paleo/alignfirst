@@ -1,11 +1,11 @@
 {
-  "platform": "openclaw",
   "projectsRoot": "~/projects",
+  "portRange": { "first": {{PORT_RANGE_FIRST}}, "last": {{PORT_RANGE_LAST}} },
   "code": {
-    "profile": "service-claude",
     "profiles": {
+      "openclaw": { "harness": "openclaw", "defaultAgentProfile": "service-claude" },
       "service-claude": {
-        "agent": "claude",
+        "harness": "claude",
         "configDir": null,
         "skipPermissions": true,
         "unset": ["ANTHROPIC_API_KEY"]

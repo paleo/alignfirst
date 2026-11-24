@@ -10,7 +10,7 @@ An assistant coordinates the conversation and delegates coding to a coding agent
 4. **Workspace.** Every stack is prepared through `{{CMD}} workspace`, with or without a recipe. Without `workspace` or `devServer`, setup is protocol-ready and performs no install, build or start; document the separate stack commands. Prepare effective plans and the selected runtime storage first. Only project-local runtime requires an ignored, untracked `.local-wt/`. A companion runtime needs no checkout runtime directory or exclusions. See `{{CMD}} setup guide workspace`.
 5. **Runtime requirements.** They are confirmed. A Node project's `.nvmrc`, `.node-version` or `engines.node` is honored. Without a declaration, use the current Node LTS unless the project's requirements say otherwise. Python and other runtimes keep their documented tools. Running the CLI through Node or Bun does not change project commands.
 6. **Assistant guide.** The project has an assistant guide, recorded as `assistantInstructionsFile`. See "The Assistant Guide" below.
-7. **Inventory.** `aligndev project doctor --root <projects-directory>` passes after the configuration and recipe are written, and before workspace setup. A port range belongs solely in `devServer.ports`. When the inventory owns an enclosing range, use `aligndev project free-ports` as a lookup.
+7. **Inventory.** `aligndev project doctor` passes after the configuration and recipe are written, and before workspace setup. It scans `projectsRoot` of the aligndev settings, else the working directory; `--root <path>` scans another root. A port range belongs solely in `devServer.ports`. `aligndev project free-ports` is a lookup in `portRange` of the aligndev settings.
 
 ## The Assistant Guide
 

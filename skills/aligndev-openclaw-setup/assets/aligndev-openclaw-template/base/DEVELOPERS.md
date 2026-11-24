@@ -5,7 +5,7 @@ This repository holds the configuration of `{{SERVER_HOST}}`: runbooks under `do
 ## Layout
 
 - `docs/` — runbooks and notes, listed by `npx -y alignfirst docmap`.
-- `infra/openclaw/` — `seed.sh` and its modules, `environment.d/`, `bin/`, `projects/`, `workspace/`, `coding-agent/`. `.env` is gitignored.
+- `infra/openclaw/` — `seed.sh` and its modules, `environment.d/`, `bin/`, `workspace/`, `coding-agent/`. `.env` is gitignored.
 - `alignfirst.jsonc` — nested conventions, explicit assistant-instructions reference and setup-only workspace recipe.
 - `.reports/` — one journal per operator task, committed.
 <!-- TEAM_PLANS_SECTION -->

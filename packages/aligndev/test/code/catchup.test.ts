@@ -22,7 +22,7 @@ beforeEach(() => {
   plans = join(dir, ".plans");
   mkdirSync(plans);
   home = join(dir, "home");
-  writeConfig(home, { platform: "codingAgent", code: { agent: "claude" } });
+  writeConfig(home, { code: { harness: "claude" } });
   env = { PATH: dir, HOME: home };
   installGit(dir);
   writeFileSync(

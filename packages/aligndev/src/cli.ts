@@ -5,7 +5,8 @@ import { runCode } from "./code/code-cli.js";
 import { createExecutableModelResolver, type ExecutableModelResolver } from "./code/models.js";
 import { type QuotaReader, readQuota } from "./code/quota.js";
 import { type CommandForms, resolveCommandForms } from "./command-form.js";
-import { loadConfig, PLATFORMS } from "./config.js";
+import { ASSISTANT_HARNESS_VARIABLE, HARNESSES } from "./assistant-harness.js";
+import { loadConfig } from "./config.js";
 import { errorMessage } from "./errors.js";
 import { runGuide } from "./guide/guide-cli.js";
 import type { Output } from "./output.js";
@@ -71,7 +72,7 @@ function renderHelp(aligndev: string): string {
     [`${aligndev} code <command> [<options>]`, "Run a coding agent through AlignFirst protocols."],
     [
       `${aligndev} project <command> [<options>]`,
-      "List projects, check their inventory, claim port ranges.",
+      "List projects, check their inventory, look up free ports.",
     ],
     [
       `${aligndev} guide [--channel <surface>] [<topic>]`,
@@ -87,10 +88,13 @@ ${usage}
 
 Run \`${aligndev} <command> --help\` for the usage of a command.
 
-Config (optional): ~/.alignfirst/aligndev.settings.json. "platform" (${PLATFORMS.join(" or ")})
-defaults to codingAgent. Named code.profiles select child agents and native configuration.
-Use code.profile for a global selection. A sole matching profile is inferred; with several,
-set one profile's default: true per agent. Without a parent, only a sole total profile is inferred.
+The assistant's harness (${HARNESSES.join(", ")}) is ${ASSISTANT_HARNESS_VARIABLE} when set, else the
+detected coding agent, else openclaw under OPENCLAW_SHELL=exec. It selects the playbook.
+
+Config (optional): ~/.alignfirst/aligndev.settings.json. Each of code.profiles names a harness and
+its native configuration; disabled: true hides one. The assistant's profile delegates to its
+defaultAgentProfile; code.fallbackProfile serves an assistant without a profile or built-in
+defaults. See \`${aligndev} code --help\` for the selection order.
 `;
 }
 

@@ -22,7 +22,7 @@ An absent declaration or malformed `engines.node` keeps fnm's default. An invali
 
 A background command that must own its process uses `exec node …`. A shell kept alive around a background child can orphan that child when the shell is killed.
 
-The audited PATH keeps `/opt/{{SERVICE_USER}}/bin` and `~/.npm-system-global/bin` ahead of fnm's writable runtime bin. A service-account `npm i -g` can install developer tools into the selected runtime but cannot shadow OpenClaw or the protected CLIs.
+The audited PATH keeps `/opt/{{SERVICE_USER}}/bin` and `~/.npm-system-global/bin` ahead of fnm's writable runtime bin. A service-account `npm i -g` can install developer tools into the selected runtime but cannot shadow OpenClaw, the coding agent or `ctx7`.
 
 ## Pi keeps its runtime without replacing the project's PATH
 
@@ -60,11 +60,11 @@ For every skill it updates, `npx skills update` drops a symlink at `~/.openclaw/
 
 ## Moving a project
 
-`alignfirst config --json` reports the selected absolute registry/runtime paths. Local physical ownership supports main relocation; a genuine main basename change re-keys on the next mutation and warns about old-named resources. Linked paths remain unchanged. Companion runtime uses canonical path-derived identities; unexplained main/storage relocation requires explicit recovery. Clean resources under the old selection before moving paths or changing source/placement. Preserve absolute paths and resource evidence: there is no placement-history registry or automatic discovery of arbitrary manually hidden storage. Moved linked worktrees also need Git's `git worktree repair`.
+`npx -y alignfirst config --json` reports the selected absolute registry/runtime paths. Local physical ownership supports main relocation; a genuine main basename change re-keys on the next mutation and warns about old-named resources. Linked paths remain unchanged. Companion runtime uses canonical path-derived identities; unexplained main/storage relocation requires explicit recovery. Clean resources under the old selection before moving paths or changing source/placement. Preserve absolute paths and resource evidence: there is no placement-history registry or automatic discovery of arbitrary manually hidden storage. Moved linked worktrees also need Git's `git worktree repair`.
 
 ## Heartbeat cost is a main-session problem
 
-A bill that climbs day after day with near-zero output (the assistant waking, finding nothing) is the heartbeat re-sending an ever-growing main-session transcript; `session.threadBindings` and `resetByType.thread` govern threads only. The slope scales with the tick frequency: it appeared under 30-minute ticks. The seed sets `every: "24h"` and keeps the heartbeat on for the daily tick and the native exec-exit notice. A comment-only scratch on the `heartbeat:main` job skips the model call on periodic ticks entirely. When the cost appears despite it, run `apply-heartbeat-scratch.sh` ([04 § 7](installations/04-openclaw.md#heartbeat-scratch)): it restores the snapshot when the assistant has rewritten the scratch ([06](installations/06-security-hardening.md#configuration-and-workspace-files)).
+A bill that climbs day after day with near-zero output (the assistant waking, finding nothing) is the heartbeat re-sending an ever-growing main-session transcript; `session.threadBindings` and `resetByType.thread` govern threads only. The slope scales with the tick frequency: it appeared under 30-minute ticks. The seed sets `every: "24h"` and keeps the heartbeat on for the daily tick and the native exec-exit notice. A comment-only scratch on the `heartbeat:main` job skips the model call on periodic ticks entirely. When the cost appears despite it, run `apply-heartbeat-scratch.sh` ([04 § 6](installations/04-openclaw.md#heartbeat-scratch)): it restores the snapshot when the assistant has rewritten the scratch ([06](installations/06-security-hardening.md#configuration-and-workspace-files)).
 
 ## OpenClaw schedules background model runs on its own
 
@@ -115,7 +115,7 @@ Two outbound paths deliver a local file with different read policies. The `MEDIA
 
 ## A new `environment.d` variable needs `daemon-reexec`
 
-`systemd --user` computes its environment block once. A gateway restart alone keeps the old block; run `systemctl --user daemon-reexec` first, then restart ([04 § 9](installations/04-openclaw.md#9-environment-changes)). Only matters on a live machine: at boot, lingering builds the block fresh.
+`systemd --user` computes its environment block once. A gateway restart alone keeps the old block; run `systemctl --user daemon-reexec` first, then restart ([04 § 8](installations/04-openclaw.md#8-environment-changes)). Only matters on a live machine: at boot, lingering builds the block fresh.
 
 ## Prefer interactive `openclaw doctor` over `--fix`
 

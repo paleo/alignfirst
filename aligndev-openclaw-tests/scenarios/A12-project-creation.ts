@@ -5,8 +5,8 @@ import {
   setupCodingAgentMock,
 } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
+import { lowestFreeFixtureBlock } from "./_lib/free-port-block.ts";
 import {
-  assertAgentCommandOrder,
   assertGatewayCommand,
   pathExists,
   readProjectConfig,
@@ -21,6 +21,8 @@ import { bootstrapThreadFromChannel, sendInThread } from "./_lib/thread-bootstra
 const PROJECT = "nova";
 const PORTS_PER_WORKSPACE = "2";
 const MAX_WORKSPACES = "4";
+const PORT_BLOCK_SIZE = Number(PORTS_PER_WORKSPACE) * Number(MAX_WORKSPACES);
+const PORT_BLOCK = lowestFreeFixtureBlock(PORT_BLOCK_SIZE);
 // Relative to the effective plans: creation selects companion plans, outside the runner's mounts.
 const REQUEST_FILE = "side-1/A1-request.md";
 
@@ -102,8 +104,8 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
       const portRange = readProjectConfig(NOVA_PROJECT_PATH)?.portRange;
       return (
         pathExists(`${NOVA_PROJECT_PATH}/.git/refs/heads/main`) &&
-        portRange?.first === 6600 &&
-        portRange.last === 6607
+        portRange?.first === PORT_BLOCK.first &&
+        portRange.last === PORT_BLOCK.last
       );
     },
     // Creation is the suite's longest flow: guide reads, port allocation, the
@@ -268,7 +270,8 @@ async function copyBootstrapTemplate(ctx: ScenarioContext): Promise<void> {
         `node --input-type=module -e 'import fs from "node:fs"; ` +
         `import { patchDevServerRange } from "/opt/openclaw-test/scripts/fixture-personalization.ts"; ` +
         `const p = "${NOVA_PROJECT_PATH}/alignfirst.json"; ` +
-        `const m = JSON.parse(patchDevServerRange(fs.readFileSync(p, "utf8"), 6600, 6607)); ` +
+        `const m = JSON.parse(patchDevServerRange(fs.readFileSync(p, "utf8"), ` +
+        `${PORT_BLOCK.first}, ${PORT_BLOCK.last})); ` +
         // The request asks for two ports per workspace.
         `m.devServer.ports.declare = ["frontend", "api"]; ` +
         `fs.writeFileSync(p, JSON.stringify(m, null, 2) + "\\n");'`,
@@ -281,18 +284,12 @@ async function copyBootstrapTemplate(ctx: ScenarioContext): Promise<void> {
 async function verifyProjectInventory(ctx: ScenarioContext): Promise<void> {
   await assertGatewayCommand(
     ctx,
-    ["aligndev", "project", "doctor", "--root", LIFECYCLE_PROJECT_PARENT],
+    ["aligndev", "project", "doctor"],
     "project inventory doctor before workspace setup",
   );
 }
 
 function assertCreationCalls(calls: AgentToolCall[]): void {
-  assertAgentCommandOrder(
-    calls,
-    /aligndev\s+guide\s+project\b/,
-    /\bgit\b[^\n;&|]*\binit\b/,
-    "`aligndev guide project` must precede git initialization",
-  );
   const commands = calls
     .filter((call) => call.toolName === "exec")
     .map((call) => JSON.stringify(call.input));
@@ -302,8 +299,14 @@ function assertCreationCalls(calls: AgentToolCall[]): void {
   if (freePortsCommand === undefined) {
     throw new Error(`missing free-ports call: ${JSON.stringify(commands)}`);
   }
-  if (!/--size(?:\s+|=)8\b/.test(freePortsCommand)) {
-    throw new Error(`free-ports call did not request size 8: ${JSON.stringify(commands)}`);
+  if (!new RegExp(`--size(?:\\s+|=)${PORT_BLOCK_SIZE}\\b`).test(freePortsCommand)) {
+    throw new Error(
+      `free-ports call did not request size ${PORT_BLOCK_SIZE}: ${JSON.stringify(commands)}`,
+    );
+  }
+  // The settings' portRange and the default root apply: an override would bypass them.
+  if (/--range\b|--root\b/.test(freePortsCommand)) {
+    throw new Error(`free-ports call passed --range or --root: ${freePortsCommand}`);
   }
   const allocatedExpectedBlock = calls.some((call) => {
     if (
@@ -313,14 +316,19 @@ function assertCreationCalls(calls: AgentToolCall[]): void {
       return false;
     }
     // Digit lookarounds, not `\b`: the serialized result escapes a newline as `\n`, so a
-    // chained command's output reads `n6600`, where `\b` finds no boundary.
+    // chained command's output reads `n<port>`, where `\b` finds no boundary.
     const result = JSON.stringify(call.result);
     return (
-      result !== undefined && /(?<!\d)6600(?!\d)/.test(result) && /(?<!\d)6607(?!\d)/.test(result)
+      result !== undefined &&
+      new RegExp(`(?<!\\d)${PORT_BLOCK.first}(?!\\d)`).test(result) &&
+      new RegExp(`(?<!\\d)${PORT_BLOCK.last}(?!\\d)`).test(result)
     );
   });
   if (!allocatedExpectedBlock) {
-    throw new Error("free-ports did not allocate the lifecycle parent's 6600..6607 block");
+    throw new Error(
+      `free-ports did not return the lowest free block ${PORT_BLOCK.first}..${PORT_BLOCK.last} ` +
+        "of the settings' portRange",
+    );
   }
 }
 

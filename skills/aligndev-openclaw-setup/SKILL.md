@@ -5,7 +5,7 @@ description: >-
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.1.0"
+  version: "0.2.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -42,7 +42,7 @@ The three overlays use explicit named profiles on both surfaces. Install current
 
 **Approved Pi authentication exception:** `<agent-dir>/auth.json` stays private, service-owned and writable/replaceable, with adjacent locking, for normal native OAuth login and automatic credential/refresh-token renewal. It can also contain executable API-key commands. Any process under that account can persist such commands for later Pi execution. This is account-level persistence, not administrator privilege escalation; filesystem permissions cannot distinguish a refresh from another same-UID write. The entire service `~/.alignfirst/` tree also stays service-owned and writable, without immutable or append-only flags. All other managed instructions, executable resources, settings/declarations, trust and launchers outside that tree retain controlled-maintenance protection. Project trust is not a sandbox.
 
-`deployment-profiles.mjs` inventories every provisioned child and optional quota store, deduplicating shared filesystem directories. Each coding profile and enabled explicit quota source must select `configDir: null` for native-default mode or a directory string for explicit mode; omission is invalid in deployments. Generated service defaults use null. This differs from ordinary developer setup, which omits the field to inherit the caller's directory selection. Like the CLI, it ignores unknown or obsolete settings keys with value-free warnings on stderr, including retired direct launch fields and `code.defaultProfiles`. Convert those fields manually to preserve their intent; they supply no legacy behavior. Recognized invalid fields, duplicate defaults and deployment safety violations still fail. Explicit valid `code.profile` remains mandatory. Custom stores must be isolated beneath the service home. Null inventories `.claude`, `.codex` or `.pi/agent` beneath that home; inventory output `configDir` remains an absolute filesystem path. Strings resolve against the deployed settings; `~/` uses the service home. A string naming the default path still sets the native variable and remains distinct from null. Symlinked roots, overlapping stores, native-directory env/unset conflicts and ambiguous native paths fail before mutation. Protected package trees allow only validated internal links. Do not treat the editable project registry as account authorization: all provisioned profiles are available to that account.
+`deployment-profiles.mjs` inventories every provisioned child and optional quota store, deduplicating shared filesystem directories. Each coding profile and enabled explicit quota source must select `configDir: null` for native-default mode or a directory string for explicit mode; omission is invalid in deployments. Generated service defaults use null. This differs from ordinary developer setup, which omits the field to inherit the caller's directory selection. Like the CLI, it ignores unknown or obsolete settings keys with value-free warnings on stderr, including `platform`, `code.profile`, retired direct launch fields and `code.defaultProfiles`. Convert those fields manually to preserve their intent; they supply no legacy behavior. Recognized invalid fields, duplicate defaults and deployment safety violations still fail. The settings need exactly one enabled `openclaw` profile, whose `defaultAgentProfile` names an enabled, provisioned coding profile: the deployment default. Disabled profiles are validated, then ignored. Custom stores must be isolated beneath the service home. Null inventories `.claude`, `.codex` or `.pi/agent` beneath that home; inventory output `configDir` remains an absolute filesystem path. Strings resolve against the deployed settings; `~/` uses the service home. A string naming the default path still sets the native variable and remains distinct from null. Symlinked roots, overlapping stores, native-directory env/unset conflicts and ambiguous native paths fail before mutation. Protected package trees allow only validated internal links. Do not treat the editable project registry as account authorization: all provisioned profiles are available to that account.
 
 Native commands must read the original selection from the relevant named profile or quota settings: null unsets `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `PI_CODING_AGENT_DIR`; a string sets that variable to its resolved value. Apply this routing after login-shell initialization, including for authentication/status, configuration/trust, package installation, readiness and update/recovery. Filesystem operations use inventory paths in either mode. Profiles sharing a path may have different invocation modes; deduplicated stores do not encode that distinction. Explicit quota starts from its own service environment and directory selection, independently of coding-profile overrides.
 
@@ -58,7 +58,7 @@ Three roles, named as the runbooks name them:
 
 - **Support** — a coding-agent session on a laptop. Edits the admin repository, never executes on the server.
 - **Operator** — a coding-agent session in the admin account `{{SERVER_ADMIN_USER}}` (sudo) on `{{SERVER_HOST}}`. Edits and executes. Holds the admin repository at `~{{SERVER_ADMIN_USER}}/{{ADMIN_REPOSITORY_NAME}}` and, with a work-files repository, its clone under `~/projects`. Root steps are the operator's, through `sudo`.
-- **Service account** — `{{SERVICE_USER}}`, no sudo, no inbound SSH, reached with `sudo -i -u {{SERVICE_USER}} -- <command>` (or `sudo -H -u {{SERVICE_USER}} bash -lc '…'` when the command defines a variable). Runs OpenClaw on fixed system Node, and runs the coding agent, `alignfirst`, `aligndev`, rootless podman and managed projects in fnm developer shells.
+- **Service account** — `{{SERVICE_USER}}`, no sudo, no inbound SSH, reached with `sudo -i -u {{SERVICE_USER}} -- <command>` (or `sudo -H -u {{SERVICE_USER}} bash -lc '…'` when the command defines a variable). Runs OpenClaw on fixed system Node, and runs the coding agent, `alignfirst` and `aligndev` (through `npx`), rootless podman and managed projects in fnm developer shells.
 
 The service account never reads the admin repository. It works from a snapshot at `~{{SERVICE_USER}}/seed/`, an `rsync` of `infra/openclaw/` with `.env` included, refreshed by the root-owned maintenance wrapper before every protected change. The wrapper contains the service account, unlocks only named scopes, runs one command as that account, and restores hardening through an exit trap. From there:
 
@@ -66,15 +66,104 @@ The service account never reads the admin repository. It works from a snapshot a
 - `~/.agents/skills/` — `sharp-writing`, shared with the delegated coding agent.
 - `/opt/{{SERVICE_USER}}/` — root-owned OpenClaw and project-shell launchers, fnm initialization, maintenance npm and runtime checks.
 - `~/.local/share/fnm/` — service-owned project Node versions and the default LTS selection.
-- `~/.npm-system-global/` — protected OpenClaw, coding-agent and admin CLI packages.
+- `~/.npm-system-global/` — protected OpenClaw, coding-agent and `ctx7` packages. `alignfirst` and `aligndev` run through `npx` from the service-writable npm cache, so they and the playbook follow each release outside maintenance windows.
 - `~/.config/environment.d/` — the non-secret variables `systemd --user` injects into the gateway and `~/.bash_profile` sources for login shells.
-- `~/.alignfirst/` — entirely service-owned and writable, including the directory itself, `aligndev.settings.json`, `companions/` and future descendants. No immutable or append-only flags apply. The seed installs the AlignDev settings (platform, projects root, coding agent); the assistant registers projects with `alignfirst companion register`. For older hosts, follow [Writable AlignFirst home](assets/aligndev-openclaw-template/base/docs/installations/06-security-hardening.md#writable-alignfirst-home) in the generated `06-security-hardening.md`.
+- `~/.alignfirst/` — entirely service-owned and writable, including the directory itself, `aligndev.settings.json`, `companions/` and future descendants. No immutable or append-only flags apply. The seed installs the AlignDev settings (projects root, port range, profiles); the assistant registers projects with `alignfirst companion register`. For older hosts, follow [Writable AlignFirst home](assets/aligndev-openclaw-template/base/docs/installations/06-security-hardening.md#writable-alignfirst-home) in the generated `06-security-hardening.md`.
 - The gateway unit, written by `openclaw gateway install`, enabled under lingering.
-- `~/projects` — the managed projects, their `.alignfirst-projects.json` marker and, with a work-files repository, the service account's own clone of it (a repository, never a project).
+- `~/projects` — the managed projects and, with a work-files repository, the service account's own clone of it (a repository, never a project).
 
 Both accounts install the same selected coding agent. The admin account uses it as the operator with the project-local `sysadmin` skill; the service account uses it through `aligndev code`.
 
 The human performs every interactive authentication and secret entry. Credentials never enter chat, files under version control, commands saved in shell history, or documentation.
+
+## Topic Map
+
+The rendered repository is expected to diverge from this template. To adopt an improvement, the consumer's agent reads the current template for the topic concerned and ports what fits. The rendered repository does not record the template version.
+
+Paths are relative to `assets/aligndev-openclaw-template/`. `<surface>` stands for `slack` or `discord`, `<agent>` for `claude-code`, `codex` or `pi`.
+
+### Accounts and roles
+
+Three roles share the server: the support session, the operator in the sudo admin account, and the unprivileged service account. Root actions stay with a reviewed operator, and the assistant gets no sudo. The admin repository holds the runbooks that rebuild the server.
+
+- `base/README.md`, `base/AGENTS.md`, `base/DEVELOPERS.md`, `base/package.json`, `base/alignfirst.jsonc`, `base/.gitignore`
+- `base/docs/overview.md`
+- `base/docs/installations/01-server-setup.md`, `base/docs/installations/02-admin-repository.md`, `base/docs/installations/03-toolchain.md`
+
+### Toolchain and runtimes
+
+OpenClaw runs on fixed system Node through root-owned launchers; projects and the coding agent run on the Node that fnm selects per project. A project's runtime therefore cannot break the gateway. `alignfirst` and `aligndev` run through `npx`, outside the protected npm prefix.
+
+- `base/docs/installations/03-toolchain.md`, `base/docs/installations/05-openclaw-dependencies.md`, `base/docs/gotchas.md`
+- `base/infra/openclaw/bin/openclaw`, `base/infra/openclaw/apparmor/playwright-chromium`
+- `base/infra/openclaw/node-runtime/admin-npm`, `base/infra/openclaw/node-runtime/check-project-runtimes.sh`, `base/infra/openclaw/node-runtime/gateway-path.conf`, `base/infra/openclaw/node-runtime/init.bash`, `base/infra/openclaw/node-runtime/project-shell`
+
+### OpenClaw seed and configuration
+
+`seed.sh` starts from the installed OpenClaw version's defaults and applies every decision through `openclaw config set`, with each credential as a file SecretRef. The seed is the record of the configuration: a rebuild or an upgrade replays it instead of copying state.
+
+- `base/infra/openclaw/seed.sh`, `base/infra/openclaw/seed/common.sh`, `base/infra/openclaw/.env.example`, `base/infra/openclaw/.gitignore`, `base/infra/openclaw/environment.d/common.conf`
+- `base/infra/openclaw/heartbeat-scratch.md`, `base/infra/openclaw/bin/apply-heartbeat-scratch.sh`
+- `base/docs/installations/04-openclaw.md`, `base/docs/configuration.md`, `base/docs/operations/configure-assistant.md`
+
+### Workspace instructions
+
+The workspace files are the assistant's bootstrap prompt: they make `npx -y aligndev guide` its first action and carry the deployment's own policies. They are applied from the snapshot and locked, so the assistant proposes changes instead of making them.
+
+- `variants/surfaces/<surface>/infra/openclaw/workspace/AGENTS.md`
+- `base/infra/openclaw/workspace/IDENTITY.md`, `base/infra/openclaw/workspace/SOUL.md`, `base/infra/openclaw/workspace/USER.md`
+- `base/infra/openclaw/bin/apply-workspace.sh`, `base/docs/operations/update-workspace.md`
+
+### Channel and apps
+
+The surface overlay connects one Slack or Discord channel, where a request for project work becomes a working thread. The OpenClaw apps reach the same gateway through an SSH tunnel or Tailscale Serve, and the operator approves every device.
+
+- `variants/surfaces/<surface>/docs/installations/07-channel.md`, `variants/surfaces/<surface>/infra/openclaw/.env.example`, `variants/surfaces/<surface>/infra/openclaw/seed/surface.sh`
+- `variants/surfaces/discord/docs/operations/pair-dm-sender.md`
+- `base/docs/operations/use-the-apps.md`
+
+### Coding agent and profiles
+
+`aligndev code` delegates to Claude Code, Codex or Pi through named profiles. The `openclaw` profile's `defaultAgentProfile` names the deployment default. `deployment-profiles.mjs` inventories the native store of every enabled profile, so hardening, backup and recovery cover each provisioned account.
+
+- `variants/coding-agents/<agent>/infra/openclaw/aligndev.settings.json`, `variants/coding-agents/<agent>/infra/openclaw/seed/coding-agent.sh`, `variants/coding-agents/<agent>/docs/installations/08-coding-agent.md`
+- `variants/coding-agents/claude-code/infra/openclaw/coding-agent/CLAUDE.md`, `variants/coding-agents/codex/infra/openclaw/coding-agent/AGENTS.md`, `variants/coding-agents/pi/infra/openclaw/coding-agent/AGENTS.md`
+- `base/infra/openclaw/deployment-profiles.mjs`
+- `base/infra/openclaw/node-runtime/install-pi-launcher.sh`, `base/infra/openclaw/node-runtime/pi-launcher.mjs`
+
+### Projects and ports
+
+Every managed project is a direct child of `~/projects`; `aligndev project` discovers it from Git, with no registration step. The settings' `portRange` is the machine's dev-server range, in which `free-ports` finds a free block for a new project.
+
+- `base/docs/operations/add-project.md`
+- `variants/coding-agents/<agent>/infra/openclaw/aligndev.settings.json` (`projectsRoot`, `portRange`)
+- `variants/surfaces/<surface>/infra/openclaw/workspace/AGENTS.md` (section "Projects")
+
+### Dev-server gateway
+
+The optional gateway serves the dev-server range on a wildcard domain behind Caddy and Authelia. Reviewers get authenticated remote URLs while the ports stay closed. Without it, the `DEV_SERVER_GATEWAY_SECTION` blocks of the base files are removed.
+
+- `variants/options/dev-server-gateway/docs/installations/09-dev-server-gateway.md`, `variants/options/dev-server-gateway/infra/gateway/Caddyfile`, `variants/options/dev-server-gateway/infra/gateway/authelia.yml`
+
+### Hardening and maintenance
+
+Hardening makes the configuration, the workspace, the skills, the managed native resources and the protected npm prefix immutable for the service account; `~/.alignfirst/` stays writable. A root-owned wrapper contains the assistant, unlocks named scopes for one command and restores the policy on exit.
+
+- `base/docs/installations/06-security-hardening.md`
+- `base/infra/openclaw/bin/assistant-maintenance.sh`, `base/infra/openclaw/deployment-policy.mjs`
+
+### Containment, backup and recovery
+
+The kill switch terminates every process of the service account. Backups map each native store to its original destination, so recovery restores exactly what the inventory protects.
+
+- `base/infra/openclaw/bin/assistant-kill.sh`, `base/infra/openclaw/bin/backup.sh`, `base/infra/openclaw/bin/bootstrap-backup.sh`
+- `base/docs/operations/recover-assistant.md`, `base/docs/troubleshooting.md`
+
+### Updates
+
+OpenClaw, its plugins, the coding agent and `ctx7` change only in maintenance windows, each step idempotent and followed by a re-seed and a smoke test. The AlignFirst CLIs, and so the playbook, follow each release through `npx`; a playbook that needs a newer `@alignfirst/service-openclaw-plugin` fails until the next window.
+
+- `base/docs/operations/update-assistant.md`
 
 ## Rendering Inputs
 
@@ -112,10 +201,9 @@ The **assistant** is fixed: every deployment uses OpenClaw and its embedded runt
 | `{{PI_QUOTA_JSON}}` | Operator, Pi only | Raw JSON object: `{"source":"none"}`, or a native source with its own null/string `configDir` |
 | `{{TEAM_NAME}}` | Operator | README, `IDENTITY.md`, `SOUL.md`, `USER.md` |
 | `{{TEAM_MEMBERS}}` | Operator | `USER.md` |
-| `{{PORT_RANGE_FIRST}}`, `{{PORT_RANGE_LAST}}` | Operator (suggested 28000–28599) | `.alignfirst-projects.json`, overview, workspace `AGENTS.md`, `09` |
+| `{{PORT_RANGE_FIRST}}`, `{{PORT_RANGE_LAST}}` | Operator (suggested 28000–28599) | `aligndev.settings.json`, overview, workspace `AGENTS.md`, `09` |
 | `{{PLANS_REPOSITORY_URL}}` | Operator, work-files repository only | README, `02`, `add-project.md` |
-| `{{PLANS_CLONE_NAME}}` | Operator, work-files repository only | `common.conf`, `02`, `add-project.md` |
-| `{{PLANS_CLONE_NOTE}}` | Derived | projects marker |
+| `{{PLANS_CLONE_NAME}}` | Operator, work-files repository only | `02`, `add-project.md`, workspace `AGENTS.md` |
 | `{{SLACK_OWNER_ID}}`, `{{SLACK_CHANNEL_ID}}` | Slack administrator | `.env.example` (Slack overlay) |
 | `{{DISCORD_OWNER_ID}}`, `{{DISCORD_GUILD_ID}}`, `{{DISCORD_CHANNEL_ID}}` | Discord administrator | `.env.example` (Discord overlay) |
 | `{{DEV_DOMAIN}}` | Operator | `09`, Caddyfile, `authelia.yml`, `REMOTE_DEV_DOMAIN` in `common.conf`, overview, gotchas |
@@ -134,7 +222,7 @@ The channel IDs are known before the bot exists (the channel, the server and the
 
 The last two rows exist only when the gateway option is on. `{{PORT_RANGE_REGEX}}` is a regex matching exactly the integers `PORT_RANGE_FIRST..PORT_RANGE_LAST`: one digit class per position when the range allows it (`28000..28599` → `28[0-5][0-9]{2}`), otherwise an alternation of such classes (`6500..7700` → `6[5-9][0-9]{2}|7[0-6][0-9]{2}|7700`). `{{DEV_DOMAIN_REGEX}}` is `DEV_DOMAIN` with every `.` escaped as `\.`.
 
-With a work-files repository, collect `{{PLANS_REPOSITORY_URL}}` and `{{PLANS_CLONE_NAME}}` at render time. Both the operator and the service account clone it under `~/projects`; each account supplies its own credentials. `{{PLANS_CLONE_NOTE}}` is then a space followed by `The work-files clone at ~/projects/{{PLANS_CLONE_NAME}} is a repository, not a project.`; without one it is empty.
+With a work-files repository, collect `{{PLANS_REPOSITORY_URL}}` and `{{PLANS_CLONE_NAME}}` at render time. Both the operator and the service account clone it under `~/projects`; each account supplies its own credentials.
 
 ## Assemble the Admin Repository
 
@@ -155,7 +243,7 @@ On the operator's machine, from the installed skill directory:
    ```
 
 6. Work-files repository on: delete the `TEAM_PLANS_SECTION` marker lines. The guarded block in `alignfirst.jsonc` writes `plans.repositoryFolder` as `{{ADMIN_REPOSITORY_NAME}}`. Off: delete each block, including that field.
-7. Replace every `{{TOKEN}}`, after all overlays are present and the derived tokens are computed. `sed` handles single-line values; the member list needs the editor or a Node one-liner. Include the merged `alignfirst.jsonc` and dotfiles (`.env.example`, `.alignfirst-projects.json`) in the sweep. Manifest `${{ reference }}` lookups are runtime syntax, not render tokens.
+7. Replace every `{{TOKEN}}`, after all overlays are present and the derived tokens are computed. `sed` handles single-line values; the member list needs the editor or a Node one-liner. Include the merged `alignfirst.jsonc` and dotfiles (`.env.example`) in the sweep. Manifest `${{ reference }}` lookups are runtime syntax, not render tokens.
 8. Validate the complete rendered configuration with `npx -y alignfirst config --json`. No workspace package dependency or wrapper installation is required.
 9. Install `sysadmin` project-locally, so the clone carries it: `npx -y skills add https://github.com/paleo/skills --yes --agent <claude-code|codex|pi> --skill sysadmin </dev/null`. The CLI writes the skill under the agent's project skill directory (`.claude/skills/` for Claude, `.agents/skills/` for Codex/Pi) and the repository's own `skills-lock.json`; both are committed. Recheck the installed CLI's target layout when upgrading.
 10. Run the audits below.
@@ -178,22 +266,22 @@ node --check infra/openclaw/deployment-profiles.mjs
 node --check infra/openclaw/deployment-policy.mjs
 # Pi overlay: also bash -n node-runtime/install-pi-launcher.sh and
 # node --check node-runtime/pi-launcher.mjs under infra/openclaw/.
-node -e 'for (const f of process.argv.slice(1)) JSON.parse(require("fs").readFileSync(f, "utf8"))' infra/openclaw/projects/.alignfirst-projects.json infra/openclaw/aligndev.settings.json package.json
+node -e 'for (const f of process.argv.slice(1)) JSON.parse(require("fs").readFileSync(f, "utf8"))' infra/openclaw/aligndev.settings.json package.json
 npm run validate
 ```
 
-Both `rg` searches must be empty. On the service host, validate the inventory with `node infra/openclaw/deployment-profiles.mjs infra/openclaw/aligndev.settings.json /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json`. The seed then validates every installed profile through an explicit `aligndev guide code --profile <name>`, independent of the seed cwd's project selection. All provisioned profiles are available to the service account: the editable project registry selects routes, not account authorization. Add a search for every collected value that is not a token (the VPS IP, the work-files repository URL, every secret): none may appear in the rendered tree.
+Both `rg` searches must be empty. On the service host, validate the inventory with `node infra/openclaw/deployment-profiles.mjs infra/openclaw/aligndev.settings.json /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json`. The seed then validates every enabled coding profile through `ALIGNDEV_ASSISTANT_HARNESS=openclaw npx -y aligndev guide code --profile <name>`, independent of the seed cwd's project selection. All provisioned profiles are available to the service account: the editable project registry selects routes, not account authorization. Add a search for every collected value that is not a token (the VPS IP, the work-files repository URL, every secret): none may appear in the rendered tree.
 
 ## Deployment Lifecycle
 
 Every runbook states its role and its position at the top. Human steps are marked `> **User action required.**`. Execution order:
 
 1. `01-server-setup.md` — **human administrator**, on the fresh server: admin account, SSH key-only, firewall, Node, podman. Ends with the coding agent installed and logged in for the admin account, then a session of that agent in the clone takes over as the **operator**.
-2. `02-admin-repository.md` — operator: deploy key (human registers it), clone, work-files clone and `alignfirst plans setup` when enabled, `workspace setup`.
-3. `03-toolchain.md` — service account created, npm prefix, the CLIs, the coding agent, git access (human: key registration or device code).
+2. `02-admin-repository.md` — operator: deploy key (human registers it), clone, work-files clone and `npx -y alignfirst plans setup` when enabled, `workspace setup`.
+3. `03-toolchain.md` — service account created, npm prefix, OpenClaw and `ctx7`, the coding agent, git access (human: key registration or device code).
 4. `05-openclaw-dependencies.md` — OS packages for the tools, git-host CLIs and their authentication (human), Chromium and its AppArmor user-namespace profile.
 5. `07-channel.md`, platform part — **channel administrator** creates the app and collects the tokens and IDs for `.env`.
-6. `04-openclaw.md` — human fills `.env`; snapshot, seed, workspace files, the projects marker, lingering, `gateway install`, `podman.socket`; human: provider login when no API key, dashboard pairing through the SSH tunnel, reboot check from the laptop.
+6. `04-openclaw.md` — human fills `.env`; snapshot, seed, the projects root, workspace files, lingering, `gateway install`, `podman.socket`; human: provider login when no API key, dashboard pairing through the SSH tunnel, reboot check from the laptop.
 7. `08-coding-agent.md` — human authenticates the coding agent in the service account; skills, global instructions, verification.
 8. `09-dev-server-gateway.md` when selected — human: DNS wildcard record and API token, Authelia secrets, gateway users.
 9. `06-security-hardening.md` — last, to protect managed resources while keeping the entire service `~/.alignfirst/` tree writable.

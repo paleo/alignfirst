@@ -9,6 +9,14 @@ import { writeConfig } from "../helpers.js";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const temporary: string[] = [];
+const HARNESS_MARKERS = [
+  "ALIGNDEV_ASSISTANT_HARNESS",
+  "CLAUDECODE",
+  "CODEX_THREAD_ID",
+  "PI_CODING_AGENT",
+  "AI_AGENT",
+  "OPENCLAW_SHELL",
+];
 const yarn = process.env.YARN_CLASSIC ?? "yarn";
 const yarnVersion = spawnSync(yarn, ["--version"], {
   cwd: tmpdir(),
@@ -102,12 +110,14 @@ function makeFixture(): Fixture {
       scripts: { "ad$&": "aligndev", "af$&": "alignfirst", "dm$&": "docmap" },
     }),
   );
-  writeConfig(home, { platform: "codingAgent", code: { agent: "pi" } });
-  // Yarn Classic leaves some npm metadata untouched; start as an ordinary shell launch.
+  writeConfig(home, { code: { harness: "pi" } });
+  // Yarn Classic leaves some npm metadata untouched; start as an ordinary shell launch, outside any
+  // assistant's harness.
   const env = { ...process.env };
   for (const key of Object.keys(env)) {
     if (key.startsWith("npm_")) delete env[key];
   }
+  for (const key of HARNESS_MARKERS) delete env[key];
   return { cwd, env: { ...env, HOME: home, npm_config_offline: "true" } };
 }
 

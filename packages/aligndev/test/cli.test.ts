@@ -54,6 +54,11 @@ describe("aligndev", () => {
     }
   });
 
+  it("documents ALIGNDEV_ASSISTANT_HARNESS in the top-level help", async () => {
+    const result = await run(["--help"]);
+    expect(result.stdout).toContain("ALIGNDEV_ASSISTANT_HARNESS");
+  });
+
   it.each([[], ["nope"]])("rejects missing or unknown commands %j", async (...args) => {
     const result = await run(args);
     expect(result.code).toBe(1);

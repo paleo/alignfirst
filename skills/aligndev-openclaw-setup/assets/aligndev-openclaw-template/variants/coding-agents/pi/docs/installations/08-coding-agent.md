@@ -9,7 +9,7 @@ read_when:
 
 Position: after `04-openclaw.md`, before `06-security-hardening.md`. [Admin Account](#admin-account) runs during `01-server-setup.md`; [Install](#install) runs during `03-toolchain.md` after the other protected npm CLIs are installed.
 
-OpenClaw is the persistent parent. The `service-pi` profile selects Pi explicitly, independently of parent detection and OpenClaw's conversational model. It uses provider `{{PI_PROVIDER}}`, model `{{PI_MODEL}}`, native directory {{PI_CONFIG_DIR_DISPLAY}}, and authentication method **{{PI_AUTH_METHOD}}**. The optional quota source in `infra/openclaw/aligndev.settings.json` belongs to its separately authenticated native CLI account; AlignDev does not verify that account against Pi's.
+OpenClaw is the persistent parent. The `openclaw` profile's `defaultAgentProfile` names the `service-pi` profile, which selects Pi independently of OpenClaw's conversational model. It uses provider `{{PI_PROVIDER}}`, model `{{PI_MODEL}}`, native directory {{PI_CONFIG_DIR_DISPLAY}}, and authentication method **{{PI_AUTH_METHOD}}**. The optional quota source in `infra/openclaw/aligndev.settings.json` belongs to its separately authenticated native CLI account; AlignDev does not verify that account against Pi's.
 
 ## Admin Account
 
@@ -49,7 +49,7 @@ set -o pipefail
 settings=infra/openclaw/aligndev.settings.json
 store=$(sudo /usr/bin/node infra/openclaw/deployment-profiles.mjs "$settings" \
   /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json | jq -er '.configDir') || exit 1
-native_default=$(jq -r '.code.profiles[.code.profile].configDir == null' "$settings")
+native_default=$(jq -r '.code as $c | $c.profiles[($c.profiles | to_entries[] | select(.value.harness == "openclaw" and .value.disabled != true) | .value.defaultAgentProfile)].configDir == null' "$settings")
 sudo -H -u {{SERVICE_USER}} bash -lc '
   if [ "$1" = true ]; then unset PI_CODING_AGENT_DIR; else export PI_CODING_AGENT_DIR="$2"; fi
   command -v pi; PI_OFFLINE=1 pi --version
@@ -74,7 +74,7 @@ set -o pipefail
 settings="$HOME/.alignfirst/aligndev.settings.json"
 store=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
   "$settings" "$HOME" "$settings" | jq -er '.configDir') || exit 1
-if jq -e '.code.profiles[.code.profile].configDir == null' "$settings" >/dev/null; then
+if jq -e '.code as $c | $c.profiles[($c.profiles | to_entries[] | select(.value.harness == "openclaw" and .value.disabled != true) | .value.defaultAgentProfile)].configDir == null' "$settings" >/dev/null; then
   unset PI_CODING_AGENT_DIR
 else
   export PI_CODING_AGENT_DIR="$store"
@@ -101,7 +101,7 @@ set -eo pipefail
 settings="$HOME/.alignfirst/aligndev.settings.json"
 /usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
   "$settings" "$HOME" "$settings" >/dev/null
-jq -c '.code.profiles[] | .quota? | select(.source == "claude" or .source == "codex")' \
+jq -c '.code.profiles[] | select(.disabled != true) | .quota? | select(.source == "claude" or .source == "codex")' \
   "$settings" | while IFS= read -r launch; do
     source=$(jq -r '.source' <<<"$launch")
     case "$source" in
@@ -161,7 +161,7 @@ Future resources beneath that parent inherit trust. Project trust controls disco
 
 ### Instructions and Hardening
 
-The seed merges `infra/openclaw/coding-agent/AGENTS.md` into each inventoried Pi instruction file between managed markers, preserving surrounding text. It does not overwrite native settings or user `agents/` profiles. Validation selects every provisioned profile explicitly, independent of the seed cwd's registry selection.
+The seed merges `infra/openclaw/coding-agent/AGENTS.md` into each inventoried Pi instruction file between managed markers, preserving surrounding text. It does not overwrite native settings or user `agents/` profiles. Validation selects every enabled coding profile explicitly, independent of the seed cwd's registry selection.
 
 Follow `06-security-hardening.md` for the shared resource policy. Managed context variants, system prompts, settings/models/MCP declarations, trust, extensions, skills, prompts/themes, bin and installed packages need protected anchors as well as protected contents. Keep executable modes in package trees. Use the shared inventory for custom stores, backup destination mapping and recovery; keep backups private.
 
@@ -182,7 +182,7 @@ The launcher accepts a simple `>=major.minor.patch` `engines.node` range from th
 
 These are host-side procedures, not claims about the offline template checks:
 
-- Run `aligndev guide code --profile service-pi`; confirm the selected store/model and credential readiness without revealing secrets.
+- Run `ALIGNDEV_ASSISTANT_HARNESS=openclaw npx -y aligndev guide code --profile service-pi`; confirm the selected store/model and credential readiness without revealing secrets.
 - Run the runtime checker directly and through the private gateway procedure in the base runbooks with `CODING_AGENT=pi`. Pi must resolve to `/opt/{{SERVICE_USER}}/bin/pi`; its no-model runtime probe must retain the project child runtime.
 - Verify an approved parent and a future worktree inherit the saved decision after restart. Confirm duplicate subagent tools are absent and existing user profiles remain intact.
 - As the real service UID, verify managed resources cannot be rewritten, unlinked or replaced, including through their parents; confirm authentication locks/renewal and ordinary session/cache writes still work.

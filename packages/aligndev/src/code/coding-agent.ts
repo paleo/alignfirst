@@ -18,7 +18,7 @@ export function createAgentAdapter(agent: CodingAgent): AgentAdapter {
   }
 }
 
-// Host detection is reached only when no named profile selects a child.
+// The coding agents whose session runs this process; one gives the assistant's harness.
 export function detectCodingAgents(env: NodeJS.ProcessEnv): CodingAgent[] {
   const detected: CodingAgent[] = [];
   if (env.CLAUDECODE === "1") detected.push("claude");

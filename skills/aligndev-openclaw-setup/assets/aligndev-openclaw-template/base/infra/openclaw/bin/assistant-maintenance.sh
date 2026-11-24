@@ -8,7 +8,7 @@
 #   alignfirst-assistant-maintenance <scope> [<scope> ...] -- <command> [<argument> ...]
 #   alignfirst-assistant-maintenance native-recovery -- <private-native-backup-directory>
 #
-# Scopes: config, workspace, packages, skills, projects, instructions, agent-skills, agent-config.
+# Scopes: config, workspace, packages, skills, instructions, agent-skills, agent-config.
 # The config scope covers openclaw.json. The entire ~/.alignfirst tree stays service-owned and writable.
 
 set -Eeuo pipefail
@@ -17,7 +17,6 @@ SERVICE_USER={{SERVICE_USER}}
 SERVICE_HOME=/home/{{SERVICE_USER}}
 ADMIN_USER={{SERVER_ADMIN_USER}}
 ADMIN_REPOSITORY=/home/{{SERVER_ADMIN_USER}}/{{ADMIN_REPOSITORY_NAME}}
-PROJECTS_MARKER="$SERVICE_HOME/projects/.alignfirst-projects.json"
 ALIGNDEV_CONFIG_FILE="$SERVICE_HOME/.alignfirst/aligndev.settings.json"
 KILL_SWITCH=/usr/local/sbin/alignfirst-assistant-kill
 LIBEXEC=/opt/{{SERVICE_USER}}/libexec
@@ -75,7 +74,7 @@ parse_arguments() {
   while [ "$#" -gt 0 ] && [ "$1" != -- ]; do
     scope=$1
     case "$scope" in
-      config|workspace|packages|skills|projects|instructions|agent-skills|agent-config) ;;
+      config|workspace|packages|skills|instructions|agent-skills|agent-config) ;;
       *) echo "Unknown maintenance scope: $scope" >&2; exit 2 ;;
     esac
     if [[ "$seen" = *" $scope "* ]]; then
@@ -102,7 +101,7 @@ resolve_paths() {
   local config="$ADMIN_REPOSITORY/infra/openclaw/aligndev.settings.json" inventory
   # Read the admin-controlled inventory before containment/unlock. Unsupported stores fail closed.
   inventory=$(read_native_inventory "$config")
-  CODING_AGENT=$(jq -r '.agent' <<<"$inventory")
+  CODING_AGENT=$(jq -r '.harness' <<<"$inventory")
   INSTRUCTION_FILE=$(jq -r '.instructionFile' <<<"$inventory")
   AGENT_SKILLS_DIR=$(jq -r '.skillsDir' <<<"$inventory")
   local action=validate-maintenance
@@ -226,12 +225,6 @@ unlock_skills() {
   fi
 }
 
-unlock_projects() {
-  [ -e "$PROJECTS_MARKER" ] || return 0
-  chattr -i "$PROJECTS_MARKER"
-  chown "$SERVICE_USER:$SERVICE_USER" "$PROJECTS_MARKER"
-}
-
 unlock_instructions() {
   native_policy unlock instructions
 }
@@ -333,14 +326,6 @@ restore_skills() {
   fi
   native_policy harden agent-skills || status=1
   return "$status"
-}
-
-restore_projects() {
-  validate_managed_paths "$PROJECTS_MARKER" || return 1
-  [ -e "$PROJECTS_MARKER" ] || return 0
-  chown root:root "$PROJECTS_MARKER" &&
-    chmod 644 "$PROJECTS_MARKER" &&
-    chattr +i "$PROJECTS_MARKER"
 }
 
 restore_instructions() {

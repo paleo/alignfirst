@@ -25,6 +25,19 @@ const piFiles = [
   "APPEND_SYSTEM.md",
 ];
 const piTrees = ["extensions", "skills", "prompts", "themes", "npm", "git", "agents", "bin"];
+const codingHarnesses = ["claude", "codex", "pi"];
+// Recognized keys of a coding-agent profile that an openclaw profile rejects.
+const codingOnlyProfileKeys = [
+  "default",
+  "configDir",
+  "defaultModel",
+  "models",
+  "modelAliases",
+  "skipPermissions",
+  "env",
+  "unset",
+  "quota",
+];
 
 if (resolve(process.argv[1] ?? ".") === fileURLToPath(import.meta.url)) {
   try {
@@ -47,20 +60,20 @@ export function inventoryProfiles(settingsFile, serviceHome, deployedSettingsFil
   rejectSymlinks(settingsFile);
   rejectSymlinks(deployedSettingsFile);
   const settings = readSettings(settingsFile);
-  const code = settings.code;
-  if (
-    !isObject(code.profiles) ||
-    typeof code.profile !== "string" ||
-    !Object.hasOwn(code.profiles, code.profile)
-  ) {
-    throw new Error(`${settingsFile}: an explicit code.profile must name a provisioned profile`);
-  }
-  validateDefaults(code.profiles, settingsFile);
-  const stores = [];
-  for (const [name, profile] of Object.entries(code.profiles)) {
-    if (name.trim() === "" || /[\x00-\x1f\x7f]/u.test(name) || !isObject(profile))
+  const profiles = settings.code.profiles ?? {};
+  for (const name of Object.keys(profiles)) {
+    if (name.trim() === "" || /[\x00-\x1f\x7f]/u.test(name))
       throw new Error("Invalid deployment profile");
-    addStore(stores, name, profile.agent, profile, home, deployedSettingsFile);
+  }
+  // A disabled profile is absent for the CLI: its shape is validated, nothing else.
+  const enabled = Object.entries(profiles).filter(([, profile]) => profile.disabled !== true);
+  const coding = enabled.filter(([, profile]) => profile.harness !== "openclaw");
+  validateReferences(settings.code, profiles, enabled, settingsFile);
+  validateDefaults(coding, settingsFile);
+  const selectedName = deploymentDefault(enabled, settingsFile);
+  const stores = [];
+  for (const [name, profile] of coding) {
+    addStore(stores, name, profile.harness, profile, home, deployedSettingsFile);
     const quota = profile.quota;
     if (quota === undefined) continue;
     if (!isObject(quota) || !["claude", "codex", "none"].includes(quota.source))
@@ -83,11 +96,11 @@ export function inventoryProfiles(settingsFile, serviceHome, deployedSettingsFil
     }
   }
   const resources = stores.flatMap((store) => storeResources(store, home, options));
-  if (stores.some((store) => store.agent === "pi")) {
+  if (stores.some((store) => store.harness === "pi")) {
     resources.push({ path: join(home, ".agents/skills"), kind: "tree", scope: "agent-skills" });
     // Context discovery also visits HOME and intermediate parents regardless of project trust.
     const ancestors = new Set([home]);
-    for (const store of stores.filter((item) => item.agent === "pi")) {
+    for (const store of stores.filter((item) => item.harness === "pi")) {
       let path = dirname(store.configDir);
       while (within(path, home)) {
         ancestors.add(path);
@@ -115,12 +128,12 @@ export function inventoryProfiles(settingsFile, serviceHome, deployedSettingsFil
   validateInventory({ resources, stores, serviceHome: home });
   const selected = stores.find(
     (store) =>
-      store.agent === code.profiles[code.profile].agent && store.profiles.includes(code.profile),
+      store.harness === profiles[selectedName].harness && store.profiles.includes(selectedName),
   );
   return {
     ...selected,
-    profile: code.profile,
-    profiles: Object.keys(code.profiles),
+    profile: selectedName,
+    profiles: coding.map(([name]) => name),
     stores,
     resources,
     serviceHome: home,
@@ -135,87 +148,142 @@ function readSettings(settingsFile) {
   } catch {
     throw new Error(`${settingsFile}: must contain valid JSON`);
   }
-  const settings = settingsObject(value, ["platform", "projectsRoot", "code"], "settings");
-  if (settings.platform !== undefined && !["openclaw", "codingAgent"].includes(settings.platform))
-    throw new Error("Invalid settings.platform");
+  const settings = settingsObject(value, ["projectsRoot", "portRange", "code"], "");
   if (
     settings.projectsRoot !== undefined &&
     (typeof settings.projectsRoot !== "string" || settings.projectsRoot.length === 0)
   )
     throw new Error("Invalid settings.projectsRoot");
-  const code = settingsObject(settings.code, ["profile", "profiles"], "code");
+  if (settings.portRange !== undefined) validatePortRange(settings.portRange);
+  const code = settingsObject(settings.code, ["fallbackProfile", "profiles"], "code");
+  if (code.fallbackProfile !== undefined && !nonblank(code.fallbackProfile))
+    throw new Error("code.fallbackProfile must be a nonblank string");
   if (code.profiles === undefined) return { ...settings, code };
   if (!isObject(code.profiles)) throw new Error("Invalid code.profiles");
   code.profiles = Object.fromEntries(
-    Object.entries(code.profiles).map(([name, value]) => {
-      const path = "code.profiles[<entry>]";
-      const profile = settingsObject(
-        value,
-        [
-          "agent",
-          "default",
-          "configDir",
-          "defaultModel",
-          "models",
-          "modelAliases",
-          "skipPermissions",
-          "env",
-          "unset",
-          "quota",
-        ],
-        path,
-      );
-      if (!["claude", "codex", "pi"].includes(profile.agent))
-        throw new Error(`${path}.agent must be claude, codex or pi`);
-      validateLaunchFields(profile, path);
-      if (profile.quota !== undefined) {
-        profile.quota = settingsObject(
-          profile.quota,
-          ["source", "configDir", "env", "unset"],
-          `${path}.quota`,
-        );
-        validateLaunchFields(profile.quota, `${path}.quota`);
-      }
-      return [name, profile];
-    }),
+    Object.entries(code.profiles).map(([name, value]) => [name, readProfile(value)]),
   );
   return { ...settings, code };
 }
 
-function settingsObject(value, keys, path) {
+function validatePortRange(value) {
+  const range = settingsObject(value, ["first", "last"], "portRange");
+  for (const key of ["first", "last"]) {
+    const port = range[key];
+    if (!Number.isInteger(port) || port < 1 || port > 65_535)
+      throw new Error(`portRange.${key} must be an integer from 1 to 65535`);
+  }
+  if (range.first > range.last) throw new Error("portRange.first must not exceed portRange.last");
+}
+
+// Dispatches on `harness`, like the CLI: an openclaw profile accepts only its own keys.
+function readProfile(value) {
+  const path = "code.profiles[<entry>]";
   if (!isObject(value)) throw new Error(`${path} must be an object`);
+  if (value.harness === "openclaw") {
+    for (const key of codingOnlyProfileKeys) {
+      if (Object.hasOwn(value, key))
+        throw new Error(
+          `${path}.${key} must be removed: an openclaw profile accepts only harness, ` +
+            "defaultAgentProfile and disabled",
+        );
+    }
+    const profile = settingsObject(value, ["harness", "defaultAgentProfile", "disabled"], path);
+    if (!nonblank(profile.defaultAgentProfile))
+      throw new Error(`${path}.defaultAgentProfile must be a nonblank string`);
+    validateDisabled(profile, path);
+    return profile;
+  }
+  if (!codingHarnesses.includes(value.harness)) {
+    throw new Error(
+      value.harness === undefined && Object.hasOwn(value, "agent")
+        ? `${path}.harness must be set: rename "agent" to "harness"`
+        : `${path}.harness must be one of claude, codex, pi, openclaw`,
+    );
+  }
+  const profile = settingsObject(
+    value,
+    ["harness", "defaultAgentProfile", "disabled", ...codingOnlyProfileKeys],
+    path,
+  );
+  if (profile.defaultAgentProfile !== undefined && !nonblank(profile.defaultAgentProfile))
+    throw new Error(`${path}.defaultAgentProfile must be a nonblank string`);
+  validateDisabled(profile, path);
+  validateLaunchFields(profile, path);
+  if (profile.quota !== undefined) {
+    profile.quota = settingsObject(
+      profile.quota,
+      ["source", "configDir", "env", "unset"],
+      `${path}.quota`,
+    );
+    validateLaunchFields(profile.quota, `${path}.quota`);
+  }
+  return profile;
+}
+
+function validateDisabled(profile, path) {
+  if (profile.disabled !== undefined && typeof profile.disabled !== "boolean")
+    throw new Error(`${path}.disabled must be a boolean`);
+}
+
+// Same warnings as the CLI: unknown keys are ignored, retired ones name their migration.
+function settingsObject(value, keys, path) {
+  if (!isObject(value)) throw new Error(`${path === "" ? "settings" : path} must be an object`);
   for (const key of Object.keys(value)) {
     if (keys.includes(key)) continue;
-    const quoted = JSON.stringify(key).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (character) =>
-      character
-        .split("")
-        .map((unit) => `\\u${unit.charCodeAt(0).toString(16).padStart(4, "0")}`)
-        .join(""),
-    );
-    const field = /^[A-Za-z_$][\w$]*$/.test(key) ? `${path}.${key}` : `${path}[${quoted}]`;
-    let migration = "Remove it or check its spelling.";
-    if (path === "code" && key === "defaultProfiles")
-      migration =
-        "code.defaultProfiles is retired; manually move needed preferences to referenced " +
-        "matching-agent profiles' default: true (omit singleton flags), remove the map and keep " +
-        'profile names unchanged. See "Convert AlignDev Profile Defaults" in ' +
-        "`alignfirst setup guide upgrade`.";
-    else if (
-      path === "code" &&
-      ["agent", "defaultModel", "models", "skipPermissions", "unset"].includes(key)
-    )
-      migration =
-        "Retired launch setting: move it into code.profiles and select one with " +
-        "code.profile (manual conversion required).";
-    console.warn(`Warning: ignoring unknown aligndev setting ${field}. ${migration}`);
+    const field = /^[A-Za-z_$][\w$]*$/.test(key)
+      ? `${path === "" ? "" : `${path}.`}${key}`
+      : `${path === "" ? "settings" : path}[${quoteName(key)}]`;
+    console.warn(`Warning: ignoring unknown aligndev setting ${field}. ${migrationHint(path, key)}`);
   }
   return Object.fromEntries(
     keys.filter((key) => Object.hasOwn(value, key)).map((key) => [key, value[key]]),
   );
 }
 
+function migrationHint(path, key) {
+  if (path === "" && key === "platform")
+    return (
+      "platform is retired: the assistant's harness is resolved at each invocation " +
+      "(see ALIGNDEV_ASSISTANT_HARNESS). Remove it."
+    );
+  if (path === "code" && key === "profile")
+    return (
+      "code.profile is retired: set defaultAgentProfile on the assistant's profile, " +
+      "or code.fallbackProfile. Remove it."
+    );
+  if (path === "code.profiles[<entry>]" && key === "agent")
+    return 'The profile key "agent" was renamed to "harness". Remove it.';
+  if (path === "code" && key === "defaultProfiles")
+    return (
+      "code.defaultProfiles is retired: manually move each needed preference to its referenced " +
+      "matching-agent profile's default: true (omit singleton flags), remove the map and " +
+      'keep profile names unchanged. See "Convert AlignDev Profile Defaults" in ' +
+      "`npx -y alignfirst setup guide upgrade`."
+    );
+  if (path === "code" && ["agent", "defaultModel", "models", "skipPermissions", "unset"].includes(key))
+    return (
+      "Retired launch setting: move it into a profile under code.profiles, then select that " +
+      "profile with the assistant profile's defaultAgentProfile or code.fallbackProfile " +
+      "(manual conversion required)."
+    );
+  return "Remove it or check its spelling.";
+}
+
+function quoteName(name) {
+  return JSON.stringify(name).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (character) =>
+    character
+      .split("")
+      .map((unit) => `\\u${unit.charCodeAt(0).toString(16).padStart(4, "0")}`)
+      .join(""),
+  );
+}
+
+function nonblank(text) {
+  return typeof text === "string" && text.trim() !== "";
+}
+
 function validateLaunchFields(value, path) {
-  const nonblank = (text) => typeof text === "string" && text.trim() !== "";
   const environmentName = (name) => /^[A-Za-z_][A-Za-z0-9_]*$/u.test(name);
   if (value.configDir !== undefined && value.configDir !== null && !nonblank(value.configDir))
     throw new Error(`${path}.configDir must be null or a nonblank string`);
@@ -252,42 +320,68 @@ function validateLaunchFields(value, path) {
     throw new Error(`${path}.unset overlaps env`);
 }
 
-function validateDefaults(profiles, settingsFile) {
-  const defaults = new Map();
-  for (const [name, profile] of Object.entries(profiles)) {
-    if (!isObject(profile)) continue;
-    if (Object.hasOwn(profile, "default") && typeof profile.default !== "boolean")
-      throw new Error(
-        `${settingsFile}: code.profiles[${JSON.stringify(name)}].default must be a boolean`,
-      );
-    if (profile.default !== true) continue;
-    const names = defaults.get(profile.agent) ?? [];
-    names.push(JSON.stringify(name));
-    defaults.set(profile.agent, names);
+// A named reference never falls through: it must name an enabled coding profile.
+function validateReferences(code, profiles, enabled, settingsFile) {
+  const check = (origin, name) => {
+    const profile = profiles[name];
+    let reason;
+    if (!Object.hasOwn(profiles, name)) reason = "a missing profile";
+    else if (profile.disabled === true) reason = "a disabled profile";
+    else if (profile.harness === "openclaw") reason = "an openclaw profile";
+    if (reason !== undefined)
+      throw new Error(`${settingsFile}: ${origin} names ${reason}; select a coding-agent profile`);
+  };
+  for (const [name, profile] of enabled) {
+    if (profile.defaultAgentProfile !== undefined)
+      check(`code.profiles[${quoteName(name)}].defaultAgentProfile`, profile.defaultAgentProfile);
   }
-  for (const [agent, names] of defaults) {
+  if (code.fallbackProfile !== undefined) check("code.fallbackProfile", code.fallbackProfile);
+}
+
+function validateDefaults(coding, settingsFile) {
+  const defaults = new Map();
+  for (const [name, profile] of coding) {
+    if (Object.hasOwn(profile, "default") && typeof profile.default !== "boolean")
+      throw new Error(`${settingsFile}: code.profiles[${quoteName(name)}].default must be a boolean`);
+    if (profile.default !== true) continue;
+    const names = defaults.get(profile.harness) ?? [];
+    names.push(quoteName(name));
+    defaults.set(profile.harness, names);
+  }
+  for (const [harness, names] of defaults) {
     if (names.length > 1)
       throw new Error(
-        `${settingsFile}: multiple default: true profiles for ${agent}: ${names.join(", ")}; ` +
-          `leave only one default: true for ${agent}`,
+        `${settingsFile}: multiple default: true profiles for ${harness}: ${names.join(", ")}; ` +
+          `leave only one default: true for ${harness}`,
       );
   }
+}
+
+// The deployment default is the enabled openclaw profile's defaultAgentProfile.
+function deploymentDefault(enabled, settingsFile) {
+  const openclaw = enabled.filter(([, profile]) => profile.harness === "openclaw");
+  if (openclaw.length !== 1)
+    throw new Error(
+      `${settingsFile}: exactly one enabled openclaw profile must name the deployment's ` +
+        "coding profile with defaultAgentProfile",
+    );
+  return openclaw[0][1].defaultAgentProfile;
 }
 
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function addStore(stores, name, agent, profile, home, deployed) {
-  if (!Object.hasOwn(nativeDirectories, agent)) throw new Error("Unsupported coding agent");
+function addStore(stores, name, harness, profile, home, deployed) {
+  if (!Object.hasOwn(nativeDirectories, harness)) throw new Error("Unsupported coding harness");
   if (
     profile.configDir !== null &&
     (typeof profile.configDir !== "string" || profile.configDir.trim() === "")
   )
     throw new Error("Every deployment profile/quota store needs an explicit null/string configDir");
   if (
-    (isObject(profile.env) && Object.hasOwn(profile.env, directoryVariables[agent])) ||
-    profile.unset?.includes(directoryVariables[agent])
+    (isObject(profile.env) && Object.hasOwn(profile.env, directoryVariables[harness])) ||
+    profile.unset?.includes(directoryVariables[harness])
   )
     throw new Error("Native directory env/unset conflicts with explicit configDir");
   // HOME and alternate session roots would invalidate this filesystem inventory.
@@ -297,7 +391,7 @@ function addStore(stores, name, agent, profile, home, deployed) {
   }
   const configDir =
     profile.configDir === null
-      ? join(home, nativeDirectories[agent])
+      ? join(home, nativeDirectories[harness])
       : expandPath(profile.configDir, home, dirname(deployed));
   if (
     !within(configDir, home) ||
@@ -315,18 +409,18 @@ function addStore(stores, name, agent, profile, home, deployed) {
     throw new Error("Native stores must be isolated beneath the service home");
   const existing = stores.find((store) => store.configDir === configDir);
   if (existing) {
-    if (existing.agent !== agent) throw new Error("Different agents cannot share a native store");
+    if (existing.harness !== harness) throw new Error("Different harnesses cannot share a native store");
     if (!existing.profiles.includes(name)) existing.profiles.push(name);
     return;
   }
   const instructions =
-    agent === "pi"
+    harness === "pi"
       ? (["AGENTS.override.md", "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD"].find((file) =>
           lstatOptional(join(configDir, file))?.isFile(),
         ) ?? "AGENTS.md")
-      : instructionNames[agent];
+      : instructionNames[harness];
   stores.push({
-    agent,
+    harness,
     configDir,
     profiles: [name],
     instructionFile: join(configDir, instructions),
@@ -364,9 +458,9 @@ function storeResources(store, home, options) {
     scope,
     ...(initial === undefined ? {} : { initial }),
   });
-  if (store.agent !== "pi")
+  if (store.harness !== "pi")
     return [
-      resource(instructionNames[store.agent], "file", "instructions", ""),
+      resource(instructionNames[store.harness], "file", "instructions", ""),
       resource("skills", "tree", "agent-skills"),
     ];
   const resources = piFiles.map((name) => {

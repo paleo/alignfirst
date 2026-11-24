@@ -8,7 +8,14 @@ const runtime = process.versions.bun === undefined ? "node" : "bun";
 const executable = basename(process.argv[1]);
 appendFileSync(
   process.env.CLI_NATIVE_LOG,
-  `${JSON.stringify({ executable, runtime, args: process.argv.slice(2) })}\n`,
+  `${JSON.stringify({
+    executable,
+    runtime,
+    args: process.argv.slice(2),
+    launcherVariables: Object.keys(process.env).filter(
+      (name) => name.startsWith("npm_") || name === "INIT_CWD",
+    ),
+  })}\n`,
 );
 assert.equal(runtime, process.env.CLI_NATIVE_EXPECT ?? "node", "external native runtime");
 

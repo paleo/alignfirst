@@ -1,11 +1,11 @@
 {
-  "platform": "openclaw",
   "projectsRoot": "~/projects",
+  "portRange": { "first": {{PORT_RANGE_FIRST}}, "last": {{PORT_RANGE_LAST}} },
   "code": {
-    "profile": "service-codex",
     "profiles": {
+      "openclaw": { "harness": "openclaw", "defaultAgentProfile": "service-codex" },
       "service-codex": {
-        "agent": "codex",
+        "harness": "codex",
         "configDir": null,
         "skipPermissions": true,
         "unset": [

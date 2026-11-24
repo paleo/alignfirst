@@ -56,15 +56,7 @@ sudo chattr +i /home/{{SERVICE_USER}}/.openclaw/openclaw.json \
   /home/{{SERVICE_USER}}/.openclaw/workspace/{AGENTS,IDENTITY,SOUL,USER}.md
 ```
 
-Accepted gap: the heartbeat checklist is the `heartbeat:main` cron job's scratch, a SQLite row ([04 § 7](04-openclaw.md#heartbeat-scratch)). No flag protects it; the assistant can rewrite it through `heartbeat_respond` or `openclaw cron scratch --set`. It joins the assistant-written state the policy tolerates (memory, sessions), its reach is the daily tick, and [update-assistant.md](../operations/update-assistant.md#smoke-test) restores it.
-
-The projects marker is repository-managed and immutable:
-
-```sh
-sudo chown root:root /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
-sudo chmod 644 /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
-sudo chattr +i /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
-```
+Accepted gap: the heartbeat checklist is the `heartbeat:main` cron job's scratch, a SQLite row ([04 § 6](04-openclaw.md#heartbeat-scratch)). No flag protects it; the assistant can rewrite it through `heartbeat_respond` or `openclaw cron scratch --set`. It joins the assistant-written state the policy tolerates (memory, sessions), its reach is the daily tick, and [update-assistant.md](../operations/update-assistant.md#smoke-test) restores it.
 
 ### Writable AlignFirst home
 
@@ -140,7 +132,7 @@ sudo chmod 644 \
 
 ## Global packages
 
-`~/.npm-system-global/` holds `openclaw`, the coding agent, `alignfirst`, `aligndev` and `ctx7`. It is root-owned and immutable. A global install by the service account instead lands in its selected fnm runtime. The audited PATH keeps that writable runtime from shadowing `openclaw`, `aligndev` or the coding agent.
+`~/.npm-system-global/` holds `openclaw`, the coding agent and `ctx7`. It is root-owned and immutable. A global install by the service account instead lands in its selected fnm runtime. The audited PATH keeps that writable runtime from shadowing `openclaw` or the coding agent. `alignfirst` and `aligndev` run through `npx` from the service-writable npm cache ([configuration.md](../configuration.md#alignfirst-clis-through-npx)).
 
 ```sh
 sudo chown -R root:root /home/{{SERVICE_USER}}/.npm-system-global
@@ -170,7 +162,7 @@ EOS
 
 ## Unlocking for maintenance
 
-Use `/usr/local/sbin/alignfirst-assistant-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `projects`, `instructions`, `agent-skills` and `agent-config`. The `config` scope covers `openclaw.json`; `~/.alignfirst/` remains writable throughout maintenance. The native scopes cover every inventoried profile/store, not just `code.profile`: `instructions` covers managed context/system files, `agent-skills` native skills, and `agent-config` Pi declarations, trust, executable helpers, packages and other resources. `skills` also covers native skills. Before an unlock, the wrapper validates paths, contains the account and refreshes `~/seed/` from this repository. It saves resolved admin/deployed inventories in a root-private directory so original resources remain tracked when declarations change. Its `EXIT` trap contains the account again before restoring ownership, modes and immutable flags on success, failure or interruption. Failed recontainment aborts privileged cleanup and leaves gateway state unknown. Failed cleanup retains the inventory path for [operator recovery](../operations/recover-assistant.md#failed-maintenance-cleanup); never pass it to a service-account command.
+Use `/usr/local/sbin/alignfirst-assistant-maintenance`. It accepts only named scopes: `config`, `workspace`, `packages`, `skills`, `instructions`, `agent-skills` and `agent-config`. The `config` scope covers `openclaw.json`; `~/.alignfirst/` remains writable throughout maintenance. The native scopes cover every inventoried profile/store, not just the deployment default: `instructions` covers managed context/system files, `agent-skills` native skills, and `agent-config` Pi declarations, trust, executable helpers, packages and other resources. `skills` also covers native skills. Before an unlock, the wrapper validates paths, contains the account and refreshes `~/seed/` from this repository. It saves resolved admin/deployed inventories in a root-private directory so original resources remain tracked when declarations change. Its `EXIT` trap contains the account again before restoring ownership, modes and immutable flags on success, failure or interruption. Failed recontainment aborts privileged cleanup and leaves gateway state unknown. Failed cleanup retains the inventory path for [operator recovery](../operations/recover-assistant.md#failed-maintenance-cleanup); never pass it to a service-account command.
 
 The operation runbooks supply the scopes and service-account command. Start the gateway only after the wrapper reports that hardening was restored and exits 0.
 
@@ -193,7 +185,6 @@ As the service account, every write must fail with `Operation not permitted` or 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.openclaw/workspace/AGENTS.md'
 sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/.openclaw/openclaw.json'
-sudo -H -u {{SERVICE_USER}} bash -lc 'echo x >> ~/projects/.alignfirst-projects.json'
 sudo -H -u {{SERVICE_USER}} bash -lc 'touch ~/.openclaw/skills/probe'
 sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.agents ~/.agents-x'
 sudo -H -u {{SERVICE_USER}} bash -lc 'mv ~/.openclaw/skills ~/.openclaw/skills-x'
@@ -261,7 +252,7 @@ set -eo pipefail
 /usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
   "$HOME/.alignfirst/aligndev.settings.json" "$HOME" \
   "$HOME/.alignfirst/aligndev.settings.json" |
-  jq -r '.stores[] | select(.agent == "pi") | .configDir' |
+  jq -r '.stores[] | select(.harness == "pi") | .configDir' |
   while IFS= read -r store; do
     stat -c '%U:%G %a %n' "$HOME" "$store" "$store/settings.json" "$store/trust.json"
     test -w "$store"

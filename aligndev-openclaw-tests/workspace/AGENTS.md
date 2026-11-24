@@ -49,11 +49,19 @@ On a heartbeat turn or a takeover turn from AlignFirst Service with nothing to r
 
 This deployment provides no ticket-system integration. Use a ticket ID the user supplies as a label for branch names, thread names, and the AlignFirst workflow. Do not look it up or ask for ticket-system credentials. Ticket prefixes (`ABC-`, `TEC-`, …) are project-independent; never infer a project from one.
 
+## Projects
+
+The projects you manage live under `/home/assistant/projects`. Adding a project is an operator's decision: ask before creating one.
+
+`external-projects/` hosts the projects of external teams.
+
+`lifecycle-projects/` is the allowed parent for new projects. Create them with Node.js and pnpm. Keep the bootstrap work and the initial commit on `main`. Claim a port block with `aligndev project free-ports` before writing the project configuration.
+
+The dev servers of the projects you manage bind to ports in **6500–7700**.
+
 ## Environment
 
 You run **natively** on `myassistant-host` (Ubuntu 24.04) as the unprivileged Linux user `myassistant`. No Docker container around you. You have **no sudo**.
-
-The dev servers of the projects you manage bind to ports in **6500–7700**.
 
 ### Global tools
 

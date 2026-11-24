@@ -28,17 +28,16 @@ export function parseShape<T>(
   }
 }
 
+// Unknown keys are reported to `onUnknown` and dropped from the result.
 export function object<T extends object>(
   fields: Fields<T>,
-  onUnknown?: (path: string, key: string) => void,
+  onUnknown: (path: string, key: string) => void,
 ): Check<T> {
   const entries: [string, Check<unknown> | OptionalField<unknown>][] = Object.entries(fields);
   return (value, path, warningPath = path) => {
     if (!isPlainObject(value)) throw shapeError(path, "be an object");
     for (const key of Object.keys(value)) {
-      if (Object.hasOwn(fields, key)) continue;
-      if (onUnknown === undefined) throw shapeError(childPath(path, key), "be removed");
-      onUnknown(warningPath, key);
+      if (!Object.hasOwn(fields, key)) onUnknown(warningPath, key);
     }
     const result: Record<string, unknown> = {};
     for (const [key, field] of entries) {
@@ -81,7 +80,7 @@ export function nulFreeString(value: unknown, path: string): string {
   return text;
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null) return false;
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
@@ -94,6 +93,11 @@ function childPath(path: string, key: string): string {
 
 function bracketPath(path: string, segment: string): string {
   return `${path === "" ? "value" : path}[${segment}]`;
+}
+
+// Lets a custom check fail on a field of the object at `path`, as the built-in checks do.
+export function rejectField(path: string, key: string, expectation: string): never {
+  throw shapeError(childPath(path, key), expectation);
 }
 
 function shapeError(path: string, expectation: string): Error {
@@ -158,14 +162,5 @@ export function arrayOf<T>(check: Check<T>): Check<T[]> {
     return value.map((item, index) =>
       check(item, bracketPath(path, String(index)), bracketPath(warningPath, String(index))),
     );
-  };
-}
-
-export function nonEmptyArrayOf<T>(check: Check<T>): Check<T[]> {
-  const checkArray = arrayOf(check);
-  return (value, path, warningPath = path) => {
-    const items = checkArray(value, path, warningPath);
-    if (items.length === 0) throw shapeError(path, "be a non-empty array");
-    return items;
   };
 }

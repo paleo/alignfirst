@@ -22,16 +22,16 @@ Run `secrets audit` from a login shell, as above: the file provider resolves fro
 ## Project routing
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project list --json'
-sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project status ~/projects/<repo> --json'
+sudo -H -u {{SERVICE_USER}} bash -lc 'npx -y aligndev project list --json'
+sudo -H -u {{SERVICE_USER}} bash -lc 'npx -y aligndev project status ~/projects/<repo> --json'
 ```
 
-A project absent from the listing may not be a Git main worktree or may sit outside a marked projects directory. Invalid `alignfirst.json`/`alignfirst.jsonc` or workspace manifests are reported as inventory issues. Follow [add-project.md](operations/add-project.md). For moved worktrees, see [gotchas.md](gotchas.md#moving-a-project).
+A project absent from the listing may not be a Git main worktree, or may sit beyond the scan's `--max-depth`; `skippedDirectories` gives the reason for each directory the scan passed over. Invalid `alignfirst.json`/`alignfirst.jsonc` or workspace manifests are reported as inventory issues. Follow [add-project.md](operations/add-project.md). For moved worktrees, see [gotchas.md](gotchas.md#moving-a-project).
 
 ## Delegation
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- aligndev guide code
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'ALIGNDEV_ASSISTANT_HARNESS=openclaw npx -y aligndev guide code'
 sudo -i -u {{SERVICE_USER}} -- \
   openclaw config get models.providers.{{RUNTIME_PROVIDER}}.agentRuntime --json
 # Expected: {"id":"openclaw"}
@@ -40,21 +40,21 @@ sudo -i -u {{SERVICE_USER}} -- \
 The agent runtime must be `openclaw`; another value changes the tool surface and breaks the
 playbook's background delegation contract. Re-seed before investigating `aligndev code` itself.
 
-The session file under the project's `.plans/<ticket>/_aligndev/` carries the exit reason. `exitReason: auth_required` means the coding agent's login expired: [08-coding-agent.md § Authenticate](installations/08-coding-agent.md#authenticate). A run that fails from the channel and succeeds from a login shell points at the gateway environment: compare `systemctl --user show-environment` with `env` ([04 § 9](installations/04-openclaw.md#9-environment-changes)).
+The session file under the project's `.plans/<ticket>/_aligndev/` carries the exit reason. `exitReason: auth_required` means the coding agent's login expired: [08-coding-agent.md § Authenticate](installations/08-coding-agent.md#authenticate). A run that fails from the channel and succeeds from a login shell points at the gateway environment: compare `systemctl --user show-environment` with `env` ([04 § 8](installations/04-openclaw.md#8-environment-changes)).
 
 ## Profiles and Pi
 
-Inspect the complete deployment inventory, not only the global `code.profile`:
+Inspect the complete deployment inventory, not only the deployment default:
 
 ```sh
 sudo -H -u {{SERVICE_USER}} /usr/bin/node \
   /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
   /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json \
   /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json
-sudo -i -u {{SERVICE_USER}} -- aligndev guide code --profile <profile>
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'ALIGNDEV_ASSISTANT_HARNESS=openclaw npx -y aligndev guide code --profile <profile>'
 ```
 
-Deployment requires explicit `code.profile`; singleton counts and per-agent `default: true` flags do not replace it. Duplicate true flags for one agent fail even with a named selection. Unknown or obsolete keys warn on stderr and are ignored, without rewriting settings. Retired direct launch fields and `code.defaultProfiles` have no effect; convert them manually, preserving profile names. Recognized invalid fields and deployment safety violations still fail. A registry-selected profile overrides the global selection; an explicit `--profile` overrides both. Run `alignfirst config --json` from the real project to inspect routing. A resume under another account must find the same native conversation there; no automatic migration occurs. Pi also requires its recorded real cwd.
+Deployment requires exactly one enabled `openclaw` profile whose `defaultAgentProfile` names an enabled, provisioned coding profile. Duplicate true flags for one harness fail even with a named selection; disabled profiles do not count. Unknown or obsolete keys warn on stderr and are ignored, without rewriting settings. Retired direct launch fields and `code.defaultProfiles` have no effect; convert them manually, preserving profile names. Recognized invalid fields and deployment safety violations still fail. A registry-selected profile overrides the deployment default; an explicit `--profile` overrides both. Run `npx -y alignfirst config --json` from the real project to inspect routing. A resume under another account must find the same native conversation there; no automatic migration occurs. Pi also requires its recorded real cwd.
 
 For a Pi deployment, check the protected executable and supported system runtime without a model call:
 
@@ -64,7 +64,7 @@ set -eo pipefail
 settings="$HOME/.alignfirst/aligndev.settings.json"
 /usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
   "$settings" "$HOME" "$settings" >/dev/null
-launch=$(jq -ce --arg name '<pi-profile>' '.code.profiles[$name] | select(.agent == "pi")' "$settings")
+launch=$(jq -ce --arg name '<pi-profile>' '.code.profiles[$name] | select(.harness == "pi")' "$settings")
 store=$(/usr/bin/node -e '
   const {resolve, dirname} = require("node:path");
   const value = JSON.parse(process.argv[1]).configDir;
@@ -112,7 +112,7 @@ Setup and pairing: [use-the-apps.md](operations/use-the-apps.md).
 - **The Serve URL times out from a team device** while `tailscale serve status` shows the route: the tailnet policy lacks the TCP 443 grant to the server.
 - **A device connects but gets no answer** (`pairing required`): its request is pending. Approve it with `openclaw devices list` and `openclaw devices approve <request-id>`.
 - **The Control UI reports `origin not allowed`**: the browser loaded it from an origin other than the Serve URL or the tunnel. Use the `https://…ts.net` URL; a different origin needs an entry in `gateway.controlUi.allowedOrigins`, set in `seed/common.sh`.
-- **A conversation does not find its project**: it started on a folder that is not a listed project, or on the agent workspace with a request naming none. The assistant then resolves the request against the project inventory; check the project with `aligndev project list` as under "Project routing".
+- **A conversation does not find its project**: it started on a folder that is not a listed project, or on the agent workspace with a request naming none. The assistant then resolves the request against the project inventory; check the project with `npx -y aligndev project list` as under "Project routing".
 
 ## Incidents
 

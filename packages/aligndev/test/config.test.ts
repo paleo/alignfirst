@@ -6,9 +6,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { main } from "../src/cli.js";
 import { describeNativeStorage } from "../src/code/native-context.js";
 import type { QuotaReader } from "../src/code/quota.js";
+import { resolveAssistantHarness } from "../src/assistant-harness.js";
 import {
   type CodingProfile,
   loadConfig,
+  type ProfileSelection,
+  requirePortRange,
   requireProjectsRoot,
   resolveCodeConfig,
 } from "../src/config.js";
@@ -18,12 +21,18 @@ const homes: string[] = [];
 // biome-ignore lint/suspicious/noTemplateCurlyInString: Exercises literal environment values.
 const LITERAL_ENV = "$HOME/${KEY} `echo x`";
 const PROFILES = {
-  global: { agent: "claude" },
-  project: { agent: "codex" },
-  recorded: { agent: "pi" },
-  explicit: { agent: "claude" },
-  detected: { agent: "codex" },
+  global: { harness: "claude" },
+  project: { harness: "codex" },
+  recorded: { harness: "pi" },
+  explicit: { harness: "claude" },
+  detected: { harness: "codex" },
 } satisfies Record<string, CodingProfile>;
+
+interface ReferenceCase {
+  selection: ProfileSelection;
+  profiles?: Record<string, object>;
+  fallbackProfile?: string;
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -38,7 +47,7 @@ function makeHome(config?: object): string {
 }
 
 function profileConfig(profile: object): object {
-  return { code: { profile: "test", profiles: { test: profile } } };
+  return { code: { fallbackProfile: "test", profiles: { test: profile } } };
 }
 
 function run(home: string, argv: string[], env: NodeJS.ProcessEnv = {}, quotaReader?: QuotaReader) {
@@ -62,12 +71,11 @@ describe("settings shape", () => {
     const config = loadConfig(home, "alignfirst");
     expect(config).toEqual({
       path: join(home, ".alignfirst/aligndev.settings.json"),
-      platform: "codingAgent",
       code: {},
     });
     expect(resolveCodeConfig(config, { CLAUDECODE: "1" })).toMatchObject({
       profile: null,
-      agent: "claude",
+      harness: "claude",
       skipPermissions: false,
       unset: [],
       childEnv: { CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: "0" },
@@ -75,8 +83,8 @@ describe("settings shape", () => {
     expect(config.code).toEqual({});
   });
 
-  it("retains platform and resolves projectsRoot independently", () => {
-    const home = makeHome({ platform: "openclaw", projectsRoot: "~/projects" });
+  it("resolves projectsRoot", () => {
+    const home = makeHome({ projectsRoot: "~/projects" });
     expect(loadConfig(home, "alignfirst").projectsRoot).toEqual({
       path: join(home, "projects"),
       written: "~/projects",
@@ -84,6 +92,25 @@ describe("settings shape", () => {
     writeConfig(home, { projectsRoot: "../work" });
     expect(requireProjectsRoot(loadConfig(home, "alignfirst")).path).toBe(join(home, "work"));
     expect(() => requireProjectsRoot(loadConfig(makeHome(), "alignfirst"))).toThrow(Error);
+  });
+
+  it("reads portRange, a missing one failing only where it is required", () => {
+    const home = makeHome({ portRange: { first: 28000, last: 28599 } });
+    expect(requirePortRange(loadConfig(home, "alignfirst"))).toEqual({ first: 28000, last: 28599 });
+    writeConfig(home, { portRange: { first: 28000, last: 28000 } });
+    expect(loadConfig(home, "alignfirst").portRange).toEqual({ first: 28000, last: 28000 });
+    expect(() => requirePortRange(loadConfig(makeHome({}), "alignfirst"))).toThrow("portRange");
+  });
+
+  it.each([
+    { first: 28600, last: 28000 },
+    { first: 0, last: 100 },
+    { first: 1, last: 65_536 },
+    { first: 1.5, last: 100 },
+    { first: 28000 },
+    [28000, 28599],
+  ])("rejects the invalid portRange %j", (portRange) => {
+    expect(() => loadConfig(makeHome({ portRange }), "alignfirst")).toThrow(Error);
   });
 
   it.each(['{"secret":"private-json-value" trailing}', "private-json-value"])(
@@ -125,52 +152,109 @@ describe("settings shape", () => {
   );
 
   it.each([
-    [{ platform: "other" }, "platform"],
+    [{ platform: "openclaw" }],
+    [{ code: { profile: "x", profiles: { x: { harness: "pi" } } } }],
+    [profileConfig({ harness: "pi", agent: "pi" })],
+  ])(
+    "ignores the retired platform, code.profile and profile agent with a warning %j",
+    (settings) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      loadConfig(makeHome(settings), "alignfirst");
+      expect(warn).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([{}, { agent: "claude" }])("requires a profile harness %j", (profile) => {
+    const home = makeHome(profileConfig(profile));
+    expect(() => loadConfig(home, "alignfirst")).toThrow(Error);
+  });
+
+  it("names the rename when a profile still carries agent", () => {
+    const home = makeHome(profileConfig({ agent: "claude" }));
+    expect(() => loadConfig(home, "alignfirst")).toThrow(/"agent".*"harness"/);
+  });
+
+  it("accepts an openclaw profile with its own keys and warns on unknown ones", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const openclaw = { harness: "openclaw", defaultAgentProfile: "work", disabled: false };
+    const home = makeHome({
+      code: { profiles: { assistant: { ...openclaw, stale: 1 }, work: { harness: "pi" } } },
+    });
+    expect(loadConfig(home, "alignfirst").code.profiles?.assistant).toEqual(openclaw);
+    expect(warn).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { default: true },
+    { configDir: null },
+    { models: [] },
+    { env: {} },
+    { quota: { source: "none" } },
+  ])("rejects coding-agent keys on an openclaw profile %j", (extra) => {
+    const home = makeHome({
+      code: {
+        profiles: { assistant: { harness: "openclaw", defaultAgentProfile: "x", ...extra } },
+      },
+    });
+    expect(() => loadConfig(home, "alignfirst")).toThrow(Error);
+  });
+
+  it.each([
     [{ projectsRoot: null }, "projectsRoot"],
-    [profileConfig({ agent: "pi", configDir: 1 }), "configDir"],
-    [profileConfig({ agent: "pi", quota: { source: "codex", configDir: false } }), "configDir"],
-    [profileConfig({ agent: "pi", quota: { source: "codex", configDir: " " } }), "configDir"],
-    [profileConfig({ agent: "pi", quota: { source: "codex", configDir: "a\0b" } }), "configDir"],
-    [{ code: { profile: "  " } }, "code.profile"],
-    [{ code: { profiles: { " ": { agent: "pi" } } } }, "nonblank"],
-    [profileConfig({ agent: "other" }), "agent"],
-    [profileConfig({ agent: "pi", models: [" "] }), "models"],
-    [profileConfig({ agent: "pi", defaultModel: " " }), "defaultModel"],
-    [profileConfig({ agent: "pi", modelAliases: { " ": "x" } }), "modelAliases"],
-    [profileConfig({ agent: "pi", modelAliases: { x: " " } }), "modelAliases"],
-    [profileConfig({ agent: "pi", env: { "bad-name": "x" } }), "env"],
-    [profileConfig({ agent: "pi", env: { X: 2 } }), "env"],
-    [profileConfig({ agent: "pi", env: { X: "a\0b" } }), "NUL"],
-    [profileConfig({ agent: "pi", unset: [" X"] }), "unset"],
-    [profileConfig({ agent: "pi", env: { X: "x" }, unset: ["X"] }), "overlaps"],
-    [profileConfig({ agent: "pi", configDir: "\0" }), "configDir"],
-    [profileConfig({ agent: "pi", configDir: " " }), "configDir"],
+    [profileConfig({ harness: "pi", configDir: 1 }), "configDir"],
+    [profileConfig({ harness: "pi", quota: { source: "codex", configDir: false } }), "configDir"],
+    [profileConfig({ harness: "pi", quota: { source: "codex", configDir: " " } }), "configDir"],
+    [profileConfig({ harness: "pi", quota: { source: "codex", configDir: "a\0b" } }), "configDir"],
+    [{ code: { fallbackProfile: "  " } }, "code.fallbackProfile"],
+    [{ code: { profiles: { " ": { harness: "pi" } } } }, "nonblank"],
+    [profileConfig({ harness: "other" }), "harness"],
+    [profileConfig({ harness: "pi", defaultAgentProfile: " " }), "defaultAgentProfile"],
+    [profileConfig({ harness: "pi", disabled: "yes" }), "disabled"],
+    [profileConfig({ harness: "pi", disabled: true, configDir: 1 }), "disabled shape"],
     [
-      profileConfig({ agent: "claude", configDir: "x", env: { CLAUDE_CONFIG_DIR: "y" } }),
+      { code: { profiles: { assistant: { harness: "openclaw" } } } },
+      "openclaw defaultAgentProfile",
+    ],
+    [profileConfig({ harness: "pi", models: [" "] }), "models"],
+    [profileConfig({ harness: "pi", defaultModel: " " }), "defaultModel"],
+    [profileConfig({ harness: "pi", modelAliases: { " ": "x" } }), "modelAliases"],
+    [profileConfig({ harness: "pi", modelAliases: { x: " " } }), "modelAliases"],
+    [profileConfig({ harness: "pi", env: { "bad-name": "x" } }), "env"],
+    [profileConfig({ harness: "pi", env: { X: 2 } }), "env"],
+    [profileConfig({ harness: "pi", env: { X: "a\0b" } }), "NUL"],
+    [profileConfig({ harness: "pi", unset: [" X"] }), "unset"],
+    [profileConfig({ harness: "pi", env: { X: "x" }, unset: ["X"] }), "overlaps"],
+    [profileConfig({ harness: "pi", configDir: "\0" }), "configDir"],
+    [profileConfig({ harness: "pi", configDir: " " }), "configDir"],
+    [
+      profileConfig({ harness: "claude", configDir: "x", env: { CLAUDE_CONFIG_DIR: "y" } }),
       "conflicts",
     ],
-    [profileConfig({ agent: "codex", configDir: "x", unset: ["CODEX_HOME"] }), "conflicts"],
+    [profileConfig({ harness: "codex", configDir: "x", unset: ["CODEX_HOME"] }), "conflicts"],
     [
-      profileConfig({ agent: "pi", configDir: "x", env: { PI_CODING_AGENT_DIR: "y" } }),
+      profileConfig({ harness: "pi", configDir: "x", env: { PI_CODING_AGENT_DIR: "y" } }),
       "conflicts",
     ],
-    [profileConfig({ agent: "pi", quota: { source: "pi" } }), "source"],
-    [profileConfig({ agent: "pi", quota: { source: "none", unset: [] } }), "no other options"],
-    [profileConfig({ agent: "pi", quota: { source: "none", env: {} } }), "no other options"],
-    [profileConfig({ agent: "pi", quota: { source: "none", configDir: "x" } }), "no other options"],
+    [profileConfig({ harness: "pi", quota: { source: "pi" } }), "source"],
+    [profileConfig({ harness: "pi", quota: { source: "none", unset: [] } }), "no other options"],
+    [profileConfig({ harness: "pi", quota: { source: "none", env: {} } }), "no other options"],
     [
-      profileConfig({ agent: "pi", quota: { source: "none", configDir: null } }),
+      profileConfig({ harness: "pi", quota: { source: "none", configDir: "x" } }),
+      "no other options",
+    ],
+    [
+      profileConfig({ harness: "pi", quota: { source: "none", configDir: null } }),
       "no other options",
     ],
     [
       profileConfig({
-        agent: "pi",
+        harness: "pi",
         quota: { source: "codex", configDir: "x", unset: ["CODEX_HOME"] },
       }),
       "quota.configDir",
     ],
     [
-      profileConfig({ agent: "pi", quota: { source: "claude", env: { X: "x" }, unset: ["X"] } }),
+      profileConfig({ harness: "pi", quota: { source: "claude", env: { X: "x" }, unset: ["X"] } }),
       "quota.unset",
     ],
   ])("rejects structural settings errors %j (%s)", (settings) => {
@@ -184,19 +268,19 @@ describe("settings shape", () => {
     ["pi", "PI_CODING_AGENT_DIR"],
   ] as const)("rejects null %s directory conflicts in env and unset", (agent, variable) => {
     for (const conflict of [{ env: { [variable]: "private" } }, { unset: [variable] }]) {
-      const home = makeHome(profileConfig({ agent, configDir: null, ...conflict }));
+      const home = makeHome(profileConfig({ harness: agent, configDir: null, ...conflict }));
       expect(() => loadConfig(home, "alignfirst")).toThrow(Error);
       if (agent === "pi") continue;
       writeConfig(
         home,
-        profileConfig({ agent: "pi", quota: { source: agent, configDir: null, ...conflict } }),
+        profileConfig({ harness: "pi", quota: { source: agent, configDir: null, ...conflict } }),
       );
       expect(() => loadConfig(home, "alignfirst")).toThrow(Error);
     }
   });
 
   it.each([null, "true", 1, [], {}])("rejects non-boolean defaults %j", (value) => {
-    const home = makeHome(profileConfig({ agent: "pi", default: value }));
+    const home = makeHome(profileConfig({ harness: "pi", default: value }));
     expect(() => loadConfig(home, "alignfirst")).toThrow(Error);
   });
 
@@ -205,7 +289,7 @@ describe("settings shape", () => {
     const home = makeHome({
       code: {
         defaultProfiles: map,
-        profiles: { a: { agent: "claude" }, b: { agent: "claude" } },
+        profiles: { a: { harness: "claude" }, b: { harness: "claude" } },
       },
     });
     const config = loadConfig(home, "alignfirst");
@@ -240,7 +324,7 @@ describe("settings shape", () => {
         unknownCode: { nested: "private-value" },
         profiles: {
           "sk-secret-profile\n\u001b[31m": {
-            agent: "pi",
+            harness: "pi",
             unknownProfile: ["private-value"],
             env: { CUSTOM: "private-value" },
             modelAliases: { custom: "private-value" },
@@ -254,7 +338,7 @@ describe("settings shape", () => {
     const config = loadConfig(home, "alignfirst");
     const profile = config.code.profiles?.["sk-secret-profile\n\u001b[31m"];
     expect(profile).toEqual({
-      agent: "pi",
+      harness: "pi",
       env: { CUSTOM: "private-value" },
       modelAliases: { custom: "private-value" },
       quota: { source: "none" },
@@ -291,7 +375,7 @@ describe("settings shape", () => {
           stale: true,
           code: {
             defaultProfiles: {},
-            profiles: { broken: { agent: "pi", default: "yes", stale: true } },
+            profiles: { broken: { harness: "pi", default: "yes", stale: true } },
           },
         }),
         "alignfirst",
@@ -302,7 +386,7 @@ describe("settings shape", () => {
   it("normalizes coding and quota directories but preserves literal values and typed quota", () => {
     const home = makeHome(
       profileConfig({
-        agent: "pi",
+        harness: "pi",
         configDir: "~/pi dir",
         env: { LITERAL: LITERAL_ENV },
         quota: {
@@ -327,79 +411,103 @@ describe("settings shape", () => {
   });
 });
 
+describe("assistant's harness", () => {
+  it.each([
+    [{ ALIGNDEV_ASSISTANT_HARNESS: "pi", CLAUDECODE: "1", OPENCLAW_SHELL: "exec" }, "pi"],
+    [{ ALIGNDEV_ASSISTANT_HARNESS: "", CLAUDECODE: "1" }, "claude"],
+    [{ CODEX_THREAD_ID: "t", OPENCLAW_SHELL: "exec" }, "codex"],
+    [{ OPENCLAW_SHELL: "exec" }, "openclaw"],
+    [{ CLAUDECODE: "1", AI_AGENT: "pi", OPENCLAW_SHELL: "exec" }, undefined],
+    [{ OPENCLAW_SHELL: "other" }, undefined],
+    [{}, undefined],
+  ])("resolves %j to %s", (env, harness) => {
+    expect(resolveAssistantHarness(env).harness).toBe(harness);
+  });
+
+  it("rejects an invalid ALIGNDEV_ASSISTANT_HARNESS even before a named selection", () => {
+    const config = loadConfig(makeHome({ code: { profiles: PROFILES } }), "alignfirst");
+    const env = { ALIGNDEV_ASSISTANT_HARNESS: "codingAgent" };
+    expect(() => resolveCodeConfig(config, env, { explicit: "explicit" })).toThrow(Error);
+  });
+});
+
 describe("profile resolution", () => {
   it.each([
     [{ explicit: "explicit", project: { profile: "project" }, recorded: "recorded" }, "explicit"],
     [{ project: { profile: "project" }, recorded: "recorded" }, "project"],
     [{ recorded: "recorded" }, "recorded"],
-    [{ recorded: null }, "global"],
     [{}, "global"],
   ])("uses exact precedence %j", (selection, expected) => {
     const config = loadConfig(
-      makeHome({ code: { profile: "global", profiles: PROFILES } }),
+      makeHome({ code: { fallbackProfile: "global", profiles: PROFILES } }),
       "alignfirst",
     );
-    expect(resolveCodeConfig(config, {}, selection).profile).toBe(expected);
-    expect(resolveCodeConfig(config, { CLAUDECODE: "1", AI_AGENT: "pi" }, selection).profile).toBe(
-      expected,
-    );
+    for (const env of [{}, { CLAUDECODE: "1", AI_AGENT: "pi" }, { OPENCLAW_SHELL: "exec" }])
+      expect(resolveCodeConfig(config, env, selection).profile).toBe(expected);
   });
 
   it.each([
-    ["claude", { CLAUDECODE: "1" }],
-    ["codex", { CODEX_THREAD_ID: "t" }],
-    ["pi", { PI_CODING_AGENT: "true" }],
-    ["pi", { AI_AGENT: "pi" }],
-    ["pi", { PI_CODING_AGENT: "true", AI_AGENT: "pi" }],
-  ])("uses %s built-ins, matching singleton or per-agent preference", (agent, env) => {
-    const home = makeHome();
-    expect(resolveCodeConfig(loadConfig(home, "alignfirst"), env)).toMatchObject({
-      agent,
-      profile: null,
-    });
-    for (const flag of [undefined, false, true]) {
-      writeConfig(home, { code: { profiles: { only: { agent, default: flag } } } });
-      const config = loadConfig(home, "alignfirst");
-      expect(resolveCodeConfig(config, env)).toMatchObject({ agent, profile: "only" });
-      expect(resolveCodeConfig(config, {})).toMatchObject({ agent, profile: "only" });
-      expect(resolveCodeConfig(config, env, { recorded: undefined }).profile).toBe("only");
-      expect(resolveCodeConfig(config, env, { recorded: null }).profile).toBeNull();
-      expect(() => resolveCodeConfig(config, {}, { recorded: null })).toThrow(Error);
-      expect(() => resolveCodeConfig(config, { CLAUDECODE: "1", AI_AGENT: "pi" })).toThrow(Error);
-    }
-    writeConfig(home, {
+    [undefined, undefined, true],
+    [undefined, "/elsewhere", true],
+    [null, undefined, true],
+    [null, "", true],
+    [null, "~/.claude", false],
+    ["~/native", "~/native/", true],
+    ["~/native", "~/other/../native", true],
+    ["~/native", undefined, false],
+    ["~/native", "~/other", false],
+  ])("matches configDir %j against a session variable %j: %s", (configDir, variable, matches) => {
+    const home = makeHome({ code: { profiles: { own: { harness: "claude", configDir } } } });
+    const env = {
+      CLAUDECODE: "1",
+      ...(variable === undefined ? {} : { CLAUDE_CONFIG_DIR: variable.replace("~", home) }),
+    };
+    const code = resolveCodeConfig(loadConfig(home, "alignfirst"), env);
+    expect(code.profile).toBe(matches ? "own" : null);
+    expect(code.harness).toBe("claude");
+  });
+
+  it.each([
+    ["~/elsewhere", "anywhere"],
+    [undefined, "unset"],
+    ["~/work", "work"],
+  ])("prefers an exact configDir match over a default omitted one: %j", (variable, expected) => {
+    const home = makeHome({
       code: {
         profiles: {
-          preferred: { agent, default: true },
-          other: { agent },
+          anywhere: { harness: "claude", default: true },
+          unset: { harness: "claude", configDir: null },
+          work: { harness: "claude", configDir: "~/work" },
         },
       },
     });
-    const config = loadConfig(home, "alignfirst");
-    expect(resolveCodeConfig(config, env).profile).toBe("preferred");
-    expect(resolveCodeConfig(config, env, { recorded: null }).profile).toBeNull();
-    expect(() => resolveCodeConfig(config, {})).toThrow(Error);
+    const env = {
+      CLAUDECODE: "1",
+      ...(variable === undefined ? {} : { CLAUDE_CONFIG_DIR: variable.replace("~", home) }),
+    };
+    expect(resolveCodeConfig(loadConfig(home, "alignfirst"), env).profile).toBe(expected);
   });
 
   it.each([
-    ["claude", { CLAUDECODE: "1" }, "pi"],
-    ["codex", { CODEX_THREAD_ID: "t" }, "claude"],
-    ["pi", { AI_AGENT: "pi" }, "codex"],
-  ])("never overrides detected %s with another agent's singleton", (agent, env, other) => {
-    const config = loadConfig(
-      makeHome({ code: { profiles: { other: { agent: other, default: true } } } }),
-      "alignfirst",
-    );
-    expect(resolveCodeConfig(config, env)).toMatchObject({ agent, profile: null });
+    ["codex", "CODEX_HOME", { CODEX_THREAD_ID: "t" }],
+    ["pi", "PI_CODING_AGENT_DIR", { AI_AGENT: "pi" }],
+  ] as const)("reads the %s session's own directory variable", (harness, variable, marker) => {
+    const home = makeHome({ code: { profiles: { own: { harness, configDir: "~/native" } } } });
+    const config = loadConfig(home, "alignfirst");
+    const env = { ...marker, [variable]: join(home, "native") };
+    expect(resolveCodeConfig(config, env).profile).toBe("own");
+    expect(
+      resolveCodeConfig(config, { ...marker, CLAUDE_CONFIG_DIR: join(home, "native") }).profile,
+    ).toBeNull();
   });
 
-  it.each(["claude", "codex", "pi"])(
-    "rejects same-agent %s ambiguity without leaking values",
-    (agent) => {
+  it.each(["claude", "codex", "pi"] as const)(
+    "breaks a tie between %s candidates only with default: true, without leaking values",
+    (harness) => {
       const marker =
-        agent === "claude"
+        harness === "claude"
           ? { CLAUDECODE: "1" }
-          : agent === "codex"
+          : harness === "codex"
             ? { CODEX_THREAD_ID: "t" }
             : { AI_AGENT: "pi" };
       for (const flag of [undefined, false]) {
@@ -407,8 +515,8 @@ describe("profile resolution", () => {
           makeHome({
             code: {
               profiles: {
-                first: { agent, default: flag, env: { SECRET: "never-print-me" } },
-                second: { agent, default: flag },
+                first: { harness, default: flag, env: { SECRET: "never-print-me" } },
+                second: { harness, default: flag },
               },
             },
           }),
@@ -416,10 +524,167 @@ describe("profile resolution", () => {
         );
         expect(() => resolveCodeConfig(config, marker)).toThrow(Error);
         expect(() => resolveCodeConfig(config, marker)).not.toThrow(/never-print-me/);
-        expect(resolveCodeConfig(config, marker, { recorded: null }).profile).toBeNull();
+        expect(resolveCodeConfig(config, marker, { explicit: "second" }).profile).toBe("second");
       }
+      const config = loadConfig(
+        makeHome({
+          code: { profiles: { first: { harness }, second: { harness, default: true } } },
+        }),
+        "alignfirst",
+      );
+      expect(resolveCodeConfig(config, marker).profile).toBe("second");
     },
   );
+
+  it("follows the assistant profile's defaultAgentProfile once", () => {
+    const config = loadConfig(
+      makeHome({
+        code: {
+          profiles: {
+            assistant: { harness: "claude", defaultAgentProfile: "worker" },
+            worker: { harness: "codex", defaultAgentProfile: "other" },
+            other: { harness: "pi" },
+          },
+        },
+      }),
+      "alignfirst",
+    );
+    expect(resolveCodeConfig(config, { CLAUDECODE: "1" })).toMatchObject({
+      profile: "worker",
+      harness: "codex",
+    });
+  });
+
+  it.each([
+    [{ CLAUDECODE: "1" }, "claude"],
+    [{ CODEX_THREAD_ID: "t" }, "codex"],
+    [{ ALIGNDEV_ASSISTANT_HARNESS: "pi" }, "pi"],
+  ])(
+    "uses the built-ins of %j without an assistant's profile, ignoring the fallback",
+    (env, harness) => {
+      const config = loadConfig(
+        makeHome({
+          code: {
+            fallbackProfile: "fallback",
+            profiles: { fallback: { harness: harness === "claude" ? "codex" : "claude" } },
+          },
+        }),
+        "alignfirst",
+      );
+      expect(resolveCodeConfig(config, env)).toMatchObject({ profile: null, harness });
+    },
+  );
+
+  it("delegates an openclaw session to its openclaw profile, else to the fallback", () => {
+    const home = makeHome({
+      code: {
+        fallbackProfile: "fallback",
+        profiles: {
+          assistant: { harness: "openclaw", defaultAgentProfile: "service" },
+          service: { harness: "pi" },
+          fallback: { harness: "claude" },
+        },
+      },
+    });
+    const env = { OPENCLAW_SHELL: "exec" };
+    expect(resolveCodeConfig(loadConfig(home, "alignfirst"), env).profile).toBe("service");
+    const config = loadConfig(home, "alignfirst");
+    const disabled = config.code.profiles?.assistant;
+    if (disabled === undefined) throw new Error("missing fixture profile");
+    disabled.disabled = true;
+    expect(resolveCodeConfig(config, env).profile).toBe("fallback");
+  });
+
+  it.each([{ OPENCLAW_SHELL: "exec" }, {}, { CLAUDECODE: "1", AI_AGENT: "pi" }])(
+    "requires code.fallbackProfile or --profile without a recognized assistant's profile %j",
+    (env) => {
+      const home = makeHome({ code: { profiles: {} } });
+      expect(() => resolveCodeConfig(loadConfig(home, "alignfirst"), env)).toThrow(Error);
+      writeConfig(home, { code: { profiles: { only: { harness: "pi" } } } });
+      expect(() => resolveCodeConfig(loadConfig(home, "alignfirst"), env)).toThrow(
+        '"fallbackProfile": "only"',
+      );
+      writeConfig(home, {
+        code: { profiles: { first: { harness: "pi" }, second: { harness: "claude" } } },
+      });
+      expect(() => resolveCodeConfig(loadConfig(home, "alignfirst"), env)).toThrow(
+        /"first", "second"/,
+      );
+    },
+  );
+
+  it.each<[string, (target: string) => ReferenceCase]>([
+    ["--profile", (target) => ({ selection: { explicit: target } })],
+    ["project", (target) => ({ selection: { project: { profile: target } } })],
+    ["recorded", (target) => ({ selection: { recorded: target } })],
+    [
+      "defaultAgentProfile",
+      (target) => ({
+        selection: { explicit: "ok" },
+        profiles: { referrer: { harness: "pi", defaultAgentProfile: target } },
+      }),
+    ],
+    ["fallbackProfile", (target) => ({ selection: { explicit: "ok" }, fallbackProfile: target })],
+  ])("fails a %s reference to a missing, disabled or openclaw profile", (_origin, build) => {
+    const messages = new Set<string>();
+    for (const target of ["missing", "off", "assistant"]) {
+      const { selection, profiles, fallbackProfile } = build(target);
+      const config = loadConfig(
+        makeHome({
+          code: {
+            fallbackProfile,
+            profiles: {
+              ok: { harness: "claude" },
+              off: { harness: "claude", disabled: true },
+              assistant: { harness: "openclaw", defaultAgentProfile: "ok" },
+              ...profiles,
+            },
+          },
+        }),
+        "alignfirst",
+      );
+      try {
+        resolveCodeConfig(config, {}, selection);
+        expect.fail(`expected ${target} to fail`);
+      } catch (error) {
+        messages.add(String(error));
+      }
+    }
+    expect(messages.size).toBe(3);
+  });
+
+  it("checks neither references nor duplicates inside disabled profiles", () => {
+    const config = loadConfig(
+      makeHome({
+        code: {
+          profiles: {
+            ok: { harness: "claude", default: true },
+            off: { harness: "claude", default: true, disabled: true, defaultAgentProfile: "gone" },
+            assistant: { harness: "openclaw", defaultAgentProfile: "ok" },
+            retired: { harness: "openclaw", defaultAgentProfile: "gone", disabled: true },
+          },
+        },
+      }),
+      "alignfirst",
+    );
+    expect(resolveCodeConfig(config, { CLAUDECODE: "1" }).profile).toBe("ok");
+  });
+
+  it("rejects two enabled openclaw profiles even with a named selection", () => {
+    const config = loadConfig(
+      makeHome({
+        code: {
+          profiles: {
+            ok: { harness: "claude" },
+            first: { harness: "openclaw", defaultAgentProfile: "ok" },
+            second: { harness: "openclaw", defaultAgentProfile: "ok" },
+          },
+        },
+      }),
+      "alignfirst",
+    );
+    expect(() => resolveCodeConfig(config, {}, { explicit: "ok" })).toThrow(Error);
+  });
 
   it.each([{ explicit: "first" }, { project: { profile: "first" } }, { recorded: "first" }, {}])(
     "rejects duplicate defaults even with named selection %j",
@@ -427,10 +692,10 @@ describe("profile resolution", () => {
       const config = loadConfig(
         makeHome({
           code: {
-            profile: "first",
+            fallbackProfile: "first",
             profiles: {
-              first: { agent: "pi", default: true },
-              second: { agent: "pi", default: true },
+              first: { harness: "pi", default: true },
+              second: { harness: "pi", default: true },
             },
           },
         }),
@@ -444,9 +709,9 @@ describe("profile resolution", () => {
     const home = makeHome({
       code: {
         profiles: {
-          claude: { agent: "claude", default: true, defaultModel: "opus" },
-          codex: { agent: "codex", default: true, defaultModel: "sol" },
-          pi: { agent: "pi", default: true, defaultModel: "openai/sol" },
+          claude: { harness: "claude", default: true, defaultModel: "opus" },
+          codex: { harness: "codex", default: true, defaultModel: "sol" },
+          pi: { harness: "pi", default: true, defaultModel: "openai/sol" },
         },
       },
     });
@@ -456,9 +721,26 @@ describe("profile resolution", () => {
     expect(resolveCodeConfig(config, { AI_AGENT: "pi" }).defaultModel).toBe("openai/sol");
   });
 
-  it("detects only when needed and never falls through selected errors", () => {
+  it("resumes a historical null profile on the built-ins of a coding harness only", () => {
     const config = loadConfig(
-      makeHome({ code: { profile: "global", profiles: PROFILES } }),
+      makeHome({ code: { fallbackProfile: "global", profiles: PROFILES } }),
+      "alignfirst",
+    );
+    const historical = { recorded: null };
+    expect(resolveCodeConfig(config, { AI_AGENT: "pi" }, historical)).toMatchObject({
+      profile: null,
+      harness: "pi",
+    });
+    for (const env of [{}, { OPENCLAW_SHELL: "exec" }, { CLAUDECODE: "1", AI_AGENT: "pi" }])
+      expect(() => resolveCodeConfig(config, env, historical)).toThrow(Error);
+    expect(resolveCodeConfig(config, {}, { ...historical, explicit: "explicit" }).profile).toBe(
+      "explicit",
+    );
+  });
+
+  it("never falls through a named selection error", () => {
+    const config = loadConfig(
+      makeHome({ code: { fallbackProfile: "global", profiles: PROFILES } }),
       "alignfirst",
     );
     for (const selection of [
@@ -472,68 +754,28 @@ describe("profile resolution", () => {
     expect(
       resolveCodeConfig(config, {}, { explicit: "explicit", recorded: "deleted" }).profile,
     ).toBe("explicit");
-    const absent = loadConfig(makeHome(), "alignfirst");
-    expect(() => resolveCodeConfig(absent, {})).toThrow(Error);
-    expect(() => resolveCodeConfig(absent, { CLAUDECODE: "1", AI_AGENT: "pi" })).toThrow(Error);
-  });
-
-  it("validates global references at resolution even with valid explicit selection", () => {
-    const config = loadConfig(
-      makeHome({ code: { profile: "missing", profiles: PROFILES } }),
-      "alignfirst",
-    );
-    expect(() => resolveCodeConfig(config, { CLAUDECODE: "1" })).toThrow(Error);
-    expect(() => resolveCodeConfig(config, {}, { explicit: "explicit" })).toThrow(Error);
-  });
-
-  it.each([
-    {},
-    { CLAUDECODE: "1", AI_AGENT: "pi" },
-    { CODEX_THREAD_ID: "t", PI_CODING_AGENT: "true" },
-  ])("requires names rather than agent-kind defaults for absent/multiple detection %j", (env) => {
-    const home = makeHome({
-      code: {
-        profiles: {
-          claude: { agent: "claude", default: true, env: { SECRET: "never-print-me" } },
-          codex: { agent: "codex", default: true },
-          pi: { agent: "pi", default: true },
-        },
-      },
-    });
-    const config = loadConfig(home, "alignfirst");
-    expect(() => resolveCodeConfig(config, env)).toThrow(Error);
-    expect(() => resolveCodeConfig(config, env)).not.toThrow(/never-print-me/);
-    expect(() => resolveCodeConfig(config, env, { recorded: null })).toThrow(Error);
-    for (const selection of [
-      { explicit: "pi" },
-      { project: { profile: "codex" } },
-      { recorded: "claude" },
-    ])
-      expect(resolveCodeConfig(config, env, selection).profile).not.toBeNull();
-    writeConfig(home, { code: { ...config.code, profile: "pi" } });
-    expect(resolveCodeConfig(loadConfig(home, "alignfirst"), env).profile).toBe("pi");
   });
 
   it("uses own properties for arbitrary profile and alias names", () => {
     const home = makeHome(
       JSON.parse(
-        '{"code":{"profile":"__proto__","profiles":{"__proto__":{"agent":"pi","modelAliases":{"constructor":"openai/sol"}}}}}',
+        '{"code":{"fallbackProfile":"__proto__","profiles":{"__proto__":{"harness":"pi","modelAliases":{"constructor":"openai/sol"}}}}}',
       ),
     );
     expect(resolveCodeConfig(loadConfig(home, "alignfirst"), {}).profile).toBe("__proto__");
-    writeConfig(home, { code: { profile: "constructor", profiles: {} } });
+    writeConfig(home, { code: { fallbackProfile: "constructor", profiles: {} } });
     expect(() => resolveCodeConfig(loadConfig(home, "alignfirst"), {})).toThrow(Error);
   });
 
   it("validates defaults with the same accepted-name policy, without alias recursion", () => {
     const home = makeHome(
-      profileConfig({ agent: "codex", defaultModel: "fast", modelAliases: { fast: "sol" } }),
+      profileConfig({ harness: "codex", defaultModel: "fast", modelAliases: { fast: "sol" } }),
     );
     expect(resolveCodeConfig(loadConfig(home, "alignfirst"), {}).defaultModel).toBe("fast");
     writeConfig(
       home,
       profileConfig({
-        agent: "codex",
+        harness: "codex",
         defaultModel: "sol",
         models: ["fast"],
         modelAliases: { fast: "sol" },
@@ -542,7 +784,7 @@ describe("profile resolution", () => {
     expect(() => resolveCodeConfig(loadConfig(home, "alignfirst"), {})).toThrow(Error);
     writeConfig(
       home,
-      profileConfig({ agent: "pi", defaultModel: " provider/model:high ", models: [] }),
+      profileConfig({ harness: "pi", defaultModel: " provider/model:high ", models: [] }),
     );
     expect(resolveCodeConfig(loadConfig(home, "alignfirst"), {}).defaultModel).toBe(
       " provider/model:high ",
@@ -570,12 +812,13 @@ describe("profile resolution", () => {
       for (const configDir of [undefined, null, `~/${directory}`]) {
         writeConfig(
           home,
-          profileConfig({ agent, configDir, unset: ["TOKEN"], env: { KEEP: "yes" } }),
+          profileConfig({ harness: agent, configDir, unset: ["TOKEN"], env: { KEEP: "yes" } }),
         );
         const path = join(home, ".alignfirst/aligndev.settings.json");
         const bytes = readFileSync(path);
         const config = loadConfig(home, "alignfirst");
         const stored = config.code.profiles?.test;
+        if (stored?.harness === "openclaw") throw new Error("expected a coding-agent profile");
         Object.freeze(stored?.unset);
         Object.freeze(stored?.env);
         Object.freeze(stored);
@@ -615,9 +858,9 @@ describe("profile resolution", () => {
       code: {
         profile: "global",
         profiles: {
-          global: { agent: "codex", env: { OTHER: "no" }, skipPermissions: true },
+          global: { harness: "codex", env: { OTHER: "no" }, skipPermissions: true },
           selected: {
-            agent: "claude",
+            harness: "claude",
             configDir: "../native",
             unset: ["TOKEN"],
             env: {
@@ -653,43 +896,41 @@ describe("profile resolution", () => {
 });
 
 describe("command boundaries outside Git", () => {
-  it.each([false, true])(
-    "shares automatic singleton/preferred selection across commands: %s",
-    async (multiple) => {
-      const home = makeHome({
-        code: {
-          profiles: {
-            inferred: {
-              agent: "claude",
-              default: multiple,
-              configDir: "~/native",
-              defaultModel: "opus",
-            },
-            ...(multiple ? { other: { agent: "claude" } } : {}),
+  it.each([false, true])("shares the assistant's profile across commands: %s", async (multiple) => {
+    const home = makeHome({
+      code: {
+        profiles: {
+          inferred: {
+            harness: "claude",
+            default: multiple,
+            configDir: "~/native",
+            defaultModel: "opus",
           },
+          ...(multiple ? { other: { harness: "claude" } } : {}),
         },
+      },
+    });
+    for (const args of [
+      ["code", "--help"],
+      ["guide", "code"],
+      ["code", "quota"],
+    ]) {
+      let calls = 0;
+      const env = { CLAUDECODE: "1", CLAUDE_CONFIG_DIR: join(home, "native") };
+      const result = await run(home, args, env, async (source, options) => {
+        ++calls;
+        expect(source).toBe("claude");
+        expect(options.env.CLAUDE_CONFIG_DIR).toBe(join(home, "native"));
+        return "synthetic limits";
       });
-      for (const args of [
-        ["code", "--help"],
-        ["guide", "code"],
-        ["code", "quota"],
-      ]) {
-        let calls = 0;
-        const result = await run(home, args, { CLAUDECODE: "1" }, async (source, options) => {
-          ++calls;
-          expect(source).toBe("claude");
-          expect(options.env.CLAUDE_CONFIG_DIR).toBe(join(home, "native"));
-          return "synthetic limits";
-        });
-        expect(result.code, result.stderr).toBe(0);
-        expect(result.stdout).toContain("inferred");
-        expect(result.stdout).toContain("claude");
-        expect(calls).toBe(args.includes("quota") ? 1 : 0);
-      }
-      expect(existsSync(join(home, ".plans"))).toBe(false);
-      expect(existsSync(join(home, ".git"))).toBe(false);
-    },
-  );
+      expect(result.code, result.stderr).toBe(0);
+      expect(result.stdout).toContain("inferred");
+      expect(result.stdout).toContain("claude");
+      expect(calls).toBe(args.includes("quota") ? 1 : 0);
+    }
+    expect(existsSync(join(home, ".plans"))).toBe(false);
+    expect(existsSync(join(home, ".git"))).toBe(false);
+  });
 
   it.each([
     ["code", "--help"],
@@ -711,15 +952,14 @@ describe("command boundaries outside Git", () => {
     "rejects --profile on unrelated commands %j",
     async (...args) => {
       const home = makeHome({
-        platform: "openclaw",
         projectsRoot: "~/projects",
-        code: { profile: "x", profiles: { x: { agent: "pi" } } },
+        code: { fallbackProfile: "x", profiles: { x: { harness: "pi" } } },
       });
       mkdirSync(join(home, "projects"));
-      writeFileSync(join(home, "projects", ".alignfirst-projects.json"), "{}");
-      const baseline = await run(home, args);
+      const env = { ALIGNDEV_ASSISTANT_HARNESS: "openclaw" };
+      const baseline = await run(home, args, env);
       expect(baseline.code, baseline.stderr).toBe(0);
-      const result = await run(home, [...args, "--profile", "x"]);
+      const result = await run(home, [...args, "--profile", "x"], env);
       expect(result.code).toBe(1);
     },
   );
@@ -739,5 +979,19 @@ describe("command boundaries outside Git", () => {
     ]) {
       expect((await run(home, args)).code).toBe(1);
     }
+  });
+
+  it("resolves the assistant's harness only for guide and profile-selecting code commands", async () => {
+    const home = makeHome({ code: { fallbackProfile: "x", profiles: { x: { harness: "pi" } } } });
+    const env = { ALIGNDEV_ASSISTANT_HARNESS: "unknown" };
+    for (const args of [
+      ["--help"],
+      ["--version"],
+      ["code", "status", "--help"],
+      ["project", "--help"],
+    ])
+      expect((await run(home, args, env)).code).toBe(0);
+    for (const args of [["code", "--help"], ["code", "quota"], ["guide"], ["guide", "code"]])
+      expect((await run(home, args, env)).code).toBe(1);
   });
 });

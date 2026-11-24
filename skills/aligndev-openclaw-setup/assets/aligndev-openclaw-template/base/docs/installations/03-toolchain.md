@@ -103,9 +103,10 @@ The `environment.d` bridge stays before `init.bash`; the runtime initialization 
 The protected CLIs live in `~/.npm-system-global/`, but no `.npmrc` selects that prefix. `admin-npm` fixes both the system interpreter and the destination. Install current stable CLIs and inspect their declared runtime compatibility. The update runbook records the installed versions.
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm install -g \
-  openclaw alignfirst aligndev ctx7
+sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm install -g openclaw ctx7
 ```
+
+`alignfirst` and `aligndev` stay outside the prefix: every command runs them through `npx -y` ([configuration.md](../configuration.md#alignfirst-clis-through-npx)).
 
 Install the selected coding agent under the same prefix: [08-coding-agent.md § Install](08-coding-agent.md#install). Complete every protected-prefix install, including any optional quota CLI, before locking the prefix. For Pi, restore root ownership and `go-w`, lock the prefix anchor, then run `/opt/{{SERVICE_USER}}/libexec/install-pi-launcher.sh` as shown in `08`. Regeneration must follow hardening, not run inside the writable package window. The seed in `04` requires the protected launcher.
 
@@ -114,8 +115,8 @@ The root-owned deployment helpers support maintenance and backup; the seed snaps
 Verify:
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'which node npm openclaw alignfirst aligndev ctx7'
-# Expected: node and npm under $FNM_MULTISHELL_PATH/bin; openclaw under /opt/{{SERVICE_USER}}/bin; the rest under /home/{{SERVICE_USER}}/.npm-system-global/bin
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'which node npm npx openclaw ctx7'
+# Expected: node, npm and npx under $FNM_MULTISHELL_PATH/bin; openclaw under /opt/{{SERVICE_USER}}/bin; ctx7 under /home/{{SERVICE_USER}}/.npm-system-global/bin
 sudo -H -u {{SERVICE_USER}} bash -lc '
 PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell \
 DEFAULT_NODE="$(fnm default)" \
@@ -170,4 +171,4 @@ sudo -i -u {{SERVICE_USER}} -- podman info --format '{{.Host.Security.Rootless}}
 # Expected: true
 ```
 
-`aligndev project` needs the aligndev settings and the projects marker, both installed in `04`. Continue with [05-openclaw-dependencies.md](05-openclaw-dependencies.md).
+`aligndev project` needs the aligndev settings, installed in `04`. Continue with [05-openclaw-dependencies.md](05-openclaw-dependencies.md).

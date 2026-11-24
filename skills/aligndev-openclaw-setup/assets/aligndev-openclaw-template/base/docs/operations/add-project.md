@@ -11,7 +11,7 @@ read_when:
 clone uses the service account's git access from `03`. Before onboarding Pi, agree on a dedicated parent containing the clone and all future worktrees. Verify the workspace's actual layout against it. If the direct-child inventory layout prevents that boundary, arrange a compatible layout and discovery policy with the operator before cloning; do not silently trust all `~/projects`.
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev guide project'
+sudo -H -u {{SERVICE_USER}} bash -lc 'ALIGNDEV_ASSISTANT_HARNESS=openclaw npx -y aligndev guide project'
 ```
 
 ## Clone and prepare
@@ -22,7 +22,7 @@ sudo -H -u {{SERVICE_USER}} bash -lc 'git -C ~/projects clone <repository-url>'
 
 Prepare the clone by following `npx -y alignfirst setup guide assistant-project`.
 The preparation writes the bootstrap section and `alignfirst.json` or `alignfirst.jsonc`, and configures docmap, workspace, and
-an explicitly referenced assistant guide (commonly `DEVELOPERS.md`). Read it with `alignfirst assistant-instructions`; use `locations.assistantInstructionsFile` from the config report for edits. It installs no AlignFirst skill.
+an explicitly referenced assistant guide (commonly `DEVELOPERS.md`). Read it with `npx -y alignfirst assistant-instructions`; use `locations.assistantInstructionsFile` from the config report for edits. It installs no AlignFirst skill.
 
 <!-- TEAM_PLANS_SECTION -->
 ## Work-files repository
@@ -43,7 +43,7 @@ From the new project root, link the work-files folder configured in the selected
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc '
 cd ~/projects/<repo>
-alignfirst plans setup ~/projects/{{PLANS_CLONE_NAME}}
+npx -y alignfirst plans setup ~/projects/{{PLANS_CLONE_NAME}}
 '
 ```
 
@@ -52,7 +52,7 @@ Without a usable link, `workspace setup` aborts on `alignfirst plans check`.
 
 ## Select a provisioned profile
 
-The deployment default is `code.profile`. To route this project elsewhere, edit the service account's `~/.alignfirst/companions/registry.json`, preserving existing entries, `dir` and `items`. A profile-only entry is valid:
+The deployment default is the `openclaw` profile's `defaultAgentProfile`. To route this project elsewhere, edit the service account's `~/.alignfirst/companions/registry.json`, preserving existing entries, `dir` and `items`. A profile-only entry is valid:
 
 ```json
 {
@@ -65,7 +65,7 @@ The deployment default is `code.profile`. To route this project elsewhere, edit 
 Use the real main-worktree path, not a linked worktree. A selection alone creates no companion and relocates no work files. The registry stays service-writable; it can choose any provisioned account. Both the registry and AlignDev settings are service-writable routing, not account authorization.
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && alignfirst config --json && aligndev guide code'
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npx -y alignfirst config --json && ALIGNDEV_ASSISTANT_HARNESS=openclaw npx -y aligndev guide code'
 ```
 
 Confirm the effective profile, native directory and model without printing credentials. An explicit `--profile` overrides the registry. Changing a profile on resume must retain the native agent/session and selected account's conversation; it never copies sessions or silently starts another. Pi also requires the recorded real cwd.
@@ -81,7 +81,7 @@ set -eo pipefail
 settings="$HOME/.alignfirst/aligndev.settings.json"
 /usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
   "$settings" "$HOME" "$settings" >/dev/null
-launch=$(jq -ce --arg name "$1" '.code.profiles[$name] | select(.agent == "pi")' "$settings")
+launch=$(jq -ce --arg name "$1" '.code.profiles[$name] | select(.harness == "pi")' "$settings")
 store=$(/usr/bin/node -e '
   const {resolve, dirname} = require("node:path");
   const value = JSON.parse(process.argv[1]).configDir;
@@ -109,18 +109,18 @@ A portless project needs no claim. For a dev-server with ports, calculate
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc '
-aligndev project free-ports --size <size>
+npx -y aligndev project free-ports --size <size>
 '
 ```
 
-When the projects directory declares several ranges, inspect `aligndev guide project` and pass `--range <code>` for the project kind. This is a lookup, not a reservation. Record first/last only in the selected merged configuration's `devServer.ports`, whether project- or companion-owned.
+The command returns the lowest free block inside the settings' `portRange`. This is a lookup, not a reservation. Record first/last only in the selected merged configuration's `devServer.ports`, whether project- or companion-owned.
 
 ## Check the inventory
 
 After writing the merged configuration, prepare usable effective plans and selected runtime storage. Only project-local runtime requires ignored, untracked `.local-wt/`; companion runtime creates no checkout directory or link. Before workspace setup, run the read-only inventory gate:
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project doctor'
+sudo -H -u {{SERVICE_USER}} bash -lc 'npx -y aligndev project doctor'
 ```
 
 Stop when it reports an error. Resolve every configuration, discovery, and port conflict first.
@@ -128,7 +128,7 @@ Stop when it reports an error. Resolve every configuration, discovery, and port 
 ## Set up the workspace
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && alignfirst workspace setup'
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npx -y alignfirst workspace setup'
 ```
 
 <!-- DEV_SERVER_GATEWAY_SECTION -->
@@ -141,10 +141,10 @@ run-file patches read `REMOTE_DEV_DOMAIN` from `environment.d/common.conf`.
 Bring the dev server up, probe the URL it prints, bring it down, then inspect the discovered project:
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && alignfirst dev up'
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npx -y alignfirst dev up'
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:<port>/
-sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && alignfirst dev down'
-sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project status ~/projects/<repo>'
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npx -y alignfirst dev down'
+sudo -H -u {{SERVICE_USER}} bash -lc 'npx -y aligndev project status ~/projects/<repo>'
 ```
 
 ## Remove
@@ -153,7 +153,7 @@ Remove every linked workspace through the project's workspace command, then dele
 next listing no longer shows it:
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && alignfirst workspace remove <workspace>'
+sudo -H -u {{SERVICE_USER}} bash -lc 'cd ~/projects/<repo> && npx -y alignfirst workspace remove <workspace>'
 sudo -H -u {{SERVICE_USER}} bash -lc 'rm -rf ~/projects/<repo>'
-sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project list'
+sudo -H -u {{SERVICE_USER}} bash -lc 'npx -y aligndev project list'
 ```
