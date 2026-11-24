@@ -18,20 +18,21 @@ const TICKET_DETECTION_PLACEHOLDER = "{{TICKET_DETECTION}}";
 const PLANS_STATE_PLACEHOLDER = "{{PLANS_STATE}}";
 const COMMIT_RULE_PLACEHOLDER = "{{COMMIT_RULE}}";
 const BASE_BRANCH_RULE_PLACEHOLDER = "{{BASE_BRANCH_RULE}}";
-const PERSPECTIVES = ["intent", "correctness", "safety", "quality"] as const;
+const LIGHT_REVIEWER = "light";
+const REVIEWERS = ["intent", "correctness", "safety", "quality", LIGHT_REVIEWER] as const;
 const MODULES = ["typescript-strict", "javascript", "python"] as const;
 const PROTOCOL_LIST = `${PROTOCOLS.join(", ")}, or overview`;
-const PERSPECTIVE_LIST = PERSPECTIVES.join(", ");
+const REVIEWER_LIST = REVIEWERS.join(", ");
 const MODULE_LIST = MODULES.join(", ");
 
 interface GuideOptions {
   protocol?: Protocol | "overview";
   protocolOnly: boolean;
-  reviewer?: Perspective;
+  reviewer?: Reviewer;
   modules: ReviewModule[];
 }
 
-type Perspective = (typeof PERSPECTIVES)[number];
+type Reviewer = (typeof REVIEWERS)[number];
 type ReviewModule = (typeof MODULES)[number];
 
 interface GuidePlaceholders {
@@ -55,7 +56,7 @@ function renderUsage(ctx: CommandContext): string {
   return `Usage:
   ${ctx.form} guide [<protocol>] [--protocol-only]
   ${ctx.form} guide overview
-  ${ctx.form} guide review --reviewer <perspective> [--module <module>]...
+  ${ctx.form} guide review --reviewer <reviewer> [--module <module>]...
 `;
 }
 
@@ -83,7 +84,7 @@ function parseGuideArgs(
   }
   if (positionals.length > 1) throw new CliError(`Expected at most one protocol.\n\n${usage}`);
   const protocol = parseProtocol(positionals[0]);
-  const reviewer = parsePerspective(values.reviewer);
+  const reviewer = parseReviewer(values.reviewer);
   const modules = (values.module ?? []).map(parseModule);
   validateOptions(protocol, values["protocol-only"], reviewer, modules);
   return { protocol, protocolOnly: values["protocol-only"], reviewer, modules };
@@ -97,12 +98,12 @@ function parseProtocol(value: string | undefined): Protocol | "overview" | undef
   return protocol;
 }
 
-function parsePerspective(value: string | undefined): Perspective | undefined {
+function parseReviewer(value: string | undefined): Reviewer | undefined {
   if (value === undefined) return;
-  const perspective = PERSPECTIVES.find((candidate) => candidate === value);
-  if (perspective === undefined)
-    throw new CliError(`Unknown reviewer "${value}". Reviewers: ${PERSPECTIVE_LIST}.`);
-  return perspective;
+  const reviewer = REVIEWERS.find((candidate) => candidate === value);
+  if (reviewer === undefined)
+    throw new CliError(`Unknown reviewer "${value}". Reviewers: ${REVIEWER_LIST}.`);
+  return reviewer;
 }
 
 function parseModule(value: string): ReviewModule {
@@ -115,7 +116,7 @@ function parseModule(value: string): ReviewModule {
 function validateOptions(
   protocol: GuideOptions["protocol"],
   protocolOnly: boolean,
-  reviewer: Perspective | undefined,
+  reviewer: Reviewer | undefined,
   modules: ReviewModule[],
 ): void {
   if (protocolOnly && protocol === undefined)
@@ -126,6 +127,8 @@ function validateOptions(
     throw new CliError("--reviewer can only be used with review.");
   if (modules.length > 0 && reviewer === undefined)
     throw new CliError("--module requires --reviewer.");
+  if (modules.length > 0 && reviewer === LIGHT_REVIEWER)
+    throw new CliError("--module cannot be used with the light reviewer.");
 }
 
 function renderGuide(ctx: CommandContext, options: GuideOptions): string {
@@ -146,10 +149,11 @@ function renderGuide(ctx: CommandContext, options: GuideOptions): string {
   ].join("\n\n");
 }
 
-function renderReviewerGuide(perspective: Perspective, modules: ReviewModule[]): string {
+function renderReviewerGuide(reviewer: Reviewer, modules: ReviewModule[]): string {
+  if (reviewer === LIGHT_REVIEWER) return readGuideTemplate("code-review/light-reviewer.md");
   const templates = [
     readGuideTemplate("code-review/reviewer-common.md"),
-    readGuideTemplate(`code-review/${perspective}-reviewer.md`),
+    readGuideTemplate(`code-review/${reviewer}-reviewer.md`),
     ...modules.map((module) => readGuideTemplate(`code-review/module-${module}.md`)),
   ];
   return templates.map((template) => template.trimEnd()).join("\n\n");

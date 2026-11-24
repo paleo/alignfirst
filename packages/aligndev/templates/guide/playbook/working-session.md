@@ -587,7 +587,7 @@ _Note: Before every code review, always start by updating both the base branch a
 
 A code review is the review workflow from the delegation guide: a fresh agent session (`review` protocol) writes a review file, then an optional fix step runs in a second fresh session, never in the review session. What to do with the review file depends on the case:
 
-- **Wrapping up your own work** — "Reviewing your own work" below decides whether the review runs. When it does, run the review and fix steps automatically: decide the fixes with the agent in the AAD discussion, then recheck when the delegation guide calls for it. This review stays internal: the fix step consumes it, nothing is posted anywhere; your report just mentions that the review-and-fix ran and names the last commit it covered.
+- **Wrapping up your own work** — "Reviewing your own work" below decides whether the review runs. When it does, run the review and fix steps automatically: decide the fixes with the agent in the AAD discussion, then recheck when the delegation guide calls for it. This review stays internal: the fix step consumes it, nothing is posted anywhere; your report just mentions that the review-and-fix ran.
 - **The user asks to review a PR/MR** (e.g. a teammate's branch) — follow the PR/MR review sequence below.
 - **The user asks to review a branch or workspace** — check for an open PR/MR on that branch first; if one exists, follow the PR/MR review sequence. Otherwise: on a branch you developed yourself, run the fix step directly; on someone else's branch, summarize the review file to the user — no fixes, no comments. Take the TICKET_ID from the branch name; ask the user when it carries none.
 
@@ -603,13 +603,14 @@ The fix step is also how you process a review that arrives from outside — a te
 
 ### Reviewing your own work
 
-A review the user asked for runs in full. One you start yourself costs several agent runs, so its depth follows the unreviewed change: the commits added since the branch's last review, or the whole branch against its base when it was never reviewed. Measure it with `git diff --shortstat <reviewed commit or base branch>...HEAD`.
+A review the user asked for always runs, on the whole branch, in the form they name if any. One you start yourself costs several agent runs, so it follows the unreviewed change: the commits added since the branch's last review, or the whole branch against its base when it was never reviewed. The ticket's latest review file names the reviewed commit, on its `Reviewed commit` line. Measure the change with `git diff --shortstat <reviewed commit or base branch>...HEAD`.
 
 - **Small and low-risk** — skip the review, and give the reason in your report. Small is roughly under 50 changed lines, generated files and lockfiles aside. Low-risk is wording, documentation, styling, a configuration value, or an isolated fix that a test covers.
-- **Larger, and you can resume the branch's review session** — have that session review the new commits, as the delegation guide describes. It already knows the branch.
-- **Anything else** — run the review workflow.
+- **Anything else** — run the review workflow. Its scope and its form go in the message, as the delegation guide describes:
+  - **Scope** — on a reviewed branch, pass the reviewed commit as the starting commit. Have the whole branch reviewed instead when the new commits rework what was reviewed, or dwarf it.
+  - **Form** — the agent chooses by default: the light review for a minor change, the regular one otherwise. Name the form when you know more than the diff shows: `Regular review.` for a small change where a mistake would be costly, `Light review.` for a larger one that is minor, such as a mechanical rename.
 
-Decide before creating a MR/PR, and again after each change added to an existing one. The reviewed commit is the one your last review report names.
+Decide before creating a MR/PR, and again after each change added to an existing one.
 
 ### Following up on a review
 

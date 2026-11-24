@@ -46,7 +46,9 @@ Each utility runs on its own, outside the workflows.
 
 ### Review
 
-`alreview` alias. Compares the current branch to a base branch (the repository's default branch unless another is given) and runs parallel reviewers, each with its own perspective: intent, correctness, change safety, code quality. Ecosystem modules (strict TypeScript, JavaScript, Python) sharpen the language-specific checks. The findings are merged into a concise review report.
+`alreview` alias. Compares the current branch to a base branch (the repository's default branch unless another is given) and runs parallel reviewers, each with its own perspective: intent, correctness, change safety, code quality. Ecosystem modules (strict TypeScript, JavaScript, Python) sharpen the language-specific checks. The findings are merged into a concise review report, which records the reviewed commit.
+
+Two options come with the request. A starting commit limits the review to the commits added after it, usually since an earlier review. The light form, a single pass in place of the four reviewers, is the default for a minor change; the request can name either form.
 
 ### Merge
 

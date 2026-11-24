@@ -47,6 +47,20 @@ describe("guide command", () => {
       cwd,
     });
     expect(unknownReviewer).toMatchObject({ code: 1, stdout: "" });
+
+    const lightWithModule = await runMain(
+      ["guide", "review", "--reviewer", "light", "--module", "python"],
+      { cwd },
+    );
+    expect(lightWithModule).toMatchObject({ code: 1, stdout: "" });
+  });
+
+  it("serves the light reviewer guide on its own", async () => {
+    const cwd = temp();
+    const light = await runMain(["guide", "review", "--reviewer", "light"], { cwd });
+    const perspective = await runMain(["guide", "review", "--reviewer", "quality"], { cwd });
+    expect(light.code).toBe(0);
+    expect(light.stdout).not.toContain(firstLine(perspective.stdout));
   });
 
   it("renders ticket detection and fallback variants", async () => {
@@ -104,6 +118,10 @@ describe("guide command", () => {
     expect(merge.stdout).toContain("release/integration");
   });
 });
+
+function firstLine(text: string): string {
+  return text.slice(0, text.indexOf("\n"));
+}
 
 function temp(): string {
   const dir = makeTempDir();

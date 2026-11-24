@@ -2,7 +2,7 @@
 
 Evaluate the change as a whole: what it tries to accomplish, and whether the implementation is a proper way to accomplish it.
 
-1. Derive the **intent** from the diff: what is this branch trying to accomplish? If the intent cannot be stated in one or two sentences, that is itself a finding.
+1. Derive the **intent** from the diff: what is this change trying to accomplish? If the intent cannot be stated in one or two sentences, that is itself a finding.
 2. Describe **how it is done**: the approach taken to implement the intent.
 3. **Assess** the approach:
    - Is there a simpler design that achieves the same intent?
