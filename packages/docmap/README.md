@@ -20,7 +20,7 @@ At the start of the session, before any investigation or code exploration, run `
 
 ### CLI runtimes
 
-Use Node.js 22.11 or later with `npx -y @alignfirst/docmap`, or Bun with `bunx --bun @alignfirst/docmap` (`bun x --bun` is equivalent). Bun 1.4.4 is the tested baseline; compatibility with every older release is not promised. Published bins retain Node shebangs, so ordinary `bunx @alignfirst/docmap` normally runs Node when it is installed. Bun-only hosts should explicitly select `--bun`.
+Use Node.js 22.11 or later with `npx -y @alignfirst/docmap`, or Bun with `bunx @alignfirst/docmap` (`bun x` is equivalent). Bun 1.4.4 is the tested baseline; compatibility with every older release is not promised. Published bins retain Node shebangs, so ordinary `bunx @alignfirst/docmap` runs Node when it is installed and Bun when Node is absent; `--bun` selects Bun explicitly.
 
 Direct `bun <installed-entry.mjs>` and transparent project scripts launched with `bun --bun run <script>` preserve Bun in suggested commands. npm scripts retain their `--` argument separator. An explicit runner wins over project lockfiles; a lockfile alone never implies a docmap script. Embedded `alignfirst docmap` follows its enclosing AlignFirst invocation.
 

@@ -9,28 +9,36 @@ import { loadConfig, resolveCodeConfig } from "../../packages/aligndev/dist/conf
 import {
   buildCodingAgentSettings,
   type CodingAgentEnvironment,
-  HARNESS_PROFILE,
+  MOCK_AGENT_PROFILE,
   PI_CONTRACT_MODEL,
+  SETTINGS_PORT_RANGE,
 } from "../scripts/coding-agent-settings.ts";
 
 const WRITER = fileURLToPath(new URL("../scripts/write-coding-agent-settings.ts", import.meta.url));
 
 for (const agent of ["claude", "codex", "pi"] as const) {
-  test(`${agent} settings use an explicit complete profile and pass the real config resolver`, () => {
+  test(`${agent} settings delegate from the openclaw profile through the real config resolver`, () => {
     const home = mkdtempSync(join(tmpdir(), "harness-settings-"));
     try {
       const settings = buildCodingAgentSettings({ CODING_AGENT: agent });
       assert.deepEqual(settings, {
-        platform: "openclaw",
         projectsRoot: "/home/assistant/projects",
-        code: { profile: HARNESS_PROFILE, profiles: { [HARNESS_PROFILE]: { agent } } },
+        portRange: SETTINGS_PORT_RANGE,
+        code: {
+          profiles: {
+            openclaw: { harness: "openclaw", defaultAgentProfile: MOCK_AGENT_PROFILE },
+            [MOCK_AGENT_PROFILE]: { harness: agent },
+          },
+        },
       });
       const path = join(home, ".alignfirst/aligndev.settings.json");
       mkdirSync(dirname(path));
       writeFileSync(path, JSON.stringify(settings));
-      const effective = resolveCodeConfig(loadConfig(home), {});
-      assert.equal(effective.profile, HARNESS_PROFILE);
-      assert.equal(effective.agent, agent);
+      const effective = resolveCodeConfig(loadConfig(home, "alignfirst"), {
+        OPENCLAW_SHELL: "exec",
+      });
+      assert.equal(effective.profile, MOCK_AGENT_PROFILE);
+      assert.equal(effective.harness, agent);
       assert.equal(effective.defaultModel, undefined);
       assert.deepEqual(effective.models, undefined);
       assert.deepEqual(readdirSync(home), [".alignfirst"]);
@@ -44,13 +52,13 @@ for (const agent of ["claude", "codex", "pi"] as const) {
       CODING_AGENT: agent,
       CODING_AGENT_MODELS: " , first, , second , ",
     });
-    const profile = buildCodingAgentSettings(env).code.profiles[HARNESS_PROFILE];
-    assert.deepEqual(profile, { agent, models: ["first", "second"] });
+    const profile = buildCodingAgentSettings(env).code.profiles[MOCK_AGENT_PROFILE];
+    assert.deepEqual(profile, { harness: agent, models: ["first", "second"] });
     assert.deepEqual(
       buildCodingAgentSettings({ CODING_AGENT: agent, CODING_AGENT_MODELS: ", ," }).code.profiles[
-        HARNESS_PROFILE
+        MOCK_AGENT_PROFILE
       ],
-      { agent },
+      { harness: agent },
     );
   });
 }
@@ -73,8 +81,8 @@ test("settings construction reads only selectors, never credentials, HOME or con
       },
     },
   );
-  assert.deepEqual(buildCodingAgentSettings(env).code.profiles[HARNESS_PROFILE], {
-    agent: "pi",
+  assert.deepEqual(buildCodingAgentSettings(env).code.profiles[MOCK_AGENT_PROFILE], {
+    harness: "pi",
     models: [PI_CONTRACT_MODEL],
   });
 });

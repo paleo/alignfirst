@@ -22,7 +22,7 @@ Each package declares only root `index.js` in `pi.extensions`. That published fi
 
 [AlignDev](aligndev-architecture.md) chooses the child adapter, protocols, prompt, worktree and durable run identity. A persistent Pi assistant launches ordinary `aligndev code new/resume ... --quiet --meta <unique-run-key>` through `background`. The assistant retains the original worktree, generic handle, unique key, exact resolved run-file path and child conversation ID separately. On a completion notice it checks handle ownership, then retrieves `code status <exact-file> --result`, resolving by the unique meta key only when the path is not yet known. The CLI owns companion resolution and reconciliation. Result-only output excludes the transcript but has no numeric final-text cap.
 
-The parent host and selected child are independent. The assistant never replaces `aligndev code` with a direct `subagent` call. A Pi coding child can use synchronous subagents, including in headless operation, with normal provider configuration and saved project trust. Installing the AlignDev skill supplies instructions only. See `npx -y alignfirst setup guide coding-agent-assistant`.
+The assistant's harness and the agent's harness are independent. The assistant never replaces `aligndev code` with a direct `subagent` call. A Pi coding child can use synchronous subagents, including in headless operation, with normal provider configuration and saved project trust. Installing the AlignDev skill supplies instructions only. See `npx -y alignfirst setup guide coding-agent-assistant`.
 
 ## Runtime ownership and cleanup
 

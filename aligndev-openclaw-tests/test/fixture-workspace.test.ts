@@ -14,7 +14,13 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { fixturePortRange, patchDevServerRange } from "../scripts/fixture-personalization.ts";
+import { SETTINGS_PORT_RANGE } from "../scripts/coding-agent-settings.ts";
+import {
+  FIXTURE_PORT_RANGES,
+  fixturePortRange,
+  patchDevServerRange,
+} from "../scripts/fixture-personalization.ts";
+import { lowestFreeFixtureBlock } from "../scenarios/_lib/free-port-block.ts";
 
 const template = fileURLToPath(new URL("../projects-fixture/template", import.meta.url));
 const alignfirst = fileURLToPath(
@@ -23,19 +29,27 @@ const alignfirst = fileURLToPath(
 const devScript = "dev";
 const workspaceScript = "workspace";
 const source = readFileSync(join(template, "alignfirst.json"), "utf8");
+const a12Block = lowestFreeFixtureBlock(8);
 
 interface RegistryEntry {
   status: string;
   ports?: { frontend: number };
 }
 
+test("A12 block is the lowest settings block that overlaps no fixture", () => {
+  const fixtures = Object.values(FIXTURE_PORT_RANGES);
+  const overlapsFixture = (first: number, last: number) =>
+    fixtures.some((range) => range.first <= last && first <= range.last);
+  assert.equal(a12Block.last - a12Block.first, 7);
+  assert(a12Block.first >= SETTINGS_PORT_RANGE.first && a12Block.last <= SETTINGS_PORT_RANGE.last);
+  assert.equal(overlapsFixture(a12Block.first, a12Block.last), false);
+  for (let first = SETTINGS_PORT_RANGE.first; first < a12Block.first; ++first) {
+    assert(overlapsFixture(first, first + 7), `block at ${first} is free`);
+  }
+});
+
 test("fixture and A12 port blocks patch strictly and idempotently", () => {
-  for (const [first, last] of [
-    [6500, 6519],
-    [6520, 6539],
-    [6540, 6559],
-    [6600, 6607],
-  ]) {
+  for (const { first, last } of [...Object.values(FIXTURE_PORT_RANGES), a12Block]) {
     const patched = patchDevServerRange(source, first, last);
     assert.equal(JSON.parse(patched).devServer.ports.first, first);
     assert.equal(JSON.parse(patched).devServer.ports.last, last);
@@ -47,7 +61,7 @@ test("fixture and A12 port blocks patch strictly and idempotently", () => {
     source.replace('"last": 6519,', ""),
     source.replace('["frontend"]', '["other"]'),
   ]) {
-    assert.throws(() => patchDevServerRange(malformed, 6600, 6607));
+    assert.throws(() => patchDevServerRange(malformed, a12Block.first, a12Block.last));
   }
   for (const [first, last] of [
     [0, 1],
@@ -180,7 +194,7 @@ test("reset recovers externally deleted running workspaces and retains failed cl
   const ports: number[] = [];
   mkdirSync(lifecycle, { recursive: true });
   try {
-    prepareProject(nova, 6600, env);
+    prepareProject(nova, a12Block.first, env);
     // Missing manifest-backed checkouts require an explicit main purge recipe.
     const manifestPath = join(nova, "alignfirst.json");
     const cleanupConfig = JSON.parse(readFileSync(manifestPath, "utf8"));
@@ -295,7 +309,8 @@ test("reset recovers externally deleted running workspaces and retains failed cl
         ),
       );
     }
-    assert(existsSync(join(lifecycle, ".alignfirst-projects.json")));
+    assert(existsSync(lifecycle));
+    assert.equal(existsSync(join(lifecycle, ".alignfirst-projects.json")), false);
   } finally {
     for (const repo of [nova, linked]) {
       if (existsSync(join(repo, "node_modules"))) {

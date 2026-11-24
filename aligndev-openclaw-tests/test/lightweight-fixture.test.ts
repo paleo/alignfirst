@@ -160,7 +160,7 @@ for (const mode of ["shared", "missing", "tracked"] as const) {
         writeFileSync(
           join(home, ".alignfirst/aligndev.settings.json"),
           JSON.stringify({
-            code: { profiles: { "keep-profile": { agent: "codex" } } },
+            code: { profiles: { "keep-profile": { harness: "codex" } } },
           }),
         );
         value.projects[key].items = { docs: "project" };

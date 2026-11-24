@@ -15,7 +15,7 @@ npx -y alignfirst workspace teardown
 npx -y alignfirst workspace remove ../project-feat-42
 ```
 
-For explicit Bun execution use `bunx --bun alignfirst`. Ordinary `bunx` may honor the Node bin shebang. The kernel runtime does not change project command toolchains. Python monorepos, Rust and Node projects use the same manifest and script ABI, including per-command cwd/env.
+Ordinary `bunx alignfirst` honors the Node bin shebang when Node is installed and runs on Bun when Node is absent. For explicit Bun execution, use `bunx --bun alignfirst`. The kernel runtime does not change project command toolchains. Python monorepos, Rust and Node projects use the same manifest and script ABI, including per-command cwd/env.
 
 ## Baseline and manifest
 

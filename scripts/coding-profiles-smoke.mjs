@@ -139,38 +139,38 @@ function createFixture(root) {
   };
   const profiles = {
     a: {
-      agent: "claude",
+      harness: "claude",
       configDir: stores.a,
       defaultModel: "choice",
       modelAliases: { choice: "opus" },
       unset: ["SMOKE_REMOVE"],
     },
     b: {
-      agent: "claude",
+      harness: "claude",
       configDir: stores.b,
       defaultModel: "sonnet",
       modelAliases: { choice: "haiku" },
       unset: ["SMOKE_REMOVE"],
     },
     "same-account": {
-      agent: "claude",
+      harness: "claude",
       configDir: stores.a,
       defaultModel: "sonnet",
       modelAliases: { choice: "haiku" },
       unset: ["SMOKE_REMOVE"],
     },
     unavailable: {
-      agent: "claude",
+      harness: "claude",
       configDir: stores.unavailable,
       modelAliases: { choice: "opus" },
     },
     replacement: {
-      agent: "claude",
+      harness: "claude",
       configDir: stores.replacement,
       modelAliases: { choice: "opus" },
     },
     pi: {
-      agent: "pi",
+      harness: "pi",
       configDir: stores.pi,
       defaultModel: "choice",
       modelAliases: { choice: "fixture/exact-model" },
@@ -185,7 +185,7 @@ function createFixture(root) {
     },
   };
   writeJson(join(home, ".alignfirst", "aligndev.settings.json"), {
-    code: { profile: "b", profiles },
+    code: { fallbackProfile: "b", profiles },
   });
   writeJson(registry, { projects: entries });
   return {
@@ -290,10 +290,13 @@ async function settingsChecks(f) {
   const path = join(f.home, ".alignfirst/aligndev.settings.json");
   const original = readFileSync(path);
   const inventoryRoot = join(f.home, "settings-inventory");
-  writeJson(join(inventoryRoot, ".alignfirst-projects.json"), {});
+  mkdirSync(inventoryRoot);
   const stale = JSON.parse(original);
   stale.unknownRoot = "private-stale-value";
+  stale.platform = "openclaw";
   stale.code.unknownCode = "private-stale-value";
+  stale.code.profile = "b";
+  stale.code.profiles.a.agent = "claude";
   stale.code.agent = "pi";
   stale.code.defaultProfiles = { claude: "missing" };
   stale.code.profiles.a.unknownProfile = "private-stale-value";
@@ -314,6 +317,10 @@ async function settingsChecks(f) {
         assert(result.stderr.includes("code.profiles[<entry>].quota.unknownQuota"));
         assert.match(result.stderr, /code.agent.*manual conversion/);
         assert.match(result.stderr, /code.defaultProfiles is retired.*manually/);
+        assert.match(result.stderr, /setting platform\. platform is retired/);
+        assert.match(result.stderr, /setting code\.profile\. code\.profile is retired/);
+        assert(result.stderr.includes("code.profiles[<entry>].agent"));
+        assert.match(result.stderr, /"agent" was renamed to "harness"/);
         assert.equal(result.stdout.includes("Warning:"), false);
         assert.equal(result.stderr.includes("private-stale-value"), false);
         if (args.includes("--json")) JSON.parse(result.stdout);
@@ -358,7 +365,6 @@ async function settingsChecks(f) {
 
 async function consumerWarningChecks(f) {
   const projectSettings = join(f.project, "alignfirst.json");
-  const inventoryMarker = join(f.home, ".alignfirst-projects.json");
   const registryBefore = readFileSync(f.registry);
   const staleRegistry = JSON.parse(registryBefore);
   staleRegistry.unknownRegistry = "private-consumer-value";
@@ -369,7 +375,6 @@ async function consumerWarningChecks(f) {
     unknownItem: "private-consumer-value",
   };
   try {
-    writeJson(inventoryMarker, {});
     writeJson(f.registry, staleRegistry);
     writeJson(projectSettings, {
       schemaVersion: 1,
@@ -451,7 +456,6 @@ async function consumerWarningChecks(f) {
   } finally {
     writeFileSync(f.registry, registryBefore);
     rmSync(projectSettings, { force: true });
-    rmSync(inventoryMarker, { force: true });
   }
   console.log(
     "PASS: tolerant nested registry warnings reach help/guide/inventory; strict project unknown/invalid properties fail, values stay private and source bytes unchanged",
@@ -666,67 +670,124 @@ async function automaticChecks(f) {
       "AI_AGENT",
     ])
       delete f.env[marker];
-    writeJson(path, { code: { profiles: { pi: profiles.pi } } });
-    const pi = await launch(f, f.project, ["new", "-m", "no-parent singleton"]);
-    await metadata(f, f.project, pi.file, { profile: "pi", agent: "pi", status: "succeeded" });
+    await unrecognizedHarnessChecks(f, path, profiles);
+    await openclawHarnessChecks(f, path, profiles);
     f.env.CLAUDECODE = "1";
     f.env.CLAUDE_CONFIG_DIR = f.stores.a;
-    for (const field of ["blank", "missing"]) {
-      writeJson(path, { code: { profiles: { a: { agent: "claude", configDir: f.stores.a } } } });
-      const initial = await launch(f, f.project, ["new", "-m", "matching singleton"]);
-      const id = lastEvent(f).id;
-      await metadata(f, f.project, initial.file, {
-        profile: "a",
-        agent: "claude",
-        status: "succeeded",
-      });
-      const historical = readFileSync(initial.file, "utf8").replace(
-        /^profile: a\n/m,
-        field === "blank" ? "profile: \n" : "",
-      );
-      writeFileSync(initial.file, historical);
-      writeJson(path, {
-        code: {
-          profiles: {
-            preferred: { ...profiles.b, default: true },
-            other: { agent: "claude", configDir: f.stores.b },
-          },
-        },
-      });
-      const resumed = await launch(f, f.project, ["resume", id, "-m", "legacy built-ins"]);
-      await metadata(f, f.project, resumed.file, {
-        profile: "",
-        model: "",
-        agent: "claude",
-        status: "succeeded",
-      });
-      assert.equal(lastEvent(f).store, f.stores.a);
-      assert.equal(lastEvent(f).removed, "synthetic-remove-value");
-      assert.equal(readFileSync(initial.file, "utf8"), historical);
-      delete f.env.CLAUDECODE;
-      const failed = await command(
-        f,
-        f.project,
-        "aligndev",
-        ["code", "resume", id, "-m", "no parent"],
-        1,
-      );
-      assert.match(failed.stderr, /no coding agent/);
-      f.env.CLAUDECODE = "1";
-      const inferred = await launch(f, f.project, ["new", "-m", "preferred profile"]);
-      await metadata(f, f.project, inferred.file, {
-        profile: "preferred",
-        model: "sonnet",
-        status: "succeeded",
-      });
-      assert.equal(lastEvent(f).store, f.stores.b);
-    }
+    await assistantProfileChecks(f, path, profiles);
+    await historicalResumeChecks(f, path, profiles);
   } finally {
     f.env = originalEnv;
     writeFileSync(path, originalSettings);
     writeFileSync(f.registry, originalRegistry);
   }
-  console.log("PASS: automatic singleton/preferred launches and protected historical-null resume");
+  console.log(
+    "PASS: fallback, openclaw and assistant-profile selection, cleaned agent environment, protected historical-null resume",
+  );
+}
+
+async function unrecognizedHarnessChecks(f, path, profiles) {
+  writeJson(path, { code: { fallbackProfile: "pi", profiles: { pi: profiles.pi } } });
+  const fallback = await launch(f, f.project, ["new", "-m", "fallback profile"]);
+  await metadata(f, f.project, fallback.file, { profile: "pi", agent: "pi", status: "succeeded" });
+  writeJson(path, { code: { profiles: { pi: profiles.pi } } });
+  const before = events(f).length;
+  const missing = await command(f, f.project, "aligndev", ["code", "new", "-m", "no fallback"], 1);
+  assert(missing.stderr.includes('"fallbackProfile": "pi"'), missing.stderr);
+  assert.equal(events(f).length, before);
+}
+
+async function openclawHarnessChecks(f, path, profiles) {
+  writeJson(path, {
+    code: {
+      profiles: {
+        assistant: { harness: "openclaw", defaultAgentProfile: "pi" },
+        pi: profiles.pi,
+      },
+    },
+  });
+  const callerEnv = f.env;
+  f.env = {
+    ...callerEnv,
+    ALIGNDEV_ASSISTANT_HARNESS: "openclaw",
+    // A launcher's user agent would make aligndev run alignfirst through npx: use another npm_ key.
+    npm_config_cache: join(f.home, ".npm"),
+    INIT_CWD: f.project,
+  };
+  try {
+    const run = await launch(f, f.project, ["new", "-m", "openclaw assistant"]);
+    await metadata(f, f.project, run.file, { profile: "pi", agent: "pi", status: "succeeded" });
+    assert.deepEqual(lastEvent(f).launcher, []);
+  } finally {
+    f.env = callerEnv;
+  }
+}
+
+async function assistantProfileChecks(f, path, profiles) {
+  const a = { harness: "claude", configDir: f.stores.a };
+  const b = { harness: "claude", configDir: f.stores.b };
+  writeJson(path, { code: { profiles: { a, b } } });
+  const matching = await launch(f, f.project, ["new", "-m", "matching configDir"]);
+  await metadata(f, f.project, matching.file, {
+    profile: "a",
+    agent: "claude",
+    status: "succeeded",
+  });
+  assert.equal(lastEvent(f).store, f.stores.a);
+  writeJson(path, {
+    code: { profiles: { a, "same-account": { ...profiles["same-account"], default: true }, b } },
+  });
+  const preferred = await launch(f, f.project, ["new", "-m", "default candidate"]);
+  await metadata(f, f.project, preferred.file, {
+    profile: "same-account",
+    model: "sonnet",
+    status: "succeeded",
+  });
+  writeJson(path, {
+    code: { profiles: { a: { ...a, defaultAgentProfile: "pi" }, pi: profiles.pi } },
+  });
+  const delegated = await launch(f, f.project, ["new", "-m", "assistant delegates"]);
+  await metadata(f, f.project, delegated.file, { profile: "pi", agent: "pi", status: "succeeded" });
+}
+
+async function historicalResumeChecks(f, path, profiles) {
+  for (const field of ["blank", "missing"]) {
+    writeJson(path, { code: { profiles: { a: { harness: "claude", configDir: f.stores.a } } } });
+    const initial = await launch(f, f.project, ["new", "-m", "historical fixture"]);
+    const id = lastEvent(f).id;
+    await metadata(f, f.project, initial.file, {
+      profile: "a",
+      agent: "claude",
+      status: "succeeded",
+    });
+    const historical = readFileSync(initial.file, "utf8").replace(
+      /^profile: a\n/m,
+      field === "blank" ? "profile: \n" : "",
+    );
+    writeFileSync(initial.file, historical);
+    // A matching assistant's profile must not replace the built-ins of a historical run.
+    writeJson(path, { code: { profiles: { "same-account": profiles["same-account"] } } });
+    const resumed = await launch(f, f.project, ["resume", id, "-m", "legacy built-ins"]);
+    await metadata(f, f.project, resumed.file, {
+      profile: "",
+      model: "",
+      agent: "claude",
+      status: "succeeded",
+    });
+    assert.equal(lastEvent(f).store, f.stores.a);
+    assert.equal(lastEvent(f).removed, "synthetic-remove-value");
+    assert.equal(readFileSync(initial.file, "utf8"), historical);
+    delete f.env.CLAUDECODE;
+    const failed = await command(
+      f,
+      f.project,
+      "aligndev",
+      ["code", "resume", id, "-m", "no parent"],
+      1,
+    );
+    assert.match(failed.stderr, /no coding agent/);
+    f.env.CLAUDECODE = "1";
+  }
 }
 
 async function resumeChecks(f) {
@@ -917,6 +978,9 @@ async function nativeFixture(kind) {
       quotaOnly: process.env.SMOKE_QUOTA_ONLY,
       scope: process.env.SMOKE_SCOPE,
       removed: process.env.SMOKE_REMOVE,
+      launcher: ["ALIGNDEV_ASSISTANT_HARNESS", "npm_config_cache", "INIT_CWD"].filter(
+        (name) => process.env[name] !== undefined,
+      ),
       parents: [
         "CLAUDECODE",
         "CLAUDE_CODE_SESSION_ID",

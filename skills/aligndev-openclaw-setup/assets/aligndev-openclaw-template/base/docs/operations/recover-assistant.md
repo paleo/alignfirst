@@ -66,7 +66,7 @@ First make the admin repository's profile settings match the backup's intended d
 
 ```sh
 sudo -H -u {{SERVICE_USER}} jq \
-  '{version, stores: [.stores[] | {agent, destination, source, present}], resources: [.resources[] | {destination, source, present}]}' \
+  '{version, stores: [.stores[] | {harness, destination, source, present}], resources: [.resources[] | {destination, source, present}]}' \
   /home/{{SERVICE_USER}}/backups/deployment/<stamp>/native/mapping.json
 # The wrapper invokes the protected deployment-policy.mjs recover helper.
 sudo /usr/local/sbin/alignfirst-assistant-maintenance native-recovery -- \

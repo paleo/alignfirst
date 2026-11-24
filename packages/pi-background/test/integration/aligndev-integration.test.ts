@@ -151,8 +151,10 @@ async function fixture() {
   for (const key of ["NODE_OPTIONS", "NODE_PATH"]) vi.stubEnv(key, undefined);
   vi.stubEnv("GIT_CONFIG_GLOBAL", join(h.cwd, "gitconfig"));
   writeFileSync(join(h.cwd, "gitconfig"), "");
+  // The background tool runs in a Pi assistant, whichever session runs this suite.
+  vi.stubEnv("ALIGNDEV_ASSISTANT_HARNESS", "pi");
   writeJson(join(home, ".alignfirst/aligndev.settings.json"), {
-    code: { profile: "pi-fixture", profiles: { "pi-fixture": { agent: "pi" } } },
+    code: { profiles: { "pi-fixture": { harness: "pi" } } },
   });
   const project = join(h.cwd, "project");
   const worktree = join(h.cwd, "worktree");

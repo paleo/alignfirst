@@ -9,32 +9,17 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { patchDevServerRange } from "./fixture-personalization.ts";
+import { FIXTURE_PORT_RANGES, patchDevServerRange } from "./fixture-personalization.ts";
 
 const TEMPLATE =
   process.env.ALIGNDEV_FIXTURE_TEMPLATE ?? "/opt/aligndev-openclaw-tests/fixtures/template";
 const PRIMARY = process.env.ALIGNDEV_FIXTURE_PROJECTS ?? "/home/assistant/projects";
 const EXTERNAL = `${PRIMARY}/external-projects`;
 const LIFECYCLE = `${PRIMARY}/lifecycle-projects`;
-const PRIMARY_MARKER = {
-  description:
-    "Managed projects of the AlignDev for OpenClaw test fixture. Adding a project is an operator's decision: ask before creating one.",
-  portRanges: [{ first: 6500, last: 7700 }],
-};
-const EXTERNAL_MARKER = {
-  description: "Projects hosted for external teams.",
-  portRanges: [{ first: 6540, last: 6599 }],
-};
-const LIFECYCLE_MARKER = {
-  description:
-    "Allowed parent for new lifecycle fixtures. Create Node.js projects with pnpm. Keep bootstrap work and the initial commit on main. Claim a port block with free-ports before writing the project config.",
-  portRanges: [{ first: 6600, last: 6699 }],
-};
-// Each fixture and its linked worktrees share a dedicated 20-port block.
 const FIXTURES = [
-  { name: "nimbus", parent: PRIMARY, basePort: 6500 },
-  { name: "lumen", parent: PRIMARY, basePort: 6520 },
-  { name: "orion", parent: EXTERNAL, basePort: 6540 },
+  { name: "nimbus", parent: PRIMARY },
+  { name: "lumen", parent: PRIMARY },
+  { name: "orion", parent: EXTERNAL },
 ];
 // Each fixture's `origin` is a bare repo alongside its working tree, so
 // `git fetch` + `git merge --ff-only origin/main` behave like a real up-to-date
@@ -78,9 +63,8 @@ async function main() {
   for (const entry of readdirSync(PRIMARY)) {
     rmSync(`${PRIMARY}/${entry}`, { recursive: true, force: true });
   }
-  createProjectsDirectory(PRIMARY, PRIMARY_MARKER);
-  createProjectsDirectory(EXTERNAL, EXTERNAL_MARKER);
-  createProjectsDirectory(LIFECYCLE, LIFECYCLE_MARKER);
+  mkdirSync(EXTERNAL, { recursive: true });
+  mkdirSync(LIFECYCLE, { recursive: true });
   rmSync(ORIGINS, { recursive: true, force: true });
   mkdirSync(ORIGINS, { recursive: true });
   for (const fixture of FIXTURES) {
@@ -96,15 +80,10 @@ function gitProjects(directory) {
     .flatMap((entry) => gitProjects(`${directory}/${entry.name}`));
 }
 
-function createProjectsDirectory(path, marker) {
-  mkdirSync(path, { recursive: true });
-  writeFileSync(`${path}/.alignfirst-projects.json`, `${JSON.stringify(marker, null, 2)}\n`);
-}
-
-async function resetFixture({ name, parent, basePort }) {
+async function resetFixture({ name, parent }) {
   const dst = `${parent}/${name}`;
   cpSync(TEMPLATE, dst, { recursive: true, preserveTimestamps: true });
-  patchFixture(dst, name, basePort);
+  patchFixture(dst, name);
   // `aligndev code` refuses to run outside a project that has a `.plans/` directory
   // (its coaching-session logs land there). Seed an empty one — the fixture's
   // .gitignore already ignores `.plans/`, so it stays untracked like a real
@@ -140,7 +119,7 @@ async function resetFixture({ name, parent, basePort }) {
 // directory name is what actually matters. Patching only the `name` field of
 // package.json keeps the frozen lockfile valid, so a single build-time install
 // serves both projects.
-function patchFixture(dst, name, basePort) {
+function patchFixture(dst, name) {
   const pkgPath = `${dst}/package.json`;
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
   pkg.name = `@aligndev-openclaw-tests/${name}-fixture`;
@@ -160,7 +139,7 @@ function patchFixture(dst, name, basePort) {
     `# ${capitalized} Developer Reference`,
   );
 
-  patchPortRange(dst, basePort);
+  patchPortRange(dst, FIXTURE_PORT_RANGES[name]);
 }
 
 // An unmatched pattern would ship an unpersonalized fixture, silently weakening
@@ -173,9 +152,9 @@ function patchHeading(path, pattern, heading) {
   writeFileSync(path, content.replace(pattern, heading));
 }
 
-function patchPortRange(dst, basePort) {
+function patchPortRange(dst, { first, last }) {
   const path = `${dst}/alignfirst.json`;
-  writeFileSync(path, patchDevServerRange(readFileSync(path, "utf8"), basePort, basePort + 19));
+  writeFileSync(path, patchDevServerRange(readFileSync(path, "utf8"), first, last));
 }
 
 function runGit(cwd, args, env) {
