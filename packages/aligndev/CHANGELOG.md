@@ -1,5 +1,17 @@
 # aligndev
 
+## 0.33.0
+
+### Minor Changes
+
+- 6c3f56f: Added effort selection: `aligndev code new` and `resume` accept `--effort <level>`, and coding profiles accept `defaultEffort` and `efforts`.
+- 1c318ff: Breaking: the assistant's harness is resolved at each invocation, from `ALIGNDEV_ASSISTANT_HARNESS`, the detected coding agent or OpenClaw's exec runtime, and the `platform` setting is retired. Profiles name their `harness` instead of `agent`; `code.profile` gives way to the assistant profile's `defaultAgentProfile` or `code.fallbackProfile`, with new `openclaw` and `disabled` profiles. The coding agent no longer inherits npm launcher variables. The project inventory scans Git repositories without `.alignfirst-projects.json` markers, and `project free-ports` looks up the settings' `portRange`; `project init` and `--range` are removed.
+
+### Patch Changes
+
+- 377dd89: A settings profile that still names its `agent` instead of `harness` loads again: `agent` reads as `harness`, with a deprecation warning on stderr. The settings file is not rewritten.
+- 6c3f56f: Made the assistant's own code review proportionate: the playbook skips it for a small, low-risk change, limits it to the commits added since the branch's last review, names the review form when it knows more than the diff shows, and runs the recheck only after an Important fix or a fix that went beyond the findings.
+
 ## 0.32.0
 
 ### Minor Changes

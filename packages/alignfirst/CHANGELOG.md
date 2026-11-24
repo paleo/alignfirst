@@ -1,5 +1,17 @@
 # alignfirst
 
+## 0.20.0
+
+### Minor Changes
+
+- 6c3f56f: The `review` protocol accepts a starting commit, to review only the commits added after it, and gains a light form, a single pass that a minor change gets by default. Review files record the reviewed commit.
+
+### Patch Changes
+
+- 6c3f56f: The `coding-agent-assistant` setup topic describes the `efforts` and `defaultEffort` profile keys.
+- 1c318ff: Updated the setup topics for AlignDev's harness settings and marker-free project inventory; the `upgrade` topic converts existing settings and markers.
+- 377dd89: The `upgrade` setup topic notes that AlignDev still reads a profile's `agent` as `harness`, with a deprecation warning.
+
 ## 0.19.0
 
 ### Minor Changes
