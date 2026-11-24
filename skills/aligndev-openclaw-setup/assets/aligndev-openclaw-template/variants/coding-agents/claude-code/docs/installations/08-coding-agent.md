@@ -42,7 +42,7 @@ set -o pipefail
 settings=infra/openclaw/aligndev.settings.json
 store=$(sudo /usr/bin/node infra/openclaw/deployment-profiles.mjs "$settings" \
   /home/{{SERVICE_USER}} /home/{{SERVICE_USER}}/.alignfirst/aligndev.settings.json | jq -er '.configDir') || exit 1
-native_default=$(jq -r '.code.profiles[.code.profile].configDir == null' "$settings")
+native_default=$(jq -r '.code as $c | $c.profiles[($c.profiles | to_entries[] | select(.value.harness == "openclaw" and .value.disabled != true) | .value.defaultAgentProfile)].configDir == null' "$settings")
 sudo -H -u {{SERVICE_USER}} bash -lc '
   if [ "$1" = true ]; then unset CLAUDE_CONFIG_DIR; else export CLAUDE_CONFIG_DIR="$2"; fi
   command -v claude && claude --version
@@ -81,7 +81,7 @@ set -o pipefail
 settings="$HOME/.alignfirst/aligndev.settings.json"
 store=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
   "$settings" "$HOME" "$settings" | jq -er '.configDir') || exit 1
-if jq -e '.code.profiles[.code.profile].configDir == null' "$settings" >/dev/null; then
+if jq -e '.code as $c | $c.profiles[($c.profiles | to_entries[] | select(.value.harness == "openclaw" and .value.disabled != true) | .value.defaultAgentProfile)].configDir == null' "$settings" >/dev/null; then
   unset CLAUDE_CONFIG_DIR
 else
   export CLAUDE_CONFIG_DIR="$store"
@@ -107,7 +107,7 @@ npx -y skills add https://github.com/paleo/skills --global --yes \
 /usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
   "$HOME/.alignfirst/aligndev.settings.json" "$HOME" \
   "$HOME/.alignfirst/aligndev.settings.json" |
-  jq -r '.stores[] | select(.agent == "claude") | .skillsDir' |
+  jq -r '.stores[] | select(.harness == "claude") | .skillsDir' |
   while IFS= read -r target; do
     mkdir -p "$target"
     test ! -L "$target/sharp-writing"
@@ -143,7 +143,7 @@ set -eo pipefail
 settings="$HOME/.alignfirst/aligndev.settings.json"
 store=$(/usr/bin/node /opt/{{SERVICE_USER}}/libexec/deployment-profiles.mjs \
   "$settings" "$HOME" "$settings" | jq -er '.configDir')
-if jq -e '.code.profiles[.code.profile].configDir == null' "$settings" >/dev/null; then
+if jq -e '.code as $c | $c.profiles[($c.profiles | to_entries[] | select(.value.harness == "openclaw" and .value.disabled != true) | .value.defaultAgentProfile)].configDir == null' "$settings" >/dev/null; then
   unset CLAUDE_CONFIG_DIR
 else
   export CLAUDE_CONFIG_DIR="$store"
@@ -185,8 +185,8 @@ These host-side acceptance procedures are separate from offline template tests. 
 After the seed and the gateway start (`04-openclaw.md`):
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'aligndev code --help | grep selected'   # names claude as the agent
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'aligndev guide project >/dev/null && echo projects-ok'
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'ALIGNDEV_ASSISTANT_HARNESS=openclaw npx -y aligndev code --help | grep selected'   # names claude as the agent
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'ALIGNDEV_ASSISTANT_HARNESS=openclaw npx -y aligndev guide project >/dev/null && echo projects-ok'
 sudo -i -u {{SERVICE_USER}} -- bash -lc 'npx -y skills list -g --json'        # 2 skills
 ```
 

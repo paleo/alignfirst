@@ -16,7 +16,7 @@ The steps below derive from the installed OpenClaw documentation, under `/home/{
 
 ## 1. Desktop apps
 
-A desktop app reaches the loopback gateway through the SSH tunnel of [04 § 11](../installations/04-openclaw.md#11-dashboard), as the dashboard does (`gateway/remote.md`). Nothing new opens on the server. The tunnel logs in as `{{SERVER_ADMIN_USER}}`, so this route serves the people who hold that login.
+A desktop app reaches the loopback gateway through the SSH tunnel of [04 § 10](../installations/04-openclaw.md#10-dashboard), as the dashboard does (`gateway/remote.md`). Nothing new opens on the server. The tunnel logs in as `{{SERVER_ADMIN_USER}}`, so this route serves the people who hold that login.
 
 > **User action required.** Keep the tunnel running while the app is in use:
 >

@@ -115,7 +115,7 @@ test("native-default rendered Codex authentication removes login-shell routing a
     fixture("codex", "slack", (f) => {
       f.install();
       const settings = JSON.parse(readFileSync(f.deployed, "utf8"));
-      settings.code.profiles[settings.code.profile].configDir = selection;
+      settings.code.profiles[selectedProfile(settings)].configDir = selection;
       writeFileSync(f.deployed, JSON.stringify(settings));
       const block = f.block("installations/08-coding-agent.md", "codex login --device-auth");
       const interactive = block.replace(
@@ -165,7 +165,7 @@ test("install inventory crosses private account boundaries and fails closed with
       }[command];
       const settingsPath = join(f.admin, "infra/openclaw/aligndev.settings.json");
       const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
-      const profile = settings.code.profiles[settings.code.profile];
+      const profile = settings.code.profiles[selectedProfile(settings)];
       const guard = join(f.root, "private-home.mjs");
       writeFileSync(
         guard,
@@ -480,6 +480,8 @@ function render(text, f, agent) {
     PI_MODEL: "fixture-model",
     PI_AUTH_METHOD: "OAuth",
     PI_QUOTA_JSON: '{"source":"none"}',
+    PORT_RANGE_FIRST: "28000",
+    PORT_RANGE_LAST: "28599",
   };
   return text
     .replace(/\{\{([A-Z_]+)\}\}/gu, (_, token) => tokens[token] ?? "fixture")
@@ -502,6 +504,13 @@ function render(text, f, agent) {
             : agent
           : "fixture",
     );
+}
+
+// The deployment default: the enabled openclaw profile's defaultAgentProfile.
+function selectedProfile(settings) {
+  return Object.values(settings.code.profiles).find(
+    (profile) => profile.harness === "openclaw" && profile.disabled !== true,
+  ).defaultAgentProfile;
 }
 
 function shellBlocks(markdown) {

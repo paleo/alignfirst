@@ -26,7 +26,7 @@ sudo -i -u {{SERVICE_USER}} -- openclaw doctor --non-interactive
 sudo -i -u {{SERVICE_USER}} -- openclaw config validate
 ```
 
-A delegated run leaves its session file under the project's `.plans/<ticket>/_aligndev/`; read it before restoring anything. `exitReason: auth_required` means the coding agent's login expired — [08-coding-agent.md § Authenticate](../installations/08-coding-agent.md#authenticate). A provider error means the runtime login — [04 § 10](../installations/04-openclaw.md#10-provider-login). Keep the failed files.
+A delegated run leaves its session file under the project's `.plans/<ticket>/_aligndev/`; read it before restoring anything. `exitReason: auth_required` means the coding agent's login expired — [08-coding-agent.md § Authenticate](../installations/08-coding-agent.md#authenticate). A provider error means the runtime login — [04 § 9](../installations/04-openclaw.md#9-provider-login). Keep the failed files.
 
 ## Restore
 
@@ -137,7 +137,7 @@ Follow [configure-assistant.md](configure-assistant.md) to re-seed through a con
 ```sh
 sudo -i -u {{SERVICE_USER}} -- systemctl --user start openclaw-gateway
 sudo -i -u {{SERVICE_USER}} -- systemctl --user status openclaw-gateway
-sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project list'
+sudo -H -u {{SERVICE_USER}} bash -lc 'npx -y aligndev project list'
 ```
 
 Finish with the selected agent's verification/acceptance section in [08-coding-agent.md](../installations/08-coding-agent.md), the real-UID permission and authentication-renewal checks in [06](../installations/06-security-hardening.md#deployment-acceptance), and the smoke test of [07-channel.md](../installations/07-channel.md) before reopening the channel. For Pi, restart in the recorded approved parent and a new linked worktree to check trust, then verify package/tool identity without duplicate subagents. Rehearse reboot recovery separately. These are live deployment acceptance procedures, not checks performed by the offline template suite.

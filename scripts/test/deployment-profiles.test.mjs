@@ -64,14 +64,19 @@ const tokens = {
 };
 const agents = {
   "claude-code": {
-    agent: "claude",
+    harness: "claude",
     directory: ".claude",
     variable: "CLAUDE_CONFIG_DIR",
     instructions: "CLAUDE.md",
   },
-  codex: { agent: "codex", directory: ".codex", variable: "CODEX_HOME", instructions: "AGENTS.md" },
+  codex: {
+    harness: "codex",
+    directory: ".codex",
+    variable: "CODEX_HOME",
+    instructions: "AGENTS.md",
+  },
   pi: {
-    agent: "pi",
+    harness: "pi",
     directory: ".pi/agent",
     variable: "PI_CODING_AGENT_DIR",
     instructions: "AGENTS.md",
@@ -126,13 +131,13 @@ for (const overlay of Object.keys(agents)) {
     test(`${overlay}/${surface}: default/custom seed idempotence and explicit all-profile CLI validation`, () => {
       for (const custom of [false, true]) {
         withFixture(overlay, surface, { custom }, (fixture) => {
-          const selected = fixture.settings.code.profile;
+          const selected = selectedProfile(fixture.settings);
           fixture.settings.code.profiles["second profile"] = {
             ...fixture.settings.code.profiles[selected],
             defaultModel:
-              fixture.agent === "codex"
+              fixture.harness === "codex"
                 ? "sol"
-                : fixture.agent === "claude"
+                : fixture.harness === "claude"
                   ? "opus"
                   : fixture.settings.code.profiles[selected].defaultModel,
           };
@@ -178,7 +183,7 @@ for (const overlay of Object.keys(agents)) {
           const redirected = spawnSync(
             process.execPath,
             [join(repository, "packages/aligndev/bin/aligndev.mjs"), "guide", "code"],
-            options(fixture),
+            cliOptions(fixture),
           );
           assert.notEqual(redirected.status, 0);
           assert(redirected.stderr.includes("missing-project-profile"));
@@ -191,7 +196,7 @@ for (const overlay of Object.keys(agents)) {
 test("native-default inventory keeps absolute paths and real resolver modes for null and explicit strings", () => {
   for (const [overlay, definition] of Object.entries(agents)) {
     withFixture(overlay, "slack", {}, (fixture) => {
-      const selected = fixture.settings.code.profile;
+      const selected = selectedProfile(fixture.settings);
       const profile = fixture.settings.code.profiles[selected];
       assert.equal(profile.configDir, null, "Rendered defaults pin native-default mode");
       fixture.settings.code.profiles.explicit = {
@@ -204,7 +209,7 @@ test("native-default inventory keeps absolute paths and real resolver modes for 
       const before = readFileSync(fixture.settingsFile);
       const inventory = readInventory(fixture);
       assert.equal(inventory.configDir, fixture.nativeDir);
-      const store = inventory.stores.find((item) => item.agent === definition.agent);
+      const store = inventory.stores.find((item) => item.harness === definition.harness);
       assert.deepEqual(store.profiles, [selected, "explicit"]);
       for (const item of inventory.stores) {
         assert(item.configDir.startsWith(`${fixture.home}/`));
@@ -225,7 +230,7 @@ test("native-default inventory keeps absolute paths and real resolver modes for 
       assert.equal(explicit.childEnv[definition.variable], fixture.nativeDir);
       if (overlay === "pi") {
         assert.equal(
-          inventory.stores.find((item) => item.agent === "codex").configDir,
+          inventory.stores.find((item) => item.harness === "codex").configDir,
           join(fixture.home, ".codex"),
         );
         const quota = resolveQuotaConfig(reset, caller);
@@ -241,17 +246,16 @@ test("native-default inventory keeps absolute paths and real resolver modes for 
 test("native-default Pi rendering accepts typed custom directory and independent null quota", () => {
   const quota = { source: "claude", configDir: null };
   withFixture("pi", "slack", { custom: true, quota }, (fixture) => {
-    assert.deepEqual(fixture.settings.code.profiles[fixture.settings.code.profile].quota, quota);
+    const selected = selectedProfile(fixture.settings);
+    assert.deepEqual(fixture.settings.code.profiles[selected].quota, quota);
     installSettings(fixture);
     const inventory = readInventory(fixture);
     assert.equal(inventory.configDir, fixture.nativeDir);
     assert.equal(
-      inventory.stores.find((store) => store.agent === "claude").configDir,
+      inventory.stores.find((store) => store.harness === "claude").configDir,
       join(fixture.home, ".claude"),
     );
-    const code = resolveCodeConfig(loadConfig(fixture.home), fixture.env, {
-      explicit: fixture.settings.code.profile,
-    });
+    const code = resolveCodeConfig(loadConfig(fixture.home), fixture.env, { explicit: selected });
     assert.equal(code.childEnv.PI_CODING_AGENT_DIR, fixture.nativeDir);
     assert.equal(
       resolveQuotaConfig(code, { CLAUDE_CONFIG_DIR: "/inherited" }).env.CLAUDE_CONFIG_DIR,
@@ -277,7 +281,7 @@ test("native-default inventory retains null-sensitive safety boundaries", () => 
       { quota: { source: "none", configDir: null } },
     ]) {
       fixture.settings = structuredClone(original);
-      Object.assign(fixture.settings.code.profiles[fixture.settings.code.profile], invalid);
+      Object.assign(fixture.settings.code.profiles[selectedProfile(fixture.settings)], invalid);
       saveSettings(fixture);
       assertInventoryRejected(fixture);
     }
@@ -286,7 +290,7 @@ test("native-default inventory retains null-sensitive safety boundaries", () => 
     saveSettings(fixture);
     assertInventoryRejected(fixture);
     fixture.settings = structuredClone(original);
-    fixture.settings.code.profiles.overlap = { agent: "pi", configDir: "~/.codex/nested" };
+    fixture.settings.code.profiles.overlap = { harness: "pi", configDir: "~/.codex/nested" };
     saveSettings(fixture);
     assertInventoryRejected(fixture);
     fixture.settings = structuredClone(original);
@@ -298,19 +302,19 @@ test("native-default inventory retains null-sensitive safety boundaries", () => 
 
 test("inventory deduplicates shared stores and includes custom, mixed-agent and independent quota stores", () => {
   withFixture("codex", "slack", {}, (fixture) => {
-    const selected = fixture.settings.code.profile;
+    const selected = selectedProfile(fixture.settings);
     fixture.settings.code.profiles.shared = {
       ...fixture.settings.code.profiles[selected],
       configDir: "../.codex",
     };
     fixture.settings.code.profiles.pi = {
-      agent: "pi",
+      harness: "pi",
       configDir: "~/native/pi",
       defaultModel: "openai/fixture-model",
       quota: { source: "claude", configDir: "~/native/claude-quota" },
     };
     fixture.settings.code.profiles.other = {
-      agent: "claude",
+      harness: "claude",
       configDir: "~/native/claude-child",
       quota: { source: "none" },
     };
@@ -321,7 +325,7 @@ test("inventory deduplicates shared stores and includes custom, mixed-agent and 
     validateProfiles(fixture);
     const inventory = readInventory(fixture);
     assert.equal(inventory.stores.length, 4);
-    const codex = inventory.stores.find((store) => store.agent === "codex");
+    const codex = inventory.stores.find((store) => store.harness === "codex");
     assert.equal(codex.configDir, fixture.nativeDir);
     assert.deepEqual(codex.profiles.sort(), [selected, "shared"].sort());
     assert.deepEqual(
@@ -354,22 +358,22 @@ test("inventory deduplicates shared stores and includes custom, mixed-agent and 
   });
 });
 
-test("inventory rejects unsafe unselected stores, missing selection and native-directory conflicts", () => {
+test("inventory rejects unsafe unselected stores and native-directory conflicts", () => {
   withFixture("codex", "discord", {}, (fixture) => {
     const original = structuredClone(fixture.settings);
     for (const profile of [
-      { agent: "unsupported", configDir: "~/native/other" },
-      { agent: "codex" },
-      { agent: "codex", configDir: "../../escape" },
-      { agent: "pi", configDir: fixture.home },
-      { agent: "pi", configDir: "~/projects/agent" },
-      { agent: "pi", configDir: "~/.codex/nested" },
-      { agent: "pi", configDir: "~/.codex" },
-      { agent: "codex", configDir: "~/native/other", env: { CODEX_HOME: "/elsewhere" } },
-      { agent: "pi", configDir: "~/native/pi", unset: ["PI_CODING_AGENT_DIR"] },
-      { agent: "pi", configDir: "~/native/pi", env: { HOME: "/elsewhere" } },
+      { harness: "unsupported", configDir: "~/native/other" },
+      { harness: "codex" },
+      { harness: "codex", configDir: "../../escape" },
+      { harness: "pi", configDir: fixture.home },
+      { harness: "pi", configDir: "~/projects/agent" },
+      { harness: "pi", configDir: "~/.codex/nested" },
+      { harness: "pi", configDir: "~/.codex" },
+      { harness: "codex", configDir: "~/native/other", env: { CODEX_HOME: "/elsewhere" } },
+      { harness: "pi", configDir: "~/native/pi", unset: ["PI_CODING_AGENT_DIR"] },
+      { harness: "pi", configDir: "~/native/pi", env: { HOME: "/elsewhere" } },
       {
-        agent: "pi",
+        harness: "pi",
         configDir: "~/native/pi",
         quota: { source: "none", configDir: "~/native/quota" },
       },
@@ -379,18 +383,49 @@ test("inventory rejects unsafe unselected stores, missing selection and native-d
       saveSettings(fixture);
       assertInventoryRejected(fixture);
     }
-    for (const code of [{ agent: "codex" }, { ...original.code, profile: "missing" }]) {
-      fixture.settings = { ...original, code };
+  });
+});
+
+test("inventory requires one enabled openclaw profile naming an enabled coding profile", () => {
+  withFixture("codex", "slack", {}, (fixture) => {
+    const original = structuredClone(fixture.settings);
+    const selected = selectedProfile(original);
+    const assistant = Object.keys(original.code.profiles).find(
+      (name) => original.code.profiles[name].harness === "openclaw",
+    );
+    for (const change of [
+      (code) => delete code.profiles[assistant],
+      (code) => {
+        code.profiles[assistant].disabled = true;
+      },
+      (code) => {
+        code.profiles.second = { ...code.profiles[assistant] };
+      },
+      (code) => {
+        code.profiles[assistant].defaultAgentProfile = "missing";
+      },
+      (code) => {
+        code.profiles[selected].disabled = true;
+      },
+      (code) => {
+        code.profiles[assistant].defaultAgentProfile = assistant;
+      },
+      (code) => {
+        code.fallbackProfile = "missing";
+      },
+    ]) {
+      fixture.settings = structuredClone(original);
+      change(fixture.settings.code);
       saveSettings(fixture);
       assertInventoryRejected(fixture);
     }
   });
 });
 
-test("inventory validates every flag and requires explicit deployment selection", () => {
+test("inventory validates every flag and counts enabled defaults only", () => {
   withFixture("codex", "slack", {}, (fixture) => {
     const original = structuredClone(fixture.settings);
-    const selected = original.code.profile;
+    const selected = selectedProfile(original);
     for (const value of [null, "true", 1, [], {}]) {
       fixture.settings = structuredClone(original);
       fixture.settings.code.profiles[selected].default = value;
@@ -408,12 +443,6 @@ test("inventory validates every flag and requires explicit deployment selection"
     fixture.settings.code.profiles.conflict.default = false;
     saveSettings(fixture);
     assert.equal(readInventory(fixture).profiles.length, 2);
-    delete fixture.settings.code.profile;
-    saveSettings(fixture);
-    assertInventoryRejected(fixture);
-    delete fixture.settings.code.profiles.conflict;
-    saveSettings(fixture);
-    assertInventoryRejected(fixture);
     for (const map of [{}, null, { codex: selected }]) {
       fixture.settings = structuredClone(original);
       fixture.settings.code.defaultProfiles = map;
@@ -428,10 +457,35 @@ test("inventory validates every flag and requires explicit deployment selection"
   });
 });
 
-test("inventory and real CLI reject duplicate invalid agents without leaking values or injecting lines", () => {
+test("inventory ignores disabled profiles but still validates their shape", () => {
   withFixture("codex", "slack", {}, (fixture) => {
     const original = structuredClone(fixture.settings);
-    for (const agent of [
+    const selected = selectedProfile(original);
+    fixture.settings.code.profiles[selected].default = true;
+    fixture.settings.code.profiles.retired = {
+      harness: "codex",
+      disabled: true,
+      default: true,
+      configDir: "~/.codex/nested",
+    };
+    saveSettings(fixture);
+    const inventory = readInventory(fixture);
+    assert.deepEqual(inventory.profiles, [selected]);
+    assert.deepEqual(
+      inventory.stores.map((store) => store.profiles),
+      [[selected]],
+    );
+    fixture.settings.code.profiles.retired.skipPermissions = "yes";
+    saveSettings(fixture);
+    assertInventoryRejected(fixture);
+  });
+});
+
+test("inventory and real CLI reject duplicate invalid harnesses without leaking values or injecting lines", () => {
+  withFixture("codex", "slack", {}, (fixture) => {
+    const original = structuredClone(fixture.settings);
+    const selected = selectedProfile(original);
+    for (const harness of [
       undefined,
       null,
       true,
@@ -442,10 +496,9 @@ test("inventory and real CLI reject duplicate invalid agents without leaking val
       "private-agent-marker\n\r\u001b\u0085\u2028\u2029\u202e",
     ]) {
       fixture.settings = structuredClone(original);
-      const selected = fixture.settings.code.profile;
-      Object.assign(fixture.settings.code.profiles[selected], { agent, default: true });
+      Object.assign(fixture.settings.code.profiles[selected], { harness, default: true });
       fixture.settings.code.profiles.conflict = {
-        agent,
+        harness,
         default: true,
         configDir: "~/native/conflict",
       };
@@ -463,7 +516,7 @@ test("inventory and real CLI reject duplicate invalid agents without leaking val
           selected,
         ],
       ]) {
-        const result = spawnSync(process.execPath, args, options(fixture));
+        const result = spawnSync(process.execPath, args, cliOptions(fixture));
         assert.equal(result.status, 1);
         assert.equal(result.stdout, "");
         assert(!result.stderr.includes("private-agent-marker"));
@@ -483,7 +536,8 @@ test("inventory refuses native root, managed resource and ancestor symlinks", ()
       if (path === "root") symlinkSync(fixture.root, fixture.nativeDir);
       else if (path === "ancestor") {
         symlinkSync(fixture.root, join(fixture.home, "linked"));
-        fixture.settings.code.profiles[fixture.settings.code.profile].configDir = "~/linked/native";
+        fixture.settings.code.profiles[selectedProfile(fixture.settings)].configDir =
+          "~/linked/native";
         saveSettings(fixture);
       } else {
         mkdirSync(fixture.nativeDir);
@@ -500,8 +554,10 @@ test("inventory refuses native root, managed resource and ancestor symlinks", ()
 test("seed rejects a mismatched overlay before writing instructions or installed settings", () => {
   withFixture("codex", "slack", {}, (fixture) => {
     fixture.settings.code = {
-      profile: "wrong-overlay",
-      profiles: { "wrong-overlay": { agent: "claude", configDir: "~/.claude" } },
+      profiles: {
+        openclaw: { harness: "openclaw", defaultAgentProfile: "wrong-overlay" },
+        "wrong-overlay": { harness: "claude", configDir: "~/.claude" },
+      },
     };
     saveSettings(fixture);
     const result = spawnSync(
@@ -524,13 +580,16 @@ test("seed rejects a mismatched overlay before writing instructions or installed
 
 test("inventory and real CLI ignore stale settings without leaking values or rewriting input", () => {
   withFixture("codex", "slack", {}, (fixture) => {
-    const selected = fixture.settings.code.profile;
+    const selected = selectedProfile(fixture.settings);
+    fixture.settings.platform = "openclaw";
+    fixture.settings.code.profile = selected;
     fixture.settings.unknownRoot = "private-value";
     fixture.settings.code.unknownCode = { nested: "private-value" };
     fixture.settings.code.agent = "retired-value";
     fixture.settings.code.defaultProfiles = { codex: "missing" };
     fixture.settings.code.profiles["sk-secret-profile-name"] = {
-      agent: "pi",
+      harness: "pi",
+      agent: "retired-value",
       configDir: "~/native/pi",
       unknownProfile: "private-value",
       env: { CUSTOM: "private-value" },
@@ -542,6 +601,7 @@ test("inventory and real CLI ignore stale settings without leaking values or rew
     installSettings(fixture);
     const before = readFileSync(fixture.settingsFile);
     const deployedBefore = readFileSync(fixture.deployedSettings);
+    const retiredWarnings = [];
     for (const args of [
       inventoryArgs(fixture),
       [
@@ -552,8 +612,16 @@ test("inventory and real CLI ignore stale settings without leaking values or rew
         selected,
       ],
     ]) {
-      const result = spawnSync(process.execPath, args, options(fixture));
+      const result = spawnSync(process.execPath, args, cliOptions(fixture));
       assert.equal(result.status, 0, result.stderr);
+      retiredWarnings.push(
+        result.stderr
+          .split("\n")
+          .filter((line) =>
+            /setting (platform|code\.profile|code\.profiles\[<entry>\]\.agent)\./u.test(line),
+          )
+          .sort(),
+      );
       assert.match(result.stderr, /unknownRoot/);
       assert(result.stderr.includes("unknownCode"));
       assert(result.stderr.includes("unknownProfile"));
@@ -573,6 +641,12 @@ test("inventory and real CLI ignore stale settings without leaking values or rew
       assert.deepEqual(readFileSync(fixture.settingsFile), before);
       assert.deepEqual(readFileSync(fixture.deployedSettings), deployedBefore);
     }
+    assert.equal(retiredWarnings[0].length, 3);
+    assert.deepEqual(
+      retiredWarnings[0],
+      retiredWarnings[1],
+      "Same retired-key warnings as the CLI",
+    );
   });
 });
 
@@ -589,7 +663,7 @@ test("inventory and real CLI sanitize malformed settings JSON and preserve input
       const result = spawnSync(
         process.execPath,
         [join(repository, "packages/aligndev/bin/aligndev.mjs"), "code", "--help"],
-        options(fixture),
+        cliOptions(fixture),
       );
       assert.equal(result.status, 1);
       assert.equal(result.stdout, "");
@@ -605,7 +679,6 @@ test("inventory and real CLI still reject malformed recognized fields alongside 
   withFixture("codex", "slack", {}, (fixture) => {
     const original = structuredClone(fixture.settings);
     for (const invalid of [
-      { agent: "private-value\n\u001b" },
       { default: "yes" },
       { skipPermissions: "yes" },
       { models: "sol" },
@@ -617,7 +690,8 @@ test("inventory and real CLI still reject malformed recognized fields alongside 
       { quota: { source: "none", env: {}, unknownQuota: true } },
     ]) {
       fixture.settings = structuredClone(original);
-      Object.assign(fixture.settings.code.profiles[fixture.settings.code.profile], invalid, {
+      const selected = selectedProfile(fixture.settings);
+      Object.assign(fixture.settings.code.profiles[selected], invalid, {
         unknownFixtureField: "private-value",
       });
       saveSettings(fixture);
@@ -633,9 +707,9 @@ test("inventory and real CLI still reject malformed recognized fields alongside 
           "guide",
           "code",
           "--profile",
-          fixture.settings.code.profile,
+          selected,
         ],
-        options(fixture),
+        cliOptions(fixture),
       );
       assert.notEqual(result.status, 0);
       assert.equal(result.stdout, "");
@@ -674,12 +748,12 @@ function auditRendered(fixture) {
 }
 
 function validateProfiles(fixture) {
-  const selected = fixture.settings.code.profile;
+  const selected = selectedProfile(fixture.settings);
   const loaded = loadConfig(fixture.home);
   const effective = resolveCodeConfig(
     loaded,
     {
-      ...fixture.env,
+      ...cliOptions(fixture).env,
       CODEX_HOME: "/unintended-account",
       CLAUDE_CONFIG_DIR: "/unintended-account",
       PI_CODING_AGENT_DIR: "/unintended-account",
@@ -689,7 +763,7 @@ function validateProfiles(fixture) {
     },
     { explicit: selected },
   );
-  assert.equal(effective.agent, fixture.agent);
+  assert.equal(effective.harness, fixture.harness);
   assert.equal(effective.profile, selected);
   assert.equal(
     effective.childEnv[agents[fixture.overlay].variable],
@@ -698,20 +772,18 @@ function validateProfiles(fixture) {
   for (const name of fixture.settings.code.profiles[selected].unset ?? []) {
     assert.equal(effective.childEnv[name], undefined);
   }
-  if (fixture.agent !== "pi") {
+  if (fixture.harness !== "pi") {
     assert.equal(effective.skipPermissions, true);
     assert.equal(effective.defaultModel, undefined, "Preserve existing native model defaults");
   } else {
     assert.notEqual(effective.defaultModel, undefined, "Pi model policy is explicit");
   }
-  for (const name of Object.keys(fixture.settings.code.profiles)) {
-    const output = run(fixture, process.execPath, [
-      join(repository, "packages/aligndev/bin/aligndev.mjs"),
-      "guide",
-      "code",
-      "--profile",
-      name,
-    ]);
+  for (const name of codingProfiles(fixture.settings)) {
+    const output = execFileSync(
+      process.execPath,
+      [join(repository, "packages/aligndev/bin/aligndev.mjs"), "guide", "code", "--profile", name],
+      cliOptions(fixture),
+    );
     assert(
       output.includes(name),
       "Validate settings through the real CLI, without launching an agent",
@@ -733,7 +805,7 @@ function withFixture(overlay, surface, choices, callback) {
     home,
     rendered,
     overlay,
-    agent: definition.agent,
+    harness: definition.harness,
     nativeDir,
     infra,
     instructions: join(nativeDir, definition.instructions),
@@ -771,7 +843,6 @@ function withFixture(overlay, surface, choices, callback) {
       "claude",
       "codex",
       "npm",
-      "npx",
       "curl",
       "wget",
     ]) {
@@ -789,9 +860,6 @@ function withFixture(overlay, surface, choices, callback) {
       PI_CONFIG_DIR_JSON: choices.custom ? JSON.stringify(nativeDir) : "null",
       PI_CONFIG_DIR_DISPLAY: choices.custom ? nativeDir : tokens.PI_CONFIG_DIR_DISPLAY,
       PI_QUOTA_JSON: JSON.stringify(choices.quota ?? { source: "none" }),
-      PLANS_CLONE_NOTE: choices.plans
-        ? " The work-files clone at ~/projects/plans is a repository, not a project."
-        : "",
     };
     for (const file of filesIn(rendered)) {
       let text = readFileSync(file, "utf8");
@@ -821,21 +889,18 @@ function withFixture(overlay, surface, choices, callback) {
     fixture.settings = JSON.parse(readFileSync(fixture.settingsFile, "utf8"));
     if (overlay === "pi")
       assert.equal(
-        fixture.settings.code.profiles[fixture.settings.code.profile].configDir,
+        fixture.settings.code.profiles[selectedProfile(fixture.settings)].configDir,
         choices.custom ? nativeDir : null,
         "Render a typed JSON directory selection before fixture adjustments",
       );
-    for (const profile of Object.values(fixture.settings.code.profiles)) {
+    for (const name of codingProfiles(fixture.settings)) {
+      const profile = fixture.settings.code.profiles[name];
       if (choices.custom) profile.configDir = nativeDir;
       else if (typeof profile.configDir === "string")
         profile.configDir = profile.configDir.replace("/home/fixture/", `${home}/`);
     }
     saveSettings(fixture);
-    writeFileSync(
-      join(bin, "aligndev"),
-      `#!/usr/bin/env bash\nset -eu\nif [ "$1 $2" = "guide code" ]; then printf '%s\\n' "$4" >> "$HOME/guide-calls"; fi\nexec ${quote(process.execPath)} ${quote(join(repository, "packages/aligndev/bin/aligndev.mjs"))} "$@"\n`,
-      { mode: 0o755 },
-    );
+    writeFileSync(join(bin, "npx"), npxDouble(), { mode: 0o755 });
     writeFileSync(
       join(bin, "alignfirst"),
       `#!/usr/bin/env bash\nexec ${quote(process.execPath)} ${quote(join(repository, "packages/alignfirst/bin/alignfirst.mjs"))} "$@"\n`,
@@ -898,6 +963,53 @@ function options(fixture) {
     maxBuffer: 64 * 1024,
     stdio: ["ignore", "pipe", "pipe"],
   };
+}
+
+// A real-CLI call as the assistant, the way the seed and the runbooks make it.
+function cliOptions(fixture) {
+  return { ...options(fixture), env: { ...fixture.env, ALIGNDEV_ASSISTANT_HARNESS: "openclaw" } };
+}
+
+// The deployment default: the enabled openclaw profile's defaultAgentProfile.
+function selectedProfile(settings) {
+  return Object.values(settings.code.profiles).find(
+    (profile) => profile.harness === "openclaw" && profile.disabled !== true,
+  ).defaultAgentProfile;
+}
+
+function codingProfiles(settings) {
+  return Object.entries(settings.code.profiles)
+    .filter(([, profile]) => profile.harness !== "openclaw")
+    .map(([name]) => name);
+}
+
+// Runs the checkout's CLIs for `npx -y aligndev|alignfirst` and records each seed validation.
+function npxDouble() {
+  const aligndev = join(repository, "packages/aligndev/bin/aligndev.mjs");
+  const alignfirst = join(repository, "packages/alignfirst/bin/alignfirst.mjs");
+  return `#!/usr/bin/env bash
+set -eu
+forbid() { printf 'Forbidden deployment fixture command: npx %s\\n' "$*" >&2; exit 97; }
+[ "\${1:-}" = -y ] || forbid "$@"
+case "\${2:-}" in
+  aligndev)
+    shift 2
+    if [ "\${1:-} \${2:-}" = "guide code" ]; then
+      if [ "\${ALIGNDEV_ASSISTANT_HARNESS:-}" != openclaw ]; then
+        echo "npx double: the seed must set ALIGNDEV_ASSISTANT_HARNESS=openclaw" >&2
+        exit 98
+      fi
+      printf '%s\\n' "\${4:-}" >> "$HOME/guide-calls"
+    fi
+    exec ${quote(process.execPath)} ${quote(aligndev)} "$@"
+    ;;
+  alignfirst)
+    shift 2
+    exec ${quote(process.execPath)} ${quote(alignfirst)} "$@"
+    ;;
+  *) forbid "$@" ;;
+esac
+`;
 }
 
 function quote(text) {

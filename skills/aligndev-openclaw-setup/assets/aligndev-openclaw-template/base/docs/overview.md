@@ -37,7 +37,7 @@ app conversation (desktop app through the SSH tunnel; mobile app through Tailsca
   → report in the same conversation
 ```
 
-The runtime model and the coding agent are independent choices: OpenClaw authenticates its provider, `aligndev code` starts the agent in the selected named profile. `code.profile` is the deployment default; an explicit override or project registry selection takes precedence. Every provisioned coding/quota store pins `configDir: null` for native-default routing or an explicit service-account directory string. The shared inventory covers default/custom directories and deduplicates shared stores ([configuration.md](configuration.md)). Every provisioned account is available to the service UID; the editable project registry is routing, not authorization. OpenClaw remains the persistent parent even with a Pi child and needs no `pi-background` for delegation.
+The runtime model and the coding agent are independent choices: OpenClaw authenticates its provider, `aligndev code` starts the agent in the selected named profile. The `openclaw` profile's `defaultAgentProfile` is the deployment default; an explicit override or project registry selection takes precedence. Every provisioned coding/quota store pins `configDir: null` for native-default routing or an explicit service-account directory string. The shared inventory covers default/custom directories and deduplicates shared stores ([configuration.md](configuration.md)). Every provisioned account is available to the service UID; the editable project registry is routing, not authorization. OpenClaw remains the persistent parent even with a Pi child and needs no `pi-background` for delegation.
 
 ## Ownership
 
@@ -68,8 +68,8 @@ The dev-server range `{{PORT_RANGE_FIRST}}–{{PORT_RANGE_LAST}}` is closed.
 `aligndev project` discovers Git projects and reads `alignfirst.json`/`alignfirst.jsonc` plus branch-local workspace metadata; this repository keeps no project list.
 
 ```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project list'
-sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project status ~/projects/<repo>'
+sudo -H -u {{SERVICE_USER}} bash -lc 'npx -y aligndev project list'
+sudo -H -u {{SERVICE_USER}} bash -lc 'npx -y aligndev project status ~/projects/<repo>'
 ```
 
 Adding one: [add-project.md](operations/add-project.md).

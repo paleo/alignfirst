@@ -88,7 +88,8 @@ for (const agent of Object.keys(legacySettings)) {
         "-euc",
         section(f, "Writable AlignFirst home", "installations/06-security-hardening.md")[0],
       ]);
-      runSection(f, "One-time: convert direct launch settings");
+      writeFileSync(f.deployed, `${JSON.stringify(f.reviewedSettings, null, 2)}\n`);
+      chmodSync(f.deployed, 0o644);
       assert.deepEqual(JSON.parse(readFileSync(f.deployed, "utf8")), f.reviewedSettings);
       // The runbook requires operator-reviewed replacement of former Claude native skill links.
       if (agent === "claude-code") {
@@ -125,7 +126,7 @@ for (const agent of Object.keys(legacySettings)) {
     });
   });
 
-  test(`${agent}: ordinary backup ignores retired fields but requires an explicit provisioned profile`, () => {
+  test(`${agent}: ordinary backup ignores retired fields but requires an enabled openclaw profile`, () => {
     fixture(agent, (f) => {
       runSection(f, "Maintenance controls");
       const result = run(f, "bash", [join(f.infra, "bin/backup.sh")], {}, false);
@@ -213,6 +214,8 @@ function fixture(agent, callback) {
         readFileSync(path, "utf8")
           .replaceAll("{{SERVICE_USER}}", "fixture")
           .replaceAll("{{ADMIN_REPOSITORY_NAME}}", "admin")
+          .replaceAll("{{PORT_RANGE_FIRST}}", "28000")
+          .replaceAll("{{PORT_RANGE_LAST}}", "28599")
           .replaceAll("/home/fixture", f.home)
           .replaceAll("~/admin", f.admin)
           .replaceAll("/opt/fixture", join(root, "opt/fixture"))
@@ -239,7 +242,6 @@ function fixture(agent, callback) {
       ".alignfirst/companions/registry.json": '{"projects":{}}\n',
       ".alignfirst/companions/project/docs/keep.md": "original companion\n",
       ".agents/skills/sharp-writing/SKILL.md": "original shared skill\n",
-      "projects/.alignfirst-projects.json": '{"portRange":[28000,28599]}\n',
       "projects/work-files/.plans/ticket.md": "original work files\n",
       ".npm-system-global/bin/tool": "original protected package\n",
       ".local/share/fnm/aliases/default": "original project runtime\n",

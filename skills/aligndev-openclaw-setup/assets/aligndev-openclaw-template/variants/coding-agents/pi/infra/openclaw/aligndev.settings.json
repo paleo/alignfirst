@@ -1,11 +1,11 @@
 {
-  "platform": "openclaw",
   "projectsRoot": "~/projects",
+  "portRange": { "first": {{PORT_RANGE_FIRST}}, "last": {{PORT_RANGE_LAST}} },
   "code": {
-    "profile": "service-pi",
     "profiles": {
+      "openclaw": { "harness": "openclaw", "defaultAgentProfile": "service-pi" },
       "service-pi": {
-        "agent": "pi",
+        "harness": "pi",
         "configDir": {{PI_CONFIG_DIR_JSON}},
         "defaultModel": "{{PI_PROVIDER}}/{{PI_MODEL}}",
         "quota": {{PI_QUOTA_JSON}}

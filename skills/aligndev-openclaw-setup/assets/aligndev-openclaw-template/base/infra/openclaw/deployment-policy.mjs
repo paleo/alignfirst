@@ -94,7 +94,7 @@ function readInventory(snapshotAction, allowMissingPackages, settings, home, dep
 function validateMaintenance(inventory, settings) {
   for (const name of ["seed", ".agents", ".openclaw/skills", ".openclaw/workspace"])
     rejectSymlinks(join(inventory.serviceHome, name), true);
-  for (const name of [".alignfirst", ".openclaw/openclaw.json", "projects/.alignfirst-projects.json"])
+  for (const name of [".alignfirst", ".openclaw/openclaw.json"])
     rejectSymlinks(join(inventory.serviceHome, name));
   rejectSymlinks(dirname(settings), true);
   const prefix = join(inventory.serviceHome, ".npm-system-global");
@@ -222,7 +222,7 @@ function protectAnchors(inventory, resources, service) {
     command("chown", `root:${service}`, anchor);
     command("chmod", "1770", anchor);
   }
-  for (const store of inventory.stores.filter((item) => item.agent === "pi")) {
+  for (const store of inventory.stores.filter((item) => item.harness === "pi")) {
     const auth = join(store.configDir, "auth.json");
     if (!lstatOptional(auth)) continue;
     rejectSymlinks(auth);
@@ -267,7 +267,7 @@ function backup(inventory, destination) {
   mkdirSync(root, { recursive: true, mode: 0o700 });
   chmodSync(root, 0o700);
   const mapping = inventory.stores.map((store, index) => ({
-    agent: store.agent,
+    harness: store.harness,
     destination: store.configDir,
     source: `store-${index}`,
     present: lstatOptional(store.configDir) !== undefined,
@@ -369,7 +369,7 @@ function validateRecovery(inventory, source, settings, deployed) {
     const store = inventory.stores[index];
     if (
       entry.destination !== store.configDir ||
-      entry.agent !== store.agent ||
+      entry.harness !== store.harness ||
       entry.source !== `store-${index}` ||
       typeof entry.present !== "boolean"
     )

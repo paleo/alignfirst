@@ -17,15 +17,14 @@ infra/openclaw/
 ├── apparmor/           # Playwright Chromium user-namespace profile
 ├── deployment-profiles.mjs # all-profile/native-store and resource inventory
 ├── deployment-policy.mjs   # prepare, harden, maintenance, private backup/recovery
-├── aligndev.settings.json  # explicit global profile and provisioned native stores
+├── aligndev.settings.json  # openclaw profile, coding profiles, native stores and port range
 ├── seed.sh             # openclaw setup + openclaw config set …, secret store, environment.d
 ├── seed/               # common.sh, surface.sh, coding-agent.sh — the configuration modules
 ├── environment.d/      # non-secret variables for systemd --user and login shells
 ├── bin/                # OpenClaw launcher, workspace, backup, kill-switch and maintenance scripts
 ├── node-runtime/       # project-shell, fnm initialization, maintenance npm and runtime checks
-├── projects/           # .alignfirst-projects.json
 ├── workspace/          # curated workspace files (AGENTS.md, IDENTITY.md, …)
-├── heartbeat-scratch.md # the heartbeat job's comment-only checklist (step 7)
+├── heartbeat-scratch.md # the heartbeat job's comment-only checklist (step 6)
 └── coding-agent/       # global instruction file of the delegated coding agent
 ```
 
@@ -43,7 +42,7 @@ cp infra/openclaw/.env.example infra/openclaw/.env && chmod 600 infra/openclaw/.
 > **User action required.** Edit `infra/openclaw/.env`. The values come from the password manager and the provider dashboards, so the coding agent cannot fill it.
 
 - `RUNTIME_PROVIDER`, `RUNTIME_MODEL` — pre-filled from the render.
-- `RUNTIME_API_KEY` — when the provider authenticates by key; leave empty for an interactive login (step 10).
+- `RUNTIME_API_KEY` — when the provider authenticates by key; leave empty for an interactive login (step 9).
 - `GATEWAY_AUTH_TOKEN` — `openssl rand -hex 32` on a fresh install; on an existing server, the current value (the `.env.example` comment shows how to read it back).
 - `GATEWAY_DASHBOARD_ORIGIN` — keep the default for the SSH tunnel.
 - `GATEWAY_TAILSCALE_SERVE` — leave empty; [use-the-apps.md](../operations/use-the-apps.md) turns it on.
@@ -67,13 +66,13 @@ The snapshot copies `bin/openclaw`, both deployment helpers and `node-runtime/`.
 
 ## 3. Seed
 
-`seed.sh` runs `openclaw setup` when `openclaw.json` is missing, so the configuration starts from the installed version's defaults, then applies every customization through `openclaw config set`, which validates each key and survives schema migrations. It derives `~/.openclaw/secrets/secrets.json` (0600) from `.env`, registers a file SecretRef provider and writes every credential into `openclaw.json` as a reference to it. It writes `CONTEXT7_API_KEY` alone into `~/.openclaw/.env`, the gateway env file inherited by exec children. It installs `environment.d/*.conf` into `~/.config/environment.d/` and generates `runtime.conf` there with `DOCKER_HOST`. It installs `aligndev.settings.json` as `~/.alignfirst/aligndev.settings.json` and validates every provisioned profile with explicit `aligndev guide code --profile <name>`. The inventory includes custom directories and optional quota stores, deduplicates shared stores, and resolves `~/` against the service home and relative paths against the deployed settings directory. Every store needs `configDir: null` for native-default mode or an explicit directory string and must remain isolated beneath the service home. Inventory paths stay absolute; native commands preserve each original null/string mode after shell initialization. Symlinked anchors/non-package resources, escaping package links, padded paths, `file:` URLs, overlapping stores and ambiguous HOME/session overrides fail before writes. It creates `~/.alignfirst/companions/`, which holds the companions and their registry. `openclaw secrets audit` then fails the seed on any plaintext, unresolved or shadowed reference, or store residue (a provider OAuth login shows as an informational legacy-residue finding and passes), before `openclaw config validate` and an interactive `openclaw doctor`.
+`seed.sh` runs `openclaw setup` when `openclaw.json` is missing, so the configuration starts from the installed version's defaults, then applies every customization through `openclaw config set`, which validates each key and survives schema migrations. It derives `~/.openclaw/secrets/secrets.json` (0600) from `.env`, registers a file SecretRef provider and writes every credential into `openclaw.json` as a reference to it. It writes `CONTEXT7_API_KEY` alone into `~/.openclaw/.env`, the gateway env file inherited by exec children. It installs `environment.d/*.conf` into `~/.config/environment.d/` and generates `runtime.conf` there with `DOCKER_HOST`. It installs `aligndev.settings.json` as `~/.alignfirst/aligndev.settings.json` and validates every enabled coding profile with `ALIGNDEV_ASSISTANT_HARNESS=openclaw npx -y aligndev guide code --profile <name>`. The inventory includes custom directories and optional quota stores, deduplicates shared stores, and resolves `~/` against the service home and relative paths against the deployed settings directory. Every store needs `configDir: null` for native-default mode or an explicit directory string and must remain isolated beneath the service home. Inventory paths stay absolute; native commands preserve each original null/string mode after shell initialization. Symlinked anchors/non-package resources, escaping package links, padded paths, `file:` URLs, overlapping stores and ambiguous HOME/session overrides fail before writes. It creates `~/.alignfirst/companions/`, which holds the companions and their registry. `openclaw secrets audit` then fails the seed on any plaintext, unresolved or shadowed reference, or store residue (a provider OAuth login shows as an informational legacy-residue finding and passes), before `openclaw config validate` and an interactive `openclaw doctor`.
 
-Deployment settings require an explicit valid `code.profile`, even with one profile or a profile-local `default: true`. Flags must be booleans, with at most one true flag per agent across all provisioned profiles. Unknown or obsolete settings keys warn on stderr and are ignored. Retired direct launch fields and `code.defaultProfiles` supply no behavior; convert them manually to preserve intent, keeping profile names unchanged. Recognized invalid fields and deployment safety violations still fail. Inventory never rewrites settings or infers a global selection.
+Deployment settings require exactly one enabled `openclaw` profile. Its `defaultAgentProfile` names the deployment's default coding profile, which must be enabled and provisioned. Flags must be booleans, with at most one true flag per harness across the enabled profiles. Disabled profiles are validated, then ignored. Unknown or obsolete settings keys warn on stderr and are ignored. Retired direct launch fields and `code.defaultProfiles` supply no behavior; convert them manually to preserve intent, keeping profile names unchanged. Recognized invalid fields and deployment safety violations still fail. Inventory never rewrites settings or infers a global selection.
 
 Keep Workshop's mode at `off`; replace a detected legacy `propose` setting with `off`. The seed also disables memory learning/flush, startup telemetry and automatic updates, and keeps Tool Search and Code Mode off so the handoff tools remain visible. Review these policy opt-outs against each upgraded release before re-seeding.
 
-The seed reserves managed discovery paths through `deployment-policy.mjs prepare` and merges the selected overlay's instructions into every store of that agent kind. It preserves text outside managed markers and existing Pi `agents/` profiles. Additional agent kinds and quota stores need their own installation, authentication and instruction review; selecting them in settings does not install or authenticate them. Provision only accounts intended to be available to this Linux user.
+The seed reserves managed discovery paths through `deployment-policy.mjs prepare` and merges the selected overlay's instructions into every store of that harness. It preserves text outside managed markers and existing Pi `agents/` profiles. Additional harnesses and quota stores need their own installation, authentication and instruction review; selecting them in settings does not install or authenticate them. Provision only accounts intended to be available to this Linux user.
 
 For Pi, install approved native `rg`/`fd` helpers in its inventoried `bin/` or system PATH before hardening. Pi prepends that native bin for tools and otherwise downloads missing helpers there. Protect this executable discovery path; do not place Node overrides in it.
 
@@ -96,6 +95,14 @@ sudo -i -u {{SERVICE_USER}} -- openclaw doctor --fix
 ```
 
 Later runs use plain `openclaw doctor` — see [gotchas.md](../gotchas.md).
+
+Create the projects root named by the settings' `projectsRoot`, then check that the inventory reads it:
+
+```sh
+sudo -H -u {{SERVICE_USER}} bash -lc 'mkdir -p ~/projects && npx -y aligndev project list'
+```
+
+Projects come later through [add-project.md](../operations/add-project.md).
 
 ## 4. Provider plugin
 
@@ -132,21 +139,7 @@ sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/apply-workspace.s
 
 Later changes follow [update-workspace.md](../operations/update-workspace.md): once `06` has run, the files are immutable.
 
-## 6. Projects marker
-
-Create the fixed project parent, install its marker as a root-owned file, then verify that an empty listing exits 0.
-
-```sh
-sudo -H -u {{SERVICE_USER}} bash -lc 'mkdir -p ~/projects'
-sudo install -m 644 -o root -g root \
-  /home/{{SERVICE_USER}}/seed/projects/.alignfirst-projects.json \
-  /home/{{SERVICE_USER}}/projects/.alignfirst-projects.json
-sudo -H -u {{SERVICE_USER}} bash -lc 'aligndev project list'
-```
-
-Projects come later through [add-project.md](../operations/add-project.md).
-
-## 7. Gateway unit
+## 6. Gateway unit
 
 Enable lingering first, so a `systemd --user` manager exists for the account without a session and restarts the gateway at boot:
 
@@ -216,7 +209,7 @@ sudo -i -u {{SERVICE_USER}} -- /home/{{SERVICE_USER}}/seed/bin/apply-heartbeat-s
 
 A comment-only scratch makes the daily tick skip its model call ([gotchas.md](../gotchas.md#heartbeat-cost-is-a-main-session-problem)). The scratch carries no immutable flag; `06` records the accepted gap.
 
-## 8. Podman socket
+## 7. Podman socket
 
 `DOCKER_HOST` is already in `~/.config/environment.d/runtime.conf`; the socket it names comes from the user manager (lingering keeps it across reboots):
 
@@ -226,7 +219,7 @@ sudo -i -u {{SERVICE_USER}} -- bash -lc 'docker version'
 # Expected: the Server section reports Podman Engine
 ```
 
-## 9. Environment changes
+## 8. Environment changes
 
 `~/.config/environment.d/*.conf` is installed by the seed. After a change, re-exec the user manager so it rebuilds its environment block, then restart the gateway so the running process inherits it:
 
@@ -244,7 +237,7 @@ sudo cat /proc/$pid/environ | tr '\0' '\n' | grep -E '^(PROJECT_DEV_LIMIT|DOCKER
 sudo -i -u {{SERVICE_USER}} -- env | grep -E '^(PROJECT_DEV_LIMIT|DOCKER_HOST)='
 ```
 
-## 10. Provider login
+## 9. Provider login
 
 Skip when `RUNTIME_API_KEY` is set. Otherwise the provider's interactive login needs a TTY; `openclaw models auth login` refuses to run without one.
 
@@ -259,7 +252,7 @@ Skip when `RUNTIME_API_KEY` is set. Otherwise the provider's interactive login n
 
 The provider's login flags (device code, browser callback) are listed by `openclaw models auth login --help`. Never move credentials through shell history, chat or a tracked file.
 
-## 11. Dashboard
+## 10. Dashboard
 
 The gateway listens on loopback with token auth. The Control UI needs a secure context for its device identity, which over plain HTTP only `localhost` provides, hence the tunnel. `openclaw.json` holds a reference; the value sits in the secret store:
 
@@ -282,7 +275,7 @@ sudo -i -u {{SERVICE_USER}} -- openclaw devices approve <request-id>
 
 The desktop apps reach the gateway through the same tunnel, and the mobile apps through Tailscale Serve, set up after the smoke test: [use-the-apps.md](../operations/use-the-apps.md).
 
-## 12. Reboot check
+## 11. Reboot check
 
 > **User action required.** The reboot ends the coding agent's SSH session, so this runs from the laptop:
 >

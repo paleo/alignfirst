@@ -234,7 +234,6 @@ for (const agent of ["claude", "codex", "pi"]) {
       for (const path of [audited, protectedBin, runtimeBin]) mkdirSync(path, { recursive: true });
       for (const name of ["node", "npm"]) script(join(runtimeBin, name), "exit 0");
       script(join(audited, "openclaw"), "exit 0");
-      script(join(protectedBin, "aligndev"), "exit 0");
       script(join(agent === "pi" ? audited : protectedBin, agent), "exit 0");
       const shell = join(fixture.root, "project-shell");
       script(
@@ -253,7 +252,7 @@ for (const agent of ["claude", "codex", "pi"]) {
         DEFAULT_NODE: "26.0.0",
         PINNED_NODE: "24.0.0",
       });
-      for (const name of ["openclaw", "aligndev", agent])
+      for (const name of ["openclaw", agent])
         assert.equal(
           existsSync(join(runtimeBin, name)),
           false,
@@ -262,6 +261,34 @@ for (const agent of ["claude", "codex", "pi"]) {
     });
   });
 }
+
+test("runtime checker runs both AlignFirst CLIs through npx", () => {
+  withFixture((fixture) => {
+    const bin = join(fixture.root, "bin");
+    const calls = join(fixture.root, "npx-calls");
+    mkdirSync(bin);
+    for (const name of ["pnpm", "openclaw", "codex"]) script(join(bin, name), "exit 0");
+    script(join(bin, "npx"), `printf '%s\\n' "$*" >> ${quote(calls)}`);
+    const shell = join(fixture.root, "project-shell");
+    script(shell, `export PATH=${quote(`${bin}:/usr/bin:/bin`)}\nexec /bin/bash "$@"`);
+    const checker = renderChecker(join(fixture.root, "service"), fixture.root).replace(
+      /main "\$@"\s*$/u,
+      "validate_environment && prepare_fixtures && trap cleanup EXIT && check_cli_commands",
+    );
+    const file = join(fixture.root, "checker.sh");
+    writeFileSync(file, checker);
+    run(fixture, "/bin/bash", [file], {
+      CODING_AGENT: "codex",
+      PROJECT_SHELL: shell,
+      DEFAULT_NODE: "26.0.0",
+      PINNED_NODE: "24.0.0",
+    });
+    assert.deepEqual(readFileSync(calls, "utf8").trim().split("\n").sort(), [
+      "-y aligndev --version",
+      "-y alignfirst --version",
+    ]);
+  });
+});
 
 for (const directory of [".pi/agent", "native/custom agent"]) {
   test(`real offline Pi/${directory} and its bash tool retain launcher/project runtimes`, () => {

@@ -175,7 +175,12 @@ function withFixture(agent, callback) {
     writeFileSync(
       settings,
       JSON.stringify({
-        code: { profile: "fixture", profiles: { fixture: { agent, configDir: native } } },
+        code: {
+          profiles: {
+            openclaw: { harness: "openclaw", defaultAgentProfile: "fixture" },
+            fixture: { harness: agent, configDir: native },
+          },
+        },
       }),
     );
     writeFileSync(stateFile, "{}");
