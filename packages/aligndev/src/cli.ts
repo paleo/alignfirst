@@ -72,7 +72,7 @@ function renderHelp(aligndev: string): string {
     [`${aligndev} code <command> [<options>]`, "Run a coding agent through AlignFirst protocols."],
     [
       `${aligndev} project <command> [<options>]`,
-      "List projects, check their inventory, claim port ranges.",
+      "List projects, check their inventory, look up free ports.",
     ],
     [
       `${aligndev} guide [--channel <surface>] [<topic>]`,

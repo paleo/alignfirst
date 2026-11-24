@@ -1,4 +1,4 @@
-import type { PortRange } from "./markers.js";
+import type { PortRange } from "./ports.js";
 
 export function formatRange(range: PortRange): string {
   return `${range.first}..${range.last}`;

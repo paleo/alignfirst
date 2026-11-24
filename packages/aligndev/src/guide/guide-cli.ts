@@ -18,7 +18,7 @@ import {
 } from "../config.js";
 import { errorMessage } from "../errors.js";
 import { readProjectReport } from "../project/layout.js";
-import { type ProjectsCallerContext, renderProjectsGuideForRoot } from "../project/project-cli.js";
+import type { ProjectsCallerContext } from "../project/project-cli.js";
 import { renderCodeGuide } from "./code-guide.js";
 import {
   type ActiveBlocks,
@@ -39,7 +39,6 @@ import {
 interface GuideArgs {
   topic?: string;
   channel?: Surface;
-  root?: string;
   profile?: string;
   help: boolean;
 }
@@ -67,7 +66,6 @@ function parseGuideArgs(tokens: string[]): GuideArgs {
     args: tokens,
     options: {
       channel: { type: "string" },
-      root: { type: "string" },
       profile: { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
@@ -76,16 +74,12 @@ function parseGuideArgs(tokens: string[]): GuideArgs {
   });
   if (positionals.length > 1) throw new Error("Error: `aligndev guide` takes at most one topic.");
   const [topic] = positionals;
-  if (values.root !== undefined && topic !== "project") {
-    throw new Error("Error: --root is valid only with `aligndev guide project`.");
-  }
   if (values.profile !== undefined && topic !== "code") {
     throw new Error("Error: --profile is valid only with `aligndev guide code`.");
   }
   return {
     topic,
     channel: parseChannel(values.channel),
-    root: values.root,
     profile: values.profile,
     help: values.help,
   };
@@ -98,7 +92,7 @@ function parseChannel(value: string | undefined): Surface | undefined {
 
 function renderUsage(forms: CommandForms): string {
   return `Usage:
-  ${forms.aligndev} guide [--channel <slack|discord|app>] [<topic>] [--root <path>] [--profile <name>]
+  ${forms.aligndev} guide [--channel <slack|discord|app>] [<topic>] [--profile <name>]
   ${forms.aligndev} guide --help
 
 The assistant's harness selects the playbook: ${ASSISTANT_HARNESS_VARIABLE} (${HARNESSES.join(", ")})
@@ -111,7 +105,7 @@ after the playbook.
 
 Topics:
   code        The delegation guide for \`${forms.aligndev} code\`.
-  project     The projects guide, openclaw only. --root overrides projectsRoot in the aligndev settings.
+  project     The projects guide, openclaw only.
 
 Playbook topics, by context:
   thread (openclaw, --channel slack|discord): ${PLAYBOOK_TOPICS.thread.join(", ")}
@@ -129,7 +123,7 @@ function renderTopic(
   assertChannelUse(args, platform);
   const { topic, channel } = args;
   if (topic === "project" && platform === "openclaw") {
-    return renderProjectsGuideForRoot({ ...ctx, projectsRoot: config.projectsRoot }, args.root);
+    return renderGuideTemplate("project.md", { platform: "openclaw" }, ctx.forms);
   }
   const active: ActiveBlocks = { platform, surface: channel };
   if (topic === undefined) {

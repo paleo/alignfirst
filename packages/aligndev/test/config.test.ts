@@ -11,6 +11,7 @@ import {
   type CodingProfile,
   loadConfig,
   type ProfileSelection,
+  requirePortRange,
   requireProjectsRoot,
   resolveCodeConfig,
 } from "../src/config.js";
@@ -91,6 +92,25 @@ describe("settings shape", () => {
     writeConfig(home, { projectsRoot: "../work" });
     expect(requireProjectsRoot(loadConfig(home, "alignfirst")).path).toBe(join(home, "work"));
     expect(() => requireProjectsRoot(loadConfig(makeHome(), "alignfirst"))).toThrow(Error);
+  });
+
+  it("reads portRange, a missing one failing only where it is required", () => {
+    const home = makeHome({ portRange: { first: 28000, last: 28599 } });
+    expect(requirePortRange(loadConfig(home, "alignfirst"))).toEqual({ first: 28000, last: 28599 });
+    writeConfig(home, { portRange: { first: 28000, last: 28000 } });
+    expect(loadConfig(home, "alignfirst").portRange).toEqual({ first: 28000, last: 28000 });
+    expect(() => requirePortRange(loadConfig(makeHome({}), "alignfirst"))).toThrow("portRange");
+  });
+
+  it.each([
+    { first: 28600, last: 28000 },
+    { first: 0, last: 100 },
+    { first: 1, last: 65_536 },
+    { first: 1.5, last: 100 },
+    { first: 28000 },
+    [28000, 28599],
+  ])("rejects the invalid portRange %j", (portRange) => {
+    expect(() => loadConfig(makeHome({ portRange }), "alignfirst")).toThrow(Error);
   });
 
   it.each(['{"secret":"private-json-value" trailing}', "private-json-value"])(
@@ -915,7 +935,6 @@ describe("command boundaries outside Git", () => {
         code: { fallbackProfile: "x", profiles: { x: { harness: "pi" } } },
       });
       mkdirSync(join(home, "projects"));
-      writeFileSync(join(home, "projects", ".alignfirst-projects.json"), "{}");
       const env = { ALIGNDEV_ASSISTANT_HARNESS: "openclaw" };
       const baseline = await run(home, args, env);
       expect(baseline.code, baseline.stderr).toBe(0);

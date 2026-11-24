@@ -7,7 +7,6 @@ import {
   integerBetween,
   literal,
   matching,
-  nonEmptyArrayOf,
   nonEmptyString,
   nonblankString,
   nulFreeString,
@@ -19,21 +18,29 @@ import {
   string,
 } from "../src/json-shape.js";
 
-const sampleShape = object<Sample>({
-  agent: literal("claude", "codex"),
-  root: optional(nonEmptyString),
-  models: optional(arrayOf(string)),
-  skip: optional(boolean),
-  ranges: optional(
-    nonEmptyArrayOf(
-      object<SampleRange>({
-        first: integerBetween(1, 65_535),
-        code: optional(matching(/^[a-z][a-z0-9-]*$/)),
-        description: optional(string),
-      }),
+const ignoreUnknown = () => {};
+
+const sampleShape = object<Sample>(
+  {
+    agent: literal("claude", "codex"),
+    root: optional(nonEmptyString),
+    models: optional(arrayOf(string)),
+    skip: optional(boolean),
+    ranges: optional(
+      arrayOf(
+        object<SampleRange>(
+          {
+            first: integerBetween(1, 65_535),
+            code: optional(matching(/^[a-z][a-z0-9-]*$/)),
+            description: optional(string),
+          },
+          ignoreUnknown,
+        ),
+      ),
     ),
-  ),
-});
+  },
+  ignoreUnknown,
+);
 
 interface Sample {
   agent: "claude" | "codex";
@@ -66,15 +73,12 @@ describe("json shape", () => {
     [
       [],
       null,
-      { agent: "claude", extra: 1 },
-      { agent: "claude", ranges: [{ first: 80, extra: 1 }] },
       {},
       { agent: "gemini" },
       { agent: "claude", root: "" },
       { agent: "claude", models: "a" },
       { agent: "claude", models: ["a", 1] },
       { agent: "claude", skip: "no" },
-      { agent: "claude", ranges: [] },
       { agent: "claude", ranges: {} },
       { agent: "claude", ranges: [{ first: 0 }] },
       { agent: "claude", ranges: [{ first: 80 }, { first: 90, code: "Web" }] },
@@ -123,9 +127,9 @@ describe("json shape", () => {
 
   it("reports a custom check's field rejection as a shape failure", () => {
     const custom: Check<object> = (_value, path) => rejectField(path, "old", "be removed");
-    expect(() => parse(object<{ nested: object }>({ nested: custom }), { nested: {} })).toThrow(
-      TypeError,
-    );
+    expect(() =>
+      parse(object<{ nested: object }>({ nested: custom }, ignoreUnknown), { nested: {} }),
+    ).toThrow(TypeError);
   });
 
   it("lets non-shape errors pass through", () => {

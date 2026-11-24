@@ -1,42 +1,43 @@
-import { lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
-import { basename, dirname, join, resolve, sep } from "node:path";
+import {
+  type Dirent,
+  lstatSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  type Stats,
+  statSync,
+} from "node:fs";
+import { dirname, join, resolve, sep } from "node:path";
 
 import { isNodeError } from "../errors.js";
 import { formatRange } from "./format.js";
 import { type ProjectReport, readProjectReport } from "./layout.js";
-import {
-  containsRange,
-  type MarkerPortRange,
-  type PortRange,
-  type ProjectsMarker,
-  rangesOverlap,
-  readMarker,
-} from "./markers.js";
+import { containsRange, type PortRange, rangesOverlap } from "./ports.js";
 
 const CONFIG_FILENAMES = ["alignfirst.json", "alignfirst.jsonc"];
+const PERMISSION_ERRORS = ["EACCES", "EPERM"];
 
 export interface ProjectInventory {
   root: string;
-  directories: ProjectsDirectory[];
+  portRange: PortRange | null;
   projects: DiscoveredProject[];
+  skippedDirectories: SkippedDirectory[];
   issues: InventoryIssue[];
-}
-
-export interface ProjectsDirectory {
-  path: string;
-  description?: string;
-  portRanges?: MarkerPortRange[];
-  others: string[];
 }
 
 export interface DiscoveredProject {
   name: string;
   path: string;
+  // The parent directory of the project.
   directory: string;
   description: ProjectReport;
   portRange?: PortRange;
-  portRangeCode?: string;
   workspaces: string[];
+}
+
+export interface SkippedDirectory {
+  path: string;
+  reason: "outsideWorktree" | "workFilesRepository" | "symlink" | "unreadable" | "maxDepth";
 }
 
 export interface InventoryIssue {
@@ -55,6 +56,11 @@ interface ProjectPortClaim {
   portRange: PortRange;
 }
 
+export interface ScanOptions {
+  portRange?: PortRange;
+  maxDepth: number;
+}
+
 export interface InventoryContext {
   env: NodeJS.ProcessEnv;
   alignfirstCommand: string[];
@@ -64,143 +70,152 @@ interface DirectoryCandidate {
   name: string;
   directory: string;
   path: string;
-  enclosingRanges?: MarkerPortRange[];
 }
 
-interface MainCandidate extends DirectoryCandidate {
-  gitDirectory: string;
-  project: DiscoveredProject;
-}
-
-interface WalkState {
-  directories: ProjectsDirectory[];
-  candidates: DirectoryCandidate[];
-  directoryClaims: ScopedPortClaim[];
+interface ScanState {
+  maxDepth: number;
+  mainCandidates: DirectoryCandidate[];
+  linkedCandidates: DirectoryCandidate[];
+  skippedDirectories: SkippedDirectory[];
   issues: InventoryIssue[];
-}
-
-interface ScopedPortClaim extends ProjectPortClaim {
-  scope: string;
 }
 
 export function buildInventory(
   root: string,
-  marker: ProjectsMarker,
+  options: ScanOptions,
   ctx: InventoryContext,
 ): ProjectInventory {
-  const state: WalkState = { directories: [], candidates: [], directoryClaims: [], issues: [] };
-  walkProjectsDirectory(root, marker, undefined, state);
+  const state: ScanState = {
+    maxDepth: options.maxDepth,
+    mainCandidates: [],
+    linkedCandidates: [],
+    skippedDirectories: [],
+    issues: [],
+  };
+  scanEntries(root, readGroupEntries(root), 1, state);
   const projects = classifyCandidates(state, ctx);
   reportSharedCompanions(projects, state.issues);
-  reportOverlappingClaims(projects, state.directoryClaims, state.issues);
-  sortInventory(state.directories, projects, state.issues);
-  return { root, directories: state.directories, projects, issues: state.issues };
+  reportOverlappingClaims(projects, state.issues);
+  if (options.portRange !== undefined)
+    reportOutsideRange(projects, options.portRange, state.issues);
+  sortInventory(projects, state);
+  return {
+    root,
+    portRange: options.portRange ?? null,
+    projects,
+    skippedDirectories: state.skippedDirectories,
+    issues: state.issues,
+  };
 }
 
-function walkProjectsDirectory(
-  path: string,
-  marker: ProjectsMarker,
-  enclosingRanges: MarkerPortRange[] | undefined,
-  state: WalkState,
-): void {
-  const effectiveRanges = marker.portRanges ?? enclosingRanges;
-  state.directories.push({
-    path,
-    ...(marker.description === undefined ? {} : { description: marker.description }),
-    ...(marker.portRanges === undefined ? {} : { portRanges: marker.portRanges }),
-    others: [],
-  });
-  for (const candidate of readDirectoryCandidates(path)) {
-    const childMarker = readMarker(candidate.path);
-    if (childMarker === undefined) {
-      state.candidates.push({ ...candidate, enclosingRanges: effectiveRanges });
-      continue;
+function readGroupEntries(path: string): Dirent[] {
+  return readdirSync(path, { withFileTypes: true }).filter(
+    (entry) => !entry.name.startsWith(".") && entry.name !== "node_modules",
+  );
+}
+
+function scanEntries(directory: string, entries: Dirent[], depth: number, state: ScanState): void {
+  for (const entry of entries) {
+    const path = join(directory, entry.name);
+    if (entry.isSymbolicLink()) {
+      if (isDirectoryTarget(path)) state.skippedDirectories.push({ path, reason: "symlink" });
+    } else if (entry.isDirectory()) {
+      scanDirectory({ name: entry.name, directory, path }, depth, state);
     }
-    for (const portRange of childMarker.portRanges ?? []) {
-      reportOutsideRange(candidate.path, portRange, effectiveRanges, state.issues);
-      state.directoryClaims.push({
-        scope: path,
-        path: candidate.path,
-        portRange,
-      });
-    }
-    walkProjectsDirectory(candidate.path, childMarker, effectiveRanges, state);
   }
 }
 
-function readDirectoryCandidates(directory: string): DirectoryCandidate[] {
-  return readdirSync(directory, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .flatMap((entry) => readDirectoryCandidate(directory, entry.name))
-    .toSorted((left, right) => left.name.localeCompare(right.name));
+function isDirectoryTarget(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
-function readDirectoryCandidate(directory: string, name: string): DirectoryCandidate[] {
+// A `.git` directory marks a main worktree, a `.git` file a linked one; anything else is a group.
+function scanDirectory(candidate: DirectoryCandidate, depth: number, state: ScanState): void {
+  const git = readGitEntry(candidate.path);
+  if (git === "unreadable") {
+    state.skippedDirectories.push({ path: candidate.path, reason: "unreadable" });
+  } else if (git?.isDirectory()) {
+    state.mainCandidates.push(candidate);
+  } else if (git?.isFile()) {
+    state.linkedCandidates.push(candidate);
+  } else {
+    scanGroup(candidate.path, depth, state);
+  }
+}
+
+function readGitEntry(path: string): Stats | "unreadable" | undefined {
   try {
-    return [{ name, directory, path: realpathSync(join(directory, name)) }];
+    return lstatSync(join(path, ".git"), { throwIfNoEntry: false });
   } catch (error) {
-    if (isNodeError(error) && (error.code === "ENOENT" || error.code === "ENOTDIR")) return [];
+    if (isPermissionError(error)) return "unreadable";
     throw error;
   }
 }
 
-function classifyCandidates(state: WalkState, ctx: InventoryContext): DiscoveredProject[] {
-  const linkedCandidates: DirectoryCandidate[] = [];
-  const ordinaryCandidates: DirectoryCandidate[] = [];
-  for (const candidate of state.candidates) {
-    (isLinkedWorktree(candidate.path) ? linkedCandidates : ordinaryCandidates).push(candidate);
+function scanGroup(path: string, depth: number, state: ScanState): void {
+  let entries: Dirent[];
+  try {
+    entries = readGroupEntries(path);
+  } catch (error) {
+    if (!isPermissionError(error)) throw error;
+    state.skippedDirectories.push({ path, reason: "unreadable" });
+    return;
   }
-  const classified = ordinaryCandidates.flatMap((candidate) =>
-    classifyCandidate(candidate, state, ctx),
+  if (entries.some((entry) => CONFIG_FILENAMES.includes(entry.name))) {
+    state.issues.push({ path, message: "not a git main worktree" });
+  }
+  if (depth >= state.maxDepth) {
+    state.skippedDirectories.push({ path, reason: "maxDepth" });
+    return;
+  }
+  scanEntries(path, entries, depth + 1, state);
+}
+
+function isPermissionError(error: unknown): boolean {
+  return isNodeError(error) && error.code !== undefined && PERMISSION_ERRORS.includes(error.code);
+}
+
+function classifyCandidates(state: ScanState, ctx: InventoryContext): DiscoveredProject[] {
+  const classified = state.mainCandidates.flatMap((candidate) =>
+    classifyCandidate(candidate, state.issues, ctx),
   );
-  const projects = excludeWorkFilesRepositories(classified, state.directories);
-  attachLinkedWorktrees(linkedCandidates, projects, state.directories);
+  const projects = excludeWorkFilesRepositories(classified, state.skippedDirectories);
+  attachLinkedWorktrees(state.linkedCandidates, projects, state.skippedDirectories);
   return projects;
 }
 
 function classifyCandidate(
   candidate: DirectoryCandidate,
-  state: WalkState,
+  issues: InventoryIssue[],
   ctx: InventoryContext,
 ): DiscoveredProject[] {
-  if (mainWorktreeGitDirectory(candidate.path) === undefined) {
-    if (
-      CONFIG_FILENAMES.some(
-        (name) => lstatSync(join(candidate.path, name), { throwIfNoEntry: false }) !== undefined,
-      )
-    ) {
-      state.issues.push({ path: candidate.path, message: "not a git main worktree" });
-    } else {
-      addOther(state.directories, candidate.directory, candidate.name);
-    }
-    return [];
-  }
   const description = readProjectReport(ctx.alignfirstCommand, candidate.path, ctx.env);
   if ("error" in description) {
-    state.issues.push({ path: candidate.path, message: description.error });
+    issues.push({ path: candidate.path, message: description.error });
     return [];
   }
-  const project: DiscoveredProject = {
-    name: candidate.name,
-    path: candidate.path,
-    directory: candidate.directory,
-    description,
-    ...(description.workspace.portRange === null
-      ? {}
-      : { portRange: description.workspace.portRange }),
-    workspaces: [],
-  };
-  const enclosingRange = findEnclosingRange(candidate.enclosingRanges, project.portRange);
-  if (enclosingRange?.code !== undefined) project.portRangeCode = enclosingRange.code;
-  reportOutsideRange(project.path, project.portRange, candidate.enclosingRanges, state.issues);
-  return [project];
+  return [
+    {
+      name: candidate.name,
+      path: candidate.path,
+      directory: candidate.directory,
+      description,
+      ...(description.workspace.portRange === null
+        ? {}
+        : { portRange: description.workspace.portRange }),
+      workspaces: [],
+    },
+  ];
 }
 
-// A repository holding another project's `.plans` target, such as a work-files clone, is listed
-// with the others.
+// A repository holding another project's `.plans` target, such as a work-files clone, is skipped.
 function excludeWorkFilesRepositories(
   projects: DiscoveredProject[],
-  directories: ProjectsDirectory[],
+  skippedDirectories: SkippedDirectory[],
 ): DiscoveredProject[] {
   const plansTargets = projects.flatMap((project) => {
     const target = realPlansPath(project);
@@ -210,7 +225,7 @@ function excludeWorkFilesRepositories(
     const holdsPlans = plansTargets.some(
       ({ owner, target }) => owner !== project.path && isSameOrInside(target, project.path),
     );
-    if (holdsPlans) addOther(directories, project.directory, project.name);
+    if (holdsPlans) skippedDirectories.push({ path: project.path, reason: "workFilesRepository" });
     return !holdsPlans;
   });
 }
@@ -229,35 +244,23 @@ function isSameOrInside(path: string, ancestor: string): boolean {
   return path === ancestor || path.startsWith(`${ancestor}${sep}`);
 }
 
-function isLinkedWorktree(path: string): boolean {
-  try {
-    return lstatSync(join(path, ".git")).isFile();
-  } catch {
-    return false;
-  }
-}
-
 function attachLinkedWorktrees(
   candidates: DirectoryCandidate[],
   projects: DiscoveredProject[],
-  directories: ProjectsDirectory[],
+  skippedDirectories: SkippedDirectory[],
 ): void {
-  const mainsByGitDirectory = new Map<string, MainCandidate>();
+  const mainsByGitDirectory = new Map<string, DiscoveredProject>();
   for (const project of projects) {
     const gitDirectory = mainWorktreeGitDirectory(project.path);
-    if (gitDirectory === undefined) continue;
-    mainsByGitDirectory.set(gitDirectory, {
-      name: project.name,
-      directory: project.directory,
-      path: project.path,
-      gitDirectory,
-      project,
-    });
+    if (gitDirectory !== undefined) mainsByGitDirectory.set(gitDirectory, project);
   }
   for (const candidate of candidates) {
     const main = linkedWorktreeMain(candidate.path, mainsByGitDirectory);
-    if (main === undefined) addOther(directories, candidate.directory, candidate.name);
-    else main.project.workspaces.push(candidate.name);
+    if (main === undefined) {
+      skippedDirectories.push({ path: candidate.path, reason: "outsideWorktree" });
+    } else {
+      main.workspaces.push(candidate.name);
+    }
   }
 }
 
@@ -273,8 +276,8 @@ function mainWorktreeGitDirectory(projectPath: string): string | undefined {
 
 function linkedWorktreeMain(
   worktreePath: string,
-  mainsByGitDirectory: ReadonlyMap<string, MainCandidate>,
-): MainCandidate | undefined {
+  mainsByGitDirectory: ReadonlyMap<string, DiscoveredProject>,
+): DiscoveredProject | undefined {
   const worktreeGitFile = join(worktreePath, ".git");
   try {
     if (!lstatSync(worktreeGitFile).isFile()) return;
@@ -303,36 +306,6 @@ function resolveMetadataPath(metadataDirectory: string, filename: string): strin
   return realpathSync(resolve(metadataDirectory, target));
 }
 
-function addOther(directories: ProjectsDirectory[], directoryPath: string, name: string): void {
-  const directory = directories.find(({ path }) => path === directoryPath);
-  if (directory === undefined) throw new Error(`Unknown projects directory: ${directoryPath}`);
-  directory.others.push(name);
-}
-
-function reportOutsideRange(
-  path: string,
-  range: PortRange | undefined,
-  enclosingRanges: MarkerPortRange[] | undefined,
-  issues: InventoryIssue[],
-): void {
-  if (range === undefined || enclosingRanges === undefined) return;
-  if (findEnclosingRange(enclosingRanges, range) !== undefined) return;
-  issues.push({
-    path,
-    message:
-      `port range ${formatRange(range)} fits no single enclosing range: ` +
-      enclosingRanges.map(formatRange).join(", "),
-  });
-}
-
-function findEnclosingRange(
-  ranges: MarkerPortRange[] | undefined,
-  claim: PortRange | undefined,
-): MarkerPortRange | undefined {
-  if (claim === undefined) return;
-  return ranges?.find((range) => containsRange(range, claim));
-}
-
 // Two projects share a companion only when their registry `dir` values resolve to the same path.
 function reportSharedCompanions(projects: DiscoveredProject[], issues: InventoryIssue[]): void {
   const projectsByCompanion = new Map<string, DiscoveredProject[]>();
@@ -356,48 +329,46 @@ function reportSharedCompanions(projects: DiscoveredProject[], issues: Inventory
   }
 }
 
-function reportOverlappingClaims(
-  projects: DiscoveredProject[],
-  directoryClaims: ScopedPortClaim[],
-  issues: InventoryIssue[],
-): void {
-  const claims = [
-    ...directoryClaims,
-    ...projects.flatMap((project): ScopedPortClaim[] =>
-      project.portRange === undefined
-        ? []
-        : [{ scope: project.directory, path: project.path, portRange: project.portRange }],
-    ),
-  ].toSorted(
-    (left, right) => left.scope.localeCompare(right.scope) || left.path.localeCompare(right.path),
-  );
+function reportOverlappingClaims(projects: DiscoveredProject[], issues: InventoryIssue[]): void {
+  const claims = projects
+    .flatMap((project): ProjectPortClaim[] =>
+      project.portRange === undefined ? [] : [{ path: project.path, portRange: project.portRange }],
+    )
+    .toSorted((left, right) => left.path.localeCompare(right.path));
   for (let index = 0; index < claims.length; ++index) {
     const claim = claims[index];
     for (let previous = 0; previous < index; ++previous) {
       const other = claims[previous];
-      if (claim.scope !== other.scope || !rangesOverlap(claim.portRange, other.portRange)) continue;
+      if (!rangesOverlap(claim.portRange, other.portRange)) continue;
       issues.push({
         path: claim.path,
-        message: `port range ${formatRange(claim.portRange)} overlaps ${basename(other.path)}`,
-        conflict: {
-          left: { path: other.path, portRange: other.portRange },
-          right: { path: claim.path, portRange: claim.portRange },
-        },
+        message: `port range ${formatRange(claim.portRange)} overlaps ${other.path}`,
+        conflict: { left: other, right: claim },
       });
     }
   }
 }
 
-function sortInventory(
-  directories: ProjectsDirectory[],
+function reportOutsideRange(
   projects: DiscoveredProject[],
+  available: PortRange,
   issues: InventoryIssue[],
 ): void {
-  directories.sort((left, right) => left.path.localeCompare(right.path));
+  for (const { path, portRange } of projects) {
+    if (portRange === undefined || containsRange(available, portRange)) continue;
+    issues.push({
+      path,
+      message:
+        `port range ${formatRange(portRange)} is outside portRange ` +
+        `${formatRange(available)} in the aligndev config`,
+    });
+  }
+}
+
+function sortInventory(projects: DiscoveredProject[], state: ScanState): void {
   projects.sort((left, right) => left.path.localeCompare(right.path));
-  issues.sort((left, right) => left.path.localeCompare(right.path));
-  for (const directory of directories)
-    directory.others.sort((left, right) => left.localeCompare(right));
+  state.skippedDirectories.sort((left, right) => left.path.localeCompare(right.path));
+  state.issues.sort((left, right) => left.path.localeCompare(right.path));
   for (const project of projects)
     project.workspaces.sort((left, right) => left.localeCompare(right));
 }

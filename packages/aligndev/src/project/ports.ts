@@ -1,54 +1,32 @@
 import type { ProjectInventory } from "./discovery.js";
 import { formatRange } from "./format.js";
-import { MARKER_FILENAME, type MarkerPortRange, type PortRange } from "./markers.js";
+
+export interface PortRange {
+  first: number;
+  last: number;
+}
 
 interface AllocatedPortRange {
   end: number;
   start: number;
 }
 
-export function findFreeBlock(inventory: ProjectInventory, size: number, code?: string): PortRange {
-  const rootRanges = inventory.directories.find(({ path }) => path === inventory.root)?.portRanges;
-  const markerPath = `${inventory.root}/${MARKER_FILENAME}`;
-  if (rootRanges === undefined) throw new Error(`${markerPath} has no portRanges.`);
-  const rootRange = selectPortRange(rootRanges, code, markerPath);
-  const occupied = [
-    ...inventory.projects.flatMap(({ portRange }) =>
-      portRange === undefined ? [] : [allocatedRange(portRange)],
-    ),
-    ...inventory.directories.flatMap(({ path, portRanges }) =>
-      path === inventory.root
-        ? []
-        : (portRanges ?? []).map((portRange) => allocatedRange(portRange)),
-    ),
-  ];
-  const first = lowestFreeBase(occupied, size, rootRange.first, rootRange.last);
+// The lowest block of `size` ports inside the inventory's range that overlaps no project range.
+export function findFreeBlock(inventory: ProjectInventory, size: number): PortRange {
+  const available = inventory.portRange;
+  if (available === null) throw new Error("free-ports requires portRange in the aligndev config.");
+  const occupied = inventory.projects.flatMap(({ portRange }) =>
+    portRange === undefined ? [] : [allocatedRange(portRange)],
+  );
+  const first = lowestFreeBase(occupied, size, available.first, available.last);
   if (first === undefined) {
-    throw new Error(`No block of ${size} contiguous free ports in ${formatRange(rootRange)}.`);
+    throw new Error(`No block of ${size} contiguous free ports in ${formatRange(available)}.`);
   }
   return { first, last: first + size - 1 };
 }
 
-function selectPortRange(
-  ranges: MarkerPortRange[],
-  code: string | undefined,
-  markerPath: string,
-): MarkerPortRange {
-  const declaredCodes = ranges.flatMap((range) => (range.code === undefined ? [] : [range.code]));
-  if (code !== undefined) {
-    const selected = ranges.find((range) => range.code === code);
-    if (selected !== undefined) return selected;
-    throw new Error(
-      `Unknown port range code ${JSON.stringify(code)} in ${markerPath}; ` +
-        `declared codes: ${declaredCodes.join(", ")}`,
-    );
-  }
-  const defaultRange = ranges.find((range) => range.code === undefined);
-  if (defaultRange !== undefined) return defaultRange;
-  throw new Error(
-    `${markerPath} declares no default range: pass --range <code> ` +
-      `(codes: ${declaredCodes.join(", ")})`,
-  );
+function allocatedRange(range: PortRange): AllocatedPortRange {
+  return { start: range.first, end: range.last };
 }
 
 function lowestFreeBase(
@@ -72,6 +50,10 @@ function fitsBefore(basePort: number, size: number, lastPort: number): boolean {
   return Number.isSafeInteger(end) && end <= lastPort;
 }
 
-function allocatedRange(range: PortRange): AllocatedPortRange {
-  return { start: range.first, end: range.last };
+export function containsRange(available: PortRange, allocation: PortRange): boolean {
+  return allocation.first >= available.first && allocation.last <= available.last;
+}
+
+export function rangesOverlap(left: PortRange, right: PortRange): boolean {
+  return left.first <= right.last && right.first <= left.last;
 }
