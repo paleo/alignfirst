@@ -587,7 +587,7 @@ _Note: Before every code review, always start by updating both the base branch a
 
 A code review is the review workflow from the delegation guide: a fresh agent session (`review` protocol) writes a review file, then an optional fix step runs in a second fresh session, never in the review session. What to do with the review file depends on the case:
 
-- **Wrapping up your own work** — before creating a MR/PR, run the review and fix steps automatically: decide the fixes with the agent in the AAD discussion. Consider returning to the review session afterward, as the delegation guide describes. This review stays internal: the fix step consumes it, nothing is posted anywhere; your report just mentions that the review-and-fix ran.
+- **Wrapping up your own work** — "Reviewing your own work" below decides whether the review runs. When it does, run the review and fix steps automatically: decide the fixes with the agent in the AAD discussion, then recheck when the delegation guide calls for it. This review stays internal: the fix step consumes it, nothing is posted anywhere; your report just mentions that the review-and-fix ran and names the last commit it covered.
 - **The user asks to review a PR/MR** (e.g. a teammate's branch) — follow the PR/MR review sequence below.
 - **The user asks to review a branch or workspace** — check for an open PR/MR on that branch first; if one exists, follow the PR/MR review sequence. Otherwise: on a branch you developed yourself, run the fix step directly; on someone else's branch, summarize the review file to the user — no fixes, no comments. Take the TICKET_ID from the branch name; ask the user when it carries none.
 
@@ -600,6 +600,16 @@ The PR/MR review sequence:
 5. End the turn on a one-line report: the comment count and a few words on the overall outcome (e.g. "Posted 6 comments on the MR — solid branch, two real bugs.").
 
 The fix step is also how you process a review that arrives from outside — a teammate's review comments on your PR/MR, a review file the user points at. As the delegation guide describes, point the fix session at wherever the review lives (the file, or the PR/MR reference so the agent fetches the comments itself); discuss the reworks with the agent, then it implements.
+
+### Reviewing your own work
+
+A review the user asked for runs in full. One you start yourself costs several agent runs, so its depth follows the unreviewed change: the commits added since the branch's last review, or the whole branch against its base when it was never reviewed. Measure it with `git diff --shortstat <reviewed commit or base branch>...HEAD`.
+
+- **Small and low-risk** — skip the review, and give the reason in your report. Small is roughly under 50 changed lines, generated files and lockfiles aside. Low-risk is wording, documentation, styling, a configuration value, or an isolated fix that a test covers.
+- **Larger, and you can resume the branch's review session** — have that session review the new commits, as the delegation guide describes. It already knows the branch.
+- **Anything else** — run the review workflow.
+
+Decide before creating a MR/PR, and again after each change added to an existing one. The reviewed commit is the one your last review report names.
 
 ### Following up on a review
 
@@ -620,7 +630,7 @@ The author of a branch you reviewed pushes fixes and asks you to check them, or 
 
 You are the judge of when the ticket's scope is done — a ticket can span several coding sessions, so no single run completion decides it. When you judge it done, create the MR/PR without asking.
 
-Before creating it: the applicable checks pass (see "Tests, lint, build"), and you exercised the change manually (see "Always test the work manually"). Then run the review workflow with its fix step (see "Code review" above) — automatic, part of creating any MR/PR.
+Before creating it: the applicable checks pass (see "Tests, lint, build"), and you exercised the change manually (see "Always test the work manually"). Then review the branch as "Reviewing your own work" decides, without asking.
 
 After creating the MR/PR (via `{{ALIGNDEV}} code`):
 
