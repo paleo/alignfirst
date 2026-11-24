@@ -164,14 +164,32 @@ describe("settings shape", () => {
     },
   );
 
-  it.each([{}, { agent: "claude" }])("requires a profile harness %j", (profile) => {
-    const home = makeHome(profileConfig(profile));
+  it("requires a profile harness", () => {
+    const home = makeHome(profileConfig({}));
     expect(() => loadConfig(home, "alignfirst")).toThrow(Error);
   });
 
-  it("names the rename when a profile still carries agent", () => {
-    const home = makeHome(profileConfig({ agent: "claude" }));
-    expect(() => loadConfig(home, "alignfirst")).toThrow(/"agent".*"harness"/);
+  it.each([
+    [
+      { agent: "claude", defaultModel: "opus" },
+      { harness: "claude", defaultModel: "opus" },
+    ],
+    [
+      { agent: "openclaw", defaultAgentProfile: "x" },
+      { harness: "openclaw", defaultAgentProfile: "x" },
+    ],
+  ])("reads a profile agent without harness as harness, with a warning %j", (profile, read) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const home = makeHome({ code: { profiles: { x: { harness: "pi" }, legacy: profile } } });
+    expect(loadConfig(home, "alignfirst").code.profiles?.legacy).toEqual(read);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls[0]?.[0]).toMatch(/code\.profiles\[<entry>\]\.agent.*"harness"/);
+  });
+
+  it("names agent when its value is not a harness", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const home = makeHome(profileConfig({ agent: "other" }));
+    expect(() => loadConfig(home, "alignfirst")).toThrow(/\.agent must be one of/);
   });
 
   it("accepts an openclaw profile with its own keys and warns on unknown ones", () => {

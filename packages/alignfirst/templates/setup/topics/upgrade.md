@@ -168,7 +168,7 @@ On an OpenClaw host, update the private admin repository and the deployed settin
 
 ## Convert AlignDev Harness Settings
 
-AlignDev resolves the assistant's harness at each invocation and no longer reads project markers. When `aligndev.settings.json` contains `platform`, `code.profile` or a profile `agent`, or when a `.alignfirst-projects.json` exists, convert once. The CLI ignores `platform` and `code.profile` with warnings on stderr and fails on a profile without `harness`.
+AlignDev resolves the assistant's harness at each invocation and no longer reads project markers. When `aligndev.settings.json` contains `platform`, `code.profile` or a profile `agent`, or when a `.alignfirst-projects.json` exists, convert once. The CLI ignores `platform` and `code.profile` with warnings on stderr. It still reads a profile's `agent` as `harness`, with a deprecation warning.
 
 1. Remove `platform`. `ALIGNDEV_ASSISTANT_HARNESS` forces the assistant's harness for one invocation.
 2. Replace `code.profile`. When a profile describes the assistant, set its `defaultAgentProfile` to the former value. On an OpenClaw account, add an `openclaw` profile whose `defaultAgentProfile` names the coding profile. For sessions without a recognized harness, set `code.fallbackProfile`.

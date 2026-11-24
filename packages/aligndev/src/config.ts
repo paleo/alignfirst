@@ -248,8 +248,10 @@ function profileShape(warn: (path: string, key: string) => void): Check<Profile>
     },
     warn,
   );
-  return (value, path, warningPath = path) => {
-    if (!isPlainObject(value)) return codingShape(value, path, warningPath);
+  return (raw, path, warningPath = path) => {
+    if (!isPlainObject(raw)) return codingShape(raw, path, warningPath);
+    const legacy = !Object.hasOwn(raw, "harness") && Object.hasOwn(raw, "agent");
+    const value = legacy ? mapLegacyAgent(raw, warningPath) : raw;
     const harness = "harness" in value ? value.harness : undefined;
     if (harness === "openclaw") {
       for (const key of CODING_ONLY_PROFILE_KEYS) {
@@ -263,16 +265,23 @@ function profileShape(warn: (path: string, key: string) => void): Check<Profile>
       return openclawShape(value, path, warningPath);
     }
     if (!HARNESSES.some((item) => item === harness)) {
-      rejectField(
-        path,
-        "harness",
-        harness === undefined && Object.hasOwn(value, "agent")
-          ? 'be set: rename "agent" to "harness"'
-          : `be one of ${HARNESSES.join(", ")}`,
-      );
+      rejectField(path, legacy ? "agent" : "harness", `be one of ${HARNESSES.join(", ")}`);
     }
     return codingShape(value, path, warningPath);
   };
+}
+
+// One-off exception to the retired-keys policy: the pre-`harness` key still reads, in memory only.
+function mapLegacyAgent(
+  profile: Record<string, unknown>,
+  warningPath: string,
+): Record<string, unknown> {
+  console.warn(
+    `Warning: deprecated aligndev setting ${warningPath}.agent: read as "harness". ` +
+      'Rename "agent" to "harness".',
+  );
+  const { agent, ...rest } = profile;
+  return { ...rest, harness: agent };
 }
 
 function warnUnknownSetting(path: string, key: string, alignfirst: string): void {

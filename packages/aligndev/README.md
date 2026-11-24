@@ -240,7 +240,7 @@ Unknown or obsolete keys at the settings root, `code`, each profile and each quo
 
 - `platform` — the assistant's harness is resolved at each invocation.
 - `code.profile` — set the assistant profile's `defaultAgentProfile`, or `code.fallbackProfile`.
-- A profile's `agent` — renamed `harness`. A profile without `harness` fails, and the message names the rename. See [harness-settings conversion](https://github.com/paleo/alignfirst/blob/main/packages/alignfirst/templates/setup/topics/upgrade.md#convert-aligndev-harness-settings).
+- A profile's `agent` — renamed `harness`. As a one-off exception, a profile with `agent` and no `harness` still loads: `agent` reads as `harness`, with a deprecation warning. Beside `harness`, `agent` is ignored. See [harness-settings conversion](https://github.com/paleo/alignfirst/blob/main/packages/alignfirst/templates/setup/topics/upgrade.md#convert-aligndev-harness-settings).
 - `code.defaultProfiles` — move needed preferences to matching profiles' `default: true` and remove the map. Keep profile names unchanged; see [profile-default migration](https://github.com/paleo/alignfirst/blob/main/packages/alignfirst/templates/setup/topics/upgrade.md#convert-aligndev-profile-defaults).
 - Direct `code.agent/defaultModel/models/skipPermissions/unset` — they no longer select or configure an agent. Move them manually into a named profile and select it through the assistant profile's `defaultAgentProfile` or `code.fallbackProfile`; see the [upgrade reference](https://github.com/paleo/alignfirst/blob/main/packages/alignfirst/templates/setup/topics/upgrade.md#convert-aligndev-launch-settings).
 
