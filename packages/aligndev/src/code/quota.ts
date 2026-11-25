@@ -65,14 +65,18 @@ export function createQuotaReader(
     try {
       return await readSourceQuota(source, context, adapter, timeoutMs);
     } catch (error) {
-      if (error instanceof Error && /^(Codex|Claude Code|Antigravity) /.test(error.message))
-        throw error;
+      if (error instanceof Error && isSourceDiagnostic(error.message)) throw error;
       throw new Error(
         `${QUOTA_SOURCE_NAMES[source]} quota command failed; ` +
           "check that the native CLI is installed and authenticated in the selected configuration.",
       );
     }
   };
+}
+
+// A source's own diagnostic names the native CLI.
+function isSourceDiagnostic(message: string): boolean {
+  return Object.values(QUOTA_SOURCE_NAMES).some((name) => message.startsWith(`${name} `));
 }
 
 function readSourceQuota(

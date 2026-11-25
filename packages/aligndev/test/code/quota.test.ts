@@ -361,6 +361,23 @@ describe("Antigravity quota", () => {
     );
   });
 
+  it("keeps its own diagnostic, and replaces any other failure with the generic one", async () => {
+    const readWith = (execute: QuotaProcessAdapter["execute"]) =>
+      createQuotaReader({
+        execute,
+        spawn: () => {
+          throw new Error("unexpected spawn");
+        },
+      })("agy", context);
+    await expect(readWith(async () => ({ stdout: "nope" }))).rejects.toThrow(
+      /^Antigravity returned malformed usage JSON/,
+    );
+    const missing = readWith(async () => {
+      throw new Error("spawn agy ENOENT");
+    });
+    await expect(missing).rejects.toThrow(/^Antigravity quota command failed;/);
+  });
+
   it("reports each valid bucket's used percentage, window and reset, per group", () => {
     const output = formatAgyQuota(
       JSON.stringify(
