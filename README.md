@@ -44,7 +44,7 @@ The `alignfirst` CLI provides the AlignFirst workflows. See [the CLI README](pac
 
 ## AlignDev CLI
 
-`aligndev` turns a Claude Code, Codex or Pi session, or an OpenClaw bot, into an **assistant**: you talk to it, and it delegates the coding to an AI coding agent through the AlignFirst protocols. See [packages/aligndev/README.md](packages/aligndev/README.md).
+`aligndev` turns a Claude Code, Codex, Pi or Antigravity session, or an OpenClaw bot, into an **assistant**: you talk to it, and it delegates the coding to an AI coding agent through the AlignFirst protocols. See [packages/aligndev/README.md](packages/aligndev/README.md).
 
 ### AlignDev for OpenClaw
 

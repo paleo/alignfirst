@@ -26,6 +26,8 @@ const piFiles = [
 ];
 const piTrees = ["extensions", "skills", "prompts", "themes", "npm", "git", "agents", "bin"];
 const codingHarnesses = ["claude", "codex", "pi"];
+const unsupportedAntigravity =
+  "the OpenClaw deployment template does not support Antigravity yet; see https://github.com/paleo/alignfirst/issues/163";
 // Recognized keys of a coding-agent profile that an openclaw profile rejects.
 const codingOnlyProfileKeys = [
   "default",
@@ -78,6 +80,8 @@ export function inventoryProfiles(settingsFile, serviceHome, deployedSettingsFil
     addStore(stores, name, profile.harness, profile, home, deployedSettingsFile);
     const quota = profile.quota;
     if (quota === undefined) continue;
+    if (isObject(quota) && quota.source === "agy")
+      throw new Error(`Unsupported quota source agy: ${unsupportedAntigravity}`);
     if (!isObject(quota) || !["claude", "codex", "none"].includes(quota.source))
       throw new Error("Invalid quota source");
     if (quota.source === "none") {
@@ -185,6 +189,8 @@ function readProfile(value) {
     validateDisabled(profile, path);
     return profile;
   }
+  if (value.harness === "agy")
+    throw new Error(`${path}.harness agy is unsupported: ${unsupportedAntigravity}`);
   if (!codingHarnesses.includes(value.harness)) {
     throw new Error(
       value.harness === undefined && Object.hasOwn(value, "agent")

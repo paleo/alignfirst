@@ -77,7 +77,7 @@ If the frontmatter's `exitReason` is `auth_required`, the coding agent is not au
 
 `{{ALIGNDEV}} code` runs the agent in the **foreground** until it exits. It never backgrounds or detaches itself. By default it streams the transcript to stdout; `--quiet` suppresses that stream while preserving the durable session file and control/diagnostic output.
 
-Choose the launch facility from **your own harness**, independently of the agent's harness, `{{AGENT}}`. The selected profile chooses the agent only: Claude Code, Codex and Pi all remain available as the agent, whatever your harness.
+Choose the launch facility from **your own harness**, independently of the agent's harness, `{{AGENT}}`. The selected profile chooses the agent only: Claude Code, Codex, Pi and Antigravity all remain available as the agent, whatever your harness.
 
 **One protocol run at a time per worktree and per ticket** — protocol runs share the working tree, and the ticket's work files. Finish (or cancel) the current protocol run before launching or resuming another. Plain messages (answers, questions) can be sent at any time.
 
@@ -128,11 +128,17 @@ When sandboxing is enabled, run `{{ALIGNDEV}} code` with the sandbox disabled: t
 
 Use your established background-execution facility with no time limit and request escalated permissions for `{{ALIGNDEV}} code`. Retain the initial `Session file: <path>` control line. End the launch turn on its acknowledgement without polling. Where no completion bridge is configured, the report waits for the user's next message. At the start of each later user turn, before anything else, check every pending run with `{{ALIGNDEV}} code status <session-file>`, and report the ones that finished. This fallback does not assert that Codex lacks native queue capability.
 
-Neither harness detaches with `&` or a wrapper. A run is pending until its outcome is handled.
+### Your harness: Antigravity
+
+Launch `{{ALIGNDEV}} code … --quiet` with `run_command` as a background task: `BypassSandbox: true`, `IsDaemon: false`, and the shortest `WaitMsBeforeAsync`. The child needs network and writes outside the workspace. `--quiet` keeps the transcript out of the completion message, which carries the command's full output. When Antigravity asks for permission to run the command, the developer approves.
+
+Retain the initial `Session file: <path>` control line. End the launch turn on its acknowledgement without polling. Antigravity wakes the session with a system message when the command exits; a background task has no time limit.
+
+Claude Code, Codex and Antigravity never detach with `&` or a wrapper. A run is pending until its outcome is handled.
 
 ## After a run completes
 
-**Your harness is Pi:** use the ownership and result-only procedure above. **Your harness is Claude Code or Codex:** run `{{ALIGNDEV}} code status <session-file>` to reconcile stale status, then read the session file and report in this conversation.
+**Your harness is Pi:** use the ownership and result-only procedure above. **Your harness is Claude Code, Codex or Antigravity:** run `{{ALIGNDEV}} code status <session-file>` to reconcile stale status, then read the session file and report in this conversation.
 
 An `exitReason` of `auth_required` (`{{ALIGNDEV}} code new/resume` exits `2`) means the selected child is not authenticated on this machine. Tell the user to authenticate with {{AUTH_COMMAND}}, and do not retry. Other launch/run failures exit `1`; success exits `0`. A successful `status` query exits `0` even for a failed run: read its `status` and `exitReason`.
 
@@ -191,12 +197,12 @@ Don't reconstruct what happened: no re-running the agent, no `git` archaeology t
 {{/codingAgent}}
 
 {{#openclaw}}
-The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. The profile's nonempty `models` replaces its displayed allowlist. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
+The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. The profile's nonempty `models` replaces its displayed allowlist. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged. An Antigravity agent takes native model names unchanged, preferably a base name with `--effort`: a name with an effort suffix conflicts with a different effort.
 
 `{{ALIGNDEV}} code status` seals a `running` record only when its `machineId` matches this installation and its pid is conclusively gone or reused. Foreign, legacy and uncertain records stay `running`; a sealed run reports `status: failed`, `exitReason: terminated`. `{{ALIGNDEV}} code quota` works without a `.plans` directory and does not start a coding session. Its output belongs to the selected native quota CLI's account; account pairing with the coding child is not verified.
 {{/openclaw}}
 {{#codingAgent}}
-The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. A nonempty profile `models` list replaces its accepted model list. Pi has no finite allowlist by default: native selectors pass through unchanged, preferably `provider/model`, with optional thinking suffix; `--effort` overrides that suffix. For a Pi child without `--model`, a new run uses profile `defaultModel`, else Pi's own default; a resume retains and validates its recorded model. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged.
+The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. A nonempty profile `models` list replaces its accepted model list. Pi has no finite allowlist by default: native selectors pass through unchanged, preferably `provider/model`, with optional thinking suffix; `--effort` overrides that suffix. For a Pi child without `--model`, a new run uses profile `defaultModel`, else Pi's own default; a resume retains and validates its recorded model. Codex aliases `astra`, `sol`, `terra`, and `luna` resolve to the newest bundled matching slug only when selected; a configured full slug passes through unchanged. An Antigravity agent takes native model names unchanged, preferably a base name with `--effort`: a name with an effort suffix conflicts with a different effort.
 
 `{{ALIGNDEV}} code status` seals a `running` record only when its `machineId` matches this installation and its pid is conclusively gone or reused. Foreign, legacy and uncertain records stay `running`; a sealed run reports `status: failed`, `exitReason: terminated`. `{{ALIGNDEV}} code quota` needs no `.plans` and starts no session. Its output belongs to the selected native quota CLI's account; account pairing with the coding child is not verified.
 {{/codingAgent}}

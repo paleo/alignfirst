@@ -4,7 +4,7 @@ Hard-won notes from tightening the `myassistant` workspace files (`aligndev-open
 
 ## Shared templates
 
-The playbook templates and `code.md` serve four contexts: a Slack thread, a Discord thread and an app conversation under `openclaw`, and `codingAgent`, a Claude Code, Codex or Pi session acting as the assistant. `project.md` is OpenClaw only.
+The playbook templates and `code.md` serve four contexts: a Slack thread, a Discord thread and an app conversation under `openclaw`, and `codingAgent`, a Claude Code, Codex, Pi or Antigravity session acting as the assistant. `project.md` is OpenClaw only.
 
 ### Dispatcher, playbook, entry topics
 
@@ -67,7 +67,7 @@ The OpenClaw session itself reads the playbook. Address it directly with "you" a
 
 ## Name the delegate by its role
 
-The playbook calls the delegate **the agent**: the coding agent launched with `aligndev code`. The word translates well, and "the agent's harness" names the software that runs it, the value of a coding profile's `harness` field. The playbook also states that the assistant is never an agent, since its own harness may be Claude Code, Codex, Pi or OpenClaw. The playbook once used a command name as a noun ("alcode reads the repository"), which invites the model to run a command by that name, even after a rename.
+The playbook calls the delegate **the agent**: the coding agent launched with `aligndev code`. The word translates well, and "the agent's harness" names the software that runs it, the value of a coding profile's `harness` field. The playbook also states that the assistant is never an agent, since its own harness may be Claude Code, Codex, Pi, Antigravity or OpenClaw. The playbook once used a command name as a noun ("alcode reads the repository"), which invites the model to run a command by that name, even after a rename.
 
 ## Keep the activation message static
 

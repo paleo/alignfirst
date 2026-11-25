@@ -12,7 +12,7 @@ When preparing a project for an assistant, skip the skills and the global bootst
 - `alignfirst`, optional, lets the agent recognize a protocol named in prose. Add `--skill alignfirst` when the user wants that recognition in repositories without the `alignfirst context` bootstrap section. Where that section exists, the skill is unnecessary.
 - `paseo-alignfirst-workspace`, optional, drives the Paseo lifecycle; see `{{CMD}} setup guide paseo`.
 
-The command skills keep `disable-model-invocation: true`: only a human invokes them. Humans type `/name` in Claude Code, GitHub Copilot and Cursor, `$name` in Codex, and `/skill:name` in Pi, such as `/skill:alspec`. Skills reuse the guides already in context, and each named guide includes the ticket directory and work-file rules.
+The command skills keep `disable-model-invocation: true`: only a human invokes them. Humans type `/name` in Claude Code, Antigravity, GitHub Copilot and Cursor, `$name` in Codex, and `/skill:name` in Pi, such as `/skill:alspec`. Skills reuse the guides already in context, and each named guide includes the ticket directory and work-file rules.
 
 ## Availability
 
@@ -26,7 +26,7 @@ The skills are installed globally only. With the user's approval, run:
 {{SKILLS_INSTALL}}
 ```
 
-Replace `<host>` with the user's coding host: `claude-code`, `codex` or `pi`. Repeat `--agent` for several hosts, as in `--agent claude-code --agent codex`. To list the package's skills without installing them:
+Replace `<host>` with the user's coding host: `claude-code`, `codex`, `pi` or `antigravity-cli`. Repeat `--agent` for several hosts, as in `--agent claude-code --agent codex`. To list the package's skills without installing them:
 
 ```sh
 {{SKILLS}} add https://github.com/paleo/alignfirst --list </dev/null
@@ -35,6 +35,10 @@ Replace `<host>` with the user's coding host: `claude-code`, `codex` or `pi`. Re
 When a global installation fails for lack of write access, report it once and continue without the skills. Never fall back to another location. On an AlignDev OpenClaw host, the service account's skill directories are admin-owned and locked, by design.
 
 Restart the target agent after installation. Update the skills with `{{SKILLS}} update --global --yes`. Remove one with `{{SKILLS}} remove --global <skill-name> --yes`.
+
+## Antigravity
+
+Antigravity also reads the shared `~/.agents/skills/`. The AlignFirst commands need the network, so they must leave Antigravity's sandbox. An interactive session asks the developer when Antigravity's own evaluation refuses a command. See "Antigravity permissions" in `{{CMD}} setup guide coding-agent-assistant`.
 
 ## Pi
 

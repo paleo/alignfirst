@@ -8,7 +8,7 @@ Supported systems: Linux and macOS, and Windows through WSL.
 
 ## Agent skills
 
-Nine Agent Skill stubs expose the CLI as commands in Claude Code, Codex, Pi, GitHub Copilot, and Cursor. Install them globally:
+Nine Agent Skill stubs expose the CLI as commands in Claude Code, Codex, Pi, Antigravity, GitHub Copilot, and Cursor. Install them globally:
 
 ```sh
 npx skills add https://github.com/paleo/alignfirst --global \
