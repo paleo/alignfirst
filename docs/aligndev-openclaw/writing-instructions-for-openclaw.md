@@ -59,7 +59,7 @@ Write every command as `{{ALIGNDEV}} …` or `{{ALIGNFIRST}} …`. They render a
 
 ### Core and runbooks
 
-A harness truncates a long command output, so every rendered guide stays under 25,000 characters under `codingAgent` with a recognized harness, and under 40,000 under `openclaw`. `packages/aligndev/test/guide-renders.test.ts` enforces both limits. The unrecognized-harness render of `guide code` exceeds 25,000 and stays outside the test: it serves an operator shell, which has no output cap.
+A harness truncates a long command output, so every rendered guide stays under 25,000 characters under `codingAgent` with a recognized harness, and under 40,000 under `openclaw`. `packages/aligndev/test/guide-renders.test.ts` enforces both limits. The unrecognized-harness render of `guide code` holds every harness block, exceeds 25,000 and stays outside the test. An operator shell, which has no output cap, receives it. So does a session whose environment carries the markers of several harnesses; setting `ALIGNDEV_ASSISTANT_HARNESS` restores its own render.
 
 A section stays in the core, `working-session`, when most sessions need it. It becomes a runbook, read when its situation arises, when only some sessions need it. A guide read at a moment of its own, such as the completion turn, is a runbook too.
 
