@@ -186,7 +186,7 @@ Start the assistant's harness in the project's repository and invoke `/aligndev`
 
 ## Permissions
 
-As the assistant's harness, Claude Code, Codex and Antigravity use their established elevation: request escalated permissions in Codex, disable Claude Code's sandbox for the launch when it is enabled, or launch `aligndev code` outside Antigravity's sandbox. The developer approves those requests because the agent needs network access and writes outside the project.
+As the assistant's harness, Claude Code, Codex and Antigravity use their established elevation: request escalated permissions in Codex, disable Claude Code's sandbox for the launch when it is enabled, or run every `aligndev` and `alignfirst` command outside Antigravity's sandbox. The developer approves those requests because the agent needs network access and writes outside the project.
 
 Pi and both extensions use ordinary OS permissions. The cwd controls discovery, not filesystem isolation. Saved project trust controls resource loading, not tool access. A profile's `skipPermissions` has no effect on Pi. The CLI prepares companions and injects project context; the generic tool only honors the command and cwd.
 

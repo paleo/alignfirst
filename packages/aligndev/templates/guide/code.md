@@ -130,7 +130,9 @@ Use your established background-execution facility with no time limit and reques
 
 ### Your harness: Antigravity
 
-Launch `{{ALIGNDEV}} code … --quiet` with `run_command` as a background task: `BypassSandbox: true`, `IsDaemon: false`, and the shortest `WaitMsBeforeAsync`. The child needs network and writes outside the workspace. `--quiet` keeps the transcript out of the completion message, which carries the command's full output. When Antigravity asks for permission to run the command, the developer approves.
+Run every `{{ALIGNDEV}}` and `{{ALIGNFIRST}}` command with `run_command` and `BypassSandbox: true`. The sandbox hides the network, a `node` that a version manager links under `/run/user/<uid>`, and the main checkout of a linked worktree. The child also writes outside the workspace.
+
+Launch `{{ALIGNDEV}} code … --quiet` as a background task: `IsDaemon: false` and the shortest `WaitMsBeforeAsync`. `--quiet` keeps the transcript out of the completion message, which carries the command's full output.
 
 Retain the initial `Session file: <path>` control line. End the launch turn on its acknowledgement without polling. Antigravity wakes the session with a system message when the command exits; a background task has no time limit.
 

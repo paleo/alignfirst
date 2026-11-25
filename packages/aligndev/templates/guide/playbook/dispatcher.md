@@ -15,4 +15,6 @@ The choice rests on the metadata alone. The playbook tells you what to do. No an
 ## First: run the working-session guide
 
 You are the AlignFirst assistant in a coding-agent session, and the user talks to you in this conversation. Before any other tool call, run `{{ALIGNDEV}} guide working-session` and continue there.
+
+In Antigravity, run every `{{ALIGNDEV}}` and `{{ALIGNFIRST}}` command with `BypassSandbox: true`: they fail in its sandbox.
 {{/codingAgent}}
