@@ -120,8 +120,8 @@ export interface AgentAdapter {
   isAuthenticationError(message: string): boolean;
   authenticationMessage(detail?: string): string;
   failureMessage?(state: AgentProtocolState): string;
-  // Wraps the prompt for the child's stdin. Absent: the prompt is sent as is.
-  formatInput?(prompt: string): string;
+  // Builds the child's stdin from the prompt. Absent: the prompt is sent as is.
+  formatInput?(config: RunConfig): string;
 }
 
 export type SpawnAgentProcess = (
@@ -269,7 +269,7 @@ function spawnAgent(
       inputError = error;
       child.kill("SIGTERM");
     });
-    child.stdin?.end(adapter.formatInput?.(config.prompt) ?? config.prompt, "utf8");
+    child.stdin?.end(adapter.formatInput?.(config) ?? config.prompt, "utf8");
   });
 }
 

@@ -37,8 +37,19 @@ function buildAgyArgs(config: RunConfig): string[] {
   return args;
 }
 
-function formatAgyInput(prompt: string): string {
-  return `${JSON.stringify({ event: "user", message: { content: prompt } })}\n`;
+// Antigravity starts its shell in the workspace directory that sorts first by path, and names it
+// as the command working directory. An added directory that sorts before the working directory,
+// such as a companion or a linked worktree's git directory, takes its place: the note restores it.
+function formatAgyInput(config: RunConfig): string {
+  const content =
+    config.additionalDirectories.length === 0
+      ? config.prompt
+      : `${workingDirectoryNote(config.cwd)}\n\n${config.prompt}`;
+  return `${JSON.stringify({ event: "user", message: { content } })}\n`;
+}
+
+function workingDirectoryNote(cwd: string): string {
+  return `Your working directory is \`${cwd}\`: run every shell command there, even where your context names another command working directory.`;
 }
 
 function createAgyState(config: RunConfig): AgyState {

@@ -196,6 +196,8 @@ A delegated run uses Antigravity's auto mode. Its commands run first in a termin
 
 The sandbox hides other directories, the main checkout of a linked git worktree included. From a linked worktree, AlignDev also makes the repository's common git directory writable, so `git` commands run in the sandbox, commits included. The rest of the main checkout stays hidden.
 
+Antigravity starts its shell in the writable directory whose path sorts first, the companion or the git directory included. AlignDev's prompt names the working directory, and the agent runs its commands there.
+
 Antigravity may let a command leave the sandbox, by its own evaluation. In a headless run, it refuses `npx` commands, and nothing can approve them. A delegated protocol then stops at its first `alignfirst` command.
 
 Two settings let it run. On a trusted machine, the recommended one is `"skipPermissions": true` on the `agy` profile, which removes the sandbox:

@@ -66,10 +66,18 @@ describe("Antigravity argv", () => {
 describe("Antigravity input", () => {
   it("sends the prompt as one user event line", () => {
     const prompt = 'Say "hi"\nthen\tstop \\ now';
-    const input = adapter.formatInput?.(prompt);
+    const input = adapter.formatInput?.({ ...BASE, prompt });
     expect(input?.endsWith("\n")).toBe(true);
     expect(input?.slice(0, -1)).not.toContain("\n");
     expect(JSON.parse(input ?? "")).toEqual({ event: "user", message: { content: prompt } });
+  });
+
+  // Antigravity's shell starts in the added directory that sorts first, here before `/proj`.
+  it("names the working directory when an added directory can take its place", () => {
+    const input = adapter.formatInput?.({ ...BASE, additionalDirectories: ["/main/.git"] });
+    const { content } = JSON.parse(input ?? "").message;
+    expect(content).toContain("`/proj`");
+    expect(content.endsWith(`\n\n${BASE.prompt}`)).toBe(true);
   });
 });
 
