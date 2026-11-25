@@ -31,7 +31,7 @@ You need:
 - **PROJECT_PATH** — The canonical absolute main-worktree path recorded in the thread starter.
 {{/thread}}
 {{#conversation}}
-- **PROJECT_PATH** — The canonical absolute main-worktree path resolved by Step 1 of `{{GUIDE}} working-session`.
+- **PROJECT_PATH** — The canonical absolute main-worktree path resolved by Step 1 of your working-session guide.
 - **The workplace and the default branch** — The session's worktree, its branch, and the project's default branch, retained by the same step.
 {{/conversation}}
 - **TICKET_ID** — The external ticket ID or the side ticket `side-N` reserved by the working session.
@@ -170,7 +170,7 @@ The lines below the tag report the workspace: after `Status:`, add what the setu
 {{/conversation}}
 
 {{#conversation}}
-In place on an existing branch, fetch first. A fast-forward of the branch onto its remote counterpart or onto the base branch, on a clean tree, is the only sync done without asking: do it, then report it in one line. Anything else — uncommitted changes, a remote branch that does not fast-forward, a base-branch catch-up that needs a merge commit — ends the turn on one message stating what will happen ("I'll commit your changes as WIP and merge `main`, OK?"). The list below runs on the user's yes. In a workspace you opened or created, the list runs directly.
+In place on an existing branch, fetch first. On a clean tree, sync without asking: fast-forward onto the remote counterpart, and catch up with the base branch as step 4 below describes, merge commit included. Report what came in, in one line. Uncommitted changes or a remote branch that does not fast-forward end the turn on one message stating what will happen ("I'll commit your changes as WIP, then sync, OK?"). The list below runs on the user's yes. In a workspace you opened or created, the list runs directly.
 {{/conversation}}
 
 Skip on sub-path 3 (no branch — nothing to sync). If Step 4 was skipped, select and fetch the base ref as described there. Once the workspace is set up, bring the branch up to date *before* inspecting, working, or reporting a status — a teammate may have pushed since you last synced, and a report off a stale branch is wrong. In order:
@@ -178,10 +178,31 @@ Skip on sub-path 3 (no branch — nothing to sync). If Step 4 was skipped, selec
 1. **Confirm the branch and the work files.** Check the worktree's checked-out branch matches the explicit user choice, or otherwise carries the expected TICKET_ID. If it doesn't, stop and surface it to the user — don't work on the wrong branch. Then run `{{ALIGNFIRST}} plans check` from the worktree.
 2. **Guard uncommitted work.** Run `git status`. If the worktree is dirty, have the agent commit a WIP first (even if it doesn't compile) — never sync over uncommitted work.
 3. **Merge the remote branch.** If the branch has a remote counterpart, fetch its remote if it differs from the base's, then merge its freshly fetched ref into the local branch to catch up. Delegate to the agent (`merge` protocol) when it doesn't fast-forward or conflicts.
-4. **Catch up with the base branch.** If the selected base ref has commits not yet in this branch, run the "Updating a branch with the base branch" flow — without asking; step 7 tells the user what came in.
-5. **Refresh the workspace if commits came in.** If the merge brought in new commits, run the "Refreshing the workspace after a branch refresh" flow.
+4. **Catch up with the base branch.** A review of someone else's branch skips this step: the branch belongs to its author. Otherwise, if the selected base ref has commits not yet in this branch, run the "Updating a branch with the base branch" flow below — without asking; step 7 tells the user what came in.
+5. **Refresh the workspace if commits came in.** If the merge brought in new commits, run the "Refreshing the workspace after a branch refresh" flow in your working-session guide.
 6. **Check for an open MR/PR** on this branch and note its state.
 7. **Report what changed.** If either merge brought in new commits, post a one-line summary so the user knows the ground shifted.
+
+### Updating a branch with the base branch
+
+{{#openclaw}}
+For an active development branch that needs to catch up with its base, follow the steps below. A request to refresh the base branch itself follows "Multi-project and operational work" in your working-session guide.
+{{/openclaw}}
+{{#codingAgent}}
+For an active development branch that needs to catch up with its base, follow the steps below. A request to refresh the base branch itself follows "Operational work" in your working-session guide.
+{{/codingAgent}}
+
+1. Fetch and fast-forward the local base branch ref without checking it out.
+2. Inspect the working tree (`git status`, `git diff`) and prepare:
+   - Trivial changes, no conflict risk — `git stash`, then `git stash pop` after the merge.
+   - Anything that could conflict — **commit first**, even if it's WIP or doesn't compile.
+3. Delegate the merge to the agent (`merge` protocol).
+{{#thread}}
+4. Push if the thread already has remote commits.
+{{/thread}}
+{{#conversation}}
+4. Push if the branch already has remote commits.
+{{/conversation}}
 
 ## Step 6 — Status request: the work content
 

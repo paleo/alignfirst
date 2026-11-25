@@ -57,7 +57,7 @@ In this conversation, the run's exit brings two turns, about ten seconds apart: 
 Any heartbeat received while an `{{ALIGNDEV}} code` run is **still pending** enters this completion procedure:
 
 1. **Reconcile the run, then read its session file.** Run `{{ALIGNDEV}} code status <session-file>` from the run's worktree when you retained its path. Otherwise, for a ticket run, use `{{ALIGNDEV}} code status --ticket <id>`, including `side-N`; its `sessionFile:` line names the newest run's file. For a run tagged with this session's key, use `{{ALIGNDEV}} code status --meta <KEY>`: it selects the newest run carrying that key, wherever it sits under `.plans/`. The shared worktree may hold runs from other threads, so never select its newest run indiscriminately. If it reports `running`, keep the run pending and end the turn with exactly `HEARTBEAT_OK`. Otherwise read the file. Its frontmatter holds `status` (`succeeded` / `failed`) and the session id; the `---- Result ----` block holds the outcome.
-2. **Verify, then report — one message that ends the turn.** Run the verification your operating instructions prescribe. Any `{{ALIGNDEV}} code` run launched from this completion turn — a manual test, a review, the next work item — launches exactly like the first one: backgrounded, with the chained completion wake. Its report becomes the launch acknowledgement, and the outcome lands on that run's own wake. Then report, in the user's language, where the work was requested:
+2. **Verify, then report — one message that ends the turn.** For a run that changed code, run `{{GUIDE}} change-wrap-up` and follow it. Any `{{ALIGNDEV}} code` run launched from this completion turn — a manual test, a review, the next work item — launches exactly like the first one: backgrounded, with the chained completion wake. Its report becomes the launch acknowledgement, and the outcome lands on that run's own wake. Then report, in the user's language, where the work was requested:
 
    `Coding run {succeeded | failed} — the agent reports: {one-line summary of the Result block}. {What you verified.}`
 
@@ -136,7 +136,7 @@ Neither harness detaches with `&` or a wrapper. A run is pending until its outco
 
 An `exitReason` of `auth_required` (`{{ALIGNDEV}} code new/resume` exits `2`) means the selected child is not authenticated on this machine. Tell the user to authenticate with {{AUTH_COMMAND}}, and do not retry. Other launch/run failures exit `1`; success exits `0`. A successful `status` query exits `0` even for a failed run: read its `status` and `exitReason`.
 
-Don't reconstruct what happened: no re-running the agent, no `git` archaeology to double-check its account — the session file is authoritative for that. Run the verification your operating instructions prescribe. A failing check is new work, in a new agent run; do not silently retry. Keep session files as the durable audit trail.
+Don't reconstruct what happened: no re-running the agent, no `git` archaeology to double-check its account — the session file is authoritative for that. For a run that changed code, run `{{GUIDE}} change-wrap-up` and follow it. A failing check is new work, in a new agent run; do not silently retry. Keep session files as the durable audit trail.
 {{/codingAgent}}
 
 ## CLI reference
@@ -243,7 +243,7 @@ For large work, do not rush. Decompose it yourself only when the concerns are tr
    For a main plan, end the message with *"Commit at each step."*: the agent spawns one subagent per sub-plan, commits after each, and writes a main summary.
 4. **Commit** — use the suggested commit message from the spec file. After a main plan, the commits already exist; only commit what the subagents left uncommitted.
 
-Run the chain end to end. The plan is a step of the implementation, not a checkpoint for your user to clear: the moment it's written, launch the execution.
+Run the chain end to end. The plan is a step of the implementation, not a checkpoint for your user to clear: the moment it's written, launch the execution and tell your user in one line that it started.
 
 ### Where the plan runs
 
@@ -291,21 +291,6 @@ Stop AAD now. Start a spec instead (alignfirst).
 <discussion answer>
 ```
 
-## Review workflow
-
-Two fresh sessions: one reviews, one fixes.
-
-1. **Review** — `{{ALIGNDEV}} code new --protocol review --ticket AB-123`. The agent reviews the current branch against the base branch and writes a review file; its path is in the run's result. Retain the session id.
-   - **Options** — the message carries them, as in `--message "Light review. Starting commit: \`<sha>\`."`:
-     - `Base branch: \`develop\`.` — the default is the repository's default branch.
-     - `Starting commit: \`<sha>\`.` — the review covers the commits added after it. A review file names the commit it reviewed on its `Reviewed commit` line: pass that commit to have the later ones reviewed.
-     - `Light review.` or `Regular review.` — the form. A light review is a single pass by the review session; a regular one runs four reviewers. Without a form, the agent takes the light review for a minor change and the regular one otherwise.
-   - **Follow up** (someone else's branch, its author pushed fixes) — `{{ALIGNDEV}} code resume <sessionId> --message "Fixes have been pushed, please check."`, in the review session, with the author's replies to the review appended when there are any. The agent checks its findings against the new commits and reports which are resolved and which remain. A new review session would start over.
-2. **Fix** (optional, always in a fresh session — never in the review session) — `{{ALIGNDEV}} code new --protocol aad --ticket AB-123 --message "Here is a code review: \`.plans/AB-123/B1-review.md\`. What should we fix?"`. Send this message as it is, pointed at wherever the review lives: the review file, or the PR/MR whose comments carry it. The agent challenges the findings and proposes fixes; decide together what to fix, as in any AAD session. The goal is the project's code quality, and a finding is not an order: welcome a fix or an expansion that cleans things up, refuse one that adds complexity; simplicity wins. The agent then implements and writes a summary file.
-3. **Recheck** (when the fix session fixed an Important finding or went beyond the findings) — once the fixes are committed, resume the original review session without a protocol. Point at the fix summary and list unchanged findings with a few words of rationale each. Ask the reviewer to check the fixes, look for regressions they introduced, and assess those decisions. Ask it to then set the `Reviewed commit` line of its review file to the commit it checked. You decide what to do with its feedback.
-
-Skip the fix step when the review is informational or has no finding. A review with nits alone still gets it: many nits improve the code.
-
 ## Catch up on a ticket
 
 `--catchup` gives a new session the ticket's history (requests, specs, reviews, summaries) before the protocol and message. Use it when the ticket has prior work, for a status synthesis, or to start AAD or spec on an existing ticket:
@@ -322,7 +307,7 @@ Prefer `--message-file` for long or multi-line messages. A quoted heredoc delimi
 ## Other protocols
 
 - **description** — `{{ALIGNDEV}} code new --protocol description --ticket AB-123`. Writes a PR/MR description for committed work. No discussion.
-- **review** — see the review workflow above.
+- **review** — `{{GUIDE}} code-review` holds the review workflow.
 - **merge** — `{{ALIGNDEV}} code new --protocol merge --ticket AB-123`. Resolves conflicts and summarizes tricky resolutions. Pass the incoming branch via `--message` to start the merge.
 
 ## Answering the agent's questions
@@ -340,6 +325,6 @@ A question your reply skips or answers partially stays open under its topic. Acc
 
 **Technical questions** — architecture, patterns, existing behavior, anything answerable by reading the code. Never escalate these to the user. Push the agent to investigate: *"Explore the codebase to find out, and give me your opinion."*, *"Do not rush. Take the time to fully understand the situation first."*, *"What would be the elegant, proper, simple yet robust solution?"*, *"Check if a similar pattern is already implemented elsewhere in the codebase."*
 
-**Functional or UX questions** — product behavior, user-facing decisions, business rules. These need human judgement: escalate to your user under the agent's topic number, as "Questions for the user" in `{{GUIDE}} working-session` describes, then relay the answer.
+**Functional or UX questions** — product behavior, user-facing decisions, business rules. These need human judgement: escalate to your user under the agent's topic number, as "Questions for the user" in your working-session guide describes, then relay the answer.
 
 When in doubt, ask the agent to explore first. Escalate only when the question truly cannot be answered from the codebase.

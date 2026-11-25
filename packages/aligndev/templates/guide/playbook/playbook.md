@@ -79,12 +79,10 @@ Never reconstruct PROJECT_PATH from PROJECT.
 You work on one project: the repository where this session started. Keep these values distinct:
 
 - **PROJECT** — the main-worktree directory name shown to the user.
-- **PROJECT_PATH** — the absolute main-worktree path.
+- **PROJECT_PATH** — the absolute main-worktree path. It anchors main-worktree Git commands and workspace tooling.
+- **The workplace** — the worktree and branch where branch work and `{{ALIGNDEV}} code` happen: the session's own by default.
 
-Step 1 of `{{GUIDE}} working-session` resolves both, and the workplace: the session's worktree and its branch, by default.
-Run `{{ALIGNFIRST}} assistant-instructions` in the selected workplace for its conventions and explicitly configured assistant guide. PROJECT_PATH anchors main-worktree Git commands and workspace tooling. Branch work and `{{ALIGNDEV}} code` happen in the workplace, which the setup procedure may move to a workspace.
-
-Creating, onboarding, or removing a project is not handled in this mode. When the user asks for it, say so.
+Step 1 of the working session below resolves all three.
 {{/codingAgent}}
 
 ## Tickets and AlignFirst protocols
@@ -98,9 +96,6 @@ Use AlignFirst protocols only for work owned by one project. Project bootstrap (
 Read-only work uses this conversation's worktree as it is when the conversation started in a linked worktree of the project, otherwise the refreshed main worktree.
 {{/app}}
 {{/openclaw}}
-{{#codingAgent}}
-Workspace cleanup, base-branch refresh, and other operational work use no protocol. A ticket ID may still identify the project workspaces involved.
-{{/codingAgent}}
 
 Users may name a protocol by its skill alias. Translate it to the `{{ALIGNDEV}} code --protocol` value: `alspec` → `spec`, `alplan` → `plan`, `al` or AAD → `aad`, `almerge` → `merge`, `alreview` → `review`, `aldescription` → `description`. `alcatchup` means `--catchup`; `alcatchupaad` and `alcatchupspec` mean `--catchup` with `aad` or `spec`.
 
@@ -127,7 +122,7 @@ Never express the effort of a coding task as a duration ("two hours", "half a da
 ## Delegating to the agent
 
 {{#openclaw}}
-To delegate, run `{{ALIGNDEV}} code` with the `exec` tool, from PROJECT_PATH or the linked worktree created from it. Before your first `{{ALIGNDEV}} code` run of a session, run `{{GUIDE}} code` (`exec`, instant, works from any directory) and follow it — it is the delegation manual, and it stays the last guide you read. Delegation always goes through `{{ALIGNDEV}} code` — never `sessions_spawn` or any sub-session spawn (those start another gateway session, not the coding agent).
+To delegate, run `{{ALIGNDEV}} code` with the `exec` tool, from PROJECT_PATH or the linked worktree created from it. Before your first `{{ALIGNDEV}} code` run of a session, run `{{GUIDE}} code` (`exec`, instant, works from any directory) and follow it — it is the delegation manual. Delegation always goes through `{{ALIGNDEV}} code` — never `sessions_spawn` or any sub-session spawn (those start another gateway session, not the coding agent).
 
 {{#thread}}
 On a takeover turn, immediately before its first coding delegation, read the current thread again through `message` with the current channel, complete `chat_id` as `target`, and bare thread ID. This catches human instructions that arrived during setup. Apply the newest human instruction before launching: a hold ends the turn after setup with no coding run, and a correction replaces the earlier scope. Skip this checkpoint on human turns and takeover turns that do not delegate.
@@ -142,9 +137,7 @@ For a `target` parameter, keep the whole `chat_id`, prefix included (e.g. `"chan
 {{/thread}}
 {{/openclaw}}
 {{#codingAgent}}
-To delegate, run `{{ALIGNDEV}} code` from the workplace, or from PROJECT_PATH for operational work. Before your first `{{ALIGNDEV}} code` run of a session, run `{{GUIDE}} code` and follow it — it is the delegation manual, and it stays the last guide you read. Delegation always goes through `{{ALIGNDEV}} code` — never your own subagents, `subagent` tool or tasks, and never an AlignFirst protocol skill run by yourself. A Pi child can use its own `subagent` tool for plan/review assignments; that is a separate role.
-
-Coding runs are long. Run `{{ALIGNDEV}} code` in the background, as the delegation guide describes.
+Delegation always goes through `{{ALIGNDEV}} code` — never your own subagents, `subagent` tool or tasks, and never an AlignFirst protocol skill run by yourself. A Pi child can use its own `subagent` tool for plan/review assignments; that is a separate role. Before your first `{{ALIGNDEV}} code` run of a session, run `{{GUIDE}} code` and follow it — it is the delegation manual.
 {{/codingAgent}}
 
 ## Ephemeral artifacts

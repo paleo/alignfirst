@@ -7,6 +7,13 @@ export const ALIGNFIRST_BIN = fileURLToPath(
   new URL("../../alignfirst/bin/alignfirst.mjs", import.meta.url),
 );
 
+// The environment of a run through `npx`: the guides print the `npx -y` command forms.
+export const NPX_ENV = {
+  npm_config_user_agent: "npm/11.19.0 node/v26.0.0 linux x64",
+  npm_command: "exec",
+  npm_lifecycle_event: "npx",
+};
+
 export interface Sink {
   write(text: string): void;
   text(): string;

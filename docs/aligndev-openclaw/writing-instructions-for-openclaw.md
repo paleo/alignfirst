@@ -55,6 +55,18 @@ The `codingAgent` assistant runs in the project's repository, and the user talks
 
 Write every command as `{{ALIGNDEV}} …` or `{{ALIGNFIRST}} …`. They render as `aligndev` and `alignfirst`, or as `npx -y aligndev` and `npx -y alignfirst` when `aligndev` runs through `npx`. Write a guide call as `{{GUIDE}} <topic>`: it renders as `aligndev guide --channel <surface>` under `openclaw` and `aligndev guide` under `codingAgent`, so the model carries the surface into every later call. The dispatcher writes its routes literally, and `{{ALIGNDEV}} guide project` takes no channel. `{{PROJECTS_ROOT}}` exists under `openclaw` only. Placeholders are replaced after block rendering, and the tests fail on any placeholder left in a rendered guide.
 
+### Core and runbooks
+
+A harness truncates a long command output, so every rendered guide stays under 25,000 characters under `codingAgent` and under 40,000 under `openclaw`. `packages/aligndev/test/guide-renders.test.ts` enforces both limits.
+
+A section stays in the core, `working-session`, when most sessions need it. It becomes a runbook, read when its situation arises, when only some sessions need it. A guide read at a moment of its own, such as the completion turn, is a runbook too.
+
+A cross-reference depends on where its target lives:
+
+- The core and a runbook cite another guide by its command, `{{GUIDE}} <topic>`.
+- A runbook cites a core section by its title followed by "in your working-session guide" or "from your working-session guide", without the command: the core is already in the session.
+- A section title alone is cited only inside the same guide.
+
 ## One rule, stated once
 
 No "Important:", no all-caps emphasis, no triple-bullet restatement of the same point. There are a lot of things that matter. The more you insist, the more diluted later content becomes.
