@@ -11,7 +11,6 @@ import {
   type CodingProfile,
   loadConfig,
   type ProfileSelection,
-  requirePortRange,
   requireProjectsRoot,
   resolveCodeConfig,
 } from "../src/config.js";
@@ -94,25 +93,6 @@ describe("settings shape", () => {
     expect(() => requireProjectsRoot(loadConfig(makeHome(), "alignfirst"))).toThrow(Error);
   });
 
-  it("reads portRange, a missing one failing only where it is required", () => {
-    const home = makeHome({ portRange: { first: 28000, last: 28599 } });
-    expect(requirePortRange(loadConfig(home, "alignfirst"))).toEqual({ first: 28000, last: 28599 });
-    writeConfig(home, { portRange: { first: 28000, last: 28000 } });
-    expect(loadConfig(home, "alignfirst").portRange).toEqual({ first: 28000, last: 28000 });
-    expect(() => requirePortRange(loadConfig(makeHome({}), "alignfirst"))).toThrow("portRange");
-  });
-
-  it.each([
-    { first: 28600, last: 28000 },
-    { first: 0, last: 100 },
-    { first: 1, last: 65_536 },
-    { first: 1.5, last: 100 },
-    { first: 28000 },
-    [28000, 28599],
-  ])("rejects the invalid portRange %j", (portRange) => {
-    expect(() => loadConfig(makeHome({ portRange }), "alignfirst")).toThrow(Error);
-  });
-
   it.each(['{"secret":"private-json-value" trailing}', "private-json-value"])(
     "sanitizes malformed JSON without rewriting input: %s",
     (text) => {
@@ -155,8 +135,9 @@ describe("settings shape", () => {
     [{ platform: "openclaw" }],
     [{ code: { profile: "x", profiles: { x: { harness: "pi" } } } }],
     [profileConfig({ harness: "pi", agent: "pi" })],
+    [{ portRange: { first: 28000, last: 28599 } }],
   ])(
-    "ignores the retired platform, code.profile and profile agent with a warning %j",
+    "ignores the retired platform, portRange, code.profile and profile agent with a warning %j",
     (settings) => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       loadConfig(makeHome(settings), "alignfirst");

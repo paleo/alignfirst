@@ -93,6 +93,8 @@ interface ConfigReport {
 }
 ```
 
+`alignfirst config --json <dir>...` reports several directories in one process, in the order given: `{ "reports": [{ path, report } | { path, error }] }`. `path` is absolute; a relative directory resolves against the working directory. `report` is the object above. A directory whose report fails yields `error` without failing the others, and the exit code stays 0. The AlignDev scan uses this form.
+
 `ItemLocation` carries an absolute `path`, `in: "project" | "companion"` and `exists`. `locations.alignfirst` and `workspace.location` identify the same selected merged file. `config` returns the full validated configuration with deprecated names normalized, including executable commands and literal environment settings. Keep credentials in environment variables or ignored files; authored literals may appear in reports and logs. Inspection executes no commands, reads no inherited environment values and creates no storage. An absent file reports canonical `.json` path, null schema/range and false dev capability; a conventions-only file reports schema version 1 with no range/services. Invalid/ambiguous/unsupported files fail rather than choose defaults. Missing new report fields produce actionable AlignFirst upgrade diagnostics, not old-shape compatibility.
 
 Independent `aligndev` profile selection is reported by config, doctor and project inventory without native agent/model resolution. AlignDev diagnostics identify the chosen structured command/runtime and available version; successful reports need no diagnostic subprocesses.

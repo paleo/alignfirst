@@ -150,13 +150,12 @@ function readSettings(settingsFile) {
   } catch {
     throw new Error(`${settingsFile}: must contain valid JSON`);
   }
-  const settings = settingsObject(value, ["projectsRoot", "portRange", "code"], "");
+  const settings = settingsObject(value, ["projectsRoot", "code"], "");
   if (
     settings.projectsRoot !== undefined &&
     (typeof settings.projectsRoot !== "string" || settings.projectsRoot.length === 0)
   )
     throw new Error("Invalid settings.projectsRoot");
-  if (settings.portRange !== undefined) validatePortRange(settings.portRange);
   const code = settingsObject(settings.code, ["fallbackProfile", "profiles"], "code");
   if (code.fallbackProfile !== undefined && !nonblank(code.fallbackProfile))
     throw new Error("code.fallbackProfile must be a nonblank string");
@@ -166,16 +165,6 @@ function readSettings(settingsFile) {
     Object.entries(code.profiles).map(([name, value]) => [name, readProfile(value)]),
   );
   return { ...settings, code };
-}
-
-function validatePortRange(value) {
-  const range = settingsObject(value, ["first", "last"], "portRange");
-  for (const key of ["first", "last"]) {
-    const port = range[key];
-    if (!Number.isInteger(port) || port < 1 || port > 65_535)
-      throw new Error(`portRange.${key} must be an integer from 1 to 65535`);
-  }
-  if (range.first > range.last) throw new Error("portRange.first must not exceed portRange.last");
 }
 
 // Dispatches on `harness`, like the CLI: an openclaw profile accepts only its own keys.
@@ -248,6 +237,11 @@ function migrationHint(path, key) {
     return (
       "platform is retired: the assistant's harness is resolved at each invocation " +
       "(see ALIGNDEV_ASSISTANT_HARNESS). Remove it."
+    );
+  if (path === "" && key === "portRange")
+    return (
+      "portRange is retired: pass the bounds to `project free-ports --within <first>..<last>`, " +
+      "and state a deployment's range in its own instructions. Remove it."
     );
   if (path === "code" && key === "profile")
     return (

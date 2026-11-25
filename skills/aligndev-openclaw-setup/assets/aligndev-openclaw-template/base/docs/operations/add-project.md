@@ -109,11 +109,11 @@ A portless project needs no claim. For a dev-server with ports, calculate
 
 ```sh
 sudo -H -u {{SERVICE_USER}} bash -lc '
-npx -y aligndev project free-ports --size <size>
+npx -y aligndev project free-ports --size <size> --within {{PORT_RANGE_FIRST}}..{{PORT_RANGE_LAST}}
 '
 ```
 
-The command returns the lowest free block inside the settings' `portRange`. This is a lookup, not a reservation. Record first/last only in the selected merged configuration's `devServer.ports`, whether project- or companion-owned.
+The command returns the lowest free block inside the deployment's dev-server range, `{{PORT_RANGE_FIRST}}..{{PORT_RANGE_LAST}}`. This is a lookup, not a reservation. Record first/last only in the selected merged configuration's `devServer.ports`, whether project- or companion-owned.
 
 ## Check the inventory
 

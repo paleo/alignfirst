@@ -11,7 +11,6 @@ import {
   type CodingAgentEnvironment,
   MOCK_AGENT_PROFILE,
   PI_CONTRACT_MODEL,
-  SETTINGS_PORT_RANGE,
 } from "../scripts/coding-agent-settings.ts";
 
 const WRITER = fileURLToPath(new URL("../scripts/write-coding-agent-settings.ts", import.meta.url));
@@ -23,7 +22,6 @@ for (const agent of ["claude", "codex", "pi"] as const) {
       const settings = buildCodingAgentSettings({ CODING_AGENT: agent });
       assert.deepEqual(settings, {
         projectsRoot: "/home/assistant/projects",
-        portRange: SETTINGS_PORT_RANGE,
         code: {
           profiles: {
             openclaw: { harness: "openclaw", defaultAgentProfile: MOCK_AGENT_PROFILE },

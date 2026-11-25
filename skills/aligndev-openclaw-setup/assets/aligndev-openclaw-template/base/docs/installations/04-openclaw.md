@@ -17,7 +17,7 @@ infra/openclaw/
 ├── apparmor/           # Playwright Chromium user-namespace profile
 ├── deployment-profiles.mjs # all-profile/native-store and resource inventory
 ├── deployment-policy.mjs   # prepare, harden, maintenance, private backup/recovery
-├── aligndev.settings.json  # openclaw profile, coding profiles, native stores and port range
+├── aligndev.settings.json  # openclaw profile, coding profiles and native stores
 ├── seed.sh             # openclaw setup + openclaw config set …, secret store, environment.d
 ├── seed/               # common.sh, surface.sh, coding-agent.sh — the configuration modules
 ├── environment.d/      # non-secret variables for systemd --user and login shells

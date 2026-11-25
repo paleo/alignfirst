@@ -3,26 +3,29 @@ import { isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 import type { CommandForms } from "../command-form.js";
-import { type LoadedConfig, requirePortRange } from "../config.js";
+import type { LoadedConfig } from "../config.js";
 import { errorMessage } from "../errors.js";
 import type { Output } from "../output.js";
 import { buildInventory, type ProjectInventory } from "./discovery.js";
 import { formatRange } from "./format.js";
-import { findFreeBlock } from "./ports.js";
+import { findFreeBlock, type PortRange } from "./ports.js";
 import {
-  renderPortRangeJson,
+  renderFreePortsJson,
   renderProjectDoctor,
   renderProjectDoctorFailure,
   renderProjectList,
   renderProjectListJson,
+  renderProjectPorts,
+  renderProjectPortsJson,
   renderProjectStatus,
   renderProjectStatusJson,
+  renderUnknownRangeWarnings,
 } from "./render.js";
 import { getProjectStatus } from "./status.js";
 
 const DEFAULT_MAX_DEPTH = 5;
 
-// What a caller supplies; the projects root default and the port range come from the config.
+// What a caller supplies; the projects root default comes from the config.
 export interface ProjectsCallerContext {
   cwd: string;
   env: NodeJS.ProcessEnv;
@@ -38,13 +41,14 @@ interface ProjectsContext extends ProjectsCallerContext {
 }
 
 interface ProjectsArgs {
-  command?: "list" | "doctor" | "status" | "free-ports";
+  command?: "list" | "doctor" | "status" | "ports" | "free-ports";
   path?: string;
   root?: string;
   maxDepth: number;
   json: boolean;
   help: boolean;
   size?: number;
+  within?: PortRange;
 }
 
 export function runProject(
@@ -67,9 +71,10 @@ function runProjectCommand(ctx: ProjectsContext, args: ProjectsArgs): number {
     return 0;
   }
   if (args.command === "doctor") return inspectProjectInventory(ctx, args);
-  if (args.command === "free-ports" && args.size !== undefined) {
-    return showFreePorts(ctx, args, args.size);
+  if (args.command === "free-ports" && args.size !== undefined && args.within !== undefined) {
+    return showFreePorts(ctx, args, args.size, args.within);
   }
+  if (args.command === "ports") return showPorts(ctx, args);
   const inventory = scanProjects(ctx, args);
   if (args.command === "list") {
     ctx.stdout.write(args.json ? renderProjectListJson(inventory) : renderProjectList(inventory));
@@ -83,10 +88,28 @@ function runProjectCommand(ctx: ProjectsContext, args: ProjectsArgs): number {
   throw new Error("Invalid aligndev project command");
 }
 
-function showFreePorts(ctx: ProjectsContext, args: ProjectsArgs, size: number): number {
-  const available = requirePortRange(ctx.config);
-  const range = findFreeBlock(scanProjects(ctx, args), available, size);
-  ctx.stdout.write(args.json ? renderPortRangeJson(range) : `${formatRange(range)}\n`);
+function showFreePorts(
+  ctx: ProjectsContext,
+  args: ProjectsArgs,
+  size: number,
+  within: PortRange,
+): number {
+  const inventory = scanPortClaims(ctx, args);
+  const range = findFreeBlock(inventory, within, size);
+  ctx.stdout.write(args.json ? renderFreePortsJson(inventory, range) : `${formatRange(range)}\n`);
+  return 0;
+}
+
+// The text mode warns about the unknown ranges; the JSON mode carries them.
+function scanPortClaims(ctx: ProjectsContext, args: ProjectsArgs): ProjectInventory {
+  const inventory = scanProjects(ctx, args);
+  if (!args.json) ctx.stderr.write(renderUnknownRangeWarnings(inventory, ctx.forms.aligndev));
+  return inventory;
+}
+
+function showPorts(ctx: ProjectsContext, args: ProjectsArgs): number {
+  const inventory = scanPortClaims(ctx, args);
+  ctx.stdout.write(args.json ? renderProjectPortsJson(inventory) : renderProjectPorts(inventory));
   return 0;
 }
 
@@ -95,12 +118,15 @@ function renderUsage(aligndev: string): string {
   ${aligndev} project list [--json] [--root <path>] [--max-depth <n>]
   ${aligndev} project doctor [--root <path>] [--max-depth <n>]
   ${aligndev} project status <path> [--json] [--root <path>] [--max-depth <n>]
-  ${aligndev} project free-ports --size <n> [--json] [--root <path>] [--max-depth <n>]
+  ${aligndev} project ports [--json] [--root <path>] [--max-depth <n>]
+  ${aligndev} project free-ports --size <n> --within <first>..<last> [--json] [--root <path>] [--max-depth <n>]
   ${aligndev} project --help
 
 --root defaults to projectsRoot in the aligndev settings, then to the working directory.
 --max-depth limits the scan through groups; the root's children are at depth 1. Default: ${DEFAULT_MAX_DEPTH}.
-free-ports looks up a free block inside portRange in the aligndev settings.
+ports prints the claimed port ranges, sorted by first port.
+free-ports prints the lowest block of <n> ports inside --within that overlaps no project range.
+--size is the number of port names × the expected concurrent workspaces.
 A relative status <path> starts from the working directory.
 `;
 }
@@ -120,7 +146,7 @@ function scanProjects(ctx: ProjectsContext, args: ProjectsArgs): ProjectInventor
   const root = resolveProjectsRoot(ctx, args.root);
   return buildInventory(
     root,
-    { portRange: ctx.config.portRange, maxDepth: args.maxDepth },
+    { maxDepth: args.maxDepth },
     { env: ctx.env, alignfirstCommand: ctx.alignfirstCommand },
   );
 }
@@ -143,6 +169,7 @@ function parseProjectsArgs(tokens: string[]): ProjectsArgs {
       "max-depth": { type: "string" },
       json: { type: "boolean", default: false },
       size: { type: "string" },
+      within: { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
     strict: true,
@@ -168,6 +195,7 @@ function parseProjectsArgs(tokens: string[]): ProjectsArgs {
     json: values.json,
     help: false,
     ...(values.size === undefined ? {} : { size: parsePositiveInteger("--size", values.size) }),
+    ...(values.within === undefined ? {} : { within: parsePortBounds(values.within) }),
   };
 }
 
@@ -176,6 +204,7 @@ interface ParsedOptionValues {
   "max-depth"?: string;
   json: boolean;
   size?: string;
+  within?: string;
   help: boolean;
 }
 
@@ -189,13 +218,24 @@ function emptyModeArgs(root: string | undefined, help: boolean): ProjectsArgs {
 }
 
 function assertNoCommandOptions(values: ParsedOptionValues): void {
-  if (values.json || values["max-depth"] !== undefined || values.size !== undefined) {
+  if (
+    values.json ||
+    values["max-depth"] !== undefined ||
+    values.size !== undefined ||
+    values.within !== undefined
+  ) {
     throw new Error("Command options require a projects command");
   }
 }
 
 function isProjectsCommand(value: string): value is ProjectsArgs["command"] & string {
-  return value === "list" || value === "doctor" || value === "status" || value === "free-ports";
+  return (
+    value === "list" ||
+    value === "doctor" ||
+    value === "status" ||
+    value === "ports" ||
+    value === "free-ports"
+  );
 }
 
 function validatePositionals(command: string, path: string | undefined, extra: string[]): void {
@@ -208,12 +248,16 @@ function validatePositionals(command: string, path: string | undefined, extra: s
 
 function validateOptionPlacement(command: string, values: ParsedOptionValues): void {
   if (values.json && command === "doctor") {
-    throw new Error("--json is valid only with list, status, or free-ports");
+    throw new Error("--json is valid only with list, status, ports, or free-ports");
   }
   if (command === "free-ports") {
     if (values.size === undefined) throw new Error("free-ports requires --size <n>");
+    if (values.within === undefined)
+      throw new Error("free-ports requires --within <first>..<last>");
   } else if (values.size !== undefined) {
     throw new Error("--size is valid only with free-ports");
+  } else if (values.within !== undefined) {
+    throw new Error("--within is valid only with free-ports");
   }
 }
 
@@ -222,4 +266,19 @@ function parsePositiveInteger(option: string, value: string): number {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed)) throw new Error(`${option} must be a positive integer`);
   return parsed;
+}
+
+function parsePortBounds(value: string): PortRange {
+  const match = /^(\d+)\.\.(\d+)$/u.exec(value);
+  if (match === null) throw new Error("--within must be <first>..<last>");
+  const first = Number(match[1]);
+  const last = Number(match[2]);
+  if (!isPort(first) || !isPort(last))
+    throw new Error("--within ports must be integers from 1 to 65535");
+  if (first > last) throw new Error("--within first port must not exceed the last port");
+  return { first, last };
+}
+
+function isPort(value: number): boolean {
+  return value >= 1 && value <= 65_535;
 }

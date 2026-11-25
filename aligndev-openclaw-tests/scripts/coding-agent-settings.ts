@@ -1,6 +1,5 @@
 export const MOCK_AGENT_PROFILE = "mock-agent";
 export const PI_CONTRACT_MODEL = "openai/gpt-6.1-terra";
-export const SETTINGS_PORT_RANGE: PortRange = { first: 6500, last: 7700 };
 
 export type CodingAgent = "claude" | "codex" | "pi";
 
@@ -9,14 +8,8 @@ export interface CodingAgentEnvironment {
   CODING_AGENT_MODELS?: string;
 }
 
-export interface PortRange {
-  first: number;
-  last: number;
-}
-
 export interface MockAgentSettings {
   projectsRoot: string;
-  portRange: PortRange;
   code: {
     profiles: {
       openclaw: { harness: "openclaw"; defaultAgentProfile: string };
@@ -33,7 +26,6 @@ export function buildCodingAgentSettings(env: CodingAgentEnvironment): MockAgent
     .filter((model) => model !== "");
   return {
     projectsRoot: "/home/assistant/projects",
-    portRange: { ...SETTINGS_PORT_RANGE },
     code: {
       profiles: {
         openclaw: { harness: "openclaw", defaultAgentProfile: MOCK_AGENT_PROFILE },

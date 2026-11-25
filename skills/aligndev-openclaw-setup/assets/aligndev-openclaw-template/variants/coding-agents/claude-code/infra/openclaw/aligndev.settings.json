@@ -1,6 +1,5 @@
 {
   "projectsRoot": "~/projects",
-  "portRange": { "first": {{PORT_RANGE_FIRST}}, "last": {{PORT_RANGE_LAST}} },
   "code": {
     "profiles": {
       "openclaw": { "harness": "openclaw", "defaultAgentProfile": "service-claude" },

@@ -77,30 +77,86 @@ export function readProjectReport(
   env: NodeJS.ProcessEnv,
 ): ProjectReport | ProjectError {
   const result = runAlignfirst(command, ["config", "--json"], cwd, env);
+  if (result.status !== 0) return toProjectError(forwardSettingsWarnings(result.stderr));
+  const describe = () => describeAlignfirst(command, cwd, env);
+  return checkProjectReport(parseReportJson(result.stdout, cwd, describe), cwd, describe);
+}
+
+// One `alignfirst config --json <dir>...` call; the entries follow the order of `directories`.
+export function readProjectReports(
+  command: string[],
+  directories: string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): (ProjectReport | ProjectError)[] {
+  if (directories.length === 0) return [];
+  const result = runAlignfirst(command, ["config", "--json", ...directories], cwd, env);
+  const describe = once(() => describeAlignfirst(command, cwd, env));
+  const outdated = () => new Error(`${outdatedAlignfirst(cwd)} ${describe()}`);
   if (result.status !== 0) {
-    const error = firstLine(forwardSettingsWarnings(result.stderr));
-    return { error: error === "" ? "alignfirst config failed" : error };
+    forwardSettingsWarnings(result.stderr);
+    throw outdated();
   }
-  let value: unknown;
-  try {
-    value = JSON.parse(result.stdout);
-  } catch (error) {
-    throw new Error(
-      `Invalid alignfirst config report for ${cwd}: ${errorMessage(error)} ${describeAlignfirst(command, cwd, env)}`,
-    );
-  }
-  if (isOutdatedReport(value)) {
-    return { error: `${outdatedAlignfirst(cwd)} ${describeAlignfirst(command, cwd, env)}` };
-  }
-  try {
-    return parseProjectReport(value, cwd);
-  } catch (error) {
-    throw new Error(`${errorMessage(error)} ${describeAlignfirst(command, cwd, env)}`);
-  }
+  const value = parseReportJson(result.stdout, cwd, describe);
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.reports) ||
+    value.reports.length !== directories.length
+  )
+    throw outdated();
+  return value.reports.map((entry: unknown, index) =>
+    readBatchEntry(entry, directories[index], describe),
+  );
+}
+
+function once(compute: () => string): () => string {
+  let value: string | undefined;
+  return () => {
+    value ??= compute();
+    return value;
+  };
+}
+
+function readBatchEntry(
+  entry: unknown,
+  path: string,
+  describe: () => string,
+): ProjectReport | ProjectError {
+  if (!isRecord(entry)) throw new Error(`${invalidReport(path).message} ${describe()}`);
+  if (typeof entry.error === "string") return toProjectError(entry.error);
+  return checkProjectReport(entry.report, path, describe);
+}
+
+function toProjectError(message: string): ProjectError {
+  const error = firstLine(message);
+  return { error: error === "" ? "alignfirst config failed" : error };
 }
 
 function firstLine(value: string): string {
   return value.trim().split("\n", 1)[0] ?? "";
+}
+
+function parseReportJson(stdout: string, path: string, describe: () => string): unknown {
+  try {
+    return JSON.parse(stdout);
+  } catch (error) {
+    throw new Error(
+      `Invalid alignfirst config report for ${path}: ${errorMessage(error)} ${describe()}`,
+    );
+  }
+}
+
+function checkProjectReport(
+  value: unknown,
+  path: string,
+  describe: () => string,
+): ProjectReport | ProjectError {
+  if (isOutdatedReport(value)) return { error: `${outdatedAlignfirst(path)} ${describe()}` };
+  try {
+    return parseProjectReport(value, path);
+  } catch (error) {
+    throw new Error(`${errorMessage(error)} ${describe()}`);
+  }
 }
 
 // Detect the contract rather than the package version, including unreleased checkout builds.

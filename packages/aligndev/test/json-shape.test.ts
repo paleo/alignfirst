@@ -4,7 +4,6 @@ import {
   arrayOf,
   boolean,
   type Check,
-  integerBetween,
   literal,
   matching,
   nonEmptyString,
@@ -26,11 +25,11 @@ const sampleShape = object<Sample>(
     root: optional(nonEmptyString),
     models: optional(arrayOf(string)),
     skip: optional(boolean),
-    ranges: optional(
+    entries: optional(
       arrayOf(
-        object<SampleRange>(
+        object<SampleEntry>(
           {
-            first: integerBetween(1, 65_535),
+            name: nonblankString,
             code: optional(matching(/^[a-z][a-z0-9-]*$/)),
             description: optional(string),
           },
@@ -47,11 +46,11 @@ interface Sample {
   root?: string;
   models?: string[];
   skip?: boolean;
-  ranges?: SampleRange[];
+  entries?: SampleEntry[];
 }
 
-interface SampleRange {
-  first: number;
+interface SampleEntry {
+  name: string;
   code?: string;
   description?: string;
 }
@@ -63,7 +62,7 @@ describe("json shape", () => {
       root: "~/p",
       models: ["a"],
       skip: false,
-      ranges: [{ first: 80, code: "web", description: "" }, { first: 90 }],
+      entries: [{ name: "a", code: "web", description: "" }, { name: "b" }],
     };
     expect(parse(sampleShape, value)).toEqual(value);
     expect(parse(sampleShape, { agent: "claude" })).toEqual({ agent: "claude" });
@@ -79,10 +78,10 @@ describe("json shape", () => {
       { agent: "claude", models: "a" },
       { agent: "claude", models: ["a", 1] },
       { agent: "claude", skip: "no" },
-      { agent: "claude", ranges: {} },
-      { agent: "claude", ranges: [{ first: 0 }] },
-      { agent: "claude", ranges: [{ first: 80 }, { first: 90, code: "Web" }] },
-      { agent: "claude", ranges: [{ first: 80, code: 1 }] },
+      { agent: "claude", entries: {} },
+      { agent: "claude", entries: [{ name: " " }] },
+      { agent: "claude", entries: [{ name: "a" }, { name: "b", code: "Web" }] },
+      { agent: "claude", entries: [{ name: "a", code: 1 }] },
     ].map((value) => [value]),
   )("rejects invalid shape %j", (value) => {
     expect(() => parse(sampleShape, value)).toThrow(TypeError);

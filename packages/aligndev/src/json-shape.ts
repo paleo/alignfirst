@@ -124,14 +124,6 @@ function listOf(items: string[]): string {
   return `${items.slice(0, -1).join(", ")} or ${items.at(-1)}`;
 }
 
-export function integerBetween(min: number, max: number): Check<number> {
-  return (value, path) => {
-    if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max)
-      throw shapeError(path, `be an integer from ${min} to ${max}`);
-    return value;
-  };
-}
-
 export function nonEmptyString(value: unknown, path: string): string {
   if (typeof value !== "string" || value.length === 0)
     throw shapeError(path, "be a non-empty string");
