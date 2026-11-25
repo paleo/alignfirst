@@ -83,7 +83,7 @@ function permissions(harness: CodingAgent): string {
     case "pi":
       return "Pi uses ordinary OS permissions, including companion access. `profile.skipPermissions` has no effect. Saved project trust is honored; no forced approval is passed";
     case "agy":
-      return "Normal runs use Antigravity's auto mode with its terminal sandbox, plus `--add-dir <companion>` for a project with a companion directory. `profile.skipPermissions: true` in the aligndev settings selects `--dangerously-skip-permissions`";
+      return "Normal runs use Antigravity's auto mode with its terminal sandbox, plus `--add-dir <companion>` for a project with a companion directory and `--add-dir <git common directory>` in a linked worktree. `profile.skipPermissions: true` in the aligndev settings selects `--dangerously-skip-permissions`";
   }
 }
 

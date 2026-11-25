@@ -876,12 +876,18 @@ describe("buildRunConfig", () => {
     }
   });
 
+  it("adds a linked worktree's git common directory after the companion", () => {
+    const linked = build({ linkedGitCommonDir: "/main/.git" });
+    expect(linked.additionalDirectories).toEqual(["/companions/proj", "/main/.git"]);
+  });
+
   it("adds no directory without a companion, or with skipPermissions", () => {
     const report = { ...reportWithCompanion([]), companion: null };
     expect(build({ report }).additionalDirectories).toEqual([]);
     const skipped = build({
       code: { ...CODE, skipPermissions: true },
       report: reportWithCompanion([".plans"]),
+      linkedGitCommonDir: "/main/.git",
     });
     expect(skipped.additionalDirectories).toEqual([]);
   });

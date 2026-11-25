@@ -2,6 +2,8 @@ import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 
+import { git, type GitContext } from "@alignfirst/workspace/git";
+
 import { loadCatchup, loadContext, openTicket, reserveSideTicket } from "../alignfirst-cli.js";
 import type { CommandForms } from "../command-form.js";
 import {
@@ -626,6 +628,7 @@ async function runSession(
     catchupContent,
     contextContent,
     alignfirst: forms.alignfirst,
+    linkedGitCommonDir: agent === "agy" ? readLinkedGitCommonDir({ cwd, env }) : undefined,
   });
   createMissingCompanion(report);
   const result = await runAgent(runConfig, createAgentAdapter(agent), stdout);
@@ -934,6 +937,8 @@ export interface RunInput {
   contextContent?: string;
   // The alignfirst command form the agent is told to run.
   alignfirst: string;
+  // The git common directory of a linked worktree, for a harness whose sandbox hides it.
+  linkedGitCommonDir?: string;
 }
 
 export function buildRunConfig(input: RunInput): RunConfig {
@@ -956,12 +961,36 @@ export function buildRunConfig(input: RunInput): RunConfig {
     executableModel: input.executableModel,
     effort: input.effort,
     skipPermissions: code.skipPermissions,
-    additionalDirectories:
-      code.harness !== "pi" && !code.skipPermissions && report.companion !== null
-        ? [report.companion.dir]
-        : [],
+    additionalDirectories: sandboxDirectories(code, report, input.linkedGitCommonDir),
     env: code.childEnv,
   };
+}
+
+// The directories outside the working directory that a sandboxed agent writes to.
+function sandboxDirectories(
+  code: CodeConfig,
+  report: ProjectReport,
+  linkedGitCommonDir: string | undefined,
+): string[] {
+  if (code.harness === "pi" || code.skipPermissions) return [];
+  const dirs = report.companion === null ? [] : [report.companion.dir];
+  if (linkedGitCommonDir !== undefined) dirs.push(linkedGitCommonDir);
+  return dirs;
+}
+
+// A linked worktree's repository lives in the main checkout's git directory, outside the worktree.
+// Undefined in a main checkout, or outside a git repository.
+function readLinkedGitCommonDir(ctx: GitContext): string | undefined {
+  try {
+    const output = git(ctx, "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir");
+    const [gitDir, commonDir] = output
+      .trimEnd()
+      .split("\n")
+      .map((path) => realpathSync(path));
+    return gitDir === commonDir ? undefined : commonDir;
+  } catch {
+    return;
+  }
 }
 
 // A registered companion becomes writable before its directory exists: create it for the agent.

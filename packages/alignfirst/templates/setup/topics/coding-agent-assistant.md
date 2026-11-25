@@ -194,6 +194,8 @@ Pi and both extensions use ordinary OS permissions. The cwd controls discovery, 
 
 A delegated run uses Antigravity's auto mode. Its commands run first in a terminal sandbox: no network, a read-only home, and the workspace, `/tmp` and the companion directory writable.
 
+The sandbox hides other directories, the main checkout of a linked git worktree included. From a linked worktree, AlignDev also makes the repository's common git directory writable, so `git` commands run in the sandbox, commits included. The rest of the main checkout stays hidden.
+
 Antigravity may let a command leave the sandbox, by its own evaluation. In a headless run, it refuses `npx` commands, and nothing can approve them. A delegated protocol then stops at its first `alignfirst` command.
 
 Two settings let it run. On a trusted machine, the recommended one is `"skipPermissions": true` on the `agy` profile, which removes the sandbox:
