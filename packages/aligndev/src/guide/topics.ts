@@ -19,6 +19,11 @@ export const PLAYBOOK_TOPICS: Record<GuideContext, readonly string[]> = {
     "project-workspace-setup",
     "project-lifecycle",
     "consultation",
+    "side-ticket",
+    "change-wrap-up",
+    "code-review",
+    "workspace-cleanup",
+    "project-rules",
     "message-tool",
   ],
   app: [
@@ -27,8 +32,23 @@ export const PLAYBOOK_TOPICS: Record<GuideContext, readonly string[]> = {
     "project-workspace-setup",
     "project-lifecycle",
     "consultation",
+    "side-ticket",
+    "change-wrap-up",
+    "code-review",
+    "workspace-cleanup",
+    "project-rules",
   ],
-  codingAgent: ["working-session", "work-files-setup", "project-workspace-setup", "consultation"],
+  codingAgent: [
+    "working-session",
+    "work-files-setup",
+    "project-workspace-setup",
+    "consultation",
+    "side-ticket",
+    "change-wrap-up",
+    "code-review",
+    "workspace-cleanup",
+    "project-rules",
+  ],
 };
 
 export type GuideContext = "thread" | "app" | "codingAgent";

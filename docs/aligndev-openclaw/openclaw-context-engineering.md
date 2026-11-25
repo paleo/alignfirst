@@ -38,6 +38,8 @@ Defaults in `src/agents/embedded-agent-helpers/bootstrap.ts`:
 
 Over-budget files are truncated with a marker. Keep workspace files under these limits.
 
+OpenClaw also truncates a tool result past a size derived from the model's context budget. The working-session guide comes back whole from a budget of 200K tokens.
+
 ## Heartbeat: cron scratch and prompt
 
 The heartbeat checklist is the scratch of the system-owned `heartbeat:main` cron job (its declaration key; its name is `heartbeat-main` and its display name is `Heartbeat (main)`), a row in the shared SQLite store (`src/cron/heartbeat-monitor.ts`, `src/cron/scratch-store.ts`). The gateway creates the job at startup from `agents.defaults.heartbeat.every`; `openclaw cron scratch <job-id>` reads and writes the scratch. The runtime never reads a workspace `HEARTBEAT.md`; `openclaw doctor --fix` imports a leftover file into the scratch and deletes it (`src/commands/doctor-heartbeat-scratch-migration.ts`). A comment-only scratch makes the periodic tick skip its model call (`reason=empty-heartbeat-file`); a missing scratch runs the model.

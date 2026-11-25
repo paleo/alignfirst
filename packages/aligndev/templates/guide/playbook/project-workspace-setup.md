@@ -178,10 +178,31 @@ Skip on sub-path 3 (no branch — nothing to sync). If Step 4 was skipped, selec
 1. **Confirm the branch and the work files.** Check the worktree's checked-out branch matches the explicit user choice, or otherwise carries the expected TICKET_ID. If it doesn't, stop and surface it to the user — don't work on the wrong branch. Then run `{{ALIGNFIRST}} plans check` from the worktree.
 2. **Guard uncommitted work.** Run `git status`. If the worktree is dirty, have the agent commit a WIP first (even if it doesn't compile) — never sync over uncommitted work.
 3. **Merge the remote branch.** If the branch has a remote counterpart, fetch its remote if it differs from the base's, then merge its freshly fetched ref into the local branch to catch up. Delegate to the agent (`merge` protocol) when it doesn't fast-forward or conflicts.
-4. **Catch up with the base branch.** If the selected base ref has commits not yet in this branch, run the "Updating a branch with the base branch" flow — without asking; step 7 tells the user what came in.
-5. **Refresh the workspace if commits came in.** If the merge brought in new commits, run the "Refreshing the workspace after a branch refresh" flow.
+4. **Catch up with the base branch.** If the selected base ref has commits not yet in this branch, run the "Updating a branch with the base branch" flow below — without asking; step 7 tells the user what came in.
+5. **Refresh the workspace if commits came in.** If the merge brought in new commits, run the "Refreshing the workspace after a branch refresh" flow of your working-session guide.
 6. **Check for an open MR/PR** on this branch and note its state.
 7. **Report what changed.** If either merge brought in new commits, post a one-line summary so the user knows the ground shifted.
+
+### Updating a branch with the base branch
+
+{{#openclaw}}
+For an active development branch that needs to catch up with its base, follow the steps below. A request to refresh the base branch itself is operational work, as your working-session guide describes.
+{{/openclaw}}
+{{#codingAgent}}
+For an active development branch that needs to catch up with its base, follow the steps below. A request to refresh the base branch itself is operational work, as your working-session guide describes.
+{{/codingAgent}}
+
+1. Fetch and fast-forward the local base branch ref without checking it out.
+2. Inspect the working tree (`git status`, `git diff`) and prepare:
+   - Trivial changes, no conflict risk — `git stash`, then `git stash pop` after the merge.
+   - Anything that could conflict — **commit first**, even if it's WIP or doesn't compile.
+3. Delegate the merge to the agent (`merge` protocol).
+{{#thread}}
+4. Push if the thread already has remote commits.
+{{/thread}}
+{{#conversation}}
+4. Push if the branch already has remote commits.
+{{/conversation}}
 
 ## Step 6 — Status request: the work content
 

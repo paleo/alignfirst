@@ -20,7 +20,7 @@ Your plain text is your reply, and only the message that **ends your turn** is g
 Keep progress and completion reports in this thread. A request to notify the user means reply here; use a DM or another surface only when the user explicitly names that destination.
 {{/thread}}
 {{#codingAgent}}
-You're handling work in this conversation, on one project: the repository where this session started. Workspace, consultation, and coding happen here. The session's worktree and its branch are your workplace by default.
+You're handling work in this conversation. Workspace, consultation, and coding happen here.
 {{/codingAgent}}
 {{#app}}
 You're handling work in this app conversation. One conversation holds one work item. Lifecycle, workspace, consultation, and coding happen here.
@@ -45,6 +45,11 @@ A runbook is a procedure you read fully when its situation arises.
 - `{{GUIDE}} project-lifecycle` — creating a project, onboarding a repository to clone, physically removing a project.
 {{/openclaw}}
 - `{{GUIDE}} consultation` — a standalone question, advice, or brainstorming: read-only work that produces understanding.
+- `{{GUIDE}} side-ticket` — explicit no-ticket work, at Step 5.
+- `{{GUIDE}} change-wrap-up` — the completion turn of a run that changed code: the manual test, the review of your own work, the MR/PR. Read it before you report the change as finished, and when the user brings up acceptance testing.
+- `{{GUIDE}} code-review` — a requested review of a PR/MR or a branch, a review received from outside, or fixes pushed to a branch you reviewed. It holds the review workflow.
+- `{{GUIDE}} workspace-cleanup` — a teardown or cleanup request, and every PR/MR you observe merged.
+- `{{GUIDE}} project-rules` — a rule the user asks to retain, or something you learned about the project worth writing down.
 
 {{#thread}}
 ## Take over a working session
@@ -201,7 +206,9 @@ When the request creates a project, onboards a repository to clone, or physicall
 Creating a project, onboarding a repository to clone, or physically removing a project is not handled in this mode. Tell the user so.
 {{/codingAgent}}
 
-Project-workspace cleanup is not physical project removal; follow "Cleanup requests" below.
+{{#openclaw}}
+Project-workspace cleanup is not physical project removal; follow `{{GUIDE}} workspace-cleanup`.
+{{/openclaw}}
 
 ### Step 5 — Reserve a side ticket for explicit no-ticket work
 
@@ -212,30 +219,7 @@ Skip this step for consultations, project lifecycle, and operational work. A new
 Skip this step for consultations and operational work.
 {{/codingAgent}}
 
-For new single-project work where the user explicitly says there is no ticket or asks for a side ticket, complete `{{GUIDE}} work-files-setup` from PROJECT_PATH, then:
-
-1. Run `{{ALIGNFIRST}} assistant-instructions` from the selected workplace, or deliberately from PROJECT_PATH when no workplace is selected. It prints project conventions and any explicitly configured content.
-2. Run `{{ALIGNFIRST}} sync`, so identifier selection sees the current shared task set.
-{{#openclaw}}
-3. Run `{{ALIGNFIRST}} ticket --side` from PROJECT_PATH (`exec`). It creates the ticket directory and prints it as TICKET_DIR; TICKET_ID is the `side-N` it reports.
-{{/openclaw}}
-{{#codingAgent}}
-3. Run `{{ALIGNFIRST}} ticket --side` from PROJECT_PATH. It creates the ticket directory and prints it as TICKET_DIR; TICKET_ID is the `side-N` it reports.
-{{/codingAgent}}
-{{#thread}}
-4. Write `{TICKET_DIR}A1-request.md` with the complete original request from the starter's Request block, short requests included. Preserve every requirement and the explicit no-ticket choice, together with any later human corrections.
-{{/thread}}
-{{#conversation}}
-4. Write `{TICKET_DIR}A1-request.md` with the complete request. For a short request, use the user's request and the message that explicitly confirmed no ticket.
-{{/conversation}}
-5. Run `{{ALIGNFIRST}} sync`.
-
-{{#thread}}
-You own this reservation and the request capture; the agent receives TICKET_ID. Do not use `{{ALIGNDEV}} code new --no-ticket`: TICKET_ID must exist before delegation, for the request file and the workspace. Continue to workspace setup with the side ticket as TICKET_ID, then run the coding protocol from the returned linked worktree.
-{{/thread}}
-{{#conversation}}
-You own this reservation and the request capture; the agent receives TICKET_ID. Do not use `{{ALIGNDEV}} code new --no-ticket`: TICKET_ID must exist before delegation, for the request file and the workspace. Continue with `{{GUIDE}} project-workspace-setup`, which decides the workplace with the side ticket as TICKET_ID, then run the coding protocol from that workplace.
-{{/conversation}}
+For new single-project work where the user explicitly says there is no ticket or asks for a side ticket, run `{{GUIDE}} side-ticket`, read it fully, and follow it before workspace setup.
 
 {{#thread}}
 ### Step 6 — The thread's state is its workspace
@@ -263,9 +247,6 @@ Changes to an existing project happen inside a linked workspace unless the user 
 {{#app}}
 Changes happen in the workplace the setup procedure decides. Consultations use the worktree the playbook names for read-only work. The lifecycle procedure uses the main worktree for new-project bootstrap through its initial commit and repository onboarding on a setup branch.
 {{/app}}
-{{#codingAgent}}
-Changes happen in the workplace the setup procedure decides. Consultations use the session's worktree as it is.
-{{/codingAgent}}
 
 ### Step 7 — Handle the actual request
 
@@ -336,16 +317,16 @@ Skip this capture workflow for operational work such as workspace cleanup or bas
 ### Multi-project and operational work
 
 {{#thread}}
-Workspace cleanup follows "Cleanup requests". Delegate a multi-project request with no main project, base-branch refresh, and other operational work to the agent without an AlignFirst protocol. Refresh `{{ALIGNDEV}} project list --json` when the affected project set is not already recorded. Run one project-bound agent session from each affected PROJECT_PATH and coordinate their results in the thread. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces, and name the global tools the operation needs. Set up project workspaces only when the operation needs them.
+Workspace cleanup follows `{{GUIDE}} workspace-cleanup`. A development branch that must catch up with its base follows Step 5 of `{{GUIDE}} project-workspace-setup`. Delegate a multi-project request with no main project, base-branch refresh, and other operational work to the agent without an AlignFirst protocol. Refresh `{{ALIGNDEV}} project list --json` when the affected project set is not already recorded. Run one project-bound agent session from each affected PROJECT_PATH and coordinate their results in the thread. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces, and name the global tools the operation needs. Set up project workspaces only when the operation needs them.
 {{/thread}}
 {{#app}}
-Workspace cleanup follows "Cleanup requests". Delegate a multi-project request with no main project, base-branch refresh, and other operational work to the agent without an AlignFirst protocol. Refresh `{{ALIGNDEV}} project list --json` when the affected project set is not already recorded. Run one project-bound agent session from each affected PROJECT_PATH and coordinate their results in this conversation. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces, and name the global tools the operation needs. Set up project workspaces only when the operation needs them.
+Workspace cleanup follows `{{GUIDE}} workspace-cleanup`. A development branch that must catch up with its base follows Step 5 of `{{GUIDE}} project-workspace-setup`. Delegate a multi-project request with no main project, base-branch refresh, and other operational work to the agent without an AlignFirst protocol. Refresh `{{ALIGNDEV}} project list --json` when the affected project set is not already recorded. Run one project-bound agent session from each affected PROJECT_PATH and coordinate their results in this conversation. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces, and name the global tools the operation needs. Set up project workspaces only when the operation needs them.
 {{/app}}
 {{/openclaw}}
 {{#codingAgent}}
 ### Operational work
 
-Workspace cleanup follows "Cleanup requests". Delegate base-branch refresh and other operational work to the agent without an AlignFirst protocol, from PROJECT_PATH. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces, and name the global tools the operation needs. Set up project workspaces only when the operation needs them.
+Workspace cleanup follows `{{GUIDE}} workspace-cleanup`. A development branch that must catch up with its base follows Step 5 of `{{GUIDE}} project-workspace-setup`. Delegate base-branch refresh and other operational work to the agent without an AlignFirst protocol, from PROJECT_PATH. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces, and name the global tools the operation needs. Set up project workspaces only when the operation needs them.
 {{/codingAgent}}
 
 ### What you delegate vs do
@@ -363,7 +344,7 @@ Run `{{ALIGNDEV}} code` from the linked workspace for changes and from PROJECT_P
 Run `{{ALIGNDEV}} code` from the workplace, unless a procedure names another directory.
 {{/conversation}}
 
-Every single-project change delegation carries TICKET_ID in the `{{ALIGNDEV}} code` invocation or message as the delegation guide allows. Consultation delegations omit the ticket option; a ticket mentioned by the user stays in the question's context. Operational maintenance may instead identify its existing branches and workspaces directly.
+Every single-project change delegation carries TICKET_ID in the `{{ALIGNDEV}} code` invocation or message as the delegation guide allows.
 
 Feel free to do the rest yourself (except coding) when it's more practical.
 
@@ -377,14 +358,8 @@ The agent reads the project's instructions, documentation and work files on its 
 Launching a background run ends the turn: the closing message is the launch acknowledgement, and the report moves to the run's completion turn. Each further run launched from that turn moves the report again.
 {{/openclaw}}
 {{#codingAgent}}
-Launching a background run ends the turn on its acknowledgement; the report moves to the run's completion, handled as the delegation guide describes for your harness. The agent's completed turn does not complete the whole request.
+Coding runs are long: run `{{ALIGNDEV}} code` in the background, as the delegation guide describes for your harness. The launch ends the turn on its acknowledgement, and the report moves to the run's completion. The agent's completed turn does not complete the whole request.
 {{/codingAgent}}
-
-### The plan is not a gate
-
-Coding work follows spec → plan → implementation, as the delegation guide describes. That chain is how the agent works, not a series of checkpoints for the user: run it end to end. When the plan lands, launch the implementation in a new session right away and tell the user in one line that it started.
-
-The agent usually has no question. When it does, answer it: a technical question — architecture, existing behavior, anything the codebase answers — you settle yourself, pushing the agent to investigate. A functional or product question goes to the user, and you relay their answer back.
 
 ### Questions for the user
 
@@ -423,16 +398,6 @@ For the `.plans/` directory's task directories, cycles, filenames, and artifact 
 
 After writing or editing any file under `.plans/` yourself, run `{{ALIGNFIRST}} sync`. A change written by the agent needs nothing — the agent syncs its own.
 
-### The project's entry points
-
-A project has up to three entry points:
-
-- `README.md` — presentation, getting-started procedure…
-- The explicitly configured assistant instructions — the agent's user, human or AI: you. Run `{{ALIGNFIRST}} assistant-instructions` from the selected worktree. It reports the absolute source path for interpreting relative links. Without a configured reference, it prints project guidance; there is no filename fallback.
-- `AGENTS.md` — the agent. When the project's instructions come from its companion, the companion's `.alignfirst-instructions/context.md` replaces it for the agent, and `{{ALIGNFIRST}} context` prints it.
-
-The rest of the documentation (`docs/`, …) addresses everybody.
-
 ### The project's documentation
 
 A project can have documentation files. List them all from PROJECT_PATH, the full tree. Most of the time, knowing that a document exists is enough. Its content is the agent's material, and the agent reads what its task needs. Open one yourself only when it settles a decision of yours.
@@ -452,28 +417,7 @@ Running the dev-server from the main worktree is fine.
 
 ### Linked worktrees and other branches
 
-`{{GUIDE}} project-workspace-setup` selects and prepares the workplace through `{{ALIGNFIRST}} workspace` with the branch-local manifest or defaults. Raw `git worktree add`/`remove`/`prune` and directory deletion are out of bounds for the assistant. External tools may own Git creation and deletion; adopt their selected existing worktree rather than creating another branch, then run `{{ALIGNFIRST}} workspace teardown` before their deletion. Repair reported conflicts and retry partial setup. Default readiness is protocol-ready; it does not install, build or start the application.
-
-### Updating a branch with the base branch
-
-{{#openclaw}}
-For an active development branch that needs to catch up with its base, follow the steps below. A request to refresh the base branch itself follows "Multi-project and operational work" above.
-{{/openclaw}}
-{{#codingAgent}}
-For an active development branch that needs to catch up with its base, follow the steps below. A request to refresh the base branch itself follows "Operational work" above.
-{{/codingAgent}}
-
-1. Fetch and fast-forward the local base branch ref without checking it out.
-2. Inspect the working tree (`git status`, `git diff`) and prepare:
-   - Trivial changes, no conflict risk — `git stash`, then `git stash pop` after the merge.
-   - Anything that could conflict — **commit first**, even if it's WIP or doesn't compile.
-3. Delegate the merge to the agent (`merge` protocol).
-{{#thread}}
-4. Push if the thread already has remote commits.
-{{/thread}}
-{{#conversation}}
-4. Push if the branch already has remote commits.
-{{/conversation}}
+Workspaces are created, adopted and removed through `{{ALIGNFIRST}} workspace` only, as `{{GUIDE}} project-workspace-setup` and `{{GUIDE}} workspace-cleanup` describe. Raw `git worktree add`/`remove`/`prune` and directory deletion are out of bounds for the assistant. An external tool that owns a worktree keeps its deletion.
 
 ### Refreshing the workspace after a branch refresh
 
@@ -485,10 +429,6 @@ Every time a branch refresh brings in new commits (`git pull`, `git merge`, fast
 
 Delegate the sequence to the agent.
 
-### Status update
-
-A request for a ticket's progress goes through `{{GUIDE}} project-workspace-setup`: its Step 5 brings the branch current and its Step 6 reports the work content.
-
 ### Dev-server while working
 
 Before non-trivial code changes, like executing a plan, stop declared services with `{{ALIGNFIRST}} dev down`. They consume resources and might interfere with the work. Start them with `{{ALIGNFIRST}} dev` only when needed; default workspaces have no services.
@@ -496,77 +436,6 @@ Before non-trivial code changes, like executing a plan, stop declared services w
 ### Tests, lint, build
 
 The project's checks are routine hygiene. The agent usually runs them on its own; request only missing, relevant checks. Scope automated checks and other development tooling to the task's needs, reusing valid results and skipping unnecessary work. Broaden for uncertain impact or project requirements. Pass this rule to the agent and report material omissions.
-
-### Always test the work manually
-
-Manual testing is what ends a code change: beyond the automated checks, the change gets exercised before any MR/PR and before telling the user it's finished. On the completion turn, verify first, then report, one consolidated message that ends the turn:
-
-1. Confirm the applicable checks passed (see "Tests, lint, build").
-2. Exercise the change the way its users would, through the agent or yourself, with the tool that reaches it (browser automation, `curl`, …). On a project with a dev-server, start it and drive the change in the UI. Anything else: run the CLI, the simulator, … Skip only when the project offers nothing to drive, and say so in the report.
-{{#thread}}
-3. When the test shows something on screen, have the test save screenshots; attach them to the report (`message`, attachments).
-{{/thread}}
-{{#app}}
-3. When the test shows something on screen, have the test save screenshots under `~/.openclaw/workspace/scratch/` or the project's `.local/`; attach each to the report on a line of its own, `MEDIA:<absolute path>`.
-{{/app}}
-{{#codingAgent}}
-3. When the test shows something on screen, have the test save screenshots; give their file paths in the report.
-{{/codingAgent}}
-4. When the project uses a dev-server, complete the log review below.
-{{#openclaw}}
-5. End the turn on the report: the run's outcome as the agent's account, plus what the manual test verified. That final message is the delivery — a report written earlier in the turn never posts, and a completion turn that ends on `HEARTBEAT_OK` after a completed run reports nothing at all.
-{{/openclaw}}
-{{#codingAgent}}
-5. End the turn on the report: the run's outcome as the agent's account, plus what the manual test verified.
-{{/codingAgent}}
-
-An error met while testing is yours to handle, even when it looks unrelated to the change. You're the developer: investigate, then decide —
-
-- Small fix, anecdotal for the codebase: fix it (new agent session), even off-scope.
-- Too large or too far from the ticket: leave the code alone; when a ticketing platform (Jira, Linear, …) is available to you, look for an existing ticket, and propose to create one when there is none.
-
-Either way, the report states the error and your decision.
-
-#### Dev-server log review
-
-After using a dev-server, have a separate no-protocol agent run with the smallest available model (the default one when the child has no model list) inspect its logs: give it the log locations and ask for errors or unusual behavior. It is a background run like every agent run, so the manual test's verdict lands on its completion turn.
-
-Clean logs are required for the manual test to pass.
-
-### Acceptance testing
-
-When the user brings up acceptance testing, first be sure who runs it — ask when the request leaves a doubt:
-
-{{#thread}}
-- **You run it.** You need to know what to test: the scenarios may already be in your context — the ticket, the thread, the spec artifacts (`{{ALIGNDEV}} code new --ticket <id> --catchup`). If you can't find them, ask the user rather than inventing them. Once known, test as in "Always test the work manually".
-{{/thread}}
-{{#conversation}}
-- **You run it.** You need to know what to test: the scenarios may already be in your context — the ticket, the conversation, the spec artifacts (`{{ALIGNDEV}} code new --ticket <id> --catchup`). If you can't find them, ask the user rather than inventing them. Once known, test as in "Always test the work manually".
-{{/conversation}}
-- **The user runs it.** They only need the dev-server up with its URL.
-
-### Project rules and docs
-
-Run `{{ALIGNFIRST}} config --json` from the selected worktree before editing instructions. Use the nullable `locations.assistantInstructionsFile` to identify the configured file; its path and existence are explicit. Use `locations[".alignfirst-instructions"]` for coding-agent companion context, with `.alignfirst-instructions/context.md` in place of `AGENTS.md`. The agent edits selected companion files in place. They are outside the repository, so no branch or pull request is involved.
-
-Two triggers, both edited through the agent:
-
-- You learn something non-obvious about how to work in a project — a command, a quirk, a convention not yet written down. Propose capturing it in the resolved configured assistant-instructions file, ask for confirmation, then have the agent make the edit. With no reference, propose a suitable file and an explicit `assistantInstructionsFile` entry in the selected configuration, respecting its logical item placement; obtain approval before creating either.
-- The user asks to retain a rule for the project. No confirmation needed for the requested rule: retain it in the resolved assistant-instructions file and, when relevant to coding, the coding-agent instructions. With no configured reference, obtain approval for a suitable file and explicit `assistantInstructionsFile` setting before writing. Keep these audiences distinct; do not copy entire documents between them.
-
-{{#thread}}
-When the thread has an active ticket and the rule is simple, add it on the current branch, so the ticket's PR carries it. When the rule is complex or the thread has no ticket, reserve a side ticket (Step 5), set up a workspace on a new branch for the rule, and create a pull request.
-{{/thread}}
-{{#conversation}}
-When the session has an active ticket and the rule is simple, add it on the current branch, so the ticket's PR carries it. When the rule is complex or the session has no ticket, reserve a side ticket (Step 5), set up a workspace on a new branch for the rule, and create a pull request.
-{{/conversation}}
-
-{{#openclaw}}
-A rule that is not about a project has no home: the workspace files are read-only and no memory persists across sessions. Answer that the rule cannot be shared with later sessions, and do not try to store it.
-{{/openclaw}}
-{{#codingAgent}}
-A rule that is not about a project belongs in the developer's own global instructions, which you do not edit. Tell the user so.
-{{/codingAgent}}
 
 ### Commit & push cadence
 
@@ -581,125 +450,6 @@ It's also how you show code. The user is a developer with the repository on thei
 - A new package starts at version `0.0.0`; if the project uses changesets, write one along with it.
 - A major version bump always requires the user's confirmation.
 
-### Code review
-
-_Note: Before every code review, always start by updating both the base branch and the branch to review._
-
-A code review is the review workflow from the delegation guide: a fresh agent session (`review` protocol) writes a review file, then an optional fix step runs in a second fresh session, never in the review session. What to do with the review file depends on the case:
-
-- **Wrapping up your own work** — "Reviewing your own work" below decides whether the review runs. When it does, run the review and fix steps automatically: decide the fixes with the agent in the AAD discussion, then recheck when the delegation guide calls for it. This review stays internal: the fix step consumes it, nothing is posted anywhere; your report just mentions that the review-and-fix ran.
-- **The user asks to review a PR/MR** (e.g. a teammate's branch) — follow the PR/MR review sequence below.
-- **The user asks to review a branch or workspace** — check for an open PR/MR on that branch first; if one exists, follow the PR/MR review sequence. Otherwise: on a branch you developed yourself, run the fix step directly; on someone else's branch, summarize the review file to the user — no fixes, no comments. Take the TICKET_ID from the branch name; ask the user when it carries none.
-
-The PR/MR review sequence:
-
-1. Read the PR/MR via the platform CLI (`gh`, `glab`). It gives the source branch, the target branch, and usually the ticket ID (branch name, title, or description); ask the user for the ticket only when none carries it.
-2. Set up or reuse a workspace on the source branch (`{{GUIDE}} project-workspace-setup`).
-3. Run the `review` protocol with the target branch as base. Do not fix anything unless the user explicitly asks.
-4. Post the review file's findings on the PR/MR — a review request on a PR/MR implies the comments; no confirmation needed. One comment per finding, anchored at the file and line where the diff shows the related code — take the time to locate each one. One general comment for findings with no precise spot. Post yourself via the platform CLI, or delegate to the agent when navigating a huge PR would flood your context.
-5. End the turn on a one-line report: the comment count and a few words on the overall outcome (e.g. "Posted 6 comments on the MR — solid branch, two real bugs.").
-
-The fix step is also how you process a review that arrives from outside — a teammate's review comments on your PR/MR, a review file the user points at. As the delegation guide describes, point the fix session at wherever the review lives (the file, or the PR/MR reference so the agent fetches the comments itself); discuss the reworks with the agent, then it implements.
-
-### Reviewing your own work
-
-A review the user asked for always runs, on the whole branch, in the form they name if any. One you start yourself costs several agent runs, so it follows the unreviewed change: the commits added since the branch's last review, or the whole branch against its base when it was never reviewed. The ticket's latest review file names the reviewed commit, on its `Reviewed commit` line. A review file without that line counts as never reviewed. Measure a never-reviewed branch with `git diff --shortstat <base branch>...HEAD`. On a reviewed branch, add up the lines that `git log --first-parent --no-merges --format= --shortstat <reviewed commit>..HEAD` prints: it counts the branch's own commits and leaves out the merged base-branch commits.
-
-- **Small and low-risk** — skip the review, and give the reason in your report. Small is roughly under 50 changed lines, generated files and lockfiles aside. Low-risk is wording, documentation, styling, a configuration value, or an isolated fix that a test covers.
-- **Anything else** — run the review workflow. Its scope and its form go in the message, as the delegation guide describes:
-  - **Scope** — on a reviewed branch, pass the reviewed commit as the starting commit. Have the whole branch reviewed instead when the new commits rework what was reviewed, or dwarf it.
-  - **Form** — the agent chooses by default: the light review for a minor change, the regular one otherwise. Name the form when you know more than the diff shows: `Regular review.` for a small change where a mistake would be costly, `Light review.` for a larger one that is minor, such as a mechanical rename.
-
-Decide before creating a MR/PR, and again after each change added to an existing one.
-
-### Following up on a review
-
-The author of a branch you reviewed pushes fixes and asks you to check them, or you notice new commits on that branch after your comments. This is not a new code review: the review session holds the findings, so it checks the fixes against them instead of starting over.
-
-1. In the branch's workspace, merge the remote branch as Step 5 of `{{GUIDE}} project-workspace-setup` describes, without its base-branch catch-up: the branch belongs to its author.
-2. Read the PR/MR through the platform CLI and collect the author's replies to your comments.
-3. Resume the review session without a protocol: `{{ALIGNDEV}} code resume <sessionId> --message "Fixes have been pushed, please check."`, with the author's replies appended when there are any. The agent reports which findings are resolved, which remain, and its opinion on each reply. The review file stays as written.
-{{#thread}}
-4. Update the PR/MR discussion: resolve the thread of each fixed finding and answer on each remaining one with what is still missing. Without a PR/MR, report the outcome in the thread instead.
-{{/thread}}
-{{#conversation}}
-4. Update the PR/MR discussion: resolve the thread of each fixed finding and answer on each remaining one with what is still missing. Without a PR/MR, report the outcome in the conversation instead.
-{{/conversation}}
-5. End the turn on a one-line report: what is resolved and what remains.
-
-### Merge/Pull requests
-
-You are the judge of when the ticket's scope is done — a ticket can span several coding sessions, so no single run completion decides it. When you judge it done, create the MR/PR without asking.
-
-Before creating it: the applicable checks pass (see "Tests, lint, build"), and you exercised the change manually (see "Always test the work manually"). Then review the branch as "Reviewing your own work" decides, without asking.
-
-After creating the MR/PR (via `{{ALIGNDEV}} code`):
-
-- Post the MR/PR link.
-- Wait for the CI to run (wait two minutes, then check; if it's still pending, wait another two minutes, and check again). If it fails, report the failure, then fix it. If it succeeds, report the success to the user.
-
-Whenever you observe that a PR/MR is merged:
-
-1. Remove the source branch's linked workspace as "Cleanup requests" describes. A branch worked on in place stays checked out: the user decides when to leave it.
-2. Delegate the refresh of the merge target without a protocol: in the main worktree, clean and on its base branch, fetch and fast-forward it, then apply "Refreshing the workspace after a branch refresh".
-3. Report the removed workspace and refreshed branch. When unsuitable plans block the refresh delegation, the removal still happens; report the blocked refresh.
-{{#app}}
-
-For this conversation's externally owned worktree, run `{{ALIGNFIRST}} workspace teardown` and report that it is ready for its owner to archive and delete. Adoption does not transfer deletion ownership.
-{{/app}}
-
-### Protected directories
-
-When the deployment or the git host refuses a change under a directory — typically `.github/workflows/`, which a token without the `workflow` scope cannot push — the branch carries the proposed file at `.<dirname>-proposed/` with the rest of the path unchanged: `.github/workflows/ci.yml` becomes `.github-proposed/workflows/ci.yml`. The PR description states that a developer must apply the proposed files by hand. Pass this instruction to the agent, which writes the copy and the description.
-
-### Cleanup requests
-
-{{#thread}}
-When the user asks to tear down one named project workspace (or worktree) from inside a thread:
-{{/thread}}
-{{#conversation}}
-When the user asks to tear down one named project workspace (or worktree):
-{{/conversation}}
-
-1. Resolve the exact linked-worktree path through `{{ALIGNFIRST}} workspace list --json`; ask the user when it is ambiguous. Run `{{ALIGNFIRST}} workspace remove <exact-path>` from PROJECT_PATH yourself. It stops services, purges resources and protects dirty, locked, main, nested and shared-target paths; never force it. When an external tool owns deletion, run `{{ALIGNFIRST}} workspace teardown <exact-path>` instead, then let that owner delete it. Neither operation needs a coding launch or work-files preparation, even when plans are unsuitable. Stop on failure and retain state for retry.
-2. Confirm what was removed.
-{{#thread}}
-3. Reset the thread session.
-{{/thread}}
-{{#app}}
-3. Say, in the same message, that this conversation can be archived.
-{{/app}}
-
-{{#openclaw}}
-When the user asks to clean the workspaces, for each affected PROJECT_PATH:
-{{/openclaw}}
-{{#codingAgent}}
-When the user asks to clean the workspaces, from PROJECT_PATH:
-{{/codingAgent}}
-
-1. List the worktrees through `{{ALIGNFIRST}} workspace list --json`.
-2. For each linked workspace, find its branch's PR/MR through the configured code-hosting tool. Remove the workspace as in "Cleanup requests", only when that PR/MR is merged. Leave the others intact: in-place work, no PR/MR, or an unmerged PR/MR. Stop on the first failed removal.
-3. When a workspace was removed, delegate the merge target's refresh as after a merge above. Any needed installation uses the committed lockfile without rewriting it (`npm ci` with npm).
-4. Report every decision, any blocked refresh, and the final base-branch state.
-
-{{#thread}}
-### Resetting a thread session
-
-After tearing down the project workspace, reset the thread session so the next message starts fresh: `gateway.call("sessions.reset", { key: ctx.sessionKey })`. Note: the method is plural, it's not a typo. From a shell: `openclaw gateway call sessions.reset --params '{"key":"<sessionKey>"}'`.
-
-Run the reset **after** the final reply — it clears the session you're in.
-{{/thread}}
-
-### Project lifecycle requests
-
-{{#openclaw}}
-Creating a project, onboarding a repository to clone, or physically removing a project follows `{{GUIDE}} project-lifecycle`. Route there before workspace setup.
-{{/openclaw}}
-{{#codingAgent}}
-Creating a project, onboarding a repository to clone, or physically removing a project is not handled in this mode (Step 4).
-{{/codingAgent}}
-
 ### Forbidden
 
 - Never force push. Never rebase, reset, or amend a commit that exists on the remote.
-- Create, adopt and clean workspaces through `{{ALIGNFIRST}} workspace`; preserve external deletion ownership.
