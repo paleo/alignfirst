@@ -1,4 +1,4 @@
-# Workspace cleanup
+# Runbook: Workspace cleanup
 
 Read this runbook for a teardown or cleanup request, and whenever you observe a merged PR/MR.
 

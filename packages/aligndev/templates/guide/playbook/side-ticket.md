@@ -1,4 +1,4 @@
-# Side ticket
+# Runbook: Side ticket
 
 For new single-project work where the user explicitly says there is no ticket or asks for a side ticket. Complete `{{GUIDE}} work-files-setup` from PROJECT_PATH, then:
 

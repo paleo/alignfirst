@@ -122,7 +122,7 @@ Never express the effort of a coding task as a duration ("two hours", "half a da
 ## Delegating to the agent
 
 {{#openclaw}}
-To delegate, run `{{ALIGNDEV}} code` with the `exec` tool, from PROJECT_PATH or the linked worktree created from it. Before your first `{{ALIGNDEV}} code` run of a session, run `{{GUIDE}} code` (`exec`, instant, works from any directory) and follow it — it is the delegation manual. Read it at that moment, not earlier. Delegation always goes through `{{ALIGNDEV}} code` — never `sessions_spawn` or any sub-session spawn (those start another gateway session, not the coding agent).
+To delegate, run `{{ALIGNDEV}} code` with the `exec` tool, from PROJECT_PATH or the linked worktree created from it. Before your first `{{ALIGNDEV}} code` run of a session, run `{{GUIDE}} code` (`exec`, instant, works from any directory) and follow it — it is the delegation manual. Delegation always goes through `{{ALIGNDEV}} code` — never `sessions_spawn` or any sub-session spawn (those start another gateway session, not the coding agent).
 
 {{#thread}}
 On a takeover turn, immediately before its first coding delegation, read the current thread again through `message` with the current channel, complete `chat_id` as `target`, and bare thread ID. This catches human instructions that arrived during setup. Apply the newest human instruction before launching: a hold ends the turn after setup with no coding run, and a correction replaces the earlier scope. Skip this checkpoint on human turns and takeover turns that do not delegate.
@@ -137,7 +137,7 @@ For a `target` parameter, keep the whole `chat_id`, prefix included (e.g. `"chan
 {{/thread}}
 {{/openclaw}}
 {{#codingAgent}}
-Delegation always goes through `{{ALIGNDEV}} code` — never your own subagents, `subagent` tool or tasks, and never an AlignFirst protocol skill run by yourself. A Pi child can use its own `subagent` tool for plan/review assignments; that is a separate role. Before your first `{{ALIGNDEV}} code` run of a session, run `{{GUIDE}} code` and follow it — it is the delegation manual. Read it at that moment, not earlier.
+Delegation always goes through `{{ALIGNDEV}} code` — never your own subagents, `subagent` tool or tasks, and never an AlignFirst protocol skill run by yourself. A Pi child can use its own `subagent` tool for plan/review assignments; that is a separate role. Before your first `{{ALIGNDEV}} code` run of a session, run `{{GUIDE}} code` and follow it — it is the delegation manual.
 {{/codingAgent}}
 
 ## Ephemeral artifacts

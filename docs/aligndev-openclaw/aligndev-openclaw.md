@@ -23,7 +23,7 @@ The [`@alignfirst/service-openclaw-plugin`](../../packages/service-openclaw-plug
    lifecycle, consultations, side tickets, the change wrap-up, code reviews, workspace cleanup and
    project rules, and the `message` tool per thread surface.
    Project discovery comes from `aligndev project list --json`; the delegation procedure comes from
-   `aligndev guide --channel <surface> code` only when delegation starts.
+   `aligndev guide --channel <surface> code`, read at workspace setup or at the first delegation.
 3. **Regression-test harness** —
    [`aligndev-openclaw-tests/`](../../aligndev-openclaw-tests/). This standalone Dockerised
    consumer drives the workspace through synthetic Discord and Slack channels and the gateway's app surface, `webchat`, and judges the result.
@@ -43,12 +43,14 @@ user message
   → … consultation (question, advice, brainstorming)               layer 2
   → … side-ticket (explicit no-ticket work)                        layer 2
   → … project-workspace-setup (when the work needs a workspace)    layer 2
-  → … code (delegation manual, read at the first delegation), then delegate via aligndev code
+  → … code (delegation manual, a prerequisite of workspace setup,
+            else read at the first delegation)                     layer 2
+  → delegate via aligndev code
   → … change-wrap-up | code-review | workspace-cleanup | project-rules
                      (each read when its situation arises)         layer 2
 ```
 
-Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 is pulled in by explicit `aligndev guide` commands run through `exec`. The dispatcher routes on the turn metadata: `channel: "webchat"` for an app conversation, `topic_id` for a thread. The dispatcher is read **first** and is purely procedural; the `aligndev guide code` output is read at the first delegation, not earlier — keeping its protocol vocabulary out of the early user-facing acks (see [writing-instructions-for-openclaw.md](./writing-instructions-for-openclaw.md)). The guide also carries the completion procedure for backgrounded runs, so it sits in the delegating session's transcript when the completion turn arrives. How that turn is started is OpenClaw's business, not the plugin's; see [openclaw-plugin.md](./openclaw-plugin.md).
+Layer 1 is the only thing OpenClaw injects automatically; everything in layer 2 is pulled in by explicit `aligndev guide` commands run through `exec`. The dispatcher routes on the turn metadata: `channel: "webchat"` for an app conversation, `topic_id` for a thread. The dispatcher is read **first** and is purely procedural; the `aligndev guide code` output is read later, as a prerequisite of workspace setup or at the first delegation of a session without one. The entry point stays free of its protocol vocabulary (see [writing-instructions-for-openclaw.md](./writing-instructions-for-openclaw.md)). The guide also carries the completion procedure for backgrounded runs, so it sits in the delegating session's transcript when the completion turn arrives. How that turn is started is OpenClaw's business, not the plugin's; see [openclaw-plugin.md](./openclaw-plugin.md).
 
 ## The channel session only bootstraps a thread
 

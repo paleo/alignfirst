@@ -1,6 +1,6 @@
-# Change wrap-up
+# Runbook: Change wrap-up
 
-Read this runbook on the completion turn of a run that changed code, before you report the change as finished. Launch every run it asks for as `{{GUIDE}} code` describes.
+Read this runbook on the completion turn of a run that changed code, before you report the change as finished, and when the user brings up acceptance testing. Launch every run it asks for as `{{GUIDE}} code` describes.
 
 ## Always test the work manually
 

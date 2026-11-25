@@ -206,9 +206,7 @@ When the request creates a project, onboards a repository to clone, or physicall
 Creating a project, onboarding a repository to clone, or physically removing a project is not handled in this mode. Tell the user so.
 {{/codingAgent}}
 
-{{#openclaw}}
 Project-workspace cleanup is not physical project removal; follow `{{GUIDE}} workspace-cleanup`.
-{{/openclaw}}
 
 ### Step 5 — Reserve a side ticket for explicit no-ticket work
 
@@ -230,7 +228,8 @@ For new single-project work where the user explicitly says there is no ticket or
 
 The question on every turn is not a mode but a fact: does this request need a project workspace?
 
-- **The request is a code review or names an AlignFirst protocol** — follow the ticket and workspace flow below.
+- **The request is a code review** — run `{{GUIDE}} code-review`, read it fully, then follow the ticket and workspace flow below.
+- **The request names an AlignFirst protocol** — follow the ticket and workspace flow below.
 - **The question arises within ongoing work** — keep that work's workflow, ticket, and workplace.
 - **The request is a consultation** — run `{{GUIDE}} consultation`, read it fully, and follow it. A ticket's progress is a status request, handled by the next case.
 {{#thread}}
@@ -317,16 +316,16 @@ Skip this capture workflow for operational work such as workspace cleanup or bas
 ### Multi-project and operational work
 
 {{#thread}}
-Workspace cleanup follows `{{GUIDE}} workspace-cleanup`. A development branch that must catch up with its base follows Step 5 of `{{GUIDE}} project-workspace-setup`. Delegate a multi-project request with no main project, base-branch refresh, and other operational work to the agent without an AlignFirst protocol. Refresh `{{ALIGNDEV}} project list --json` when the affected project set is not already recorded. Run one project-bound agent session from each affected PROJECT_PATH and coordinate their results in the thread. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces, and name the global tools the operation needs. Set up project workspaces only when the operation needs them.
+Workspace cleanup follows `{{GUIDE}} workspace-cleanup`. A development branch that must catch up with its base follows "Updating a branch with the base branch" in `{{GUIDE}} project-workspace-setup`. Delegate a multi-project request with no main project, base-branch refresh, and other operational work to the agent without an AlignFirst protocol. Refresh `{{ALIGNDEV}} project list --json` when the affected project set is not already recorded. Run one project-bound agent session from each affected PROJECT_PATH and coordinate their results in the thread. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces, and name the global tools the operation needs. Set up project workspaces only when the operation needs them.
 {{/thread}}
 {{#app}}
-Workspace cleanup follows `{{GUIDE}} workspace-cleanup`. A development branch that must catch up with its base follows Step 5 of `{{GUIDE}} project-workspace-setup`. Delegate a multi-project request with no main project, base-branch refresh, and other operational work to the agent without an AlignFirst protocol. Refresh `{{ALIGNDEV}} project list --json` when the affected project set is not already recorded. Run one project-bound agent session from each affected PROJECT_PATH and coordinate their results in this conversation. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces, and name the global tools the operation needs. Set up project workspaces only when the operation needs them.
+Workspace cleanup follows `{{GUIDE}} workspace-cleanup`. A development branch that must catch up with its base follows "Updating a branch with the base branch" in `{{GUIDE}} project-workspace-setup`. Delegate a multi-project request with no main project, base-branch refresh, and other operational work to the agent without an AlignFirst protocol. Refresh `{{ALIGNDEV}} project list --json` when the affected project set is not already recorded. Run one project-bound agent session from each affected PROJECT_PATH and coordinate their results in this conversation. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces, and name the global tools the operation needs. Set up project workspaces only when the operation needs them.
 {{/app}}
 {{/openclaw}}
 {{#codingAgent}}
 ### Operational work
 
-Workspace cleanup follows `{{GUIDE}} workspace-cleanup`. A development branch that must catch up with its base follows Step 5 of `{{GUIDE}} project-workspace-setup`. Delegate base-branch refresh and other operational work to the agent without an AlignFirst protocol, from PROJECT_PATH. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces, and name the global tools the operation needs. Set up project workspaces only when the operation needs them.
+Workspace cleanup follows `{{GUIDE}} workspace-cleanup`. A development branch that must catch up with its base follows "Updating a branch with the base branch" in `{{GUIDE}} project-workspace-setup`. Delegate base-branch refresh and other operational work to the agent without an AlignFirst protocol, from PROJECT_PATH. For a base-branch refresh, the agent owns the initial fetch, the fast-forward, and any dependency, build, or migration refresh; an already-current branch is one possible result of that delegation. Supply the ticket ID when one identifies the workspaces, and name the global tools the operation needs. Set up project workspaces only when the operation needs them.
 {{/codingAgent}}
 
 ### What you delegate vs do
@@ -363,7 +362,7 @@ Coding runs are long: run `{{ALIGNDEV}} code` in the background, as the delegati
 
 ### Questions for the user
 
-A decision on the work itself — behavior, scope, design — reaches the user as a numbered topic, whether the agent raised it or you did. A value or an approval that a procedure asks for keeps that procedure's wording: a ticket ID, a project path, a work-files approval, a lifecycle confirmation, the consultation's ticket question.
+A decision on the work itself — behavior, scope, design — reaches the user as a numbered topic, whether the agent raised it or you did. A value or an approval that a procedure asks for keeps that procedure's wording: a ticket ID, a project path, a work-files approval, a lifecycle confirmation, the consultation's ticket question. The spec, plan and implementation chain runs end to end: no step is a checkpoint for the user.
 
 {{#thread}}
 Write one block per question, in the user's language, a lone question included. Bold the identifier and the title with your surface's markers rather than literal `**`.

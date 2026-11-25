@@ -1,4 +1,4 @@
-# Project rules
+# Runbook: Project rules
 
 Run `{{ALIGNFIRST}} config --json` from the selected worktree before editing instructions. Use the nullable `locations.assistantInstructionsFile` to identify the configured file; its path and existence are explicit. Use `locations[".alignfirst-instructions"]` for coding-agent companion context, with `.alignfirst-instructions/context.md` in place of `AGENTS.md`. The agent edits selected companion files in place. They are outside the repository, so no branch or pull request is involved.
 
