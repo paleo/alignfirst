@@ -8,13 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { main } from "../src/cli.js";
 import { resolveCommandForms } from "../src/command-form.js";
 import { renderCodeGuide } from "../src/guide/code-guide.js";
-import { makeSink, writeConfig } from "./helpers.js";
-
-const NPX_ENV = {
-  npm_config_user_agent: "npm/11.19.0 node/v26.0.0 linux x64",
-  npm_command: "exec",
-  npm_lifecycle_event: "npx",
-};
+import { makeSink, NPX_ENV, writeConfig } from "./helpers.js";
 
 const CONFIG = { code: { harness: "claude" } };
 
