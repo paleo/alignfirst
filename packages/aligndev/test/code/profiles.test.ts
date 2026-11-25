@@ -175,6 +175,12 @@ describe("independent quota configuration", () => {
     }
   });
 
+  it("reads omitted agy quota from the agy coding environment", () => {
+    settings({ profiles: { a: { harness: "agy", unset: ["TOKEN"] } } });
+    const code = resolveCodeConfig(loadConfig(home, "alignfirst"), env);
+    expect(resolveQuotaConfig(code, env)).toEqual({ source: "agy", env: code.childEnv });
+  });
+
   it.each(["claude", "codex"] as const)(
     "shares a null %s coding reset with omitted quota only",
     (agent) => {

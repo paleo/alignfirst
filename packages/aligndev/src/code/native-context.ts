@@ -1,17 +1,22 @@
 import { type CodeConfig, CONFIG_DIRECTORY_VARIABLES } from "../config.js";
 
+// The storage of an agent without a native directory variable: Antigravity's.
+export const FIXED_NATIVE_STORAGE = "native store: fixed ~/.gemini; account in the OS keyring";
+
 export function describeNativeStorage(code: CodeConfig): string {
-  const variable = CONFIG_DIRECTORY_VARIABLES[code.harness];
-  const directory =
-    code.configDir === null
-      ? `${variable}: unset by configDir: null; native defaults apply`
-      : code.configDir === undefined
-        ? describeVariable(code, variable)
-        : `${variable}: configDir ${JSON.stringify(code.configDir)}`;
   const home = ["HOME", "USERPROFILE"]
     .filter((name) => code.childEnv[name] !== undefined || code.unset?.includes(name))
     .map((name) => describeVariable(code, name));
-  return [directory, ...home].join("; ");
+  return [describeDirectory(code), ...home].join("; ");
+}
+
+function describeDirectory(code: CodeConfig): string {
+  const variable = CONFIG_DIRECTORY_VARIABLES[code.harness];
+  if (variable === undefined) return FIXED_NATIVE_STORAGE;
+  if (code.configDir === null)
+    return `${variable}: unset by configDir: null; native defaults apply`;
+  if (code.configDir === undefined) return describeVariable(code, variable);
+  return `${variable}: configDir ${JSON.stringify(code.configDir)}`;
 }
 
 function describeVariable(code: CodeConfig, name: string): string {

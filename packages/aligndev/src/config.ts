@@ -30,11 +30,13 @@ import {
 } from "./json-shape.js";
 import type { AligndevProjectSettings } from "./project/layout.js";
 
-export const CONFIG_DIRECTORY_VARIABLES = {
+// Antigravity has one native store and one account per OS user: no variable moves them.
+export const CONFIG_DIRECTORY_VARIABLES: Readonly<Record<CodingAgent, string | undefined>> = {
   claude: "CLAUDE_CONFIG_DIR",
   codex: "CODEX_HOME",
   pi: "PI_CODING_AGENT_DIR",
-} as const;
+  agy: undefined,
+};
 
 const environmentName = matching(/^[A-Za-z_][A-Za-z0-9_]*$/);
 const environmentShape = record(nulFreeString, environmentName);
@@ -97,7 +99,7 @@ export interface OpenclawProfile {
 }
 
 export interface QuotaSettings {
-  source: "claude" | "codex" | "none";
+  source: "claude" | "codex" | "agy" | "none";
   configDir?: string | null;
   env?: Record<string, string>;
   unset?: string[];
@@ -202,7 +204,7 @@ function configShape(alignfirst: string): Check<ConfigFile> {
 function profileShape(warn: (path: string, key: string) => void): Check<Profile> {
   const quotaShape = object<QuotaSettings>(
     {
-      source: literal("claude", "codex", "none"),
+      source: literal("claude", "codex", "agy", "none"),
       configDir: optional(directoryValue),
       env: optional(environmentShape),
       unset: optional(arrayOf(environmentName)),
@@ -333,11 +335,16 @@ function validateEnvironment(
       throw invalidConfig(path, `${field}.unset overlaps ${field}.env for ${name}`);
     }
   }
+  if (settings.configDir === undefined) return;
   const variable = CONFIG_DIRECTORY_VARIABLES[agent];
-  if (
-    settings.configDir !== undefined &&
-    (Object.hasOwn(settings.env ?? {}, variable) || settings.unset?.includes(variable))
-  ) {
+  if (variable === undefined) {
+    throw invalidConfig(
+      path,
+      `${field}.configDir is not supported for ${agent}: Antigravity has one native store and ` +
+        "one account per OS user; remove it",
+    );
+  }
+  if (Object.hasOwn(settings.env ?? {}, variable) || settings.unset?.includes(variable)) {
     throw invalidConfig(path, `${field}.configDir conflicts with env/unset for ${variable}`);
   }
 }
@@ -347,7 +354,7 @@ function resolvePath(written: string, home: string, path: string): string {
   return isAbsolute(written) ? written : resolve(dirname(path), written);
 }
 
-export type QuotaSource = "claude" | "codex";
+export type QuotaSource = "claude" | "codex" | "agy";
 
 export type ResolvedQuota = { source: "none" } | { source: QuotaSource; env: NodeJS.ProcessEnv };
 
@@ -358,7 +365,7 @@ export function resolveQuotaConfig(code: CodeConfig, callerEnv: NodeJS.ProcessEn
     if (code.harness === "pi") {
       throw new Error(
         "Pi account quota is unsupported without explicit configuration: " +
-          "set quota.source to claude or codex, or none to disable it.",
+          "set quota.source to claude, codex or agy, or none to disable it.",
       );
     }
     return { source: code.harness, env: code.childEnv };
@@ -377,8 +384,9 @@ function buildNativeEnv(
 ): NodeJS.ProcessEnv {
   const variable = CONFIG_DIRECTORY_VARIABLES[agent];
   const overrides = { ...settings.env };
-  if (typeof settings.configDir === "string") overrides[variable] = settings.configDir;
   const unset = settings.unset ?? [];
+  if (variable === undefined) return buildAgentEnv(callerEnv, unset, overrides, required);
+  if (typeof settings.configDir === "string") overrides[variable] = settings.configDir;
   const removals = settings.configDir === null ? [...unset, variable] : unset;
   return buildAgentEnv(callerEnv, removals, overrides, required);
 }
@@ -560,14 +568,16 @@ function automaticProfile(
 // The enabled profile of the assistant's harness whose configDir matches the session's native
 // directory. An exact match (null for an unset variable, a path for the same directory) wins;
 // profiles with an omitted configDir match any session and apply only without an exact match.
+// A harness without a directory variable has only such profiles.
 function codingAssistantProfile(
   config: LoadedConfig,
   env: NodeJS.ProcessEnv,
   harness: CodingAgent,
 ): NamedProfile<CodingProfile> | undefined {
-  const variable = env[CONFIG_DIRECTORY_VARIABLES[harness]];
-  const directory = variable === "" ? undefined : variable;
   const own = enabledCodingProfiles(config).filter(({ profile }) => profile.harness === harness);
+  const variable = CONFIG_DIRECTORY_VARIABLES[harness];
+  const value = variable === undefined ? undefined : env[variable];
+  const directory = value === "" ? undefined : value;
   const exact = own.filter(({ profile }) => matchesDirectory(profile.configDir, directory));
   const candidates =
     exact.length > 0 ? exact : own.filter(({ profile }) => profile.configDir === undefined);

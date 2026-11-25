@@ -47,6 +47,12 @@ import {
   makeSink,
   writeConfig,
 } from "../helpers.js";
+import {
+  addWorktree,
+  makeFixture,
+  makeRepository,
+  useProjectFixtures,
+} from "../project/fixtures.js";
 
 const ALIGNFIRST = [process.execPath, ALIGNFIRST_BIN];
 
@@ -837,6 +843,8 @@ describe("resolveTicket", () => {
 });
 
 describe("buildRunConfig", () => {
+  useProjectFixtures();
+
   const CODE: CodeConfig = {
     harness: "claude",
     profile: null,
@@ -856,6 +864,7 @@ describe("buildRunConfig", () => {
       executableModel: undefined,
       effort: undefined,
       alignfirst: "alignfirst",
+      env: process.env,
       ...overrides,
     });
   }
@@ -874,6 +883,16 @@ describe("buildRunConfig", () => {
       const report = reportWithCompanion(items);
       expect(build({ report }).additionalDirectories).toEqual(["/companions/proj"]);
     }
+  });
+
+  it("adds a linked worktree's git common directory after the companion, for Antigravity", () => {
+    const fixture = makeFixture();
+    const main = makeRepository(fixture.root, "app");
+    const cwd = join(fixture.root, "app-feature");
+    addWorktree(main, cwd, "feature");
+    const agy = build({ code: { ...CODE, harness: "agy" }, cwd });
+    expect(agy.additionalDirectories).toEqual(["/companions/proj", join(main, ".git")]);
+    expect(build({ cwd }).additionalDirectories).toEqual(["/companions/proj"]);
   });
 
   it("adds no directory without a companion, or with skipPermissions", () => {

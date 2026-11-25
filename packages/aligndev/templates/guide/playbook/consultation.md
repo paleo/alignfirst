@@ -65,7 +65,11 @@ The message carries the complete question, however detailed, the selected branch
 Retain the printed session id. Later turns of the same topic resume that session, so the discussion accumulates in one place.
 {{/openclaw}}
 {{#codingAgent}}
-Retain the child session id, from authoritative completion retrieval for an asynchronous Pi launch. Follow the delegation guide instead of waiting for it at launch. Later turns of the same topic resume that session, so the discussion accumulates in one place.
+Retain the child session id. Follow the delegation guide instead of waiting for it at launch. Later turns of the same topic resume that session, so the discussion accumulates in one place.
+{{#pi}}
+
+For an asynchronous Pi launch, the session id comes from authoritative completion retrieval.
+{{/pi}}
 {{/codingAgent}}
 
 ## Step 4 — Relay

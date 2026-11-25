@@ -3,9 +3,10 @@ name: aligndev-openclaw-setup
 description: >-
   Create or operate an AlignDev assistant on OpenClaw: render its private admin repository, which holds the runbooks, the OpenClaw seed and the scripts that rebuild the server.
 license: CC0 1.0
+compatibility: Requires Node.js, Git, curl and ripgrep.
 metadata:
   author: Paleo
-  version: "0.3.0"
+  version: "0.3.1"
   repository: https://github.com/paleo/alignfirst
 ---
 

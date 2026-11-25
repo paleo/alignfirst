@@ -3,9 +3,10 @@ name: alcatchupspec
 description: "Load the current AlignFirst task history, then execute the specification protocol."
 disable-model-invocation: true
 license: CC0 1.0
+compatibility: Requires Node.js.
 metadata:
   author: Paleo
-  version: "4.0.0"
+  version: "4.0.1"
   repository: https://github.com/paleo/alignfirst
 ---
 

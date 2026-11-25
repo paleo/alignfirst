@@ -237,6 +237,10 @@ describe("settings shape", () => {
       profileConfig({ harness: "pi", configDir: "x", env: { PI_CODING_AGENT_DIR: "y" } }),
       "conflicts",
     ],
+    [profileConfig({ harness: "agy", configDir: "~/.gemini" }), "agy configDir"],
+    [profileConfig({ harness: "agy", configDir: null }), "agy configDir"],
+    [profileConfig({ harness: "claude", quota: { source: "agy", configDir: "x" } }), "agy quota"],
+    [profileConfig({ harness: "agy", quota: { source: "agy", configDir: null } }), "agy quota"],
     [profileConfig({ harness: "pi", quota: { source: "pi" } }), "source"],
     [profileConfig({ harness: "pi", quota: { source: "none", unset: [] } }), "no other options"],
     [profileConfig({ harness: "pi", quota: { source: "none", env: {} } }), "no other options"],
@@ -418,6 +422,7 @@ describe("assistant's harness", () => {
     [{ ALIGNDEV_ASSISTANT_HARNESS: "pi", CLAUDECODE: "1", OPENCLAW_SHELL: "exec" }, "pi"],
     [{ ALIGNDEV_ASSISTANT_HARNESS: "", CLAUDECODE: "1" }, "claude"],
     [{ CODEX_THREAD_ID: "t", OPENCLAW_SHELL: "exec" }, "codex"],
+    [{ ANTIGRAVITY_AGENT: "1", OPENCLAW_SHELL: "exec" }, "agy"],
     [{ OPENCLAW_SHELL: "exec" }, "openclaw"],
     [{ CLAUDECODE: "1", AI_AGENT: "pi", OPENCLAW_SHELL: "exec" }, undefined],
     [{ OPENCLAW_SHELL: "other" }, undefined],
@@ -503,15 +508,14 @@ describe("profile resolution", () => {
     ).toBeNull();
   });
 
-  it.each(["claude", "codex", "pi"] as const)(
+  it.each([
+    ["claude", { CLAUDECODE: "1" }],
+    ["codex", { CODEX_THREAD_ID: "t" }],
+    ["pi", { AI_AGENT: "pi" }],
+    ["agy", { ANTIGRAVITY_AGENT: "1" }],
+  ] as const)(
     "breaks a tie between %s candidates only with default: true, without leaking values",
-    (harness) => {
-      const marker =
-        harness === "claude"
-          ? { CLAUDECODE: "1" }
-          : harness === "codex"
-            ? { CODEX_THREAD_ID: "t" }
-            : { AI_AGENT: "pi" };
+    (harness, marker) => {
       for (const flag of [undefined, false]) {
         const config = loadConfig(
           makeHome({
@@ -721,6 +725,13 @@ describe("profile resolution", () => {
     expect(resolveCodeConfig(config, { CLAUDECODE: "1" }).defaultModel).toBe("opus");
     expect(resolveCodeConfig(config, { CODEX_THREAD_ID: "thread" }).defaultModel).toBe("sol");
     expect(resolveCodeConfig(config, { AI_AGENT: "pi" }).defaultModel).toBe("openai/sol");
+  });
+
+  it("runs an Antigravity session on the agy built-ins without settings", () => {
+    const code = resolveCodeConfig(loadConfig(makeHome(), "alignfirst"), {
+      ANTIGRAVITY_AGENT: "1",
+    });
+    expect(code).toMatchObject({ profile: null, harness: "agy" });
   });
 
   it("resumes a historical null profile on the built-ins of a coding harness only", () => {

@@ -193,7 +193,7 @@ function renderInstructionReport(ctx: CommandContext, report: InstructionReport)
 /** Ends with the section the project should carry. */
 function renderStatusGuidance(ctx: CommandContext, report: InstructionReport): string {
   if (report.status === "global")
-    return `The companion's defaultLocation is "companion": the repository carries no section. Add this section to the global agent instructions instead (~/.claude/CLAUDE.md, ~/.codex/AGENTS.md, ~/.pi/agent/AGENTS.md or the agent's equivalent):\n\n${fenced(renderGlobalBootstrapSection(ctx, report.root))}`;
+    return `The companion's defaultLocation is "companion": the repository carries no section. Add this section to the global agent instructions instead (~/.claude/CLAUDE.md, ~/.codex/AGENTS.md, ~/.pi/agent/AGENTS.md, ~/.gemini/AGENTS.md or the agent's equivalent):\n\n${fenced(renderGlobalBootstrapSection(ctx, report.root))}`;
   const canonical = `Canonical section:\n\n${fenced(renderBootstrapSection(ctx))}`;
   const { diagnosis } = report;
   switch (diagnosis.status) {

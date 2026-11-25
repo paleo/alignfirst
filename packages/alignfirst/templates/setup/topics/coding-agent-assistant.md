@@ -1,6 +1,6 @@
 # A Coding Agent as the Assistant
 
-Claude Code, Codex or a persistent Pi session can act as the AlignFirst assistant on one project: the repository where its session starts. It follows the `aligndev` playbook and delegates through `aligndev code`. The assistant's harness and the agent's harness are independent. No OpenClaw deployment is needed.
+Claude Code, Codex, Antigravity or a persistent Pi session can act as the AlignFirst assistant on one project: the repository where its session starts. It follows the `aligndev` playbook and delegates through `aligndev code`. The assistant's harness and the agent's harness are independent. No OpenClaw deployment is needed.
 
 Supported systems: Linux and macOS, and Windows through WSL.
 
@@ -27,7 +27,7 @@ Without settings, the agent runs with the built-in defaults of the assistant's h
 }
 ```
 
-A profile's required `harness` is `claude`, `codex` or `pi`. Profiles are complete, without inheritance. A profile with `"disabled": true` is ignored.
+A profile's required `harness` is `claude`, `codex`, `pi` or `agy`. Profiles are complete, without inheritance. A profile with `"disabled": true` is ignored.
 
 The assistant's profile is the enabled profile that describes the session: it has the assistant's harness, and its `configDir` is compatible with the session's native directory variable. `null` matches an unset variable and a path matches the same directory. An omitted `configDir` matches any session, but only when no `null` or path profile matches. Among several candidates, the one with `default: true` wins; without it, the launch fails and lists the candidates. At most one `default: true` per harness is allowed. The assistant's profile launches the agent itself, or delegates to the profile named by its `defaultAgentProfile`. In the example, a Claude Code session delegates to Codex through `codex-personal`; a Codex session matches `codex-personal` and delegates to Codex too.
 
@@ -47,6 +47,8 @@ On macOS, explicitly setting `CLAUDE_CONFIG_DIR` to the default path can select 
 
 A string or null `configDir` conflicts with its matching native variable in `env` or `unset`.
 
+An `agy` profile takes no `configDir`. Antigravity keeps one store under `~/.gemini` and its account in the OS keyring: one account per OS user.
+
 ### Environment and models
 
 Profiles can supply literal non-secret `env` values and remove inherited variables with `unset`. No shell expansion occurs. Credentials remain in native stores or provisioned process environments. A variable cannot appear in both fields.
@@ -55,13 +57,15 @@ Before login, reproduce the agent's effective environment and cwd: apply `unset`
 
 For Pi, prefer provider-qualified `modelAliases` targets. Exact IDs pin a model; fuzzy native selectors and thinking suffixes pass unchanged to Pi. For example, separate `pi-codex` and `pi-anthropic` profiles can map `sol` to `openai/sol` and `opus` to `anthropic/opus`, using separately provisioned native configurations. AlignDev never infers their providers or account identity. Targets are illustrative and depend on the native catalog. One alias expands after validating the chosen name, without recursion.
 
-Without a nonempty profile `models`, Pi accepts any nonblank selector, and Claude and Codex accept their built-in names plus configured aliases. A nonempty list replaces the accepted names. New sessions use the profile's `defaultModel`, else the native default.
+Without a nonempty profile `models`, Pi and Antigravity accept any nonblank selector, and Claude and Codex accept their built-in names plus configured aliases. A nonempty list replaces the accepted names. New sessions use the profile's `defaultModel`, else the native default.
 
 A nonempty profile `efforts` replaces the harness's built-in effort levels and bounds what `--effort` accepts. New sessions use the profile's `defaultEffort`, which must be one of the accepted levels, else the native default. A resume keeps its recorded effort. Under Pi, an effort overrides a thinking suffix of the model selector.
 
+For Antigravity, prefer a base model name with an effort, such as `--model gemini-3.8-flash --effort low`. A name with an effort suffix conflicts with a different effort, a profile's `defaultEffort` included, and the run fails. The catalog depends on the account: `agy models` lists it.
+
 Resume retains and validates its recorded user-facing model, ignoring profile defaults. Disallowed names require `--model`; null keeps the native conversation model. Current alias mappings apply even to retained names. The selected native account must contain the original conversation; cross-agent resumes fail, and Pi requires the recorded real directory. No fallback account or replacement conversation is accepted.
 
-The [`aligndev` README](https://github.com/paleo/alignfirst/tree/main/packages/aligndev#configuration) documents every profile field and the independent quota settings. Omitted quota uses a native Claude or Codex profile's effective environment. For Pi, follow "Optional quota setup for Pi" below. Quota selection follows new-session precedence, needs no ticket or `.plans`, and never changes the agent.
+The [`aligndev` README](https://github.com/paleo/alignfirst/tree/main/packages/aligndev#configuration) documents every profile field and the independent quota settings. Omitted quota uses a native Claude, Codex or Antigravity profile's effective environment. For Pi, follow "Optional quota setup for Pi" below. Quota selection follows new-session precedence, needs no ticket or `.plans`, and never changes the agent.
 
 ### Credentials
 
@@ -80,6 +84,8 @@ Check whether the developer's shell exports `ANTHROPIC_API_KEY` (Claude Code) or
 ```
 
 For a Pi agent, start `pi` under the account and configuration the agent will use and run `/login <provider>`, or configure the provider's credentials. Pi uses its native credential precedence; the Claude and Codex environment-key rules above do not apply. Inspect only credential-variable names, never values. Saved project trust must cover the execution directory and the required project resources; do not force `--approve` to bypass missing trust.
+
+For an Antigravity agent, run `agy` once interactively, under the OS user that will run the agent, and sign in.
 
 ### Optional quota setup for Pi
 
@@ -176,10 +182,44 @@ Install current stable packages and inspect their declared Pi peer and Node runt
 
 ## 5. Start the assistant
 
-Start the assistant's harness in the project's repository and invoke `/aligndev` in Claude Code, `$aligndev` in Codex, or `/skill:aligndev` in Pi. The skill runs `npx -y aligndev guide`; no global AlignDev CLI installation is required. Confirm skill discovery and the requested tools without changing trust or settings merely to test them.
+Start the assistant's harness in the project's repository and invoke `/aligndev` in Claude Code or Antigravity, `$aligndev` in Codex, or `/skill:aligndev` in Pi. The skill runs `npx -y aligndev guide`; no global AlignDev CLI installation is required. Confirm skill discovery and the requested tools without changing trust or settings merely to test them.
 
 ## Permissions
 
-As the assistant's harness, Claude Code and Codex use their established elevation: request escalated permissions in Codex, or disable Claude Code's sandbox for the launch when it is enabled. The developer approves those requests because the agent needs network access and writes outside the project.
+As the assistant's harness, Claude Code, Codex and Antigravity use their established elevation: request escalated permissions in Codex, disable Claude Code's sandbox for the launch when it is enabled, or run every `aligndev` and `alignfirst` command outside Antigravity's sandbox. The developer approves those requests because the agent needs network access and writes outside the project.
 
 Pi and both extensions use ordinary OS permissions. The cwd controls discovery, not filesystem isolation. Saved project trust controls resource loading, not tool access. A profile's `skipPermissions` has no effect on Pi. The CLI prepares companions and injects project context; the generic tool only honors the command and cwd.
+
+### Antigravity permissions
+
+A delegated run uses Antigravity's auto mode. Its commands run first in a terminal sandbox: no network, a read-only home, and the workspace, `/tmp` and the companion directory writable.
+
+The sandbox hides other directories, the main checkout of a linked git worktree included. From a linked worktree, AlignDev also makes the repository's common git directory writable, so `git` commands run in the sandbox, commits included. The rest of the main checkout stays hidden.
+
+Antigravity starts its shell in the writable directory whose path sorts first, the companion or the git directory included. AlignDev's prompt names the working directory, and the agent runs its commands there.
+
+Antigravity may let a command leave the sandbox, by its own evaluation. In a headless run, it refuses `npx` commands, and nothing can approve them. A delegated protocol then stops at its first `alignfirst` command.
+
+Two settings let it run. On a trusted machine, the recommended one is `"skipPermissions": true` on the `agy` profile, which removes the sandbox:
+
+```json
+{
+  "code": {
+    "profiles": {
+      "antigravity": { "harness": "agy", "skipPermissions": true }
+    }
+  }
+}
+```
+
+The narrower one is an allow rule in `~/.gemini/antigravity-cli/settings.json`. After a failed sandboxed attempt, the command runs outside the sandbox:
+
+```json
+{ "permissions": { "allow": ["command(npx)"] } }
+```
+
+The rule names the project's runner: `npx`, `bunx` or the installed binary.
+
+The sandbox hides `/run/user/<uid>`. A version manager that links `node` there, such as fnm's multishell, leaves sandboxed commands without `node`.
+
+AlignDev never edits Antigravity's settings.

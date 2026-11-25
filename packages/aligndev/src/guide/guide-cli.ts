@@ -3,6 +3,7 @@ import { parseArgs } from "node:util";
 import {
   ASSISTANT_HARNESS_VARIABLE,
   HARNESSES,
+  type Harness,
   type Platform,
   platformOf,
   resolveAssistantHarness,
@@ -55,8 +56,8 @@ export function runGuide(
       ctx.stdout.write(renderUsage(ctx.forms));
       return 0;
     }
-    const platform = platformOf(resolveAssistantHarness(ctx.env).harness);
-    ctx.stdout.write(`${renderTopic(args, platform, config, ctx)}\n`);
+    const { harness } = resolveAssistantHarness(ctx.env);
+    ctx.stdout.write(`${renderTopic(args, harness, config, ctx)}\n`);
     return 0;
   } catch (error) {
     ctx.stderr.write(`${errorMessage(error)}\n`);
@@ -99,7 +100,8 @@ function renderUsage(forms: CommandForms): string {
   ${forms.aligndev} guide --help
 
 The assistant's harness selects the playbook: ${ASSISTANT_HARNESS_VARIABLE} (${HARNESSES.join(", ")})
-when set, else the detected coding agent, else openclaw under OPENCLAW_SHELL=exec.
+when set, else the detected coding agent, else openclaw under OPENCLAW_SHELL=exec. A recognized
+coding-agent harness also selects the harness-specific text of the guides.
 
 Without a topic, prints the dispatcher; with --channel alone, the surface's playbook. When the
 assistant's harness is openclaw, every playbook topic requires --channel, code defaults to
@@ -119,16 +121,21 @@ Playbook topics, by context:
 
 function renderTopic(
   args: GuideArgs,
-  platform: Platform,
+  harness: Harness | undefined,
   config: LoadedConfig,
   ctx: ProjectsCallerContext,
 ): string {
+  const platform = platformOf(harness);
   assertChannelUse(args, platform);
   const { topic, channel } = args;
   if (topic === "project" && platform === "openclaw") {
     return renderGuideTemplate("project.md", { platform: "openclaw" }, ctx.forms);
   }
-  const active: ActiveBlocks = { platform, surface: channel };
+  const active: ActiveBlocks = {
+    platform,
+    surface: channel,
+    harness: harness === "openclaw" ? undefined : harness,
+  };
   if (topic === undefined) {
     const name = channel === undefined ? PLAYBOOK_DISPATCHER : PLAYBOOK;
     return renderPlaybookTemplate(name, active, config, ctx.forms);

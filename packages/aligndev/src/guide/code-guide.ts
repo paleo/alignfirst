@@ -1,6 +1,7 @@
 import type { CodingAgent } from "../code/coding-agent.js";
 import { resolveEfforts } from "../code/efforts.js";
 import { resolveModels } from "../code/models.js";
+import { FIXED_NATIVE_STORAGE } from "../code/native-context.js";
 import type { CommandForms } from "../command-form.js";
 import { CONFIG_DIRECTORY_VARIABLES, type CodingProfile, type NamedProfile } from "../config.js";
 import { escapeControlCharacters } from "../project/format.js";
@@ -36,24 +37,12 @@ export function renderCodeGuide(options: CodeGuideOptions): string {
     AGENT: harness,
     PROFILE: profile ?? "(built-in)",
     PROFILES: renderProfiles(options.profiles ?? [], profile),
-    NATIVE_CONFIG:
-      options.nativeStorage ??
-      `${CONFIG_DIRECTORY_VARIABLES[harness]}: inherited/default native storage`,
-    AUTH_COMMAND:
-      harness === "pi"
-        ? "`pi`, then `/login <provider>`, or configure provider credentials in the selected native configuration"
-        : harness === "claude"
-          ? "`claude`, then `/login` in the selected native configuration"
-          : "`codex login` in the selected native configuration",
-    PERMISSIONS:
-      harness === "pi"
-        ? "Pi uses ordinary OS permissions, including companion access. `profile.skipPermissions` has no effect. Saved project trust is honored; no forced approval is passed"
-        : harness === "claude"
-          ? "Normal runs use `--permission-mode auto`, plus `--add-dir <companion>` for a project with a companion directory. `profile.skipPermissions: true` in the aligndev settings selects `--dangerously-skip-permissions`"
-          : "Normal runs use `--sandbox workspace-write`, plus `--add-dir <companion>` for a project with a companion directory. `profile.skipPermissions: true` in the aligndev settings selects `--dangerously-bypass-approvals-and-sandbox`",
+    NATIVE_CONFIG: options.nativeStorage ?? defaultNativeStorage(harness),
+    AUTH_COMMAND: authCommand(harness),
+    PERMISSIONS: permissions(harness),
     MODEL_POLICY:
       models === undefined
-        ? "Any nonblank pi-native selector, preferably `provider/model` (thinking suffixes supported; `--effort` overrides them)"
+        ? openModelPolicy(harness)
         : `One of ${models.map((model) => `\`${model}\``).join(", ")}`,
     DEFAULT_MODEL:
       defaultModel === undefined ? "the coding agent's default" : `\`${defaultModel}\``,
@@ -63,6 +52,46 @@ export function renderCodeGuide(options: CodeGuideOptions): string {
     ALIGNFIRST_SETUP: `The project must be prepared for AlignFirst. AlignDev uses \`${forms.alignfirst}\` for the AlignFirst CLI.`,
     ALIGNFIRST_USE: `\`${forms.aligndev} code\` and the agent use the same AlignFirst command: \`${forms.alignfirst} guide <protocol>\` in the project.`,
   });
+}
+
+function defaultNativeStorage(harness: CodingAgent): string {
+  const variable = CONFIG_DIRECTORY_VARIABLES[harness];
+  return variable === undefined
+    ? FIXED_NATIVE_STORAGE
+    : `${variable}: inherited/default native storage`;
+}
+
+function authCommand(harness: CodingAgent): string {
+  switch (harness) {
+    case "claude":
+      return "`claude`, then `/login` in the selected native configuration";
+    case "codex":
+      return "`codex login` in the selected native configuration";
+    case "pi":
+      return "`pi`, then `/login <provider>`, or configure provider credentials in the selected native configuration";
+    case "agy":
+      return "`agy`, then sign in, under the OS user that runs the agent";
+  }
+}
+
+function permissions(harness: CodingAgent): string {
+  switch (harness) {
+    case "claude":
+      return "Normal runs use `--permission-mode auto`, plus `--add-dir <companion>` for a project with a companion directory. `profile.skipPermissions: true` in the aligndev settings selects `--dangerously-skip-permissions`";
+    case "codex":
+      return "Normal runs use `--sandbox workspace-write`, plus `--add-dir <companion>` for a project with a companion directory. `profile.skipPermissions: true` in the aligndev settings selects `--dangerously-bypass-approvals-and-sandbox`";
+    case "pi":
+      return "Pi uses ordinary OS permissions, including companion access. `profile.skipPermissions` has no effect. Saved project trust is honored; no forced approval is passed";
+    case "agy":
+      return "Normal runs use Antigravity's auto mode with its terminal sandbox, plus `--add-dir <companion>` for a project with a companion directory and `--add-dir <git common directory>` in a linked worktree. `profile.skipPermissions: true` in the aligndev settings selects `--dangerously-skip-permissions`";
+  }
+}
+
+// The policy of a harness without a finite model list.
+function openModelPolicy(harness: CodingAgent): string {
+  return harness === "agy"
+    ? "Any nonblank Antigravity model name, preferably a base name such as `gemini-3.8-flash` with `--effort`"
+    : "Any nonblank pi-native selector, preferably `provider/model` (thinking suffixes supported; `--effort` overrides them)";
 }
 
 // Trusts the settings: no executable, login or environment value is consulted.

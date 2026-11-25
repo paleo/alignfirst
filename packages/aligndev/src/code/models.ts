@@ -24,6 +24,7 @@ export function resolveModels(
     case "codex":
       return [...new Set([...CODEX_DEFAULT_MODELS, ...Object.keys(aliases)])];
     case "pi":
+    case "agy":
       return;
   }
 }

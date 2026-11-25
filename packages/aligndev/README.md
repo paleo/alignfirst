@@ -27,17 +27,17 @@ A task can also start at any intermediate step.
 
 ## Two Ways to Run the Assistant
 
-**In your coding agent.** A Claude Code, Codex or persistent Pi session becomes the assistant of the repository it starts in. You keep chatting in the same session; the agents it launches work in the background.
+**In your coding agent.** A Claude Code, Codex, Antigravity or persistent Pi session becomes the assistant of the repository it starts in. You keep chatting in the same session; the agents it launches work in the background.
 
 **As an OpenClaw bot.** [AlignDev for OpenClaw](#start-as-an-openclaw-bot) deploys the assistant on a server, under its own name in Slack or Discord. It works on every project of the host, one thread per task.
 
-The assistant's harness and the agent's harness are independent: a coding profile selects Claude Code, Codex or Pi for the agent. Without a named selection, the profile that describes the assistant's session selects the agent; without one, a coding-agent assistant uses the built-in defaults of its own harness. OpenClaw deployment templates offer all three agents on Slack or Discord, with explicit profiles and inventoried default/custom native stores. The Pi overlay uses a protected absolute-Node launcher while retaining project PATH. Its [deployment boundary](https://github.com/paleo/alignfirst/blob/main/skills/aligndev-openclaw-setup/SKILL.md#deployment-gate) explicitly permits writable native `auth.json` and adjacent locks for OAuth renewal. That file can persist same-account executable API-key commands; this is account-level persistence, not administrator privilege escalation. Other managed resources and trust retain controlled-maintenance protection. Project trust is not a sandbox, and offline checks do not certify live deployment.
+The assistant's harness and the agent's harness are independent: a coding profile selects Claude Code, Codex, Pi or Antigravity for the agent. Without a named selection, the profile that describes the assistant's session selects the agent; without one, a coding-agent assistant uses the built-in defaults of its own harness. OpenClaw deployment templates offer the Claude Code, Codex and Pi agents on Slack or Discord, with explicit profiles and inventoried default/custom native stores. The Pi overlay uses a protected absolute-Node launcher while retaining project PATH. Its [deployment boundary](https://github.com/paleo/alignfirst/blob/main/skills/aligndev-openclaw-setup/SKILL.md#deployment-gate) explicitly permits writable native `auth.json` and adjacent locks for OAuth renewal. That file can persist same-account executable API-key commands; this is account-level persistence, not administrator privilege escalation. Other managed resources and trust retain controlled-maintenance protection. Project trust is not a sandbox, and offline checks do not certify live deployment.
 
 ## Configuration boundary
 
 AlignDev requires the workspace-aware `alignfirst config --json` report: top-level `workspace` metadata with absolute registry/runtime paths, `selectionOrigins`, logical locations and independent `aligndev` selection. One selected `alignfirst.json`/`.jsonc` with `schemaVersion: 1` holds nested conventions, plans, explicit assistant instructions and optional recipes. Project configuration rejects unknown properties. Companion/global settings retain tolerant warnings. Inventory ranges come only from workspace `devServer.ports`. The scan reads every project's report through one `alignfirst config --json <dir>...` call. `project ports` prints the claimed ranges; `project free-ports --within <first>..<last>` looks up a free block inside the caller's bounds without reserving it.
 
-## Start in Claude Code, Codex or Pi
+## Start in Claude Code, Codex, Pi or Antigravity
 
 The project needs usable AlignFirst work files, untracked by the project's own repository or in a [companion directory](https://github.com/paleo/alignfirst/tree/main/packages/alignfirst#companion-directories). A separate work-files repository may track them. To prepare the project, ask your agent to run [`npx -y alignfirst setup guide coding-agent-assistant`](https://github.com/paleo/alignfirst/blob/main/packages/alignfirst/templates/setup/topics/coding-agent-assistant.md). `alignfirst plans check --json` verifies them, from the main worktree or a linked one. AlignFirst refuses effective plans tracked by the project's own repository. Missing or project-tracked effective plans require authorized companion preparation through the `work-files-setup` topic of `aligndev guide`; existing project content stays untouched and is not copied.
 
@@ -49,6 +49,8 @@ The child needs network access and access to its selected work files. The assist
 
 Pi uses ordinary OS permissions and saved project trust; a profile's `skipPermissions` has no effect. Native Pi 1.3.0 host probes passed for shared plans, a separate work-files repository, companion plans and `.local`. These results establish OS access, not sandbox confinement. Neither agent's host-user probes establish production service-account or deployment support.
 
+Antigravity runs commands in a terminal sandbox without network, so a delegated protocol needs its AlignFirst commands to leave it. See "Antigravity permissions" in `npx -y alignfirst setup guide coding-agent-assistant`.
+
 ### With the Skill
 
 Install the `aligndev` skill:
@@ -57,7 +59,7 @@ Install the `aligndev` skill:
 npx skills add https://github.com/paleo/alignfirst --global --skill aligndev
 ```
 
-Then start a session in the project and invoke `/aligndev` in Claude Code, `$aligndev` in Codex, or `/skill:aligndev` in Pi. To target Pi explicitly, add `--agent pi` to the installer command. Pi discovers global `~/.agents/skills/`; verify the current installer's target/layout when upgrading.
+Then start a session in the project and invoke `/aligndev` in Claude Code or Antigravity, `$aligndev` in Codex, or `/skill:aligndev` in Pi. To target Pi explicitly, add `--agent pi` to the installer command. Pi and Antigravity discover global `~/.agents/skills/`; verify the current installer's target/layout when upgrading.
 
 ### Pi's Separate Tools
 
@@ -72,12 +74,12 @@ Background reporting uses Pi's native follow-up delivery. Manual compaction and 
 
 ### Without a Skill
 
-Add this section to your global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.pi/agent/AGENTS.md`, or the equivalent):
+Add this section to your global agent instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.pi/agent/AGENTS.md`, `~/.gemini/AGENTS.md`, or the equivalent):
 
 ```markdown
 ## AlignDev
 
-When the user mentions **aligndev**, follow the `aligndev` playbook if it is already in context. Otherwise, run `npx -y aligndev guide` and follow it.
+When the user mentions **aligndev**, follow the `aligndev` playbook if it is already in context. Otherwise, run `npx -y aligndev guide` and follow it. If your sandbox blocks `npx -y aligndev guide`, rerun it outside the sandbox.
 ```
 
 Then ask your session to work with aligndev.
@@ -85,7 +87,7 @@ Then ask your session to work with aligndev.
 ### Requirements
 
 - Node.js 22.11 or later with `npx -y aligndev`, or Bun with `bunx aligndev` (`bun x` is equivalent). Bun 1.4.4 is the tested CLI baseline; compatibility with every older release is not promised.
-- The selected child installed and authenticated under the same effective environment and cwd as the child. Apply the profile's `unset/env/configDir`, including HOME, PATH and credential routing, before using `claude` then `/login`, `codex login`, or `pi` then `/login <provider>` (or configured provider credentials). A bare login in another shell may select another account. Pi keeps its own runtime requirements; see the [extension compatibility baseline](https://github.com/paleo/alignfirst/blob/main/docs/pi-extensions.md#supported-and-tested-baseline).
+- The selected child installed and authenticated under the same effective environment and cwd as the child. Apply the profile's `unset/env/configDir`, including HOME, PATH and credential routing, before using `claude` then `/login`, `codex login`, `pi` then `/login <provider>` (or configured provider credentials), or `agy` then sign in. A bare login in another shell may select another account. Pi keeps its own runtime requirements; see the [extension compatibility baseline](https://github.com/paleo/alignfirst/blob/main/docs/pi-extensions.md#supported-and-tested-baseline).
 - For Pi, select a usable native model, preferably `provider/model` (optional thinking suffix). Authenticate in the same account/configuration used by the child; never expose credential values in diagnostics.
 - Linux or macOS, or Windows through WSL.
 
@@ -95,7 +97,7 @@ Bun support covers this CLI, not its selected coding agent, Docker or an OpenCla
 
 ## Configuration
 
-`~/.alignfirst/aligndev.settings.json` is optional. Without it, a Claude Code, Codex or Pi assistant delegates with the built-in defaults of its own harness. A minimal setup is:
+`~/.alignfirst/aligndev.settings.json` is optional. Without it, a Claude Code, Codex, Pi or Antigravity assistant delegates with the built-in defaults of its own harness. A minimal setup is:
 
 ```json
 {
@@ -105,14 +107,14 @@ Bun support covers this CLI, not its selected coding agent, Docker or an OpenCla
 }
 ```
 
-A Claude Code assistant selects `work`: a profile without `configDir` describes any session of its harness. A Codex or Pi assistant keeps its own built-ins.
+A Claude Code assistant selects `work`: a profile without `configDir` describes any session of its harness. A Codex, Pi or Antigravity assistant keeps its own built-ins.
 
 ### The Assistant's Harness
 
-A harness is the software that runs a session: `claude`, `codex`, `pi` or `openclaw`. The assistant's harness runs the session that calls `aligndev`; the agent's harness runs the coding agent. `aligndev` resolves the assistant's harness at each invocation:
+A harness is the software that runs a session: `claude`, `codex`, `pi`, `agy` or `openclaw`. The assistant's harness runs the session that calls `aligndev`; the agent's harness runs the coding agent. `aligndev` resolves the assistant's harness at each invocation:
 
-1. `ALIGNDEV_ASSISTANT_HARNESS`, when set: one of the four values. Any other value is an error.
-2. The detected coding agent. Several detected agents leave the harness unrecognized.
+1. `ALIGNDEV_ASSISTANT_HARNESS`, when set: one of the five values. Any other value is an error.
+2. The detected coding agent, read from its session variables, such as `ANTIGRAVITY_AGENT=1` for Antigravity. Several detected agents leave the harness unrecognized.
 3. `OPENCLAW_SHELL=exec`, set by OpenClaw's exec runtime: `openclaw`.
 4. Otherwise, the harness is unrecognized.
 
@@ -181,15 +183,15 @@ OpenClaw sessions delegate to `service-pi`. A Codex session on that account is d
 
 A coding-agent profile accepts:
 
-- `harness` — `claude`, `codex` or `pi`: the agent's harness.
+- `harness` — `claude`, `codex`, `pi` or `agy`: the agent's harness.
 - `defaultAgentProfile` — the profile a session delegates to when this profile is the assistant's profile. Without it, the profile delegates to itself. It is followed once.
 - `disabled` — `true` makes the profile absent for the CLI. Its shape is still validated.
 - `default` — optional boolean. When several enabled profiles describe the session, the one flagged true is the assistant's profile. At most one true flag per harness is allowed among enabled profiles, even with a named choice. Omitted and false are equivalent.
-- `configDir` — native directory selection through `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or `PI_CODING_AGENT_DIR`. Omit it for ordinary setup: the caller's variable is inherited unless `env` or `unset` changes it; without a variable, native defaults apply. `null` deliberately removes that variable to force native-default directory behavior. A string resolves and sets it, including when naming the default path. `~/` uses the configured home; relative paths resolve against the settings directory. The same value decides which sessions the profile describes: `null` a session whose variable is unset, a path a session whose variable names the same directory, and omitted any session that no `null` or path profile describes. A variable set to the native default path does not match `null`.
+- `configDir` — native directory selection through `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or `PI_CODING_AGENT_DIR`. An `agy` profile rejects it: Antigravity has one native store and one account per OS user. Omit it for ordinary setup: the caller's variable is inherited unless `env` or `unset` changes it; without a variable, native defaults apply. `null` deliberately removes that variable to force native-default directory behavior. A string resolves and sets it, including when naming the default path. `~/` uses the configured home; relative paths resolve against the settings directory. The same value decides which sessions the profile describes: `null` a session whose variable is unset, a path a session whose variable names the same directory, and omitted any session that no `null` or path profile describes. A variable set to the native default path does not match `null`.
 - `env` — literal environment values for non-secret configuration. No interpolation or shell expansion. Keep credentials in native stores or separately provisioned process environments.
 - `unset` — inherited variables to remove, including API keys that select an unintended authentication route. A variable cannot occur in both `env` and `unset`. A string or null `configDir` cannot coexist with its native directory variable in either field.
 - `defaultModel` — new-session default, validated against accepted names. Omission uses the native default.
-- `models` — a nonempty list replaces accepted names. Otherwise Claude accepts `fable`, `opus`, `sonnet`, `haiku`, Codex accepts `astra`, `sol`, `terra`, `luna`, and both add configured alias names. Pi accepts every nonblank selector. An empty list adds no override.
+- `models` — a nonempty list replaces accepted names. Otherwise Claude accepts `fable`, `opus`, `sonnet`, `haiku`, Codex accepts `astra`, `sol`, `terra`, `luna`, and both add configured alias names. Pi and Antigravity accept every nonblank selector. For Antigravity, prefer a base name with an effort: a name with an effort suffix conflicts with a different effort, `defaultEffort` included. An empty list adds no override.
 - `modelAliases` — one-step user-facing name → native selector mappings. Validate the chosen name first, expand once, then apply native handling. A Codex alias target such as `sol` still resolves through its bundled catalog.
 - `efforts` — a nonempty list replaces the harness's built-in effort levels and bounds what AlignDev passes. An empty list adds no override. Entries are free strings, so a level AlignDev does not know can be listed.
 - `defaultEffort` — pins new sessions to one of the accepted levels. Without it, a session launched without `--effort` runs at the native default, which AlignDev does not read.
@@ -199,10 +201,11 @@ A coding-agent profile accepts:
   | `claude` | `low`, `medium`, `high`, `xhigh`, `max` | `--effort <level>` |
   | `codex` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` | `-c model_reasoning_effort="<level>"` |
   | `pi` | `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` | `--thinking <level>` |
+  | `agy` | `low`, `medium`, `high`, `xhigh`, `max` | `--effort <level>` |
 
-  The level reaches the native CLI unchanged. AlignDev checks no level against the model: Claude falls back to a supported level, Pi clamps it, and Codex passes it through.
-- `skipPermissions` — defaults to false. Claude uses `--permission-mode auto`, or `--dangerously-skip-permissions`; Codex uses `--sandbox workspace-write`, or `--dangerously-bypass-approvals-and-sandbox`. Pi ignores this setting.
-- `quota` — independent native usage reader: `source` is `claude`, `codex`, or `none`, with optional `configDir`, `env`, `unset`. `none` disables quota and accepts no other recognized options. Omitted quota uses a native Claude/Codex profile's coding environment; Pi requires an explicit source.
+  The level reaches the native CLI unchanged. AlignDev checks no level against the model: Claude falls back to a supported level, Pi clamps it, Codex passes it through, and Antigravity fails the run on a model and effort that conflict.
+- `skipPermissions` — defaults to false. Claude uses `--permission-mode auto`, or `--dangerously-skip-permissions`; Codex uses `--sandbox workspace-write`, or `--dangerously-bypass-approvals-and-sandbox`; Antigravity uses its auto mode, or `--dangerously-skip-permissions` (see "Antigravity permissions" in `npx -y alignfirst setup guide coding-agent-assistant`). Pi ignores this setting.
+- `quota` — independent native usage reader: `source` is `claude`, `codex`, `agy` or `none`, with optional `configDir`, `env`, `unset`. An `agy` source rejects `configDir`. `none` disables quota and accepts no other recognized options. Omitted quota uses a native Claude, Codex or Antigravity profile's coding environment; Pi requires an explicit source.
 
 An `openclaw` profile describes an OpenClaw assistant and launches nothing. It accepts `harness`, a required `defaultAgentProfile` and `disabled`; any other recognized profile key is an error. At most one is enabled.
 
@@ -216,7 +219,7 @@ Selection for new sessions, help, `guide code`, and quota:
 2. The project registry selection.
 3. On resume, the latest recorded named profile.
 4. The assistant profile's `defaultAgentProfile`, or the assistant's profile itself.
-5. Without an assistant's profile: the built-in defaults of a Claude Code, Codex or Pi harness, or `code.fallbackProfile` for an `openclaw` or unrecognized harness. Without that key, the error names the remedies; with one enabled coding-agent profile, it prints the line to add.
+5. Without an assistant's profile: the built-in defaults of a Claude Code, Codex, Pi or Antigravity harness, or `code.fallbackProfile` for an `openclaw` or unrecognized harness. Without that key, the error names the remedies; with one enabled coding-agent profile, it prints the line to add.
 
 A named reference never falls through: a `--profile`, project selection, recorded profile, `defaultAgentProfile` or `code.fallbackProfile` that names a missing, disabled or `openclaw` profile fails. Project selections use the actual working directory, matching linked worktrees through AlignFirst; help/guide/quota need no `.plans` or Git repository. `--profile` is rejected on status and unrelated guide topics. `aligndev guide code` lists every enabled coding-agent profile with its harness and models, so the assistant passes `--profile <name>` when the user asks for another agent or account.
 
@@ -226,11 +229,11 @@ For example, `"configDir": null` forces native-default mode despite an inherited
 
 ### Agent Environment
 
-The agent inherits the caller environment without what a package launcher injected: every lowercase `npm_*` variable, `INIT_CWD`, `NODE` when it equals `npm_node_execpath`, and the leading PATH entries that end in `node_modules/.bin` or `node-gyp-bin`. Uppercase variables such as `NPM_TOKEN` stay. To pass npm settings to the agent, use `.npmrc`, an uppercase `NPM_CONFIG_*` variable or the profile's `env`. It then removes `unset`, and applies `env` and the directory selection (setting a string or removing the native variable for null). The assistant's session identities and `ALIGNDEV_ASSISTANT_HARNESS` are stripped afterward, and required adapter values win; `OPENCLAW_SHELL` stays. The same finalized environment reaches discovery, execution and native context lookup. Help, guides and failures identify native storage selected through a string `configDir`, a null reset, profile environment overrides, inherited variables or profile removal. They show environment-variable names and origins, never their values. Login must reproduce that effective environment and cwd. No environment values are printed or saved in run metadata.
+The agent inherits the caller environment without what a package launcher injected: every lowercase `npm_*` variable, `INIT_CWD`, `NODE` when it equals `npm_node_execpath`, and the leading PATH entries that end in `node_modules/.bin` or `node-gyp-bin`. Uppercase variables such as `NPM_TOKEN` stay. To pass npm settings to the agent, use `.npmrc`, an uppercase `NPM_CONFIG_*` variable or the profile's `env`. It then removes `unset`, and applies `env` and the directory selection (setting a string or removing the native variable for null). Every coding agent's session identity, `AI_AGENT` included, and `ALIGNDEV_ASSISTANT_HARNESS` are stripped afterward, and required adapter values win. `OPENCLAW_SHELL`, the trace variables `TRACEPARENT` and `TRACESTATE`, and host-app variables such as `PASEO_AGENT_ID` pass through; list them in `unset` to remove them. The same finalized environment reaches discovery, execution and native context lookup. Help, guides and failures identify native storage selected through a string `configDir`, a null reset, profile environment overrides, inherited variables or profile removal. They show environment-variable names and origins, never their values. Login must reproduce that effective environment and cwd. No environment values are printed or saved in run metadata.
 
 ### Resume
 
-Resume requires the same native agent and, for Pi, the same real directory. A selected account must contain the native conversation; failure never falls back to an old profile or accepts a new conversation. `--model` overrides the recorded user-facing model; otherwise that name is retained and validated under the current profile. A disallowed retained name requires an explicit replacement; a recorded null keeps the native conversation's model. `--effort` likewise overrides the recorded effort; otherwise it is retained and validated under the current profile, and a recorded null keeps the native default. AlignDev passes the effective effort on every run, new or resumed. Profile defaults apply only to new sessions. Retained aliases use the selected profile's current mappings, so changing a mapping can change the native target. Session metadata records profile, agent, chosen name, native ID and cwd; historical records with blank or missing profiles read as null. Unless `--profile` or a project registry selection replaces null, resume uses the built-ins of the assistant's harness, ignoring configured profiles and flags, and records null in the new run. An `openclaw` or unrecognized harness fails. Original records remain unchanged. A deleted recorded name needs `--profile` or a project replacement; automatic selection cannot rescue it. Status reads durable metadata even when launch settings are invalid or a profile has been deleted.
+Resume requires the same native agent and, for Pi, the same real directory. A selected account must contain the native conversation; failure never falls back to an old profile or accepts a new conversation. An unknown conversation fails the run, and the child is stopped before it executes the prompt. `--model` overrides the recorded user-facing model; otherwise that name is retained and validated under the current profile. A disallowed retained name requires an explicit replacement; a recorded null keeps the native conversation's model. `--effort` likewise overrides the recorded effort; otherwise it is retained and validated under the current profile, and a recorded null keeps the native default. AlignDev passes the effective effort on every run, new or resumed. Profile defaults apply only to new sessions. Retained aliases use the selected profile's current mappings, so changing a mapping can change the native target. Session metadata records profile, agent, chosen name, native ID and cwd; historical records with blank or missing profiles read as null. Unless `--profile` or a project registry selection replaces null, resume uses the built-ins of the assistant's harness, ignoring configured profiles and flags, and records null in the new run. An `openclaw` or unrecognized harness fails. Original records remain unchanged. A deleted recorded name needs `--profile` or a project replacement; automatic selection cannot rescue it. Status reads durable metadata even when launch settings are invalid or a profile has been deleted.
 
 ### Retired Keys
 

@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 
-import type { CodingAgent } from "./coding-agent.js";
+import { CODING_AGENTS, type CodingAgent } from "./coding-agent.js";
 
 export interface SessionFrontmatter {
   status: "running" | "succeeded" | "failed";
@@ -380,7 +380,7 @@ export function parseFrontmatter(block: string): SessionFrontmatter {
 }
 
 function parseAgent(raw: string | null | undefined): CodingAgent | null {
-  return raw === "claude" || raw === "codex" || raw === "pi" ? raw : null;
+  return CODING_AGENTS.find((agent) => agent === raw) ?? null;
 }
 
 function parsePid(raw: string | null | undefined): number | null {

@@ -66,7 +66,7 @@ export const SETUP_TOPICS: readonly SetupTopic[] = [
   {
     name: "coding-agent-assistant",
     title: "A Coding Agent as the Assistant",
-    description: "Run Claude Code, Codex or Pi as the AlignDev assistant.",
+    description: "Run Claude Code, Codex, Pi or Antigravity as the AlignDev assistant.",
   },
   {
     name: "upgrade",

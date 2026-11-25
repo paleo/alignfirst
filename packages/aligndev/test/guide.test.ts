@@ -325,6 +325,33 @@ describe("renderBlocks", () => {
     expect(render({ platform: "codingAgent" })).toEqual(["Conversation.", "Assistant."]);
   });
 
+  it("keeps the assistant's harness block, or every harness block when it is unrecognized", () => {
+    const text = [
+      "{{#codingAgent}}",
+      "{{#claude}}",
+      "Claude Code.",
+      "{{/claude}}",
+      "{{#codex}}",
+      "Codex.",
+      "{{/codex}}",
+      "{{#pi}}",
+      "Pi.",
+      "{{/pi}}",
+      "{{#agy}}",
+      "Antigravity.",
+      "{{/agy}}",
+      "{{/codingAgent}}",
+    ].join("\n");
+    const render = (active: ActiveBlocks) => renderBlocks(text, active, "t.md").split("\n");
+    expect(render({ platform: "codingAgent", harness: "pi" })).toEqual(["Pi."]);
+    expect(render({ platform: "codingAgent" })).toEqual([
+      "Claude Code.",
+      "Codex.",
+      "Pi.",
+      "Antigravity.",
+    ]);
+  });
+
   it.each([
     ["an unknown block", "{{#teams}}\nx\n{{/teams}}"],
     [
@@ -342,6 +369,12 @@ describe("renderBlocks", () => {
     [
       "a platform block inside a surface block",
       "{{#app}}\n{{#openclaw}}\nx\n{{/openclaw}}\n{{/app}}",
+    ],
+    ["a harness block at the top level", "{{#pi}}\nx\n{{/pi}}"],
+    ["a harness block inside openclaw", "{{#openclaw}}\n{{#pi}}\nx\n{{/pi}}\n{{/openclaw}}"],
+    [
+      "a harness block inside a harness block",
+      "{{#codingAgent}}\n{{#pi}}\n{{#agy}}\nx\n{{/agy}}\n{{/pi}}\n{{/codingAgent}}",
     ],
     ["an unclosed block", "a\n{{#openclaw}}\nx"],
     ["a stray closing marker", "{{#openclaw}}\nx\n{{/codingAgent}}"],
