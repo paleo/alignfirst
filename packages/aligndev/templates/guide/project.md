@@ -22,9 +22,13 @@ The inventory scans a root directory: `--root`, else `projectsRoot` in the align
 
 ## Port ranges
 
-`portRange` in the aligndev settings is the machine's range for dev servers. Each project's range comes only from `devServer.ports` in its selected configuration.
+Each project's range comes only from `devServer.ports` in the selected configuration of its main worktree. A range declared in a linked worktree counts once it reaches the main worktree.
 
-`{{ALIGNDEV}} project free-ports --size <n>` returns the lowest block of `n` ports inside `portRange` that overlaps no project range of the scan. The size is the project's port names × its expected concurrent workspaces. This is a lookup, not a reservation: the setup guide writes the returned block in the project's `devServer.ports`.
+`{{ALIGNDEV}} project ports` prints the claimed ranges, sorted by first port, with paths relative to the scan root.
+
+`{{ALIGNDEV}} project free-ports --size <n> --within <first>..<last>` returns the lowest block of `n` ports inside the bounds that overlaps no project range of the scan. The size is the project's port names × its expected concurrent workspaces. The bounds come from your context: the deployment's or the team's instructions. This is a lookup, not a reservation: the setup guide writes the returned block in the project's `devServer.ports`.
+
+A project whose configuration report fails has an unknown range. Both commands still answer: the text form warns on stderr, and the JSON form lists these projects under `unknown`. Run `{{ALIGNDEV}} project doctor` to see why.
 
 ## Commands
 
@@ -32,7 +36,8 @@ The inventory scans a root directory: `--root`, else `projectsRoot` in the align
 {{ALIGNDEV}} project list [--json] [--root <path>] [--max-depth <n>]
 {{ALIGNDEV}} project doctor [--root <path>] [--max-depth <n>]
 {{ALIGNDEV}} project status <path> [--json] [--root <path>] [--max-depth <n>]
-{{ALIGNDEV}} project free-ports --size <n> [--json] [--root <path>] [--max-depth <n>]
+{{ALIGNDEV}} project ports [--json] [--root <path>] [--max-depth <n>]
+{{ALIGNDEV}} project free-ports --size <n> --within <first>..<last> [--json] [--root <path>] [--max-depth <n>]
 {{ALIGNDEV}} guide project
 ```
 
@@ -46,6 +51,5 @@ A project's AlignFirst files may live in its companion directory, the `dir` of i
 
 - An invalid project configuration.
 - An `alignfirst.json` or `alignfirst.jsonc` in a directory outside a git main worktree. The scan still treats that directory as a group.
-- A project range outside `portRange`.
 - Two overlapping project ranges, anywhere in the scan.
 - Two projects whose registry entries resolve to the same companion directory.

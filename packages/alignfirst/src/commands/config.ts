@@ -1,7 +1,9 @@
 import type { WorkspaceConfigReport } from "@alignfirst/workspace/config";
 import { CliError } from "../cli-error.js";
+import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import type { CommandContext } from "../context.js";
+import { errorMessage } from "../errors.js";
 import { parseCommandArgs } from "../parse-args.js";
 import { resolveProjectConfig } from "../project-config.js";
 import type { ProjectConfig, ResolvedProjectConfig } from "../project-config-types.js";
@@ -15,6 +17,7 @@ import {
   layoutOf,
   type ProjectLayout,
   renderItemLocation,
+  resolveProjectLayout,
 } from "../project-layout.js";
 
 interface ConfigReport {
@@ -28,9 +31,15 @@ interface ConfigReport {
 }
 
 export function runConfig(ctx: CommandContext, args: string[]): number {
-  const usage = `Usage: ${ctx.form} config [--json]\n`;
-  const json = parseConfigArgs(ctx, args, usage);
-  if (json === undefined) return 0;
+  const usage = `Usage: ${ctx.form} config [--json [<dir>...]]\n`;
+  const parsed = parseConfigArgs(ctx, args, usage);
+  if (parsed === undefined) return 0;
+  const { json, directories } = parsed;
+  if (directories.length > 0) {
+    const reports = directories.map((directory) => reportDirectory(ctx, directory));
+    ctx.stdout.write(`${JSON.stringify({ reports }, undefined, 2)}\n`);
+    return 0;
+  }
   const layout = layoutOf(ctx);
   const resolved = resolveProjectConfig(layout);
   const report = buildConfigReport(layout, resolved);
@@ -38,7 +47,16 @@ export function runConfig(ctx: CommandContext, args: string[]): number {
   return 0;
 }
 
-function parseConfigArgs(ctx: CommandContext, args: string[], usage: string): boolean | undefined {
+interface ConfigArgs {
+  json: boolean;
+  directories: string[];
+}
+
+function parseConfigArgs(
+  ctx: CommandContext,
+  args: string[],
+  usage: string,
+): ConfigArgs | undefined {
   const { values, positionals } = parseCommandArgs(usage, () =>
     parseArgs({
       args,
@@ -54,9 +72,25 @@ function parseConfigArgs(ctx: CommandContext, args: string[], usage: string): bo
     ctx.stdout.write(usage);
     return;
   }
-  if (positionals.length > 0)
+  if (positionals.length > 0 && !values.json)
     throw new CliError(`Unexpected argument: ${positionals[0]}\n\n${usage}`);
-  return values.json;
+  return { json: values.json, directories: positionals };
+}
+
+interface DirectoryReport {
+  path: string;
+  report?: ConfigReport;
+  error?: string;
+}
+
+function reportDirectory(ctx: CommandContext, directory: string): DirectoryReport {
+  const path = resolve(ctx.cwd, directory);
+  try {
+    const layout = resolveProjectLayout(path, ctx.home);
+    return { path, report: buildConfigReport(layout, resolveProjectConfig(layout)) };
+  } catch (error) {
+    return { path, error: errorMessage(error) };
+  }
 }
 
 function buildConfigReport(

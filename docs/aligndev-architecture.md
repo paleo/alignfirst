@@ -24,7 +24,7 @@ read_when:
 | `src/config.ts` | `~/.alignfirst/aligndev.settings.json`: tolerant settings, reference validation, effective selection and child environment. |
 | `src/code/` | `aligndev code`: arguments, prompt, run, session file, adapters, models, quota. |
 | `src/guide/` | `aligndev guide [--channel <surface>]`: topics by context and the template renderer. |
-| `src/project/` | `aligndev project`: discovery, status and free-port lookup; AlignFirst report parsing and work-files gate calls. |
+| `src/project/` | `aligndev project`: discovery, status, port claims and free-port lookup; AlignFirst report parsing and work-files gate calls. |
 | `@alignfirst/workspace/git` | Shared Git inventory/path helpers; lifecycle commands belong to AlignFirst. |
 | `templates/guide/` | The dispatcher, the playbook and the guides, rendered per platform and surface. |
 
@@ -164,16 +164,18 @@ The scan starts at `--root`, then `projectsRoot` from the settings, then the wor
 - A linked worktree is a workspace of its project.
 - Any other directory is a group, scanned in turn.
 
-`--max-depth <n>`, a positive integer with a default of 5, applies to `list`, `status`, `doctor` and `free-ports`. The root's children are at depth 1. Hidden directories and `node_modules` are skipped silently. The root itself must be readable; a missing or unreadable root fails the scan.
+`--max-depth <n>`, a positive integer with a default of 5, applies to `list`, `status`, `doctor`, `ports` and `free-ports`. The root's children are at depth 1. Hidden directories and `node_modules` are skipped silently. The root itself must be readable; a missing or unreadable root fails the scan.
+
+After the walk, one `alignfirst config --json <dir>...` call, run from the root, reads the reports of every main-worktree candidate; entries match candidates by position. A failed call, or an output without a `reports` array of the expected length, fails the scan with the AlignFirst upgrade diagnostic. An entry with `error` becomes an issue, and its path joins `unreadableProjects`: that project's range is unknown.
 
 `skippedDirectories` lists what the scan left out, with a reason: `outsideWorktree` (a linked worktree whose main worktree is outside the scan), `workFilesRepository` (a repository holding another project's `.plans`), `symlink` (not followed), `unreadable` and `maxDepth` (a group at the depth limit). These entries are informative and never fail `doctor`.
 
-- These are inventory issues: a group with a root `alignfirst.json` or `alignfirst.jsonc` (the group is still scanned), two projects sharing one companion directory, overlapping project ranges, and a project range outside the settings' `portRange`. `aligndev project doctor` succeeds only without any issue.
+- These are inventory issues: a group with a root `alignfirst.json` or `alignfirst.jsonc` (the group is still scanned), two projects sharing one companion directory, unreadable projects and overlapping project ranges. `aligndev project doctor` succeeds only without any issue.
 - `list` and `status` carry the registry's independent `aligndev: { profile } | null` selection alongside companion and location data. Inventory reports it without resolving a launch profile or requiring an available coding agent. A missing top-level `aligndev` field in `alignfirst config --json` is an outdated contract and requires an AlignFirst upgrade.
 - A project's sole range declaration is `devServer.ports` in its selected merged configuration, including companion-selected recipes.
 
 ### Port Claims
 
-`portRange` in the settings is the machine's range for dev servers: `first` and `last`, integers from 1 to 65535. `doctor` compares every project range with every other across the whole inventory and reports a range outside `portRange`.
+Only a main worktree's range counts; a range declared in a linked worktree counts once it reaches the main worktree. `doctor` compares every project range with every other across the whole inventory.
 
-`aligndev project free-ports --size <n>` returns the lowest block of that size inside `portRange` that overlaps no project range of the scan. Without the setting, it fails and names the missing key. The size is the project's port range: port names × expected concurrent workspaces. This lookup does not reserve ports. The preparation that `alignfirst setup guide assistant-project` describes writes the block in the selected configuration's `devServer.ports`. AlignDev requires the merged report contract: top-level `workspace` metadata with registry/runtime addresses, `selectionOrigins`, `locations.alignfirst`, nullable `locations.assistantInstructionsFile` and `locations.workspaceRuntime`. It reads nested `config.conventions`, accepts full authored recipes and inventories `workspace.portRange` without evaluating scripts. Missing contract fields produce an actionable AlignFirst upgrade diagnostic.
+`aligndev project ports` prints the claimed ranges sorted by first port, with paths relative to the root. `aligndev project free-ports --size <n> --within <first>..<last>` returns the lowest block of that size inside the caller's bounds that overlaps no project range of the scan. The bounds come from the deployment's or the team's instructions; the settings hold no machine range. The size is the project's port range: port names × expected concurrent workspaces. Unreadable projects never fail either command: the text form warns on stderr, and the JSON form lists their relative paths under `unknown`. This lookup does not reserve ports. The preparation that `alignfirst setup guide assistant-project` describes writes the block in the selected configuration's `devServer.ports`. AlignDev requires the merged report contract: top-level `workspace` metadata with registry/runtime addresses, `selectionOrigins`, `locations.alignfirst`, nullable `locations.assistantInstructionsFile` and `locations.workspaceRuntime`. It reads nested `config.conventions`, accepts full authored recipes and inventories `workspace.portRange` without evaluating scripts. Missing contract fields produce an actionable AlignFirst upgrade diagnostic.

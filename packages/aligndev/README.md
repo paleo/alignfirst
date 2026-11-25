@@ -35,7 +35,7 @@ The assistant's harness and the agent's harness are independent: a coding profil
 
 ## Configuration boundary
 
-AlignDev requires the workspace-aware `alignfirst config --json` report: top-level `workspace` metadata with absolute registry/runtime paths, `selectionOrigins`, logical locations and independent `aligndev` selection. One selected `alignfirst.json`/`.jsonc` with `schemaVersion: 1` holds nested conventions, plans, explicit assistant instructions and optional recipes. Project configuration rejects unknown properties. Companion/global settings retain tolerant warnings. Inventory ranges come only from workspace `devServer.ports`; `project free-ports` looks up a free block in the settings' `portRange` without reserving it.
+AlignDev requires the workspace-aware `alignfirst config --json` report: top-level `workspace` metadata with absolute registry/runtime paths, `selectionOrigins`, logical locations and independent `aligndev` selection. One selected `alignfirst.json`/`.jsonc` with `schemaVersion: 1` holds nested conventions, plans, explicit assistant instructions and optional recipes. Project configuration rejects unknown properties. Companion/global settings retain tolerant warnings. Inventory ranges come only from workspace `devServer.ports`. The scan reads every project's report through one `alignfirst config --json <dir>...` call. `project ports` prints the claimed ranges; `project free-ports --within <first>..<last>` looks up a free block inside the caller's bounds without reserving it.
 
 ## Start in Claude Code, Codex or Pi
 
@@ -162,7 +162,6 @@ On an account shared by OpenClaw and coding-agent sessions:
 ```json
 {
   "projectsRoot": "~/projects",
-  "portRange": { "first": 28000, "last": 28599 },
   "code": {
     "fallbackProfile": "service-pi",
     "profiles": {
@@ -177,7 +176,6 @@ On an account shared by OpenClaw and coding-agent sessions:
 OpenClaw sessions delegate to `service-pi`. A Codex session on that account is described by `service-codex` and delegates to it. A shell without a recognized harness uses `code.fallbackProfile`.
 
 - `projectsRoot` — projects directory, required by the OpenClaw playbook. `~/` uses the configured home; relative paths resolve against the settings directory.
-- `portRange` — the machine's range for dev servers: `first` and `last`, integers from 1 to 65535. `aligndev project free-ports` looks up blocks in it, and `aligndev project doctor` reports project ranges outside it.
 - `code.profiles` — named profiles, each with a required `harness`. Names and references are exact, nonblank strings. Profiles have no inheritance or merging.
 - `code.fallbackProfile` — the profile used when the assistant has no profile and its harness has no built-in defaults: an `openclaw` harness without an `openclaw` profile, or an unrecognized harness.
 
@@ -239,6 +237,7 @@ Resume requires the same native agent and, for Pi, the same real directory. A se
 Unknown or obsolete keys at the settings root, `code`, each profile and each quota object are ignored with warnings on stderr. Profile names, environment names and model aliases remain dynamic map keys. Warnings omit values, redact dynamic map names and escape control characters. Recognized invalid values and duplicate defaults still fail. The CLI never rewrites the settings file.
 
 - `platform` — the assistant's harness is resolved at each invocation.
+- `portRange` — pass the bounds to `aligndev project free-ports --within <first>..<last>`, and state a deployment's range in its own instructions.
 - `code.profile` — set the assistant profile's `defaultAgentProfile`, or `code.fallbackProfile`.
 - A profile's `agent` — renamed `harness`. As a one-off exception, a profile with `agent` and no `harness` still loads: `agent` reads as `harness`, with a deprecation warning. Beside `harness`, `agent` is ignored. See [harness-settings conversion](https://github.com/paleo/alignfirst/blob/main/packages/alignfirst/templates/setup/topics/upgrade.md#convert-aligndev-harness-settings).
 - `code.defaultProfiles` — move needed preferences to matching profiles' `default: true` and remove the map. Keep profile names unchanged; see [profile-default migration](https://github.com/paleo/alignfirst/blob/main/packages/alignfirst/templates/setup/topics/upgrade.md#convert-aligndev-profile-defaults).

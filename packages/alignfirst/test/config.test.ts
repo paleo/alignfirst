@@ -255,6 +255,30 @@ describe("config command", () => {
     expect(result.stdout).toBe("");
   });
 
+  it("reports each directory of a batch in order, isolating a failed one", async () => {
+    const root = temp();
+    configureGit(root);
+    const valid = join(root, "valid");
+    const broken = join(root, "broken");
+    initRepository(valid);
+    initRepository(broken);
+    writeFileSync(join(valid, "alignfirst.json"), '{"schemaVersion":1}');
+    writeFileSync(join(broken, "alignfirst.json"), "{}");
+    const single = await runMain(["config", "--json"], { cwd: valid });
+    const result = await runMain(["config", "--json", "valid", broken], { cwd: root });
+    expect(result.code).toBe(0);
+    const { reports } = JSON.parse(result.stdout);
+    expect(reports).toHaveLength(2);
+    expect(reports[0]).toEqual({ path: valid, report: JSON.parse(single.stdout) });
+    expect(reports[1]).toEqual({ path: broken, error: expect.any(String) });
+  });
+
+  it("rejects a directory without --json", async () => {
+    const cwd = temp();
+    const result = await runMain(["config", cwd], { cwd });
+    expect(result.code).toBe(1);
+  });
+
   it("reports invalid companion settings", async () => {
     const home = temp();
     writeRegistry(home, { projects: { "~/app": { aligndev: { profile: false } } } });

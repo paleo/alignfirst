@@ -100,7 +100,7 @@ Setup reapplies owned patches; `--force` reseeds workspace files. Starts preserv
 
 ### Port range
 
-`devServer.ports` is the sole range declaration: `{ "first": 8100, "last": 8199, "declare": ["frontend"] }`, optionally with `exclude`. Size it for the number of port names times the concurrent workspaces. A declaration can be `{ "name": "frontend", "mainWorktree": 8100, "range": { "first": 8100, "last": 8119 } }`, for a pinned main port or a dedicated range. Ports stay stable until reconciliation requires a move. `dev setup --reset-ports` reallocates them while stopped. `aligndev project free-ports` looks up a free block in `portRange` of the aligndev settings without reserving it.
+`devServer.ports` is the sole range declaration: `{ "first": 8100, "last": 8199, "declare": ["frontend"] }`, optionally with `exclude`. Size it for the number of port names times the concurrent workspaces. A declaration can be `{ "name": "frontend", "mainWorktree": 8100, "range": { "first": 8100, "last": 8119 } }`, for a pinned main port or a dedicated range. Ports stay stable until reconciliation requires a move. `dev setup --reset-ports` reallocates them while stopped. `aligndev project free-ports --size <n> --within <first>..<last>` looks up a free block inside the given bounds without reserving it.
 
 ### Services
 

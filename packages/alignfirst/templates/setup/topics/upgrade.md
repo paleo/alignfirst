@@ -33,7 +33,7 @@ When `skills-lock.json` is present, inspect it through the current skills CLI. I
 - Standalone project skill: follow `{{CMD}} setup guide upgrade-v2`.
 - Full-content protocol skills or `plans-share`: follow `{{CMD}} setup guide upgrade-v3`.
 - Retired workspace files or registries: follow `{{CMD}} setup guide upgrade-workspaces`.
-- AlignDev settings with `platform`, `code.profile` or a profile `agent`, or a `.alignfirst-projects.json` marker: apply "Convert AlignDev Harness Settings" below.
+- AlignDev settings with `platform`, `code.profile`, `portRange` or a profile `agent`, or a `.alignfirst-projects.json` marker: apply "Convert AlignDev Harness Settings" below.
 - CLI-backed skills: keep the current skills. Set `plans.autoArchive: true` in the selected `alignfirst.json` or `alignfirst.jsonc`; the user can remove it after the upgrade to opt out. If `plans-share` artifacts remain, apply the cleanup, command sweep and check of `{{CMD}} setup guide upgrade-v3`.
 - No detected installation: follow `{{CMD}} setup guide protocols`.
 
@@ -168,12 +168,12 @@ On an OpenClaw host, update the private admin repository and the deployed settin
 
 ## Convert AlignDev Harness Settings
 
-AlignDev resolves the assistant's harness at each invocation and no longer reads project markers. When `aligndev.settings.json` contains `platform`, `code.profile` or a profile `agent`, or when a `.alignfirst-projects.json` exists, convert once. The CLI ignores `platform` and `code.profile` with warnings on stderr. It still reads a profile's `agent` as `harness`, with a deprecation warning.
+AlignDev resolves the assistant's harness at each invocation and no longer reads project markers. When `aligndev.settings.json` contains `platform`, `code.profile`, `portRange` or a profile `agent`, or when a `.alignfirst-projects.json` exists, convert once. The CLI ignores `platform`, `code.profile` and `portRange` with warnings on stderr. It still reads a profile's `agent` as `harness`, with a deprecation warning.
 
 1. Remove `platform`. `ALIGNDEV_ASSISTANT_HARNESS` forces the assistant's harness for one invocation.
 2. Replace `code.profile`. When a profile describes the assistant, set its `defaultAgentProfile` to the former value. On an OpenClaw account, add an `openclaw` profile whose `defaultAgentProfile` names the coding profile. For sessions without a recognized harness, set `code.fallbackProfile`.
 3. Rename `agent` to `harness` in every profile, then run `aligndev guide code --profile <name>` for each coding profile.
-4. Move the marker's range to `portRange` in the aligndev settings, and check that every project's `devServer.ports` fits in it. Delete each `.alignfirst-projects.json`, then run `aligndev project doctor`. Policy text that a marker description carried, such as allowed directories or approvals, moves to the deployment's own instructions.
+4. Move the marker's range, or the settings' `portRange`, to the deployment's own instructions, and remove `portRange` from the settings. The assistant passes that range to `aligndev project free-ports --within <first>..<last>`. Check with `aligndev project ports` that every project's range fits in it. Delete each `.alignfirst-projects.json`, then run `aligndev project doctor`. Policy text that a marker description carried, such as allowed directories or approvals, moves to the deployment's own instructions.
 
 Before:
 
@@ -193,7 +193,6 @@ After:
 ```json
 {
   "projectsRoot": "~/projects",
-  "portRange": { "first": 28000, "last": 28599 },
   "code": {
     "profiles": {
       "openclaw": { "harness": "openclaw", "defaultAgentProfile": "service-pi" },

@@ -5,7 +5,7 @@ description: >-
 license: CC0 1.0
 metadata:
   author: Paleo
-  version: "0.2.1"
+  version: "0.3.0"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -68,7 +68,7 @@ The service account never reads the admin repository. It works from a snapshot a
 - `~/.local/share/fnm/` — service-owned project Node versions and the default LTS selection.
 - `~/.npm-system-global/` — protected OpenClaw, coding-agent and `ctx7` packages. `alignfirst` and `aligndev` run through `npx` from the service-writable npm cache, so they and the playbook follow each release outside maintenance windows.
 - `~/.config/environment.d/` — the non-secret variables `systemd --user` injects into the gateway and `~/.bash_profile` sources for login shells.
-- `~/.alignfirst/` — entirely service-owned and writable, including the directory itself, `aligndev.settings.json`, `companions/` and future descendants. No immutable or append-only flags apply. The seed installs the AlignDev settings (projects root, port range, profiles); the assistant registers projects with `alignfirst companion register`. For older hosts, follow [Writable AlignFirst home](assets/aligndev-openclaw-template/base/docs/installations/06-security-hardening.md#writable-alignfirst-home) in the generated `06-security-hardening.md`.
+- `~/.alignfirst/` — entirely service-owned and writable, including the directory itself, `aligndev.settings.json`, `companions/` and future descendants. No immutable or append-only flags apply. The seed installs the AlignDev settings (projects root, profiles); the assistant registers projects with `alignfirst companion register`. For older hosts, follow [Writable AlignFirst home](assets/aligndev-openclaw-template/base/docs/installations/06-security-hardening.md#writable-alignfirst-home) in the generated `06-security-hardening.md`.
 - The gateway unit, written by `openclaw gateway install`, enabled under lingering.
 - `~/projects` — the managed projects and, with a work-files repository, the service account's own clone of it (a repository, never a project).
 
@@ -133,10 +133,10 @@ The surface overlay connects one Slack or Discord channel, where a request for p
 
 ### Projects and ports
 
-Every managed project is a direct child of `~/projects`; `aligndev project` discovers it from Git, with no registration step. The settings' `portRange` is the machine's dev-server range, in which `free-ports` finds a free block for a new project.
+Every managed project is a direct child of `~/projects`; `aligndev project` discovers it from Git, with no registration step. The workspace `AGENTS.md` states the deployment's dev-server range; `free-ports --within` finds a free block in it for a new project.
 
 - `base/docs/operations/add-project.md`
-- `variants/coding-agents/<agent>/infra/openclaw/aligndev.settings.json` (`projectsRoot`, `portRange`)
+- `variants/coding-agents/<agent>/infra/openclaw/aligndev.settings.json` (`projectsRoot`)
 - `variants/surfaces/<surface>/infra/openclaw/workspace/AGENTS.md` (section "Projects")
 
 ### Dev-server gateway
@@ -201,7 +201,7 @@ The **assistant** is fixed: every deployment uses OpenClaw and its embedded runt
 | `{{PI_QUOTA_JSON}}` | Operator, Pi only | Raw JSON object: `{"source":"none"}`, or a native source with its own null/string `configDir` |
 | `{{TEAM_NAME}}` | Operator | README, `IDENTITY.md`, `SOUL.md`, `USER.md` |
 | `{{TEAM_MEMBERS}}` | Operator | `USER.md` |
-| `{{PORT_RANGE_FIRST}}`, `{{PORT_RANGE_LAST}}` | Operator (suggested 28000–28599) | `aligndev.settings.json`, overview, workspace `AGENTS.md`, `09` |
+| `{{PORT_RANGE_FIRST}}`, `{{PORT_RANGE_LAST}}` | Operator (suggested 28000–28599) | `add-project.md`, overview, workspace `AGENTS.md`, `09` |
 | `{{PLANS_REPOSITORY_URL}}` | Operator, work-files repository only | README, `02`, `add-project.md` |
 | `{{PLANS_CLONE_NAME}}` | Operator, work-files repository only | `02`, `add-project.md`, workspace `AGENTS.md` |
 | `{{SLACK_OWNER_ID}}`, `{{SLACK_CHANNEL_ID}}` | Slack administrator | `.env.example` (Slack overlay) |
