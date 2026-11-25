@@ -1,6 +1,6 @@
 import { type CodingAgent, detectCodingAgents } from "./code/coding-agent.js";
 
-export const HARNESSES = ["claude", "codex", "pi", "openclaw"] as const;
+export const HARNESSES = ["claude", "codex", "pi", "agy", "openclaw"] as const;
 export const PLATFORMS = ["openclaw", "codingAgent"] as const;
 export const ASSISTANT_HARNESS_VARIABLE = "ALIGNDEV_ASSISTANT_HARNESS";
 

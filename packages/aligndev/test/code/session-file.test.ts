@@ -143,9 +143,9 @@ describe("frontmatter serialization", () => {
     expect(parseFrontmatter(block)).toEqual(makeFrontmatter());
   });
 
-  it("round-trips pi identity", () => {
-    const block = serializeFrontmatter({ ...frontmatter, agent: "pi" });
-    expect(parseFrontmatter(block).agent).toBe("pi");
+  it.each(["pi", "agy"] as const)("round-trips %s identity", (agent) => {
+    const block = serializeFrontmatter({ ...frontmatter, agent });
+    expect(parseFrontmatter(block).agent).toBe(agent);
   });
 
   it("reads omitted historical profile/agent/machine/effort fields as null", () => {

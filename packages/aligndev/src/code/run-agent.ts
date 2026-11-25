@@ -34,6 +34,16 @@ const ASSISTANT_SESSION_VARIABLES = [
   "PI_PROVIDER",
   "PI_MODEL",
   "PI_REASONING_LEVEL",
+  "ANTIGRAVITY_AGENT",
+  "ANTIGRAVITY_AGENTAPI_EXE",
+  "ANTIGRAVITY_APP_DATA_DIR",
+  "ANTIGRAVITY_CONVERSATION_ID",
+  "ANTIGRAVITY_CSRF_TOKEN",
+  "ANTIGRAVITY_LS_ADDRESS",
+  "ANTIGRAVITY_LS_VERSION",
+  "ANTIGRAVITY_PROJECT_ID",
+  "ANTIGRAVITY_SOURCE_METADATA",
+  "ANTIGRAVITY_TRAJECTORY_ID",
   "ALIGNDEV_ASSISTANT_HARNESS",
 ];
 
@@ -110,6 +120,8 @@ export interface AgentAdapter {
   isAuthenticationError(message: string): boolean;
   authenticationMessage(detail?: string): string;
   failureMessage?(state: AgentProtocolState): string;
+  // Wraps the prompt for the child's stdin. Absent: the prompt is sent as is.
+  formatInput?(prompt: string): string;
 }
 
 export type SpawnAgentProcess = (
@@ -215,10 +227,19 @@ function spawnAgent(
   let buffer = "";
   let stderr = "";
   let inputError: Error | undefined;
+  let identityStopTimer: NodeJS.Timeout | undefined;
+  // A changed or missing identity is permanent: the rest of the run would work in another
+  // conversation.
+  const interpretLine = (line: string) => {
+    emitLine(config, adapter, line, state, out);
+    if (state.identityFailure !== undefined && identityStopTimer === undefined) {
+      identityStopTimer = stopChild(child);
+    }
+  };
   child.stdout?.setEncoding("utf-8");
   child.stdout?.on("data", (chunk: string) => {
     buffer += chunk;
-    buffer = drainLines(buffer, (line) => emitLine(config, adapter, line, state, out));
+    buffer = drainLines(buffer, interpretLine);
   });
   child.stderr?.setEncoding("utf-8");
   child.stderr?.on("data", (chunk: string) => {
@@ -229,6 +250,7 @@ function spawnAgent(
     const finish = (outcome: ProcessOutcome) => {
       if (settled) return;
       settled = true;
+      clearTimeout(identityStopTimer);
       detachChildGuards();
       resolve(outcome);
     };
@@ -247,7 +269,7 @@ function spawnAgent(
       inputError = error;
       child.kill("SIGTERM");
     });
-    child.stdin?.end(config.prompt, "utf8");
+    child.stdin?.end(adapter.formatInput?.(config.prompt) ?? config.prompt, "utf8");
   });
 }
 
@@ -361,23 +383,14 @@ function guardChildLifecycle(
 ): () => void {
   // Seal the session, ask the child to stop, then force-kill it after a short grace period so
   // interrupted runs leave neither a stale session record nor an orphaned child process.
-  const isAlive = () => child.exitCode === null && child.signalCode === null;
-  const signalChild = (signal: NodeJS.Signals) => {
-    if (!isAlive()) return;
-    try {
-      child.kill(signal);
-    } catch {
-      // The child exited between the liveness check and the signal.
-    }
-  };
-  const forceKill = () => signalChild("SIGKILL");
+  const forceKill = () => signalChild(child, "SIGKILL");
   const onSignal = async (signal: NodeJS.Signals) => {
     try {
       applyCompletion(sessionFilePath, buildTerminationUpdate(signal, state, new Date()));
     } catch {
       // Session sealing is best-effort when the file is missing or malformed.
     }
-    signalChild("SIGTERM");
+    signalChild(child, "SIGTERM");
     await waitForChildExit(child, TERMINATION_GRACE_MS);
     forceKill();
     process.exit(signal === "SIGINT" ? 130 : 143);
@@ -392,6 +405,22 @@ function guardChildLifecycle(
     process.off("SIGTERM", onSigterm);
     process.off("exit", forceKill);
   };
+}
+
+// Asks the child to stop, then force-kills it after the grace period. Clear the returned timer
+// once the child has closed.
+function stopChild(child: ChildProcess): NodeJS.Timeout {
+  signalChild(child, "SIGTERM");
+  return setTimeout(() => signalChild(child, "SIGKILL"), TERMINATION_GRACE_MS);
+}
+
+function signalChild(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  try {
+    child.kill(signal);
+  } catch {
+    // The child exited between the liveness check and the signal.
+  }
 }
 
 function waitForChildExit(child: ChildProcess, graceMs: number): Promise<void> {

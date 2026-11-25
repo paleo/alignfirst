@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createQuotaReader,
+  formatAgyQuota,
   formatCodexQuota,
   parseClaudeQuota,
   type QuotaProcessAdapter,
@@ -66,7 +67,7 @@ describe("Claude quota", () => {
     expect(execute).toHaveBeenCalledWith(
       "claude",
       ["-p", "/usage", "--tools", "", "--output-format", "json", "--no-session-persistence"],
-      {
+      expect.objectContaining({
         cwd: "/project",
         env: {
           KEEP: "yes",
@@ -77,7 +78,7 @@ describe("Claude quota", () => {
           CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY: "1",
         },
         timeout: 30_000,
-      },
+      }),
     );
   });
 
@@ -338,6 +339,88 @@ describe("Codex quota buckets", () => {
     expect(() => formatCodexQuota(response)).toThrow(Error);
   });
 });
+
+describe("Antigravity quota", () => {
+  const GEMINI_WEEKLY_RESET = Date.UTC(2026, 11, 2, 7, 28, 6) / 1000;
+  const GEMINI_5H_RESET = Date.UTC(2026, 10, 25, 12, 28, 6) / 1000;
+
+  it("reads the usage command of agy in its JSON output", async () => {
+    const execute = vi.fn(async () => ({ stdout: JSON.stringify(agyUsage(geminiGroup())) }));
+    const reader = createQuotaReader({
+      execute,
+      spawn: () => {
+        throw new Error("unexpected spawn");
+      },
+    });
+    const env = { KEEP: "yes" };
+    await expect(reader("agy", { cwd: "/project", env })).resolves.toContain("Gemini Models");
+    expect(execute).toHaveBeenCalledWith(
+      "agy",
+      ["-p", "/usage", "--output-format", "json"],
+      expect.objectContaining({ cwd: "/project", env }),
+    );
+  });
+
+  it("reports each valid bucket's used percentage, window and reset, per group", () => {
+    const output = formatAgyQuota(
+      JSON.stringify(
+        agyUsage(geminiGroup(), {
+          name: "Claude and GPT models",
+          buckets: [
+            { id: "3p-weekly", window: "weekly", remaining_fraction: 0.75, reset_time: "soon" },
+            { id: "3p-bad", window: "daily", remaining_fraction: 1.5, reset_time: "soon" },
+          ],
+        }),
+      ),
+      (timestamp) => `time-${timestamp}`,
+    );
+    expect(output).toContain("Gemini Models");
+    expect(output).toContain("Claude and GPT models");
+    expect(output).toMatch(new RegExp(`^.*1 week: 0% used\\b.*time-${GEMINI_WEEKLY_RESET}$`, "m"));
+    expect(output).toMatch(new RegExp(`^.*5 hours: 1% used\\b.*time-${GEMINI_5H_RESET}$`, "m"));
+    expect(output).toMatch(/^.*1 week: 25% used\b/m);
+    expect(output).not.toMatch(/25% used.*time-/);
+    expect(output).not.toContain("daily");
+  });
+
+  it.each([
+    "nope",
+    "{}",
+    JSON.stringify({ status: "SUCCESS", command: { name: "usage", data: {} } }),
+    JSON.stringify(
+      agyUsage({
+        name: "Gemini Models",
+        buckets: [{ id: "gemini-weekly", window: "weekly", remaining_fraction: -0.1 }],
+      }),
+    ),
+  ])("fails without any valid bucket: %s", (stdout) => {
+    expect(() => formatAgyQuota(stdout)).toThrow(Error);
+  });
+});
+
+function agyUsage(...groups: object[]): object {
+  return { status: "SUCCESS", command: { name: "usage", data: { groups } } };
+}
+
+function geminiGroup(): object {
+  return {
+    name: "Gemini Models",
+    buckets: [
+      {
+        id: "gemini-weekly",
+        window: "weekly",
+        remaining_fraction: 0.998,
+        reset_time: "2026-12-02T07:28:06Z",
+      },
+      {
+        id: "gemini-5h",
+        window: "5h",
+        remaining_fraction: 0.993,
+        reset_time: "2026-11-25T12:28:06Z",
+      },
+    ],
+  };
+}
 
 interface FixtureServer {
   adapter: QuotaProcessAdapter;

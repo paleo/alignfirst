@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { createAgyAdapter } from "../../src/code/agy-agent.js";
 import { createClaudeAdapter, createClaudeState } from "../../src/code/claude-agent.js";
 import { createCodexAdapter } from "../../src/code/codex-agent.js";
 import { createPiAdapter } from "../../src/code/pi-agent.js";
@@ -48,6 +49,8 @@ describe("shared runner helpers", () => {
         CLAUDE_CODE_EXECPATH: "/usr/bin/claude",
         CODEX_THREAD_ID: "t-1",
         CODEX_SANDBOX_NETWORK_DISABLED: "1",
+        ANTIGRAVITY_AGENT: "1",
+        ANTIGRAVITY_CONVERSATION_ID: "conv-1",
         CLAUDE_CODE_USE_BEDROCK: "1",
       },
       [],
@@ -283,6 +286,49 @@ describe("shared runner helpers", () => {
       expect(result.result).toBe(config.prompt);
     },
   );
+
+  it("writes the adapter's formatted input to the child's stdin", async () => {
+    const { config } = makeRun();
+    const script = `
+      let input = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (chunk) => { input += chunk; });
+      process.stdin.on("end", () => {
+        const events = [
+          { event: "init", conversation_id: "conv-1", init: {} },
+          { event: "result", result: { conversation_id: "conv-1", status: "SUCCESS", response: input } },
+        ];
+        process.stdout.write(events.map((event) => JSON.stringify(event)).join("\\n") + "\\n");
+      });
+    `;
+    const result = await runAgent(config, createAgyAdapter(), makeSink(), nodeFixture(script));
+    expect(result.status).toBe("succeeded");
+    expect(result.result.endsWith("\n")).toBe(true);
+    expect(JSON.parse(result.result)).toEqual({ event: "user", message: { content: "go" } });
+  });
+
+  it("stops the child once its native identity fails", async () => {
+    const { config, sessionFilePath } = makeRun("conv-old");
+    const marker = join(config.cwd, "prompt-executed");
+    const initLine = JSON.stringify({ event: "init", conversation_id: "conv-new", init: {} });
+    const script = `
+      process.stdout.write(${JSON.stringify(`${initLine}\n`)});
+      setTimeout(() => {
+        require("node:fs").writeFileSync(${JSON.stringify(marker)}, "");
+        process.stdout.write(JSON.stringify({ event: "result", result: { status: "SUCCESS", response: "Done." } }) + "\\n");
+      }, 3000);
+    `;
+    const adapter = createAgyAdapter();
+    const result = await runAgent(config, adapter, makeSink(), nodeFixture(script));
+    const expected = adapter.createState(config);
+    adapter.interpretLine(initLine, expected);
+    expect(result).toMatchObject({ status: "failed", result: expected.identityFailure });
+    expect(readCompletion(sessionFilePath).frontmatter).toMatchObject({
+      status: "failed",
+      exitReason: "error",
+    });
+    expect(existsSync(marker)).toBe(false);
+  });
 
   it.each([false, true])("records a failed prompt pipe with quiet=%s", async (quiet) => {
     const { config, sessionFilePath } = makeRun();

@@ -11,6 +11,12 @@ const CLAUDE_PRIVACY_OPT_OUTS = [
   "DISABLE_BUG_COMMAND",
   "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY",
 ] as const;
+const QUOTA_SOURCE_NAMES: Readonly<Record<QuotaSource, string>> = {
+  claude: "Claude Code",
+  codex: "Codex",
+  agy: "Antigravity",
+};
+const AGY_WINDOW_LABELS: Readonly<Record<string, string>> = { weekly: "1 week", "5h": "5 hours" };
 const DEFAULT_QUOTA_PROCESS_ADAPTER: QuotaProcessAdapter = {
   execute: executeQuotaProcess,
   spawn: spawnQuotaProcess,
@@ -26,17 +32,19 @@ export interface QuotaContext {
 export type QuotaReader = (source: QuotaSource, context: QuotaContext) => Promise<string>;
 
 export interface QuotaProcessAdapter {
-  execute(
-    file: string,
-    args: string[],
-    options: QuotaProcessOptions & { timeout: number },
-  ): Promise<{ stdout: string }>;
+  execute(file: string, args: string[], options: QuotaExecuteOptions): Promise<{ stdout: string }>;
   spawn(file: string, args: string[], options: QuotaProcessOptions): ChildProcessWithoutNullStreams;
 }
 
 interface QuotaProcessOptions {
   cwd: string;
   env: NodeJS.ProcessEnv;
+}
+
+export interface QuotaExecuteOptions extends QuotaProcessOptions {
+  timeout: number;
+  // The native CLI's display name, for diagnostics.
+  source: string;
 }
 
 interface RateLimitWindow {
@@ -55,21 +63,36 @@ export function createQuotaReader(
 ): QuotaReader {
   return async (source, context) => {
     try {
-      return source === "claude"
-        ? await readClaudeQuota(
-            { ...context, env: translateClaudePrivacyOptOut({ ...context.env }) },
-            adapter,
-            timeoutMs,
-          )
-        : await readCodexQuota(context, adapter, timeoutMs);
+      return await readSourceQuota(source, context, adapter, timeoutMs);
     } catch (error) {
-      if (error instanceof Error && /^(Codex|Claude Code) /.test(error.message)) throw error;
+      if (error instanceof Error && /^(Codex|Claude Code|Antigravity) /.test(error.message))
+        throw error;
       throw new Error(
-        `${source === "claude" ? "Claude Code" : "Codex"} quota command failed; ` +
+        `${QUOTA_SOURCE_NAMES[source]} quota command failed; ` +
           "check that the native CLI is installed and authenticated in the selected configuration.",
       );
     }
   };
+}
+
+function readSourceQuota(
+  source: QuotaSource,
+  context: QuotaContext,
+  adapter: QuotaProcessAdapter,
+  timeoutMs: number,
+): Promise<string> {
+  switch (source) {
+    case "claude":
+      return readClaudeQuota(
+        { ...context, env: translateClaudePrivacyOptOut({ ...context.env }) },
+        adapter,
+        timeoutMs,
+      );
+    case "codex":
+      return readCodexQuota(context, adapter, timeoutMs);
+    case "agy":
+      return readAgyQuota(context, adapter, timeoutMs);
+  }
 }
 
 function translateClaudePrivacyOptOut(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -91,6 +114,7 @@ async function readClaudeQuota(
       cwd: context.cwd,
       env: context.env,
       timeout: timeoutMs,
+      source: QUOTA_SOURCE_NAMES.claude,
     },
   );
   return `Claude Code quota\n\n${parseClaudeQuota(stdout)}`;
@@ -205,19 +229,21 @@ function initializeCodex(write: (message: unknown) => void): void {
 async function executeQuotaProcess(
   file: string,
   args: string[],
-  options: QuotaProcessOptions & { timeout: number },
+  options: QuotaExecuteOptions,
 ): Promise<{ stdout: string }> {
   const child = spawnQuotaProcess(file, args, options);
   let stdout = "";
   const result = await runQuotaProcess<string>(child, {
-    source: "Claude Code",
+    source: options.source,
     timeoutMs: options.timeout,
     stdout(chunk) {
       stdout += chunk;
     },
     close(code) {
       if (code !== 0)
-        throw new Error("Claude Code could not read usage limits; check native authentication.");
+        throw new Error(
+          `${options.source} could not read usage limits; check native authentication.`,
+        );
       return stdout;
     },
     start() {
@@ -237,6 +263,76 @@ function spawnQuotaProcess(
     env: options.env,
     stdio: ["pipe", "pipe", "pipe"],
   });
+}
+
+async function readAgyQuota(
+  context: QuotaContext,
+  adapter: QuotaProcessAdapter,
+  timeoutMs: number,
+): Promise<string> {
+  const { stdout } = await adapter.execute("agy", ["-p", "/usage", "--output-format", "json"], {
+    cwd: context.cwd,
+    env: context.env,
+    timeout: timeoutMs,
+    source: QUOTA_SOURCE_NAMES.agy,
+  });
+  return formatAgyQuota(stdout);
+}
+
+export function formatAgyQuota(
+  stdout: string,
+  formatTime: (timestampSeconds: number) => string = formatLocalTime,
+): string {
+  const groups = parseAgyGroups(stdout)
+    .map((group) => formatAgyGroup(group, formatTime))
+    .filter((group) => group !== undefined);
+  if (groups.length === 0) {
+    throw new Error("Antigravity returned no usage limits for the current account.");
+  }
+  return `Antigravity quota\n\n${groups.join("\n")}`;
+}
+
+function parseAgyGroups(stdout: string): unknown[] {
+  let value: unknown;
+  try {
+    value = JSON.parse(stdout);
+  } catch {
+    throw new Error("Antigravity returned malformed usage JSON; check native CLI usage.");
+  }
+  const command = isRecord(value) ? value.command : undefined;
+  const data = isRecord(command) ? command.data : undefined;
+  const groups = isRecord(data) ? data.groups : undefined;
+  if (!Array.isArray(groups)) throw new Error("Antigravity returned an unexpected usage response.");
+  return groups;
+}
+
+// A group without any valid bucket is omitted.
+function formatAgyGroup(
+  group: unknown,
+  formatTime: (timestampSeconds: number) => string,
+): string | undefined {
+  if (!isRecord(group) || typeof group.name !== "string" || !Array.isArray(group.buckets)) return;
+  const lines = group.buckets
+    .map((bucket) => formatAgyBucket(bucket, formatTime))
+    .filter((line) => line !== undefined);
+  if (lines.length === 0) return;
+  return `${group.name}\n${lines.join("\n")}`;
+}
+
+function formatAgyBucket(
+  bucket: unknown,
+  formatTime: (timestampSeconds: number) => string,
+): string | undefined {
+  if (!isRecord(bucket)) return;
+  const remaining = bucket.remaining_fraction;
+  if (!finiteNumber(remaining) || remaining < 0 || remaining > 1) return;
+  const usedPercent = Math.round((1 - remaining) * 100);
+  const window = typeof bucket.window === "string" ? bucket.window : "unknown window";
+  const label = Object.hasOwn(AGY_WINDOW_LABELS, window) ? AGY_WINDOW_LABELS[window] : window;
+  const resetMs =
+    typeof bucket.reset_time === "string" ? Date.parse(bucket.reset_time) : Number.NaN;
+  const reset = Number.isNaN(resetMs) ? "" : ` · resets ${formatTime(resetMs / 1000)}`;
+  return `  ${label}: ${usedPercent}% used${reset}`;
 }
 
 export function formatCodexQuota(

@@ -666,6 +666,8 @@ function authenticationInstruction(agent: CodingAgent): string {
       return "`codex login`";
     case "pi":
       return "`pi`, then `/login <provider>`, or configure provider credentials";
+    case "agy":
+      return "`agy`, then sign in";
   }
 }
 
@@ -977,20 +979,8 @@ function renderHelp(
 ): string {
   const { harness: agent, profile, defaultModel, defaultEffort } = code;
   const { aligndev, alignfirst } = forms;
-  const permissionMode =
-    agent === "pi"
-      ? "Ordinary OS permissions; profile.skipPermissions has no effect. Saved project trust is honored."
-      : agent === "claude"
-        ? "--permission-mode auto (dangerous opt-out: --dangerously-skip-permissions)"
-        : "--sandbox workspace-write (dangerous opt-out: --dangerously-bypass-approvals-and-sandbox)";
-  const modelBehavior =
-    agent === "codex"
-      ? "Codex aliases astra, sol, terra, and luna resolve on demand; configured full slugs pass through."
-      : agent === "pi"
-        ? "Pi native selectors (including provider/model:thinking) pass through unchanged. --effort overrides a thinking suffix of the model selector."
-        : "Claude model values pass through unchanged.";
   const modelPolicy =
-    models === undefined ? "Any nonblank pi-native selector" : `One of ${models.join(", ")}`;
+    models === undefined ? "Any nonblank native selector" : `One of ${models.join(", ")}`;
   const requires = `Requires: the AlignFirst CLI through \`${forms.alignfirst}\`, for the project layout, side\ntickets and the delegated protocols.`;
   return `aligndev code — run a coding agent through AlignFirst protocols.
 
@@ -1049,9 +1039,9 @@ Config (~/.alignfirst/aligndev.settings.json):
   code.profile, profile agent, direct launch keys, code.defaultProfiles) have no effect.
   Effective profile: ${profile ?? "(built-in)"}; agent's harness: ${agent}.
   code.profiles         Complete named profiles, without inheritance. harness (required): claude,
-                        codex, pi or openclaw. Other keys: defaultAgentProfile, disabled, default,
-                        configDir, env, unset, defaultModel, models, modelAliases, defaultEffort,
-                        efforts, skipPermissions, quota.
+                        codex, pi, agy or openclaw. Other keys: defaultAgentProfile, disabled,
+                        default, configDir, env, unset, defaultModel, models, modelAliases,
+                        defaultEffort, efforts, skipPermissions, quota.
   profile.defaultAgentProfile
                         The profile a session delegates to when this profile is the assistant's
                         profile; omitted means the profile itself. Followed once.
@@ -1066,19 +1056,21 @@ Config (~/.alignfirst/aligndev.settings.json):
                         even when naming the default path. ~/ uses the configured home;
                         relative paths use the settings directory. String/null conflicts with
                         the matching native variable in env/unset: CLAUDE_CONFIG_DIR (claude),
-                        CODEX_HOME (codex), PI_CODING_AGENT_DIR (pi).
-  profile.quota         source: claude, codex or none. Enabled sources use the same omitted/null/
-                        string directory rules, starting from the original caller env without
-                        coding-profile overrides. Omitted Claude/Codex quota uses the coding
-                        environment; pi requires an explicit source or none. none accepts no
-                        other recognized fields, including configDir: null.
+                        CODEX_HOME (codex), PI_CODING_AGENT_DIR (pi). agy has no native
+                        directory variable and rejects configDir: Antigravity has one native
+                        store and one account per OS user.
+  profile.quota         source: claude, codex, agy or none. Enabled sources use the same omitted/
+                        null/string directory rules, starting from the original caller env without
+                        coding-profile overrides. Omitted Claude/Codex/Antigravity quota uses the
+                        coding environment; pi requires an explicit source or none. none accepts
+                        no other recognized fields, including configDir: null.
   profile.default       Breaks a tie between several profiles matching the assistant's session;
                         at most one true per harness.
   --profile <name>      Override for new, resume, quota and help (also guide code).
   Selection             --profile > project registry > recorded named resume > the assistant
                         profile's defaultAgentProfile, or that profile itself > built-ins of a
-                        claude, codex or pi harness > code.fallbackProfile. A named reference never
-                        falls through. The assistant's profile has the assistant's harness
+                        claude, codex, pi or agy harness > code.fallbackProfile. A named reference
+                        never falls through. The assistant's profile has the assistant's harness
                         (ALIGNDEV_ASSISTANT_HARNESS, else the detected coding agent, else openclaw
                         under OPENCLAW_SHELL=exec) and a configDir matching the session's native
                         directory variable: null an unset variable, a path the same directory,
@@ -1099,9 +1091,9 @@ credentials from an unset CLAUDE_CONFIG_DIR. Confirm the intended mode before ch
 strings; no automatic settings rewrite, login or credential transfer occurs. OpenClaw deployments
 require null/string selections for every coding profile and enabled explicit quota source.
 
-Selected-agent permissions: ${permissionMode}
+Selected-agent permissions: ${permissionMode(agent)}
 The project's companion directory is prepared before launch; pi uses ordinary OS access.
-${modelBehavior}
+${modelBehavior(agent)}
 
 ${aligndev} code runs a coding agent in the foreground and blocks until it finishes. The transcript
 is durable in a session file under .plans/ or its companion; stdout also streams it unless --quiet.
@@ -1111,4 +1103,30 @@ retrieve status --result with the exact session-file path or a unique per-run --
 
 See the \`code\` topic of \`${aligndev} guide\` for the full delegation guide.
 `;
+}
+
+function permissionMode(agent: CodingAgent): string {
+  switch (agent) {
+    case "claude":
+      return "--permission-mode auto (dangerous opt-out: --dangerously-skip-permissions)";
+    case "codex":
+      return "--sandbox workspace-write (dangerous opt-out: --dangerously-bypass-approvals-and-sandbox)";
+    case "pi":
+      return "Ordinary OS permissions; profile.skipPermissions has no effect. Saved project trust is honored.";
+    case "agy":
+      return "Antigravity's auto mode with its terminal sandbox (dangerous opt-out: --dangerously-skip-permissions)";
+  }
+}
+
+function modelBehavior(agent: CodingAgent): string {
+  switch (agent) {
+    case "claude":
+      return "Claude model values pass through unchanged.";
+    case "codex":
+      return "Codex aliases astra, sol, terra, and luna resolve on demand; configured full slugs pass through.";
+    case "pi":
+      return "Pi native selectors (including provider/model:thinking) pass through unchanged. --effort overrides a thinking suffix of the model selector.";
+    case "agy":
+      return "Antigravity model names pass through unchanged. Prefer a base name with --effort: a name with an effort suffix conflicts with a different effort.";
+  }
 }
