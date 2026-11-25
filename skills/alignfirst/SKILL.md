@@ -2,9 +2,10 @@
 name: alignfirst
 description: "Collaborative problem-solving protocols. Read when the user names AlignFirst or a protocol alias: alspec, alplan, AAD, alcatchup, alcatchupaad, alcatchupspec, almerge, alreview, or aldescription."
 license: CC0 1.0
+compatibility: Requires Node.js. The merge and review protocols also require Git.
 metadata:
   author: Paleo
-  version: "4.0.1"
+  version: "4.0.2"
   repository: https://github.com/paleo/alignfirst
 ---
 

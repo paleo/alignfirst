@@ -3,9 +3,10 @@ name: alreview
 description: "Execute the AlignFirst review protocol."
 disable-model-invocation: true
 license: CC0 1.0
+compatibility: Requires Node.js and Git.
 metadata:
   author: Paleo
-  version: "4.0.0"
+  version: "4.0.1"
   repository: https://github.com/paleo/alignfirst
 ---
 

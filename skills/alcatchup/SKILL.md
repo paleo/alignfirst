@@ -3,9 +3,10 @@ name: alcatchup
 description: "Catch up with the current AlignFirst task: load its history, then continue with the user's instructions or summarize it."
 disable-model-invocation: true
 license: CC0 1.0
+compatibility: Requires Node.js.
 metadata:
   author: Paleo
-  version: "4.0.0"
+  version: "4.0.1"
   repository: https://github.com/paleo/alignfirst
 ---
 
