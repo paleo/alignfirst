@@ -19,7 +19,7 @@ A block names a fact, each marker alone on its line. A line is kept when every b
 | Slack | `openclaw`, `slack`, `thread` |
 | Discord | `openclaw`, `discord`, `thread` |
 | App | `openclaw`, `app`, `conversation` |
-| `codingAgent` | `codingAgent`, `conversation` |
+| `codingAgent` | `codingAgent`, `conversation`, the assistant's harness: `claude`, `codex`, `pi` or `agy`, all four when unrecognized |
 
 ```text
 {{#openclaw}}
@@ -35,7 +35,9 @@ Text only for a coding agent.
 
 Assistant instructions are read at execution time through `{{ALIGNFIRST}} assistant-instructions` from the selected workplace. The command prints project guidance and any explicitly configured content. Use nullable `locations.assistantInstructionsFile` from `config --json` to locate edits. Guide rendering does not inspect project filenames or offer project-file condition blocks.
 
-A platform block sits at the top level. A surface block and `{{#thread}}` never sit inside a `{{#codingAgent}}` block, and `{{#conversation}}` sits anywhere. An unknown name, a misplaced block, an unclosed block or a stray closing marker fails the render, naming the template and the line.
+A platform block sits at the top level. A surface block and `{{#thread}}` never sit inside a `{{#codingAgent}}` block, and `{{#conversation}}` sits anywhere. A harness block, `{{#claude}}`, `{{#codex}}`, `{{#pi}}` or `{{#agy}}`, sits inside a `{{#codingAgent}}` block, never inside another harness block. An unknown name, a misplaced block, an unclosed block or a stray closing marker fails the render, naming the template and the line.
+
+Blocks have no "or": text shared by several harnesses is repeated in each of their blocks. A harness block names its harness, as in "In Antigravity, …", because an unrecognized-harness render prints every harness block.
 
 After block removal, runs of blank lines collapse to one, which repairs the gaps left by dropped blocks. Keep the templates free of double blank lines: the collapse would remove them from the rendered output.
 
@@ -57,7 +59,7 @@ Write every command as `{{ALIGNDEV}} …` or `{{ALIGNFIRST}} …`. They render a
 
 ### Core and runbooks
 
-A harness truncates a long command output, so every rendered guide stays under 25,000 characters under `codingAgent` and under 40,000 under `openclaw`. `packages/aligndev/test/guide-renders.test.ts` enforces both limits.
+A harness truncates a long command output, so every rendered guide stays under 25,000 characters under `codingAgent` with a recognized harness, and under 40,000 under `openclaw`. `packages/aligndev/test/guide-renders.test.ts` enforces both limits. The unrecognized-harness render of `guide code` exceeds 25,000 and stays outside the test: it serves an operator shell, which has no output cap.
 
 A section stays in the core, `working-session`, when most sessions need it. It becomes a runbook, read when its situation arises, when only some sessions need it. A guide read at a moment of its own, such as the completion turn, is a runbook too.
 

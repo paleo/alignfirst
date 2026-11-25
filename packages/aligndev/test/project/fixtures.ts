@@ -84,6 +84,7 @@ export async function runAligndev(
     CODEX_THREAD_ID: _codex,
     PI_CODING_AGENT: _pi,
     AI_AGENT: _agent,
+    ANTIGRAVITY_AGENT: _agy,
     OPENCLAW_SHELL: _openclaw,
     ALIGNDEV_ASSISTANT_HARNESS: _harness,
     ...baseEnv

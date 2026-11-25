@@ -83,6 +83,7 @@ Choose the launch facility from **your own harness**, independently of the agent
 
 ## Background runs and reporting
 
+{{#pi}}
 ### Your harness: Pi
 
 Before launching, establish that the `background` tool is available and that your session stays alive after its acknowledgement. A one-shot print/JSON process is not a persistent assistant. Missing capability is an installation problem: explain that your Pi session needs `pi install npm:@alignfirst/pi-background`. The AlignDev skill alone supplies no executable tools. Do not substitute a blocking ordinary bash call, shell `&`, `nohup`, or a detach wrapper, or promise a wake without the facility.
@@ -117,17 +118,25 @@ Cancel through `background` with `{"action":"stop","id":"<returned-job-id>"}`. I
 **Host limits:** standalone manual compaction or cancelled/failed navigation can delay a notice until another ordinary turn. Interruption or native queue clearing can lose automatic continuation. Already-submitted notices can appear after navigation or reload; validate ownership as above. Delivery is not exactly once. Normal shutdown, session replacement, successful tree navigation and `/reload` cancel owned work; crash recovery is not promised.
 
 Pi uses ordinary OS permissions and saved project trust, not an implied sandbox. `profile.skipPermissions` does not elevate Pi or force project approval.
+{{/pi}}
 
+{{#claude}}
 ### Your harness: Claude Code
 
 Coding runs can last hours. Launch with `run_in_background` and pass `timeout` set to the maximum your Bash tool description states.
 
-When sandboxing is enabled, run `{{ALIGNDEV}} code` with the sandbox disabled: the child needs network and writes outside the project. Retain the initial `Session file: <path>` control line. End the launch turn on its acknowledgement without polling; follow "After a run completes" when the harness wakes the session as the command exits.
+When sandboxing is enabled, run `{{ALIGNDEV}} code` with the sandbox disabled: the child needs network and writes outside the project. Retain the initial `Session file: <path>` control line. End the launch turn on its acknowledgement without polling. When the harness wakes the session as the command exits, run `{{ALIGNDEV}} code status <session-file>` to reconcile stale status, then read the session file and report in this conversation.
+{{/claude}}
 
+{{#codex}}
 ### Your harness: Codex
 
 Use your established background-execution facility with no time limit and request escalated permissions for `{{ALIGNDEV}} code`. Retain the initial `Session file: <path>` control line. End the launch turn on its acknowledgement without polling. Where no completion bridge is configured, the report waits for the user's next message. At the start of each later user turn, before anything else, check every pending run with `{{ALIGNDEV}} code status <session-file>`, and report the ones that finished. This fallback does not assert that Codex lacks native queue capability.
 
+For a finished run, run `{{ALIGNDEV}} code status <session-file>` to reconcile stale status, then read the session file and report in this conversation.
+{{/codex}}
+
+{{#agy}}
 ### Your harness: Antigravity
 
 Run every `{{ALIGNDEV}}` and `{{ALIGNFIRST}}` command with `run_command` and `BypassSandbox: true`. The sandbox hides the network, a `node` that a version manager links under `/run/user/<uid>`, and the main checkout of a linked worktree. The child also writes outside the workspace.
@@ -136,11 +145,12 @@ Launch `{{ALIGNDEV}} code … --quiet` as a background task: `IsDaemon: false` a
 
 Retain the initial `Session file: <path>` control line. End the launch turn on its acknowledgement without polling. Antigravity wakes the session with a system message when the command exits; a background task has no time limit.
 
-Claude Code, Codex and Antigravity never detach with `&` or a wrapper. A run is pending until its outcome is handled.
+On that message, run `{{ALIGNDEV}} code status <session-file>` to reconcile stale status, then read the session file and report in this conversation.
+{{/agy}}
+
+Never detach with `&` or a wrapper. A run is pending until its outcome is handled.
 
 ## After a run completes
-
-**Your harness is Pi:** use the ownership and result-only procedure above. **Your harness is Claude Code, Codex or Antigravity:** run `{{ALIGNDEV}} code status <session-file>` to reconcile stale status, then read the session file and report in this conversation.
 
 An `exitReason` of `auth_required` (`{{ALIGNDEV}} code new/resume` exits `2`) means the selected child is not authenticated on this machine. Tell the user to authenticate with {{AUTH_COMMAND}}, and do not retry. Other launch/run failures exit `1`; success exits `0`. A successful `status` query exits `0` even for a failed run: read its `status` and `exitReason`.
 
@@ -227,7 +237,11 @@ Profile selection, native configuration directories, quota sources and settings 
 For `new` runs, the `Session ID:` is printed to stdout and written with `agent: {{AGENT}}` in the session file frontmatter. Save it to resume the conversation later. Resume requires the same selected agent; agentless legacy sessions require a new session.
 {{/openclaw}}
 {{#codingAgent}}
-For `new` runs, the child `Session ID:` is printed to stdout and recorded as `sessionId` with `agent: {{AGENT}}` in the durable session file. A Pi assistant retains it from authoritative `status --result` retrieval, without waiting at launch. Save it for resume, which requires the same selected child; agentless legacy sessions require a new session.
+For `new` runs, the child `Session ID:` is printed to stdout and recorded as `sessionId` with `agent: {{AGENT}}` in the durable session file. Save it for resume, which requires the same selected child; agentless legacy sessions require a new session.
+{{#pi}}
+
+A Pi assistant retains the session ID from authoritative `status --result` retrieval, without waiting at launch.
+{{/pi}}
 {{/codingAgent}}
 
 **No protocol or catchup:** the message is sent as-is (no AlignFirst command). Use it to answer the agent's questions in an existing session, execute a plan in a new session, or ask a question:

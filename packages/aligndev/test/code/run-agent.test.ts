@@ -577,7 +577,7 @@ function completionEvents(adapter: AgentAdapter, id: string | undefined): object
 }
 
 describe("pi through the shared runner", () => {
-  it("sanitizes only the child identity and preserves storage, credentials and generic markers", () => {
+  it("sanitizes the child identity whatever its values and preserves storage and credentials", () => {
     const env = {
       CODEX_THREAD_ID: "parent",
       PI_CODING_AGENT: "true",
@@ -598,10 +598,7 @@ describe("pi through the shared runner", () => {
     });
     expect(env.CODEX_THREAD_ID).toBe("parent");
     expect(env.AI_AGENT).toBe("pi");
-    expect(buildAgentEnv({ AI_AGENT: "other", PI_CODING_AGENT: "false" }, [])).toEqual({
-      AI_AGENT: "other",
-      PI_CODING_AGENT: "false",
-    });
+    expect(buildAgentEnv({ AI_AGENT: "other", PI_CODING_AGENT: "false" }, [])).toEqual({});
     expect(buildAgentEnv(env, ["OPENAI_API_KEY"]).OPENAI_API_KEY).toBeUndefined();
   });
 

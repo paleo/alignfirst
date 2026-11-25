@@ -14,6 +14,7 @@ const CODING_PROFILES = {
   work: { harness: "claude", default: true, defaultModel: "opus", modelAliases: { fast: "haiku" } },
   "codex-main": { harness: "codex", defaultEffort: "high" },
   local: { harness: "pi", modelAliases: { quick: "openai/luna" } },
+  gemini: { harness: "agy" },
 };
 const SETTINGS = {
   projectsRoot: "~/projects",
@@ -24,6 +25,7 @@ const VARIANTS: Variant[] = [
   { platform: "codingAgent", label: "codingAgent claude", env: { CLAUDECODE: "1" } },
   { platform: "codingAgent", label: "codingAgent codex", env: { CODEX_THREAD_ID: "thread" } },
   { platform: "codingAgent", label: "codingAgent pi", env: { PI_CODING_AGENT: "true" } },
+  { platform: "codingAgent", label: "codingAgent agy", env: { ANTIGRAVITY_AGENT: "1" } },
   { platform: "openclaw", label: "openclaw", env: OPENCLAW_ENV },
   ...SURFACES.map(
     (surface): Variant => ({

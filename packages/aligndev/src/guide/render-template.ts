@@ -1,5 +1,6 @@
 import type { CommandForms } from "../command-form.js";
 import { PLATFORMS, type Platform } from "../assistant-harness.js";
+import { CODING_AGENTS, type CodingAgent } from "../code/coding-agent.js";
 import { readTemplate } from "../templates.js";
 
 export const SURFACES = ["slack", "discord", "app"] as const;
@@ -17,6 +18,8 @@ export type Surface = (typeof SURFACES)[number];
 export interface ActiveBlocks {
   platform: Platform;
   surface?: Surface; // openclaw only
+  // codingAgent only. Absent when the harness is unrecognized: every harness block then holds.
+  harness?: CodingAgent;
 }
 
 interface OpenBlock {
@@ -24,7 +27,7 @@ interface OpenBlock {
   line: number;
 }
 
-type BlockName = Platform | Surface | typeof THREAD | typeof CONVERSATION;
+type BlockName = Platform | Surface | CodingAgent | typeof THREAD | typeof CONVERSATION;
 
 // Renders `templates/guide/<name>`: the blocks first, then the placeholders — the command forms,
 // the guide command of the render, and every key of `values`.
@@ -61,7 +64,8 @@ function guidePlaceholder(active: ActiveBlocks, forms: CommandForms): Record<str
 
 // A block is `{{#<name>}}` … `{{/<name>}}`, each marker alone on its line, and names a fact. A
 // platform block sits at the top level. A surface block and `thread` never sit inside a
-// `codingAgent` block; `conversation` sits anywhere.
+// `codingAgent` block. A harness block sits inside a `codingAgent` block, never inside another
+// harness block. `conversation` sits anywhere.
 // A line is kept when every block around it holds. The runs of empty lines that removed blocks
 // leave collapse to one.
 export function renderBlocks(text: string, active: ActiveBlocks, templateName: string): string {
@@ -88,6 +92,7 @@ export function renderBlocks(text: string, active: ActiveBlocks, templateName: s
 function isActive(name: BlockName, active: ActiveBlocks): boolean {
   if (name === THREAD) return active.surface === "slack" || active.surface === "discord";
   if (name === CONVERSATION) return active.surface === "app" || active.platform === "codingAgent";
+  if (isCodingAgent(name)) return active.harness === undefined || active.harness === name;
   return name === active.platform || name === active.surface;
 }
 
@@ -112,6 +117,16 @@ function openBlock(
     }
     return { name, line };
   }
+  if (isCodingAgent(name)) {
+    if (!insideCodingAgent) {
+      throw blockError(templateName, line, `harness block "${name}" outside a codingAgent block`);
+    }
+    const outerHarness = open.find((block) => isCodingAgent(block.name));
+    if (outerHarness !== undefined) {
+      throw blockError(templateName, line, `harness block "${name}" inside "${outerHarness.name}"`);
+    }
+    return { name, line };
+  }
   if (name === CONVERSATION) return { name, line };
   throw blockError(templateName, line, `unknown block "${name}"`);
 }
@@ -125,7 +140,13 @@ function closeBlock(name: string, line: number, open: OpenBlock[], templateName:
 }
 
 function isBlockName(name: string): name is BlockName {
-  return isPlatform(name) || isSurface(name) || name === THREAD || name === CONVERSATION;
+  return (
+    isPlatform(name) ||
+    isSurface(name) ||
+    isCodingAgent(name) ||
+    name === THREAD ||
+    name === CONVERSATION
+  );
 }
 
 function isPlatform(name: string): name is Platform {
@@ -134,6 +155,10 @@ function isPlatform(name: string): name is Platform {
 
 export function isSurface(name: string): name is Surface {
   return (SURFACES as readonly string[]).includes(name);
+}
+
+function isCodingAgent(name: string): name is CodingAgent {
+  return (CODING_AGENTS as readonly string[]).includes(name);
 }
 
 function blockError(templateName: string, line: number, detail: string): Error {

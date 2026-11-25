@@ -3,6 +3,7 @@ import { lstatSync, realpathSync } from "node:fs";
 import { basename, delimiter, join } from "node:path";
 
 import type { Output } from "../output.js";
+import { HARNESS_ENVIRONMENTS } from "./harness-environment.js";
 import {
   appendTranscript,
   applyCompletion,
@@ -12,38 +13,13 @@ import {
 
 const TERMINATION_GRACE_MS = 2000;
 
-// A coding-agent session exports its own identity to every command it runs; when the assistant
-// runs in one, the agent it launches must not inherit it.
-const ASSISTANT_SESSION_VARIABLES = [
-  "CLAUDECODE",
-  "CLAUDE_CODE_SESSION_ID",
-  "CLAUDE_CODE_CHILD_SESSION",
-  "CLAUDE_CODE_ENTRYPOINT",
-  "CLAUDE_CODE_MESSAGING_SOCKET",
-  "CLAUDE_CODE_MESSAGING_TOKEN",
-  "CLAUDE_CODE_SESSION_ATTENDED",
-  "CLAUDE_CODE_EXECPATH",
-  "CLAUDE_PID",
-  "CLAUDE_EFFORT",
-  "CODEX_SESSION_ID",
-  "CODEX_THREAD_ID",
-  "CODEX_CI",
-  "CODEX_SANDBOX_NETWORK_DISABLED",
-  "PI_SESSION_ID",
-  "PI_SESSION_FILE",
-  "PI_PROVIDER",
-  "PI_MODEL",
-  "PI_REASONING_LEVEL",
-  "ANTIGRAVITY_AGENT",
-  "ANTIGRAVITY_AGENTAPI_EXE",
-  "ANTIGRAVITY_APP_DATA_DIR",
-  "ANTIGRAVITY_CONVERSATION_ID",
-  "ANTIGRAVITY_CSRF_TOKEN",
-  "ANTIGRAVITY_LS_ADDRESS",
-  "ANTIGRAVITY_LS_VERSION",
-  "ANTIGRAVITY_PROJECT_ID",
-  "ANTIGRAVITY_SOURCE_METADATA",
-  "ANTIGRAVITY_TRAJECTORY_ID",
+// Every harness's session identity, and the assistant's harness request: the agent starts its own
+// session, so it inherits none of them.
+const SESSION_IDENTITY_VARIABLES = [
+  ...Object.values(HARNESS_ENVIRONMENTS).flatMap(({ markers, sessionVariables }) => [
+    ...markers.map((marker) => marker.name),
+    ...sessionVariables,
+  ]),
   "ALIGNDEV_ASSISTANT_HARNESS",
 ];
 
@@ -317,9 +293,7 @@ export function buildAgentEnv(
   const inherited = externalProcessBaseline(baseEnv);
   for (const name of unset) delete inherited[name];
   const env = { ...inherited, ...overrides };
-  for (const name of ASSISTANT_SESSION_VARIABLES) delete env[name];
-  if (env.PI_CODING_AGENT === "true") delete env.PI_CODING_AGENT;
-  if (env.AI_AGENT === "pi") delete env.AI_AGENT;
+  for (const name of SESSION_IDENTITY_VARIABLES) delete env[name];
   return { ...env, ...required };
 }
 

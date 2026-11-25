@@ -1,6 +1,7 @@
 import { createAgyAdapter } from "./agy-agent.js";
 import { createClaudeAdapter } from "./claude-agent.js";
 import { createCodexAdapter } from "./codex-agent.js";
+import { type EnvironmentMarker, HARNESS_ENVIRONMENTS } from "./harness-environment.js";
 import { createPiAdapter } from "./pi-agent.js";
 import type { AgentAdapter } from "./run-agent.js";
 
@@ -23,10 +24,13 @@ export function createAgentAdapter(agent: CodingAgent): AgentAdapter {
 
 // The coding agents whose session runs this process; one gives the assistant's harness.
 export function detectCodingAgents(env: NodeJS.ProcessEnv): CodingAgent[] {
-  const detected: CodingAgent[] = [];
-  if (env.CLAUDECODE === "1") detected.push("claude");
-  if (env.CODEX_THREAD_ID !== undefined && env.CODEX_THREAD_ID !== "") detected.push("codex");
-  if (env.PI_CODING_AGENT === "true" || env.AI_AGENT === "pi") detected.push("pi");
-  if (env.ANTIGRAVITY_AGENT === "1") detected.push("agy");
-  return detected;
+  return CODING_AGENTS.filter((agent) =>
+    HARNESS_ENVIRONMENTS[agent].markers.some((marker) => markerMatches(marker, env)),
+  );
+}
+
+function markerMatches({ name, value }: EnvironmentMarker, env: NodeJS.ProcessEnv): boolean {
+  const actual = env[name];
+  if (actual === undefined || actual === "") return false;
+  return value === undefined || actual === value;
 }

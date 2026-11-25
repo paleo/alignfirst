@@ -15,6 +15,7 @@ const HARNESS_MARKERS = [
   "CODEX_THREAD_ID",
   "PI_CODING_AGENT",
   "AI_AGENT",
+  "ANTIGRAVITY_AGENT",
   "OPENCLAW_SHELL",
 ];
 const yarn = process.env.YARN_CLASSIC ?? "yarn";
