@@ -1,9 +1,6 @@
 import { gitOutputOrUndefined, gitSucceeds } from "./git.js";
 import type { ProjectConfig } from "./project-config-types.js";
 
-const DEFAULT_BRANCH_WORK_RULE =
-  "Edit or commit on it only when the user explicitly asks; otherwise, work on a ticket branch.";
-
 export interface DefaultBranch {
   name: string;
   source: "config" | "cached";
@@ -36,6 +33,7 @@ function resolveRemote(cwd: string): string | undefined {
 export function renderDefaultBranchLine(branch: DefaultBranch | undefined): string {
   if (branch === undefined)
     return "Default branch: unresolved; ask before default-branch operations.";
-  const cached = branch.source === "cached" ? " (cached)" : "";
-  return `Default branch: ${branch.name}${cached}. ${DEFAULT_BRANCH_WORK_RULE}`;
+  return branch.source === "cached"
+    ? `Default branch: ${branch.name} (cached).`
+    : `Default branch: ${branch.name}.`;
 }
