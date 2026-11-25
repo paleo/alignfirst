@@ -6,6 +6,7 @@ import {
 } from "./_lib/mock-coding-agent.ts";
 import { setupGhMock } from "./_lib/mock-gh.ts";
 import { lowestFreeFixtureBlock } from "./_lib/free-port-block.ts";
+import { FIXTURE_PORT_BOUNDS } from "../scripts/fixture-personalization.ts";
 import {
   assertGatewayCommand,
   pathExists,
@@ -304,9 +305,15 @@ function assertCreationCalls(calls: AgentToolCall[]): void {
       `free-ports call did not request size ${PORT_BLOCK_SIZE}: ${JSON.stringify(commands)}`,
     );
   }
-  // The settings' portRange and the default root apply: an override would bypass them.
-  if (/--range\b|--root\b/.test(freePortsCommand)) {
-    throw new Error(`free-ports call passed --range or --root: ${freePortsCommand}`);
+  // The bounds come from workspace/AGENTS.md; the default root applies.
+  const within = `${FIXTURE_PORT_BOUNDS.first}\\.\\.${FIXTURE_PORT_BOUNDS.last}`;
+  if (!new RegExp(`--within(?:\\s+|=)${within}(?!\\d)`).test(freePortsCommand)) {
+    throw new Error(
+      `free-ports call did not pass --within ${FIXTURE_PORT_BOUNDS.first}..${FIXTURE_PORT_BOUNDS.last}: ${freePortsCommand}`,
+    );
+  }
+  if (/--root\b/.test(freePortsCommand)) {
+    throw new Error(`free-ports call passed --root: ${freePortsCommand}`);
   }
   const allocatedExpectedBlock = calls.some((call) => {
     if (
@@ -327,7 +334,7 @@ function assertCreationCalls(calls: AgentToolCall[]): void {
   if (!allocatedExpectedBlock) {
     throw new Error(
       `free-ports did not return the lowest free block ${PORT_BLOCK.first}..${PORT_BLOCK.last} ` +
-        "of the settings' portRange",
+        `within ${FIXTURE_PORT_BOUNDS.first}..${FIXTURE_PORT_BOUNDS.last}`,
     );
   }
 }

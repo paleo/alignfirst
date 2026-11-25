@@ -1,3 +1,5 @@
+import { relative } from "node:path";
+
 import type { InventoryIssue, ProjectInventory, SkippedDirectory } from "./discovery.js";
 import { escapeAdditionalJsonCharacters, escapeControlCharacters, formatRange } from "./format.js";
 import type { CompanionReport, ItemLocation } from "./layout.js";
@@ -5,12 +7,7 @@ import type { PortRange } from "./ports.js";
 import type { ProjectDetails } from "./status.js";
 
 export function renderProjectList(inventory: ProjectInventory): string {
-  const lines = [
-    `Root: ${renderOutputValue(inventory.root)}`,
-    `Port range: ${renderRange(inventory.portRange)}`,
-    "",
-    "Projects:",
-  ];
+  const lines = [`Root: ${renderOutputValue(inventory.root)}`, "", "Projects:"];
   if (inventory.projects.length === 0) lines.push("  (none)");
   for (const project of inventory.projects) {
     lines.push(
@@ -42,7 +39,6 @@ function renderSkippedDirectory({ path, reason }: SkippedDirectory): string {
 export function renderProjectListJson(inventory: ProjectInventory): string {
   const report = {
     root: inventory.root,
-    portRange: inventory.portRange,
     projects: inventory.projects.map((project) => ({
       name: project.name,
       path: project.path,
@@ -139,8 +135,65 @@ export function renderProjectStatusJson(details: ProjectDetails): string {
   return renderJson(details);
 }
 
-export function renderPortRangeJson(range: PortRange): string {
-  return renderJson(range);
+export function renderFreePortsJson(inventory: ProjectInventory, range: PortRange): string {
+  return renderJson({ first: range.first, last: range.last, unknown: unknownProjects(inventory) });
+}
+
+// Paths relative to the scan root of the projects whose port range is unknown.
+function unknownProjects(inventory: ProjectInventory): string[] {
+  return inventory.unreadableProjects.map((path) => relative(inventory.root, path));
+}
+
+export function renderUnknownRangeWarnings(inventory: ProjectInventory, aligndev: string): string {
+  return unknownProjects(inventory)
+    .map(
+      (project) =>
+        `Warning: unknown port range for ${renderOutputValue(project)}: its configuration ` +
+        `report failed. Run \`${aligndev} project doctor\`.\n`,
+    )
+    .join("");
+}
+
+export function renderProjectPorts(inventory: ProjectInventory): string {
+  const claims = sortedPortClaims(inventory);
+  if (claims.length === 0) return "(none)\n";
+  const width = Math.max(...claims.map((claim) => formatRange(claim).length));
+  return claims
+    .map(
+      (claim) => `${formatRange(claim).padEnd(width)}  ${escapeControlCharacters(claim.project)}\n`,
+    )
+    .join("");
+}
+
+export function renderProjectPortsJson(inventory: ProjectInventory): string {
+  return renderJson({
+    root: inventory.root,
+    ranges: sortedPortClaims(inventory),
+    unknown: unknownProjects(inventory),
+  });
+}
+
+interface PortClaim extends PortRange {
+  // Relative to the scan root.
+  project: string;
+}
+
+function sortedPortClaims(inventory: ProjectInventory): PortClaim[] {
+  return inventory.projects
+    .flatMap(({ path, portRange }): PortClaim[] =>
+      portRange === undefined
+        ? []
+        : [
+            {
+              first: portRange.first,
+              last: portRange.last,
+              project: relative(inventory.root, path),
+            },
+          ],
+    )
+    .toSorted(
+      (left, right) => left.first - right.first || left.project.localeCompare(right.project),
+    );
 }
 
 function renderJson(value: unknown): string {

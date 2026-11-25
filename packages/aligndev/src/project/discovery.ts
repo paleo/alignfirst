@@ -11,16 +11,17 @@ import { dirname, join, resolve, sep } from "node:path";
 
 import { isNodeError } from "../errors.js";
 import { formatRange } from "./format.js";
-import { type ProjectReport, readProjectReport } from "./layout.js";
-import { containsRange, type PortRange, rangesOverlap } from "./ports.js";
+import { type ProjectError, type ProjectReport, readProjectReports } from "./layout.js";
+import { type PortRange, rangesOverlap } from "./ports.js";
 
 const CONFIG_FILENAMES = ["alignfirst.json", "alignfirst.jsonc"];
 const PERMISSION_ERRORS = ["EACCES", "EPERM"];
 
 export interface ProjectInventory {
   root: string;
-  portRange: PortRange | null;
   projects: DiscoveredProject[];
+  // The main worktrees whose configuration report failed: their port range is unknown.
+  unreadableProjects: string[];
   skippedDirectories: SkippedDirectory[];
   issues: InventoryIssue[];
 }
@@ -57,7 +58,6 @@ interface ProjectPortClaim {
 }
 
 export interface ScanOptions {
-  portRange?: PortRange;
   maxDepth: number;
 }
 
@@ -76,6 +76,7 @@ interface ScanState {
   maxDepth: number;
   mainCandidates: DirectoryCandidate[];
   linkedCandidates: DirectoryCandidate[];
+  unreadableProjects: string[];
   skippedDirectories: SkippedDirectory[];
   issues: InventoryIssue[];
 }
@@ -89,20 +90,19 @@ export function buildInventory(
     maxDepth: options.maxDepth,
     mainCandidates: [],
     linkedCandidates: [],
+    unreadableProjects: [],
     skippedDirectories: [],
     issues: [],
   };
   scanEntries(root, readGroupEntries(root), 1, state);
-  const projects = classifyCandidates(state, ctx);
+  const projects = classifyCandidates(root, state, ctx);
   reportSharedCompanions(projects, state.issues);
   reportOverlappingClaims(projects, state.issues);
-  if (options.portRange !== undefined)
-    reportOutsideRange(projects, options.portRange, state.issues);
   sortInventory(projects, state);
   return {
     root,
-    portRange: options.portRange ?? null,
     projects,
+    unreadableProjects: state.unreadableProjects,
     skippedDirectories: state.skippedDirectories,
     issues: state.issues,
   };
@@ -179,9 +179,19 @@ function isPermissionError(error: unknown): boolean {
   return isNodeError(error) && error.code !== undefined && PERMISSION_ERRORS.includes(error.code);
 }
 
-function classifyCandidates(state: ScanState, ctx: InventoryContext): DiscoveredProject[] {
-  const classified = state.mainCandidates.flatMap((candidate) =>
-    classifyCandidate(candidate, state.issues, ctx),
+function classifyCandidates(
+  root: string,
+  state: ScanState,
+  ctx: InventoryContext,
+): DiscoveredProject[] {
+  const reports = readProjectReports(
+    ctx.alignfirstCommand,
+    state.mainCandidates.map(({ path }) => path),
+    root,
+    ctx.env,
+  );
+  const classified = state.mainCandidates.flatMap((candidate, index) =>
+    classifyCandidate(candidate, reports[index], state),
   );
   const projects = excludeWorkFilesRepositories(classified, state.skippedDirectories);
   attachLinkedWorktrees(state.linkedCandidates, projects, state.skippedDirectories);
@@ -190,12 +200,12 @@ function classifyCandidates(state: ScanState, ctx: InventoryContext): Discovered
 
 function classifyCandidate(
   candidate: DirectoryCandidate,
-  issues: InventoryIssue[],
-  ctx: InventoryContext,
+  description: ProjectReport | ProjectError,
+  state: ScanState,
 ): DiscoveredProject[] {
-  const description = readProjectReport(ctx.alignfirstCommand, candidate.path, ctx.env);
   if ("error" in description) {
-    issues.push({ path: candidate.path, message: description.error });
+    state.issues.push({ path: candidate.path, message: description.error });
+    state.unreadableProjects.push(candidate.path);
     return [];
   }
   return [
@@ -349,24 +359,9 @@ function reportOverlappingClaims(projects: DiscoveredProject[], issues: Inventor
   }
 }
 
-function reportOutsideRange(
-  projects: DiscoveredProject[],
-  available: PortRange,
-  issues: InventoryIssue[],
-): void {
-  for (const { path, portRange } of projects) {
-    if (portRange === undefined || containsRange(available, portRange)) continue;
-    issues.push({
-      path,
-      message:
-        `port range ${formatRange(portRange)} is outside portRange ` +
-        `${formatRange(available)} in the aligndev config`,
-    });
-  }
-}
-
 function sortInventory(projects: DiscoveredProject[], state: ScanState): void {
   projects.sort((left, right) => left.path.localeCompare(right.path));
+  state.unreadableProjects.sort((left, right) => left.localeCompare(right));
   state.skippedDirectories.sort((left, right) => left.path.localeCompare(right.path));
   state.issues.sort((left, right) => left.path.localeCompare(right.path));
   for (const project of projects)

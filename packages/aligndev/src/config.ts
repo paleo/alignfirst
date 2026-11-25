@@ -16,7 +16,6 @@ import {
   arrayOf,
   boolean,
   type Check,
-  integerBetween,
   isPlainObject,
   literal,
   matching,
@@ -30,7 +29,6 @@ import {
   rejectField,
 } from "./json-shape.js";
 import type { AligndevProjectSettings } from "./project/layout.js";
-import type { PortRange } from "./project/ports.js";
 
 export const CONFIG_DIRECTORY_VARIABLES = {
   claude: "CLAUDE_CONFIG_DIR",
@@ -59,7 +57,6 @@ const CODING_ONLY_PROFILE_KEYS = [
 export interface LoadedConfig {
   path: string;
   projectsRoot?: ProjectsRoot;
-  portRange?: PortRange;
   code: CodeSettings;
 }
 
@@ -115,7 +112,6 @@ export interface CodeConfig extends CodingProfile {
 
 interface ConfigFile {
   projectsRoot?: string;
-  portRange?: PortRange;
   code?: CodeSettings;
 }
 
@@ -124,8 +120,6 @@ export function loadConfig(home: string, alignfirst: string): LoadedConfig {
   const path = join(home, ".alignfirst", "aligndev.settings.json");
   const value = existsSync(path) ? parseConfigFile(path, alignfirst) : absentConfig(home);
   const code = value.code ?? {};
-  if (value.portRange !== undefined && value.portRange.first > value.portRange.last)
-    throw invalidConfig(path, "portRange.first must not exceed portRange.last");
   for (const [name, profile] of Object.entries(code.profiles ?? {})) {
     if (profile.harness === "openclaw") continue;
     const field = `code.profiles[${JSON.stringify(name)}]`;
@@ -156,7 +150,6 @@ export function loadConfig(home: string, alignfirst: string): LoadedConfig {
             written: value.projectsRoot,
           },
         }),
-    ...(value.portRange === undefined ? {} : { portRange: value.portRange }),
     code,
   };
 }
@@ -196,14 +189,9 @@ function configShape(alignfirst: string): Check<ConfigFile> {
     },
     warn,
   );
-  const portRangeShape = object<PortRange>(
-    { first: integerBetween(1, 65_535), last: integerBetween(1, 65_535) },
-    warn,
-  );
   return object<ConfigFile>(
     {
       projectsRoot: optional(nonEmptyString),
-      portRange: optional(portRangeShape),
       code: optional(codeShape),
     },
     warn,
@@ -299,6 +287,10 @@ function warnUnknownSetting(path: string, key: string, alignfirst: string): void
     migration =
       "platform is retired: the assistant's harness is resolved at each invocation " +
       `(see ${ASSISTANT_HARNESS_VARIABLE}). Remove it.`;
+  } else if (path === "" && key === "portRange") {
+    migration =
+      "portRange is retired: pass the bounds to `project free-ports --within <first>..<last>`, " +
+      "and state a deployment's range in its own instructions. Remove it.";
   } else if (path === "code" && key === "profile") {
     migration =
       "code.profile is retired: set defaultAgentProfile on the assistant's profile, " +
@@ -640,12 +632,4 @@ function checkDefaultEffort(profile: CodingProfile, field: string, path: string)
 export function requireProjectsRoot(config: LoadedConfig): ProjectsRoot {
   if (config.projectsRoot !== undefined) return config.projectsRoot;
   throw new Error(`Error: projectsRoot is missing from the aligndev config ${config.path}.`);
-}
-
-export function requirePortRange(config: LoadedConfig): PortRange {
-  if (config.portRange !== undefined) return config.portRange;
-  throw new Error(
-    `Error: portRange is missing from the aligndev config ${config.path}: ` +
-      'add "portRange": { "first": <port>, "last": <port> }, the range for dev servers.',
-  );
 }

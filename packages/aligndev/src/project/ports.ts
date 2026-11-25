@@ -52,10 +52,6 @@ function fitsBefore(basePort: number, size: number, lastPort: number): boolean {
   return Number.isSafeInteger(end) && end <= lastPort;
 }
 
-export function containsRange(available: PortRange, allocation: PortRange): boolean {
-  return allocation.first >= available.first && allocation.last <= available.last;
-}
-
 export function rangesOverlap(left: PortRange, right: PortRange): boolean {
   return left.first <= right.last && right.first <= left.last;
 }

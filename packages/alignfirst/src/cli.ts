@@ -116,7 +116,7 @@ Usage:
   ${ctx.form} setup init [options]
   ${ctx.form} setup instructions [--write] [--file <path>]
   ${ctx.form} companion register | unregister
-  ${ctx.form} config [--json]
+  ${ctx.form} config [--json [<dir>...]]
   ${ctx.form} doctor
   ${ctx.form} workspace <command> [--json]
   ${ctx.form} dev [<command>]

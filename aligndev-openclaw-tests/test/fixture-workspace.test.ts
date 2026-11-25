@@ -14,8 +14,8 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { SETTINGS_PORT_RANGE } from "../scripts/coding-agent-settings.ts";
 import {
+  FIXTURE_PORT_BOUNDS,
   FIXTURE_PORT_RANGES,
   fixturePortRange,
   patchDevServerRange,
@@ -36,14 +36,14 @@ interface RegistryEntry {
   ports?: { frontend: number };
 }
 
-test("A12 block is the lowest settings block that overlaps no fixture", () => {
+test("A12 block is the lowest block within the fixture bounds that overlaps no fixture", () => {
   const fixtures = Object.values(FIXTURE_PORT_RANGES);
   const overlapsFixture = (first: number, last: number) =>
     fixtures.some((range) => range.first <= last && first <= range.last);
   assert.equal(a12Block.last - a12Block.first, 7);
-  assert(a12Block.first >= SETTINGS_PORT_RANGE.first && a12Block.last <= SETTINGS_PORT_RANGE.last);
+  assert(a12Block.first >= FIXTURE_PORT_BOUNDS.first && a12Block.last <= FIXTURE_PORT_BOUNDS.last);
   assert.equal(overlapsFixture(a12Block.first, a12Block.last), false);
-  for (let first = SETTINGS_PORT_RANGE.first; first < a12Block.first; ++first) {
+  for (let first = FIXTURE_PORT_BOUNDS.first; first < a12Block.first; ++first) {
     assert(overlapsFixture(first, first + 7), `block at ${first} is free`);
   }
 });
