@@ -1,5 +1,16 @@
 # alignfirst
 
+## 0.21.0
+
+### Minor Changes
+
+- 859f368: Added Antigravity CLI to the setup guides.
+- 0e14889: Added `alignfirst config --json <dir>...`, which reports several project directories in one call.
+
+### Patch Changes
+
+- 859f368: Defaulted AlignDev setup to a coding agent unless the user explicitly mentions OpenClaw.
+
 ## 0.20.0
 
 ### Minor Changes

@@ -1,5 +1,18 @@
 # aligndev
 
+## 0.34.0
+
+### Minor Changes
+
+- 859f368: Added Antigravity CLI (`agy`) as a coding agent and as an assistant's harness.
+- 859f368: Filtered the guides to the instructions of the assistant's harness, and stopped passing `AI_AGENT` and every harness's session variables to the coding agent.
+- 0e14889: Breaking: `aligndev project free-ports` requires `--within <first>..<last>`, and the `portRange` setting is retired (ignored with a warning). Added `aligndev project ports` to print the claimed port ranges. Both commands report projects with an unreadable configuration as unknown ranges. Requires the matching `alignfirst` release.
+
+### Patch Changes
+
+- 4e29dfe: Split the working-session guide into a core and five runbooks (`side-ticket`, `change-wrap-up`, `code-review`, `workspace-cleanup`, `project-rules`), so every guide stays within the inline output limit of the assistant's harness.
+- 4e29dfe: The assistant now merges the base branch into an in-place branch without asking, and pushes the merge when the branch is already on the remote. A review of someone else's branch skips the base merge.
+
 ## 0.33.0
 
 ### Minor Changes
