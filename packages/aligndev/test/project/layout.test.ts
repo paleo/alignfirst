@@ -4,7 +4,7 @@ import { delimiter, join, relative } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { readProjectReport } from "../../src/project/layout.js";
+import { readProjectReport, readProjectReports } from "../../src/project/layout.js";
 
 const dirs: string[] = [];
 const warnings = [
@@ -172,6 +172,64 @@ describe("readProjectReport", () => {
       config: { schemaVersion: 1, plans: { folder: "project-plans" } },
     });
     expect(() => readProjectReport(command, cwd, {})).toThrow(Error);
+  });
+});
+
+describe("readProjectReports", () => {
+  const cwd = tmpdir();
+  const directories = [join(cwd, "a"), join(cwd, "b")];
+
+  it("returns one result per directory, in order", () => {
+    const f = executableFixture("alignfirst", {
+      reports: [
+        { path: directories[0], error: "Invalid alignfirst.json" },
+        { path: directories[1], report: report(directories[1]) },
+      ],
+    });
+    expect(readProjectReports(["alignfirst"], directories, cwd, { PATH: f.dir })).toEqual([
+      { error: "Invalid alignfirst.json" },
+      report(directories[1]),
+    ]);
+  });
+
+  it("reports an outdated entry as a project error without failing the batch", () => {
+    const { aligndev: _, ...outdated } = report(directories[0]);
+    const f = executableFixture("alignfirst", {
+      reports: [
+        { path: directories[0], report: outdated },
+        { path: directories[1], report: report(directories[1]) },
+      ],
+    });
+    const results = readProjectReports(["alignfirst"], directories, cwd, { PATH: f.dir });
+    expect(results[0]).toHaveProperty("error");
+    expect(results[1]).toEqual(report(directories[1]));
+  });
+
+  it.each([
+    { reports: [{ path: directories[0], report: report(directories[0]) }] },
+    { reports: [null, { path: directories[1], report: report(directories[1]) }] },
+    report(cwd),
+  ])("rejects a malformed batch report: %#", (value) => {
+    const f = executableFixture("alignfirst", value);
+    expect(() => readProjectReports(["alignfirst"], directories, cwd, { PATH: f.dir })).toThrow(
+      Error,
+    );
+  });
+
+  it("advises an upgrade when alignfirst rejects the directory arguments", () => {
+    const stderr = `Unexpected argument: ${directories[0]}\n\nUsage: alignfirst config [--json]\n`;
+    const f = executableFixture("alignfirst", {}, "0.21.0\n", stderr, 1);
+    expect(() => readProjectReports(["alignfirst"], directories, cwd, { PATH: f.dir })).toThrow(
+      /Upgrade alignfirst/,
+    );
+  });
+
+  it("keeps the first diagnostic of any other failure", () => {
+    const stderr = "npm error code ENOTCACHED\nnpm error detail\n";
+    const f = executableFixture("alignfirst", {}, "0.21.0\n", stderr, 1);
+    const run = () => readProjectReports(["alignfirst"], directories, cwd, { PATH: f.dir });
+    expect(run).toThrow("npm error code ENOTCACHED");
+    expect(run).not.toThrow(/Upgrade alignfirst/);
   });
 });
 

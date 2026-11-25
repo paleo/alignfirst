@@ -94,8 +94,10 @@ export function readProjectReports(
   const describe = once(() => describeAlignfirst(command, cwd, env));
   const outdated = () => new Error(`${outdatedAlignfirst(cwd)} ${describe()}`);
   if (result.status !== 0) {
-    forwardSettingsWarnings(result.stderr);
-    throw outdated();
+    const diagnostic = firstLine(forwardSettingsWarnings(result.stderr));
+    // An alignfirst that predates the batch mode rejects the directory arguments.
+    if (diagnostic.startsWith("Unexpected argument:")) throw outdated();
+    throw new Error(`${batchFailure(diagnostic, cwd)} ${describe()}`);
   }
   const value = parseReportJson(result.stdout, cwd, describe);
   if (
@@ -115,6 +117,11 @@ function once(compute: () => string): () => string {
     value ??= compute();
     return value;
   };
+}
+
+function batchFailure(diagnostic: string, cwd: string): string {
+  const reason = diagnostic === "" ? "no diagnostic" : diagnostic;
+  return `alignfirst config --json failed in ${cwd}: ${reason}`;
 }
 
 function readBatchEntry(

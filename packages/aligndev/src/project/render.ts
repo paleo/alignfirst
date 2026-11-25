@@ -141,9 +141,7 @@ export function renderFreePortsJson(inventory: ProjectInventory, range: PortRang
 
 // Paths relative to the scan root of the projects whose port range is unknown.
 function unknownProjects(inventory: ProjectInventory): string[] {
-  return inventory.unreadableProjects
-    .map((path) => relative(inventory.root, path))
-    .toSorted((left, right) => left.localeCompare(right));
+  return inventory.unreadableProjects.map((path) => relative(inventory.root, path));
 }
 
 export function renderUnknownRangeWarnings(inventory: ProjectInventory, aligndev: string): string {
