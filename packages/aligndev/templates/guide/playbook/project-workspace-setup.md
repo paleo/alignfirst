@@ -170,7 +170,7 @@ The lines below the tag report the workspace: after `Status:`, add what the setu
 {{/conversation}}
 
 {{#conversation}}
-In place on an existing branch, fetch first. A fast-forward of the branch onto its remote counterpart or onto the base branch, on a clean tree, is the only sync done without asking: do it, then report it in one line. Anything else — uncommitted changes, a remote branch that does not fast-forward, a base-branch catch-up that needs a merge commit — ends the turn on one message stating what will happen ("I'll commit your changes as WIP and merge `main`, OK?"). The list below runs on the user's yes. In a workspace you opened or created, the list runs directly.
+In place on an existing branch, fetch first. On a clean tree, sync without asking: fast-forward onto the remote counterpart, and catch up with the base branch, merge commit included. Report what came in, in one line. Uncommitted changes or a remote branch that does not fast-forward end the turn on one message stating what will happen ("I'll commit your changes as WIP, then sync, OK?"). The list below runs on the user's yes. In a workspace you opened or created, the list runs directly.
 {{/conversation}}
 
 Skip on sub-path 3 (no branch — nothing to sync). If Step 4 was skipped, select and fetch the base ref as described there. Once the workspace is set up, bring the branch up to date *before* inspecting, working, or reporting a status — a teammate may have pushed since you last synced, and a report off a stale branch is wrong. In order:
