@@ -173,7 +173,7 @@ async function assertChannelSessionHandedOff(
   const forbidden = parentCalls.filter(
     (call) =>
       readsAssistantInstructions(call) ||
-      readsFile(call, "DEVELOPERS.md") ||
+      readsFile(call, "ASSISTANTS.md") ||
       readsFile(call, "README.md") ||
       invokesAligndevCode(call) ||
       execMatches(call, /\b(workspace|worktree|git\s+(?:-C\s+\S+\s+)?(?:status|log|show|diff))\b/i),

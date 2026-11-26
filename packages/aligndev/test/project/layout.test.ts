@@ -192,18 +192,29 @@ describe("readProjectReports", () => {
     ]);
   });
 
-  it("reports an outdated entry as a project error without failing the batch", () => {
-    const { aligndev: _, ...outdated } = report(directories[0]);
-    const f = executableFixture("alignfirst", {
-      reports: [
-        { path: directories[0], report: outdated },
-        { path: directories[1], report: report(directories[1]) },
-      ],
-    });
-    const results = readProjectReports(["alignfirst"], directories, cwd, { PATH: f.dir });
-    expect(results[0]).toHaveProperty("error");
-    expect(results[1]).toEqual(report(directories[1]));
-  });
+  const current = report(directories[0]);
+  const { aligndev: _, ...withoutAligndev } = current;
+  const nullGuide = {
+    ...current,
+    locations: { ...current.locations, assistantInstructionsFile: null },
+  };
+  it.each([
+    ["without aligndev settings", withoutAligndev],
+    ["with a null assistant guide location", nullGuide],
+  ])(
+    "reports an outdated entry %s as a project error without failing the batch",
+    (_name, outdated) => {
+      const f = executableFixture("alignfirst", {
+        reports: [
+          { path: directories[0], report: outdated },
+          { path: directories[1], report: report(directories[1]) },
+        ],
+      });
+      const results = readProjectReports(["alignfirst"], directories, cwd, { PATH: f.dir });
+      expect(results[0]).toHaveProperty("error");
+      expect(results[1]).toEqual(report(directories[1]));
+    },
+  );
 
   it.each([
     { reports: [{ path: directories[0], report: report(directories[0]) }] },
@@ -291,9 +302,7 @@ function report(cwd: string) {
     config: null,
     companion: null,
     aligndev: null,
-    locations: Object.fromEntries(
-      names.map((name) => [name, name === "assistantInstructionsFile" ? null : location]),
-    ),
+    locations: Object.fromEntries(names.map((name) => [name, location])),
     selectionOrigins: Object.fromEntries(names.map((name) => [name, "builtin"])),
   };
 }

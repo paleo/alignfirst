@@ -73,7 +73,11 @@ describe("explicit companion-only onboarding", () => {
       const before = readReport(fixture, repo);
       expect(before.companion === null).toBe(state !== "registered");
       expect(before.config).toBeNull();
-      expect(before.locations.assistantInstructionsFile).toBeNull();
+      expect(before.locations.assistantInstructionsFile).toEqual(
+        state === "registered"
+          ? { path: join(existingCompanion, "ASSISTANTS.md"), in: "companion", exists: false }
+          : { path: join(repo, "ASSISTANTS.md"), in: "project", exists: false },
+      );
       expect(before.locations[".plans"].path).toBe(join(repo, ".plans"));
       expect(execGit(repo, "ls-files", "--", ".plans")).toBe("");
       expect(execGit(repo, "check-ignore", ".plans/side-7/A1-request.md")).toBe(
@@ -132,7 +136,6 @@ describe("explicit companion-only onboarding", () => {
         '{"schemaVersion":1,"assistantInstructionsFile":"handbook/workflow.md"}\n',
       );
       const instructions = readReport(fixture, repo).locations.assistantInstructionsFile;
-      if (instructions === null) throw new Error("Missing configured assistant instructions");
       expect(instructions).toMatchObject({
         in: "companion",
         path: join(dir, "handbook", "workflow.md"),
@@ -147,7 +150,7 @@ describe("explicit companion-only onboarding", () => {
       );
       const prepared = readReport(fixture, repo);
       expect(prepared.source).toBe("companion");
-      expect(prepared.locations.assistantInstructionsFile?.exists).toBe(true);
+      expect(prepared.locations.assistantInstructionsFile.exists).toBe(true);
       expect(prepared.aligndev).toEqual(state === "missing" ? null : { profile: "kept-profile" });
       const finalRegistry: Registry = JSON.parse(readFileSync(registryPath, "utf8"));
       expect(finalRegistry).toEqual(registeredRegistry);

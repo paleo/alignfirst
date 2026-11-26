@@ -28,7 +28,7 @@ Keep only the optional fields that apply.
 | --- | --- | --- |
 | `conventions` | Ticket IDs, default branch, branch names, commits, agent attribution | `{{CMD}} setup guide protocols` |
 | `plans` | Work-files repository folder and automatic archival | `{{CMD}} setup guide work-files` |
-| `assistantInstructionsFile` | Relative path of the assistant guide | `{{CMD}} setup guide assistant-project` |
+| `assistantInstructionsFile` | Deprecated: relative path of an assistant guide not named `ASSISTANTS.md` | `{{CMD}} setup guide upgrade` |
 | `workspace`, `devServer` | Workspace preparation, ports and services; port ranges belong only in `devServer.ports` | `{{CMD}} setup guide workspace` |
 
 ## Format rules

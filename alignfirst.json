@@ -1,7 +1,6 @@
 {
   "$schema": "https://cdn.jsdelivr.net/npm/alignfirst/schemas/alignfirst-v1.schema.json",
   "schemaVersion": 1,
-  "assistantInstructionsFile": "DEVELOPERS.md",
   "plans": {
     "repositoryFolder": "alignfirst",
     "autoArchive": true

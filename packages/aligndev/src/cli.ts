@@ -95,6 +95,9 @@ Config (optional): ~/.alignfirst/aligndev.settings.json. Each of code.profiles n
 its native configuration; disabled: true hides one. The assistant's profile delegates to its
 defaultAgentProfile; code.fallbackProfile serves an assistant without a profile or built-in
 defaults. See \`${aligndev} code --help\` for the selection order.
+
+Global assistant instructions (optional): ~/.alignfirst/ASSISTANTS.md. \`${aligndev} guide\` prints
+them at the end of the dispatcher.
 `;
 }
 

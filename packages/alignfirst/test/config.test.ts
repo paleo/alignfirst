@@ -214,7 +214,11 @@ describe("config command", () => {
         assistantInstructionsFile: "builtin",
       },
       locations: {
-        assistantInstructionsFile: null,
+        assistantInstructionsFile: {
+          path: join(companion, "ASSISTANTS.md"),
+          in: "companion",
+          exists: false,
+        },
         workspaceRuntime: { in: "companion", exists: false },
       },
       workspace: {

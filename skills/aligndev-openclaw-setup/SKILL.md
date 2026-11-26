@@ -6,7 +6,7 @@ license: CC0 1.0
 compatibility: Requires Node.js, Git, curl and ripgrep.
 metadata:
   author: Paleo
-  version: "0.3.1"
+  version: "0.3.2"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -69,7 +69,7 @@ The service account never reads the admin repository. It works from a snapshot a
 - `~/.local/share/fnm/` — service-owned project Node versions and the default LTS selection.
 - `~/.npm-system-global/` — protected OpenClaw, coding-agent and `ctx7` packages. `alignfirst` and `aligndev` run through `npx` from the service-writable npm cache, so they and the playbook follow each release outside maintenance windows.
 - `~/.config/environment.d/` — the non-secret variables `systemd --user` injects into the gateway and `~/.bash_profile` sources for login shells.
-- `~/.alignfirst/` — entirely service-owned and writable, including the directory itself, `aligndev.settings.json`, `companions/` and future descendants. No immutable or append-only flags apply. The seed installs the AlignDev settings (projects root, profiles); the assistant registers projects with `alignfirst companion register`. For older hosts, follow [Writable AlignFirst home](assets/aligndev-openclaw-template/base/docs/installations/06-security-hardening.md#writable-alignfirst-home) in the generated `06-security-hardening.md`.
+- `~/.alignfirst/` — entirely service-owned and writable, including the directory itself, `aligndev.settings.json`, `companions/` and future descendants. No immutable or append-only flags apply. The seed installs the AlignDev settings (projects root, profiles); the assistant registers projects with `alignfirst companion register`. An optional `ASSISTANTS.md` there holds the global assistant instructions, which `aligndev guide` prints on every activation. For older hosts, follow [Writable AlignFirst home](assets/aligndev-openclaw-template/base/docs/installations/06-security-hardening.md#writable-alignfirst-home) in the generated `06-security-hardening.md`.
 - The gateway unit, written by `openclaw gateway install`, enabled under lingering.
 - `~/projects` — the managed projects and, with a work-files repository, the service account's own clone of it (a repository, never a project).
 
@@ -87,7 +87,7 @@ Paths are relative to `assets/aligndev-openclaw-template/`. `<surface>` stands f
 
 Three roles share the server: the support session, the operator in the sudo admin account, and the unprivileged service account. Root actions stay with a reviewed operator, and the assistant gets no sudo. The admin repository holds the runbooks that rebuild the server.
 
-- `base/README.md`, `base/AGENTS.md`, `base/DEVELOPERS.md`, `base/package.json`, `base/alignfirst.jsonc`, `base/.gitignore`
+- `base/README.md`, `base/AGENTS.md`, `base/ASSISTANTS.md`, `base/package.json`, `base/alignfirst.jsonc`, `base/.gitignore`
 - `base/docs/overview.md`
 - `base/docs/installations/01-server-setup.md`, `base/docs/installations/02-admin-repository.md`, `base/docs/installations/03-toolchain.md`
 
@@ -288,7 +288,7 @@ Every runbook states its role and its position at the top. Human steps are marke
 9. `06-security-hardening.md` — last, to protect managed resources while keeping the entire service `~/.alignfirst/` tree writable.
 10. `07-channel.md`, smoke test — operator, from the chat client.
 11. `docs/operations/use-the-apps.md` — connects the desktop apps through the SSH tunnel; operator: device and node checks. Tailscale Serve for the mobile apps is opt-in and later. Human: Tailscale login and tailnet settings; operator: Serve through a re-seed, then each device's approval.
-12. `docs/operations/add-project.md` for each managed project. Prepare the project first with `npx -y alignfirst setup guide assistant-project`. The preparation writes one selected `alignfirst.json` or `.jsonc`, including optional recipe sections and an explicit assistant-instructions reference. Prepare effective plans and selected runtime storage before setup in both work-files modes. Only project runtime needs ignored `.local-wt/`. For existing wrappers/state, first follow the clean-break runbook, `npx -y alignfirst setup guide upgrade-workspaces`. Project discovery then needs no registration step.
+12. `docs/operations/add-project.md` for each managed project. Prepare the project first with `npx -y alignfirst setup guide assistant-project`. The preparation writes one selected `alignfirst.json` or `.jsonc`, including optional recipe sections, and the assistant guide `ASSISTANTS.md`. Prepare effective plans and selected runtime storage before setup in both work-files modes. Only project runtime needs ignored `.local-wt/`. For existing wrappers/state, first follow the clean-break runbook, `npx -y alignfirst setup guide upgrade-workspaces`. Project discovery then needs no registration step.
 
 The operator records each task in `.reports/`, committed. The operations runbooks own the rest: `use-the-apps.md` (devices), `configure-assistant.md` (re-seed, secret rotation), `update-assistant.md`, `update-workspace.md`, `recover-assistant.md` (kill switch, backup, restore), `pair-dm-sender.md` (Discord).
 

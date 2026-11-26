@@ -38,7 +38,7 @@ test("export label", () => assert.equal(label, "Export"));
   const instructions =
     "# Nimbus\n\nThis is a small ESM library. Run `npm test` to test it. No install or build is needed.\nUse `alignfirst workspace` in manifest-free mode. Readiness is protocol-ready; there is no dev server or port allocation.\nUse the AlignDev playbook for isolated branch work.\n";
   writeFileSync(join(repo, "README.md"), instructions);
-  writeFileSync(join(repo, "DEVELOPERS.md"), instructions);
+  writeFileSync(join(repo, "ASSISTANTS.md"), instructions);
   const configPath = join(repo, "alignfirst.json");
   const config = JSON.parse(readFileSync(configPath, "utf8"));
   delete config.workspace;

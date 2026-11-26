@@ -11,8 +11,8 @@ export interface ProjectConfig extends WorkspaceManifest {
   /** Shared work-file organization and sync policy; omit to retain default behavior. */
   plans?: PlansConfig;
   /**
-   * Explicit instructions-file path relative to the selected project or companion root. It must
-   * remain within that root, including through symlinks. Omit when no file should be selected.
+   * Deprecated: the assistant guide is `ASSISTANTS.md`. Path of a guide under another name, relative
+   * to the selected project or companion root, and lexically within it.
    */
   assistantInstructionsFile?: string;
 }

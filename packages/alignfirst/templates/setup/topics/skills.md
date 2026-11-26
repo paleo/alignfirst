@@ -1,6 +1,6 @@
 # Install the Skills
 
-The skills invoke the CLI through `{{CMD}}`; they need no separate CLI installation. For a skills-only request, install the skills and leave the project unchanged. Configure the project only when the user also wants the repository to adopt AlignFirst (`{{CMD}} setup guide protocols`).
+The skills invoke the CLI through `npx`, or through `bunx` with Bun; they need no separate CLI installation. For a skills-only request, install the skills and leave the project unchanged. Configure the project only when the user also wants the repository to adopt AlignFirst (`{{CMD}} setup guide protocols`).
 
 When preparing a project for an assistant, skip the skills and the global bootstrap line; see `{{CMD}} setup guide assistant-project`.
 

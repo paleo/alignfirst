@@ -19,6 +19,7 @@ const warnings = [
   "Warning: developerInstructions is deprecated in /project/alignfirst.json; use assistantInstructionsFile instead. assistantInstructionsFile takes precedence when both are set.",
   "Warning: developerInstructions is deprecated in companion registry projects[<entry>].items; use assistantInstructionsFile instead. assistantInstructionsFile takes precedence when both are set.",
   "Warning: developer-instructions is deprecated; use assistant-instructions instead.",
+  "Warning: assistantInstructionsFile is deprecated in /project/alignfirst.json. Rename the assistant guide to ASSISTANTS.md and remove the property.",
 ];
 const privateMessages = [
   "Warning: ignoring unknown .alignfirst.json setting plans.extra. Remove it or check its spelling.",
