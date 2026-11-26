@@ -70,7 +70,7 @@ A takeover turn starts with the plugin's `Take over this thread.` message from `
 {{#codingAgent}}
 ### Step 1 — Resolve the project
 
-Outside a git repository, tell the user to start the session inside the project's repository, and stop. Otherwise, resolve the project before any other step:
+When the user or your instructions designate the project by a path, change to that directory first: it replaces the session's working directory in every guide. Outside a git repository, ask the user for the project's path. Otherwise, resolve the project before any other step:
 {{/codingAgent}}
 {{#app}}
 ### Step 1 — Identify the conversation

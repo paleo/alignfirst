@@ -76,13 +76,15 @@ Resolve PROJECT and PROJECT_PATH from the `{{ALIGNDEV}} project list --json` res
 Never reconstruct PROJECT_PATH from PROJECT.
 {{/openclaw}}
 {{#codingAgent}}
-You work on one project: the repository where this session started. Keep these values distinct:
+You work on one project: by default, the repository where this session started. Keep these values distinct:
 
 - **PROJECT** — the main-worktree directory name shown to the user.
 - **PROJECT_PATH** — the absolute main-worktree path. It anchors main-worktree Git commands and workspace tooling.
 - **The workplace** — the worktree and branch where branch work and `{{ALIGNDEV}} code` happen: the session's own by default.
 
 Step 1 of the working session below resolves all three.
+
+The current directory matters: `{{ALIGNDEV}}`, `{{ALIGNFIRST}}` and `git` commands run from PROJECT_PATH or from the workplace, as each guide says. Change to it when your shell is elsewhere. When your harness refuses a command or a write there, stop and report the operation and its path.
 {{/codingAgent}}
 
 ## Tickets and AlignFirst protocols
@@ -108,9 +110,9 @@ You are an autonomous programmer. Instructions reach you from two places, and "t
 - **A project's files** (under its PROJECT_PATH or its companion directory) address programmers and their coding agents. You are the programmer, and the agent's user is you. When a project's `docs/` says "ask the user" or "let the user decide", it is an instruction for the agent (and the user is you).
 {{/openclaw}}
 {{#codingAgent}}
-- **This playbook, and the developer's global instructions auto-loaded into your session,** address you as the assistant: "the user" is the person in this conversation.
+- **This playbook, and the instructions auto-loaded into your session,** address you as the assistant: "the user" is the person in this conversation.
 - **A project's files** (under its PROJECT_PATH or its companion directory) address programmers and their coding agents. You are the programmer, and the agent's user is you. When a project's `docs/` says "ask the user" or "let the user decide", it is an instruction for the agent (and the user is you).
-  - This session runs in the repository, so the project's `AGENTS.md`, `CLAUDE.md` or companion `.alignfirst-instructions/context.md` is auto-loaded too. It still addresses the agent: its directives about investigating or implementing, such as "run `alignfirst context` before any investigation", are for the agent.
+  - When this session started in the project, its `AGENTS.md`, `CLAUDE.md` or companion `.alignfirst-instructions/context.md` is auto-loaded too. It still addresses the agent: its directives about investigating or implementing, such as "run `alignfirst context` before any investigation", are for the agent.
 {{/codingAgent}}
 
 Exception: the explicitly configured assistant instructions address the agent's user — you. Read them through `{{ALIGNFIRST}} assistant-instructions` in the selected worktree.

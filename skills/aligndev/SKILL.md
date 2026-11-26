@@ -1,12 +1,12 @@
 ---
 name: aligndev
-description: "Act as the AlignFirst assistant: delegate the work on this project to agent sessions through aligndev."
+description: "Act as the AlignFirst assistant: delegate the work on a project to agent sessions through aligndev."
 disable-model-invocation: true
 license: CC0 1.0
 compatibility: Requires Node.js and Git.
 metadata:
   author: Paleo
-  version: "1.0.2"
+  version: "1.0.3"
   repository: https://github.com/paleo/alignfirst
 ---
 
