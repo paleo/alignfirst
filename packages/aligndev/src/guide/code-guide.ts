@@ -116,7 +116,7 @@ function renderProfiles(profiles: NamedProfile<CodingProfile>[], selected: strin
     "|---------|---------|----------|---------|--------|---------------|---------|----------------|",
     ...rows.map((row) => `| ${row} |`),
     "",
-    "Pass `--profile <name>` when the user or the global assistant instructions ask for another agent or account; otherwise keep the selected profile.",
+    "Pass `--profile <name>` for another agent or account; omit it to keep the selected profile.",
   ].join("\n");
 }
 
