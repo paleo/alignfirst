@@ -180,13 +180,15 @@ describe("assistant-instructions command", () => {
   });
 
   it.each([
-    { name: "default", file: "ASSISTANTS.md", config: undefined },
-    { name: "configured", file: "guide.md", config: { assistantInstructionsFile: "guide.md" } },
-  ])("refuses only there a $name guide linked out of its root", async ({ file, config }) => {
+    { name: "default", link: "ASSISTANTS.md", target: "shared.md", file: "ASSISTANTS.md" },
+    { name: "configured", link: "guide.md", target: "shared.md", file: "guide.md" },
+    { name: "configured nested", link: "guides", target: ".", file: "guides/shared.md" },
+  ])("refuses only there a $name guide linked out of its root", async ({ link, target, file }) => {
     const cwd = temp();
     const outside = temp();
     writeFileSync(join(outside, "shared.md"), "Shared guide\n");
-    symlinkSync(join(outside, "shared.md"), join(cwd, file));
+    symlinkSync(join(outside, target), join(cwd, link));
+    const config = file === "ASSISTANTS.md" ? undefined : { assistantInstructionsFile: file };
     if (config !== undefined)
       writeFileSync(join(cwd, "alignfirst.json"), JSON.stringify({ schemaVersion: 1, ...config }));
     const refused = await runMain(["assistant-instructions"], { cwd });
@@ -195,6 +197,42 @@ describe("assistant-instructions command", () => {
     expect(refused.stderr).toContain(join(cwd, file));
     expect((await runMain(["context"], { cwd })).code).toBe(0);
     expect((await runMain(["config", "--json"], { cwd })).code).toBe(0);
+  });
+
+  it("refuses a companion guide linked out of the companion into the project", async () => {
+    const { root, home, project, companion } = makeCompanionProject({
+      assistantInstructionsFile: "companion",
+    });
+    dirs.push(root);
+    mkdirSync(companion, { recursive: true });
+    writeFileSync(join(project, "shared.md"), "Project file\n");
+    symlinkSync(join(project, "shared.md"), join(companion, "ASSISTANTS.md"));
+    const result = await runMain(["assistant-instructions"], { cwd: project, home });
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain(join(companion, "ASSISTANTS.md"));
+  });
+
+  it("refuses a guide whose symbolic link loops", async () => {
+    const cwd = temp();
+    const path = join(cwd, "ASSISTANTS.md");
+    symlinkSync(path, path);
+    const result = await runMain(["assistant-instructions"], { cwd });
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain(path);
+  });
+
+  it("treats a guide behind a broken folder link as missing", async () => {
+    const cwd = temp();
+    symlinkSync(join(temp(), "missing"), join(cwd, "guides"));
+    writeFileSync(
+      join(cwd, "alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, assistantInstructionsFile: "guides/guide.md" }),
+    );
+    const result = await runMain(["assistant-instructions"], { cwd });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(result.stdout).not.toContain("<assistant-instructions");
   });
 
   it("uses linked-branch instructions and configuration from nested cwd, not main", async () => {

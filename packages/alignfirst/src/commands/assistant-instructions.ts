@@ -15,7 +15,7 @@ export function runAssistantInstructions(ctx: CommandContext, args: string[]): n
   if (parseBareCommandArgs(ctx, args, usage)) return 0;
   const layout = layoutOf(ctx);
   const location = layout.locations.assistantInstructionsFile;
-  const content = readGuide(ctx, layout);
+  const content = readGuide(layout);
   ctx.stdout.write(renderConventionsSection(ctx));
   ctx.stdout.write(`\n${renderWorkspaceGuidance(ctx)}`);
   if (content !== undefined) ctx.stdout.write(`\n${renderGuideBlock(location, content)}`);
@@ -23,10 +23,10 @@ export function runAssistantInstructions(ctx: CommandContext, args: string[]): n
 }
 
 /** The trimmed guide, or `undefined` when the file is missing or blank. */
-function readGuide(ctx: CommandContext, layout: ProjectLayout): string | undefined {
+function readGuide(layout: ProjectLayout): string | undefined {
   const location = layout.locations.assistantInstructionsFile;
   if (!location.exists) return;
-  assertInstructionsInRoot(ctx.cwd, layout);
+  assertInstructionsInRoot(layout);
   const content = readInstructions(location.path).trimEnd();
   return content.length === 0 ? undefined : content;
 }

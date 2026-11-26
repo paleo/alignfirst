@@ -97,6 +97,8 @@ export type ItemName = (typeof ITEM_NAMES)[number];
 export interface ProjectLayout {
   aligndev: AligndevProjectSettings | null;
   companion: CompanionLayout | null;
+  /** The project root the locations resolve from: the worktree top level, or the cwd outside Git. */
+  root: string;
   locations: ProjectLocations;
   selectionOrigins: Record<ItemName, SelectionOrigin>;
   projectConfig?: ResolvedProjectConfig;
@@ -233,6 +235,7 @@ function layoutForEntry(
   return {
     aligndev: entry?.project.aligndev ?? null,
     companion,
+    root,
     projectConfig,
     selectionOrigins: selectionOriginsFor(entry?.project),
     storage,
@@ -519,10 +522,9 @@ function instructionCopy(
 }
 
 /** Refuses an assistant guide whose symbolic links lead out of its selected root. */
-export function assertInstructionsInRoot(cwd: string, layout: ProjectLayout): void {
+export function assertInstructionsInRoot(layout: ProjectLayout): void {
   const { path, in: placement } = layout.locations.assistantInstructionsFile;
-  const root =
-    placement === "companion" && layout.companion ? layout.companion.dir : projectRoot(cwd);
+  const root = placement === "companion" && layout.companion ? layout.companion.dir : layout.root;
   if (isSameOrInside(canonicalInstructionPath(path), canonicalPath(root))) return;
   throw new CliError(
     `The assistant guide ${path} leads outside ${root} through a symbolic link. ` +

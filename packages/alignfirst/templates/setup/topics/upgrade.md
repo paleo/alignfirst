@@ -294,8 +294,10 @@ When an `AGENTS.md` or `CLAUDE.md` has a `Docmap - Seek Documentation` section w
 
 The assistant guide is `ASSISTANTS.md`. The configuration properties `assistantInstructionsFile` and `developerInstructions` are deprecated: they still name a guide under another name, and every command warns about them on stderr. The `Legacy` item of the `{{CMD}} setup` report lists them. Migrate once:
 
-1. Move the file that `locations.assistantInstructionsFile` reports to `ASSISTANTS.md`, at the root of the same project or companion directory.
-2. Retitle it `# Assistant Guide`.
+1. Create `ASSISTANTS.md` from the file that `locations.assistantInstructionsFile` reports, at the root of the same project or companion directory:
+   - When the file serves only as the assistant guide, move it. When its folder changes, fix its relative links.
+   - When the file has another purpose, such as `README.md`, keep it. Write a short `ASSISTANTS.md` with what only the assistant needs, as "The Assistant Guide" in `{{CMD}} setup guide assistant-project` describes, and link to the file for the rest.
+2. Title `ASSISTANTS.md` `# Assistant Guide`.
 3. Remove the property from the selected `alignfirst.json` or `.jsonc`.
-4. Update the links to the old name.
+4. Update the links to a moved guide.
 5. Run `{{CMD}} assistant-instructions` and check that it prints the guide without a warning.
