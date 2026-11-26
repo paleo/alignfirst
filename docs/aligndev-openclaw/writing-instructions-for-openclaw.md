@@ -33,7 +33,7 @@ Text only for a coding agent.
 {{/codingAgent}}
 ```
 
-Assistant instructions are read at execution time through `{{ALIGNFIRST}} assistant-instructions` from the selected workplace. The command prints project guidance and any explicitly configured content. Use nullable `locations.assistantInstructionsFile` from `config --json` to locate edits. Guide rendering does not inspect project filenames or offer project-file condition blocks.
+Assistant instructions are read at execution time through `{{ALIGNFIRST}} assistant-instructions` from the selected workplace. The command prints project guidance, then the project's assistant guide, `ASSISTANTS.md` unless `assistantInstructionsFile` names another file. Use `locations.assistantInstructionsFile` from `config --json` to locate edits; it always names the file to read, edit or create. Guide rendering does not inspect project filenames or offer project-file condition blocks.
 
 A platform block sits at the top level. A surface block and `{{#thread}}` never sit inside a `{{#codingAgent}}` block, and `{{#conversation}}` sits anywhere. A harness block, `{{#claude}}`, `{{#codex}}`, `{{#pi}}` or `{{#agy}}`, sits inside a `{{#codingAgent}}` block, never inside another harness block. An unknown name, a misplaced block, an unclosed block or a stray closing marker fails the render, naming the template and the line.
 
@@ -59,7 +59,7 @@ Write every command as `{{ALIGNDEV}} …` or `{{ALIGNFIRST}} …`. They render a
 
 ### Core and runbooks
 
-A harness truncates a long command output, so every rendered guide stays under 25,000 characters under `codingAgent` with a recognized harness, and under 40,000 under `openclaw`. `packages/aligndev/test/guide-renders.test.ts` enforces both limits. The unrecognized-harness render of `guide code` holds every harness block, exceeds 25,000 and stays outside the test. An operator shell, which has no output cap, receives it. So does a session whose environment carries the markers of several harnesses; setting `ALIGNDEV_ASSISTANT_HARNESS` restores its own render.
+A harness truncates a long command output, so every rendered guide stays under 25,000 characters under `codingAgent` with a recognized harness, and under 40,000 under `openclaw`. `packages/aligndev/test/guide-renders.test.ts` enforces both limits. The unrecognized-harness render of `guide code` holds every harness block, exceeds 25,000 and stays outside the test. An operator shell, which has no output cap, receives it. So does a session whose environment carries the markers of several harnesses; setting `ALIGNDEV_ASSISTANT_HARNESS` restores its own render. The global assistant instructions that the dispatcher appends from `~/.alignfirst/ASSISTANTS.md` fall outside these limits: their author keeps them short.
 
 A section stays in the core, `working-session`, when most sessions need it. It becomes a runbook, read when its situation arises, when only some sessions need it. A guide read at a moment of its own, such as the completion turn, is a runbook too.
 

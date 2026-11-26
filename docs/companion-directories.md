@@ -54,7 +54,7 @@ Without a companion every item uses the current project root. Discovery uses the
 
 The selected `alignfirst.json`/`.jsonc` contains the complete configuration: `conventions` (ticket and Git settings), `plans`, optional `assistantInstructionsFile`, `workspace` and `devServer`. Sections are never merged across sources. Workspace recipes exist only when `workspace` or `devServer` is declared; a conventions-only file uses default preparation. One packaged editor schema covers the entire document. Optional `$schema` is validated URI metadata; it is neither fetched nor used to choose runtime validation. Future breaking majors require sequential in-memory converters retained throughout the CLI major; reads never rewrite committed settings.
 
-`assistantInstructionsFile` is an explicit relative file reference. Its logical item chooses the root, with lexical and symlink containment checks. Without the setting, its location is null; no filename is discovered. Missing configured files remain reportable destinations. `alignfirst assistant-instructions` prints project guidance from the selected configuration, then any configured UTF-8 content and its absolute source path. A configured missing or unreadable file fails before printing a body; reads create nothing. The command uses the invoked worktree's configuration, including from nested cwd. Invoke from main deliberately to read main's branch version. It prints no extra agent context, Docmap or protocols.
+The assistant guide is `ASSISTANTS.md` by default; `assistantInstructionsFile` overrides that name with a relative path. Its logical item chooses the root, with lexical and symlink containment checks. Its location is always reported; a missing file is the creation destination. `config.assistantInstructionsFile` is present only when the configuration sets it. `alignfirst assistant-instructions` prints project guidance from the selected configuration, then the guide's UTF-8 content in an `<assistant-instructions scope="project" file="…">` block carrying its absolute path. A missing or blank `ASSISTANTS.md`, or a blank explicit file, leaves the guidance alone. A missing or unreadable explicit file fails before printing a body; reads create nothing. The command uses the invoked worktree's configuration, including from nested cwd. Invoke from main deliberately to read main's branch version. It prints no extra agent context, Docmap or protocols.
 
 The old `developerInstructions` config field and registry item remain accepted as deprecated aliases, as does `alignfirst developer-instructions`. Each deprecated spelling emits a `console.warn` diagnostic on stderr. When both field or item names are present, `assistantInstructionsFile` wins; an invalid new value fails rather than falling back to the old one. Normalization is in memory only, with no file rewrites. `schemaVersion` remains 1. Reports use only `assistantInstructionsFile`, including in `config`, `companion.items`, `locations` and `selectionOrigins`.
 
@@ -78,9 +78,7 @@ interface ConfigReport {
     defaultLocation: ItemSetting;
     items: Record<ItemName, ItemSetting | AligndevSetting>;
   } | null;
-  locations: Record<Exclude<ItemName, "assistantInstructionsFile">, ItemLocation> & {
-    assistantInstructionsFile: ItemLocation | null;
-  };
+  locations: Record<ItemName, ItemLocation>;
   selectionOrigins: Record<ItemName, "item" | "defaultLocation" | "builtin">;
   workspace: {
     location: ItemLocation;

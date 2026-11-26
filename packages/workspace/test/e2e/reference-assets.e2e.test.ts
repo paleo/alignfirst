@@ -47,19 +47,17 @@ it("publishes manifest examples accepted by the production CLI without consumer 
           portRange,
           hasDevServer: portRange !== null,
         },
+        locations: {
+          assistantInstructionsFile: { path: join(project, "ASSISTANTS.md"), exists: false },
+        },
       });
+      expect(report.config.assistantInstructionsFile).toBeUndefined();
       if (directory === examples) {
         expect(report.config.devServer.maxConcurrentDevServers).toEqual({
           env: "PROJECT_DEV_LIMIT",
           default: 5,
         });
         expect(report.config.devServer.servers[0].error).toEqual({ preset: "node" });
-        expect(report.locations.assistantInstructionsFile).toBeNull();
-      } else {
-        expect(report.config.assistantInstructionsFile).toBe("DEVELOPERS.md");
-        expect(report.locations.assistantInstructionsFile.path).toBe(
-          join(project, "DEVELOPERS.md"),
-        );
       }
       rmSync(path);
     }

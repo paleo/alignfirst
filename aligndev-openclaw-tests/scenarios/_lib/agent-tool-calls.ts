@@ -14,7 +14,7 @@ const READ_VIA_EXEC = /\b(cat|head|tail|less|bat)\b/;
 /**
  * True when the call reads `fileName` — either the `read` tool with a matching
  * `path`, or an `exec` that cats/heads/tails it. `fileName` is matched as a
- * substring, so pass a discriminating suffix like `nimbus/DEVELOPERS.md`.
+ * substring, so pass a discriminating suffix like `nimbus/ASSISTANTS.md`.
  */
 export function readsFile(call: AgentToolCall, fileName: string): boolean {
   const input = inputOf(call);
@@ -29,7 +29,7 @@ export function readsFile(call: AgentToolCall, fileName: string): boolean {
 }
 
 // The command names the file by its full path, or runs in its directory and names it bare: through
-// `cd` (`cd /proj && cat DEVELOPERS.md`) or the exec `workdir` parameter.
+// `cd` (`cd /proj && cat ASSISTANTS.md`) or the exec `workdir` parameter.
 function namesFile(command: string, workdir: string | undefined, fileName: string): boolean {
   if (command.includes(fileName)) return true;
   const slash = fileName.lastIndexOf("/");
