@@ -492,6 +492,7 @@ function mockRunConfig(home: string, resume?: string): RunConfig {
     cwd: home,
     sessionFilePath: join(home, "run.md"),
     executableModel: PI_CONTRACT_MODEL,
+    effort: undefined,
     skipPermissions: false,
     additionalDirectories: [],
     env: { HOME: home, CODEX_HOME: home, PI_CODING_AGENT_DIR: join(home, "pi") },
