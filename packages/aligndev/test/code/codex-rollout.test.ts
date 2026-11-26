@@ -62,6 +62,7 @@ describe("Codex rollout child HOME isolation", () => {
     const state = createCodexState({
       prompt: "fixture",
       sessionFilePath: join(root, "unused.md"),
+      authenticationFailure: { instructions: "login instructions", errorLabel: "Agent error:" },
       cwd: childHome,
       executableModel: undefined,
       effort: undefined,

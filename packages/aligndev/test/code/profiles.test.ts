@@ -599,7 +599,6 @@ describe("effective profiles through CLI launch and resume", () => {
       }),
       stderr.text(),
     ).toBe(0);
-    expect(stdout.text()).toContain(nativeB);
     expect(stdout.text()).toContain("`sonnet`");
     expect(stdout.text()).not.toContain("fixture-secret");
     expect(records()).toHaveLength(0);

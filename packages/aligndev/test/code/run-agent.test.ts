@@ -699,7 +699,11 @@ describe("pi through the shared runner", () => {
       nodeFixture('process.stderr.write("No API key found for openai."); process.exitCode = 1;'),
     );
     expect(result).toMatchObject({ status: "failed", authRequired: true });
-    expect(readCompletion(sessionFilePath).frontmatter.exitReason).toBe("auth_required");
+    const completion = readCompletion(sessionFilePath);
+    expect(completion.frontmatter.exitReason).toBe("auth_required");
+    expect(completion.result).toBe(
+      "login instructions\n\nAgent error:\n\nNo API key found for openai.",
+    );
   });
 });
 
@@ -734,6 +738,7 @@ function makeRun(resume?: string): { config: RunConfig; sessionFilePath: string 
     config: {
       prompt: "go",
       sessionFilePath,
+      authenticationFailure: { instructions: "login instructions", errorLabel: "Agent error:" },
       cwd: dir,
       resume,
       executableModel: undefined,

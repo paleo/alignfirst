@@ -27,7 +27,7 @@ A task can also start at any intermediate step.
 
 ## Two Ways to Run the Assistant
 
-**In your coding agent.** A Claude Code, Codex, Antigravity or persistent Pi session becomes the assistant of the repository it starts in. You keep chatting in the same session; the agents it launches work in the background.
+**In your coding agent.** A Claude Code, Codex, Antigravity or persistent Pi session becomes the assistant. Started on a ticket branch, it works on that ticket in place. Started on `main`, it drives several tasks, each in its own worktree, in its repository or in any project you designate by a path. You keep chatting in the same session; the agents it launches work in the background.
 
 **As an OpenClaw bot.** [AlignDev for OpenClaw](#start-as-an-openclaw-bot) deploys the assistant on a server, under its own name in Slack or Discord. It works on every project of the host, one thread per task.
 
@@ -87,7 +87,7 @@ Then ask your session to work with aligndev.
 ### Requirements
 
 - Node.js 22.11 or later with `npx -y aligndev`, or Bun with `bunx aligndev` (`bun x` is equivalent). Bun 1.4.4 is the tested CLI baseline; compatibility with every older release is not promised.
-- The selected child installed and authenticated under the same effective environment and cwd as the child. Apply the profile's `unset/env/configDir`, including HOME, PATH and credential routing, before using `claude` then `/login`, `codex login`, `pi` then `/login <provider>` (or configured provider credentials), or `agy` then sign in. A bare login in another shell may select another account. Pi keeps its own runtime requirements; see the [extension compatibility baseline](https://github.com/paleo/alignfirst/blob/main/docs/pi-extensions.md#supported-and-tested-baseline).
+- The selected child installed and authenticated under the same effective environment and cwd as the child. `aligndev code --help` prints the login command of the selected profile, and so does a run that ends with `auth_required`. The command applies the profile's `unset/env/configDir` to `claude` then `/login`, `codex login`, `pi` then `/login <provider>` (or configured provider credentials), or `agy` then sign in. A bare login in another shell may select another account. Pi keeps its own runtime requirements; see the [extension compatibility baseline](https://github.com/paleo/alignfirst/blob/main/docs/pi-extensions.md#supported-and-tested-baseline).
 - For Pi, select a usable native model, preferably `provider/model` (optional thinking suffix). Authenticate in the same account/configuration used by the child; never expose credential values in diagnostics.
 - Linux or macOS, or Windows through WSL.
 

@@ -1,6 +1,7 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 
 import type { QuotaSource } from "../config.js";
+import { CODING_AGENT_NAMES } from "./coding-agent.js";
 import { runQuotaProcess } from "./quota-process.js";
 
 const QUOTA_TIMEOUT_MS = 30_000;
@@ -11,11 +12,6 @@ const CLAUDE_PRIVACY_OPT_OUTS = [
   "DISABLE_BUG_COMMAND",
   "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY",
 ] as const;
-const QUOTA_SOURCE_NAMES: Readonly<Record<QuotaSource, string>> = {
-  claude: "Claude Code",
-  codex: "Codex",
-  agy: "Antigravity",
-};
 const AGY_WINDOW_LABELS: Readonly<Record<string, string>> = { weekly: "1 week", "5h": "5 hours" };
 const DEFAULT_QUOTA_PROCESS_ADAPTER: QuotaProcessAdapter = {
   execute: executeQuotaProcess,
@@ -67,7 +63,7 @@ export function createQuotaReader(
     } catch (error) {
       if (error instanceof Error && isSourceDiagnostic(error.message)) throw error;
       throw new Error(
-        `${QUOTA_SOURCE_NAMES[source]} quota command failed; ` +
+        `${CODING_AGENT_NAMES[source]} quota command failed; ` +
           "check that the native CLI is installed and authenticated in the selected configuration.",
       );
     }
@@ -76,7 +72,7 @@ export function createQuotaReader(
 
 // A source's own diagnostic names the native CLI.
 function isSourceDiagnostic(message: string): boolean {
-  return Object.values(QUOTA_SOURCE_NAMES).some((name) => message.startsWith(`${name} `));
+  return Object.values(CODING_AGENT_NAMES).some((name) => message.startsWith(`${name} `));
 }
 
 function readSourceQuota(
@@ -118,7 +114,7 @@ async function readClaudeQuota(
       cwd: context.cwd,
       env: context.env,
       timeout: timeoutMs,
-      source: QUOTA_SOURCE_NAMES.claude,
+      source: CODING_AGENT_NAMES.claude,
     },
   );
   return `Claude Code quota\n\n${parseClaudeQuota(stdout)}`;
@@ -278,7 +274,7 @@ async function readAgyQuota(
     cwd: context.cwd,
     env: context.env,
     timeout: timeoutMs,
-    source: QUOTA_SOURCE_NAMES.agy,
+    source: CODING_AGENT_NAMES.agy,
   });
   return formatAgyQuota(stdout);
 }

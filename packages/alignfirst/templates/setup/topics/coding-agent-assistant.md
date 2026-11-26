@@ -1,6 +1,6 @@
 # A Coding Agent as the Assistant
 
-Claude Code, Codex, Antigravity or a persistent Pi session can act as the AlignFirst assistant on one project: the repository where its session starts. It follows the `aligndev` playbook and delegates through `aligndev code`. The assistant's harness and the agent's harness are independent. No OpenClaw deployment is needed.
+Claude Code, Codex, Antigravity or a persistent Pi session can act as the AlignFirst assistant. It works on the repository where its session starts, and on any project designated by a path. It follows the `aligndev` playbook and delegates through `aligndev code`. The assistant's harness and the agent's harness are independent. No OpenClaw deployment is needed.
 
 Supported systems: Linux and macOS, and Windows through WSL.
 
@@ -53,7 +53,7 @@ An `agy` profile takes no `configDir`. Antigravity keeps one store under `~/.gem
 
 Profiles can supply literal non-secret `env` values and remove inherited variables with `unset`. No shell expansion occurs. Credentials remain in native stores or provisioned process environments. A variable cannot appear in both fields.
 
-Before login, reproduce the agent's effective environment and cwd: apply `unset`, `env` and `configDir`, including HOME, PATH and credential routing. Help and guides identify storage-variable origins without printing their values. A bare login in another shell may select another account.
+Before login, reproduce the agent's effective environment and cwd: apply `unset`, `env` and `configDir`, including HOME, PATH and credential routing. `aligndev code --help` prints the login command of the selected profile, and so does a run that ends with `auth_required`. Both omit the profile's `env` values. A bare login in another shell may select another account.
 
 For Pi, prefer provider-qualified `modelAliases` targets. Exact IDs pin a model; fuzzy native selectors and thinking suffixes pass unchanged to Pi. For example, separate `pi-codex` and `pi-anthropic` profiles can map `sol` to `openai/sol` and `opus` to `anthropic/opus`, using separately provisioned native configurations. AlignDev never infers their providers or account identity. Targets are illustrative and depend on the native catalog. One alias expands after validating the chosen name, without recursion.
 
@@ -187,6 +187,8 @@ Install current stable packages and inspect their declared Pi peer and Node runt
 ## 5. Start the assistant
 
 Start the assistant's harness in the project's repository and invoke `/aligndev` in Claude Code or Antigravity, `$aligndev` in Codex, or `/skill:aligndev` in Pi. The skill runs `npx -y aligndev guide`, or `bunx --bun aligndev guide` with Bun; no global AlignDev CLI installation is required. Confirm skill discovery and the requested tools without changing trust or settings merely to test them.
+
+A session can also work on other projects, and its starting directory need not be a Git repository. The user's request, the starting directory's instructions or `~/.alignfirst/ASSISTANTS.md` give each project's path. The assistant stays in its starting directory and runs each command in the project's directory. There it writes work files, Git state and workspaces, never the codebase. The harness must allow a directory that holds the projects and their workspaces, typically their common parent, with `--add-dir` in Claude Code or Codex.
 
 ## Permissions
 

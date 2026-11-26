@@ -7,6 +7,13 @@ import type { AgentAdapter } from "./run-agent.js";
 
 export const CODING_AGENTS = ["claude", "codex", "pi", "agy"] as const;
 
+export const CODING_AGENT_NAMES: Readonly<Record<CodingAgent, string>> = {
+  claude: "Claude Code",
+  codex: "Codex",
+  pi: "Pi",
+  agy: "Antigravity",
+};
+
 export type CodingAgent = (typeof CODING_AGENTS)[number];
 
 export function createAgentAdapter(agent: CodingAgent): AgentAdapter {

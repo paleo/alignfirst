@@ -26,7 +26,6 @@ export function createPiAdapter(): AgentAdapter {
     interpretLine: interpretPiLine,
     assess: assessPiState,
     isAuthenticationError: isPiAuthenticationError,
-    authenticationMessage: piAuthenticationMessage,
     failureMessage: piFailure,
   };
 }
@@ -259,12 +258,4 @@ function isPiAuthenticationError(message: string): boolean {
         /^(?:Error:\s*)?No API key found for [^\r\n]+\.\s*$/.test(line.trim()) ||
         /^(?:Error:\s*)?Authentication failed for "[^"]+"[.:\s]/.test(line.trim()),
     );
-}
-
-function piAuthenticationMessage(detail?: string): string {
-  const base =
-    "Coding agent not authenticated: run `pi`, then `/login <provider>`, or configure " +
-    "the provider's credentials with the same effective environment and cwd as the child " +
-    "(apply profile unset/env/configDir, including HOME, PATH and credential routing) before another coding run.";
-  return detail === undefined || detail.trim() === "" ? base : `${base}\n\n${detail}`;
 }

@@ -15,7 +15,7 @@ Use the main worktree on the configured default branch. When the question explic
 When this conversation started in a linked worktree of the project, use that worktree and its branch as they are. Otherwise use the main worktree on the configured default branch. When the question explicitly concerns another branch or a PR, or follows ongoing branch work in this conversation, use that branch's existing registered workspace instead: resolve it through `{{ALIGNFIRST}} workspace list --json`. Report the limitation rather than inspecting a different branch when no worktree exists. Do not create a worktree merely to answer a question.
 {{/app}}
 {{#codingAgent}}
-Use the session's worktree and its branch as they are. When the question explicitly concerns another branch or a PR, use that branch's existing registered workspace instead: resolve it through `{{ALIGNFIRST}} workspace list --json`. Report the limitation rather than inspecting a different branch when no worktree exists. Do not create a worktree merely to answer a question.
+Use the session's worktree and its branch as they are. For a project the session did not start in, use its main worktree as it is. When the question explicitly concerns another branch or a PR, use that branch's existing registered workspace instead: resolve it through `{{ALIGNFIRST}} workspace list --json`. Report the limitation rather than inspecting a different branch when no worktree exists. Do not create a worktree merely to answer a question.
 {{/codingAgent}}
 
 {{#openclaw}}
@@ -36,7 +36,7 @@ Retain `git rev-parse --short HEAD` after the refresh. Other sessions fast-forwa
 {{#codingAgent}}
 ## Step 2 — Record the revision
 
-Skip the refresh of the default branch: the tree stays as the user left it. A question is never a reason to switch branches, stash, commit, reset, or resolve a merge.
+The tree stays as the user left it: a question is never a reason to switch branches, stash, commit, reset, or resolve a merge.
 
 Retain `git rev-parse --short HEAD`, the revision the answer comes from. Report it when something in the answer looks inconsistent, and in the Step 5 record.
 {{/codingAgent}}
@@ -65,11 +65,7 @@ The message carries the complete question, however detailed, the selected branch
 Retain the printed session id. Later turns of the same topic resume that session, so the discussion accumulates in one place.
 {{/openclaw}}
 {{#codingAgent}}
-Retain the child session id. Follow the delegation guide instead of waiting for it at launch. Later turns of the same topic resume that session, so the discussion accumulates in one place.
-{{#pi}}
-
-For an asynchronous Pi launch, the session id comes from authoritative completion retrieval.
-{{/pi}}
+Retain the agent's session id from the run's result. Later turns of the same topic resume that session, so the discussion accumulates in one place.
 {{/codingAgent}}
 
 ## Step 4 — Relay

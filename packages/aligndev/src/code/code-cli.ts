@@ -26,7 +26,8 @@ import { readLinkedGitCommonDir } from "./linked-worktree.js";
 import { readMachineId } from "./machine-id.js";
 import { resolveEfforts } from "./efforts.js";
 import { expandModelAlias, type ExecutableModelResolver, resolveModels } from "./models.js";
-import { describeNativeStorage } from "./native-context.js";
+import { renderAuthenticationFailure, renderLoginInstructions } from "./login.js";
+import { describeNativeStorage, describeProfile } from "./native-context.js";
 import { buildPrompt, PROTOCOLS } from "./prompt.js";
 import type { QuotaReader } from "./quota.js";
 import { runAgent, type RunConfig } from "./run-agent.js";
@@ -158,7 +159,7 @@ export async function runCode(
     const models = resolveModels(code.harness, code.models, code.modelAliases);
     const efforts = resolveEfforts(code.harness, code.efforts);
     if (command.kind === "help") {
-      ctx.stdout.write(renderHelp(code, models, efforts, ctx.forms));
+      ctx.stdout.write(renderHelp(code, models, efforts, ctx));
       return 0;
     }
     loadMessage(command.args, ctx.cwd);
@@ -639,14 +640,7 @@ async function runSession(
     stdout.write(`\nSession ID: ${result.sessionId}\n`);
   }
   if (result.authRequired) {
-    writeFailureDiagnostic(
-      ctx,
-      completedPath,
-      `${nativeContext(code)} not authenticated — an administrator must re-login ` +
-        "with the same effective environment as the child (apply profile unset/env/configDir, " +
-        "including HOME, PATH and credential routing), from the same working directory. " +
-        `Then use ${authenticationInstruction(agent)}. A bare login in another shell may use a different account.`,
-    );
+    writeFailureDiagnostic(ctx, completedPath, runConfig.authenticationFailure.instructions);
     return EXIT_AUTH_REQUIRED;
   }
   if (result.status === "succeeded") return 0;
@@ -659,20 +653,7 @@ async function runSession(
 }
 
 function nativeContext(code: CodeConfig): string {
-  return `${code.harness} profile ${JSON.stringify(code.profile ?? "(built-in)")} (${describeNativeStorage(code)})`;
-}
-
-function authenticationInstruction(agent: CodingAgent): string {
-  switch (agent) {
-    case "claude":
-      return "`claude`, then `/login`";
-    case "codex":
-      return "`codex login`";
-    case "pi":
-      return "`pi`, then `/login <provider>`, or configure provider credentials";
-    case "agy":
-      return "`agy`, then sign in";
-  }
+  return `${describeProfile(code)} (${describeNativeStorage(code)})`;
 }
 
 function writeFailureDiagnostic(ctx: CodeContext, sessionFilePath: string, message: string): void {
@@ -956,6 +937,7 @@ export function buildRunConfig(input: RunInput): RunConfig {
     }),
     sessionFilePath: input.sessionFilePath,
     nativeContext: nativeContext(code),
+    authenticationFailure: renderAuthenticationFailure(code, input.cwd),
     cwd: input.cwd,
     resume: args.resume,
     quiet: args.quiet,
@@ -988,7 +970,7 @@ function renderHelp(
   code: CodeConfig,
   models: readonly string[] | undefined,
   efforts: readonly string[],
-  forms: CommandForms,
+  { forms, cwd }: CodeContext,
 ): string {
   const { harness: agent, profile, defaultModel, defaultEffort } = code;
   const { aligndev, alignfirst } = forms;
@@ -1095,10 +1077,11 @@ Config (~/.alignfirst/aligndev.settings.json):
   Effort default        ${defaultEffort ?? "native default"} (new only). Resume retains and validates its effort.
 
 Native configuration: ${describeNativeStorage(code)}.
-Login must use the same effective environment as the child: apply profile unset/env/configDir,
-including HOME, PATH and credential routing, from the same working directory. Then use
-${authenticationInstruction(agent)}. A bare login in another shell may use a different account.
-Environment values are omitted. A null reset changes directory routing only, not HOME, PATH
+Login of the selected profile, for an agent run from this directory:
+
+${renderLoginInstructions(code, cwd)}
+
+Other environment values are omitted. A null reset changes directory routing only, not HOME, PATH
 or API-key precedence. On macOS, setting Claude's default path can select different Keychain
 credentials from an unset CLAUDE_CONFIG_DIR. Confirm the intended mode before changing existing
 strings; no automatic settings rewrite, login or credential transfer occurs. OpenClaw deployments

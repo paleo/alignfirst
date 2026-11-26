@@ -14,7 +14,6 @@ export function createCodexAdapter(): AgentAdapter {
     interpretLine: interpretCodexLine,
     assess: assessCodexState,
     isAuthenticationError: isCodexAuthenticationMessage,
-    authenticationMessage: codexAuthenticationMessage,
     failureMessage: missingCodexOutcome,
   };
 }
@@ -180,15 +179,6 @@ function isCodexAuthenticationMessage(message: string): boolean {
 function missingCodexOutcome(state: AgentProtocolState): string {
   if (!state.protocolComplete) return "Codex stream ended before turn.completed.";
   return "Codex turn completed without a final agent message.";
-}
-
-function codexAuthenticationMessage(detail?: string): string {
-  const base =
-    "Coding agent not authenticated: an administrator must run `codex login` with the same effective environment " +
-    "and cwd as the child (apply profile unset/env/configDir, including HOME, PATH and credential routing) before " +
-    "another coding run.";
-  const reason = detail?.trim();
-  return reason === undefined || reason === "" ? base : `${base}\n\n${reason}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

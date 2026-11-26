@@ -491,6 +491,7 @@ function mockRunConfig(home: string, resume?: string): RunConfig {
     prompt: PROMPT,
     cwd: home,
     sessionFilePath: join(home, "run.md"),
+    authenticationFailure: { instructions: "login instructions", errorLabel: "Agent error:" },
     executableModel: PI_CONTRACT_MODEL,
     effort: undefined,
     skipPermissions: false,

@@ -1867,9 +1867,20 @@ describe("quiet execution", () => {
       });
       expect(result.stderr).toContain("Session file:");
       expect(result.stderr).not.toContain("credential-must-stay-private");
-      expect(result.stdout.length + result.stderr.length).toBeLessThan(700);
+      expect(result.stdout.length + result.stderr.length).toBeLessThan(1500);
     },
   );
+
+  it("records the login command of an authentication diagnostic in the durable result", async () => {
+    const fake = installFakeClaude(
+      base,
+      'process.stdout.write(JSON.stringify({ type: "assistant", error: "authentication_failed" }));',
+    );
+    const result = await launch(["new", "-m", "go", "--quiet"], fake.path);
+    const login = result.stderr.split("\n").find((line) => line.includes(project));
+    expect(login).toBeDefined();
+    expect(result.completion.result).toContain(login);
+  });
 
   it("sanitizes quiet model-resolution failures in diagnostics and the file", async () => {
     const stdout = makeSink();
