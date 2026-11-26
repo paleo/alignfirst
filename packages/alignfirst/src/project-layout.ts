@@ -23,7 +23,7 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import { normalizeAssistantInstructionsFile } from "./assistant-instructions-setting.js";
+import { normalizeAssistantInstructionsItem } from "./assistant-instructions-setting.js";
 import { CliError } from "./cli-error.js";
 import type { CommandContext } from "./context.js";
 import { errorMessage } from "./errors.js";
@@ -294,7 +294,7 @@ function registryProjectValue(value: unknown, path: string, warningPath = path):
 
 function registryItemsValue(value: unknown, path: string, warningPath = path): RegistryItems {
   return registryItemsShape(
-    normalizeAssistantInstructionsFile(value, `companion registry ${warningPath}`),
+    normalizeAssistantInstructionsItem(value, `companion registry ${warningPath}`),
     path,
     warningPath,
   );
@@ -513,19 +513,30 @@ function instructionCopy(
   placement: "project" | "companion",
 ): ItemLocation {
   const path = resolve(root, name);
-  if (
-    !isSameOrInside(path, resolve(root)) ||
-    !isSameOrInside(canonicalInstructionPath(path), canonicalPath(root))
-  )
+  if (!isSameOrInside(path, resolve(root)))
     throw new CliError("assistantInstructionsFile must remain within its selected root.");
   return { path, in: placement, exists: pathExists(path) };
+}
+
+/** Refuses an assistant guide whose symbolic links lead out of its selected root. */
+export function assertInstructionsInRoot(cwd: string, layout: ProjectLayout): void {
+  const { path, in: placement } = layout.locations.assistantInstructionsFile;
+  const root =
+    placement === "companion" && layout.companion ? layout.companion.dir : projectRoot(cwd);
+  if (isSameOrInside(canonicalInstructionPath(path), canonicalPath(root))) return;
+  throw new CliError(
+    `The assistant guide ${path} leads outside ${root} through a symbolic link. ` +
+      `It must stay within ${root}.`,
+  );
 }
 
 function canonicalInstructionPath(path: string, links = new Set<string>()): string {
   const entry = lstatSync(path, { throwIfNoEntry: false });
   if (entry?.isSymbolicLink()) {
     if (links.has(path))
-      throw new CliError("assistantInstructionsFile contains a symbolic link cycle.");
+      throw new CliError(
+        `The path of the assistant guide loops through the symbolic link ${path}.`,
+      );
     links.add(path);
     return canonicalInstructionPath(resolve(dirname(path), readlinkSync(path)), links);
   }

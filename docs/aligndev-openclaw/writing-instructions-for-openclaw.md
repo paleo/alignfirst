@@ -33,7 +33,7 @@ Text only for a coding agent.
 {{/codingAgent}}
 ```
 
-Assistant instructions are read at execution time through `{{ALIGNFIRST}} assistant-instructions` from the selected workplace. The command prints project guidance, then the project's assistant guide, `ASSISTANTS.md` unless `assistantInstructionsFile` names another file. Use `locations.assistantInstructionsFile` from `config --json` to locate edits; it always names the file to read, edit or create. Guide rendering does not inspect project filenames or offer project-file condition blocks.
+Assistant instructions are read at execution time through `{{ALIGNFIRST}} assistant-instructions` from the selected workplace. The command prints project guidance, then the project's optional assistant guide, `ASSISTANTS.md`. Use `locations.assistantInstructionsFile` from `config --json` to locate edits; it always names the file to read, edit or create. Guide rendering does not inspect project filenames or offer project-file condition blocks.
 
 A platform block sits at the top level. A surface block and `{{#thread}}` never sit inside a `{{#codingAgent}}` block, and `{{#conversation}}` sits anywhere. A harness block, `{{#claude}}`, `{{#codex}}`, `{{#pi}}` or `{{#agy}}`, sits inside a `{{#codingAgent}}` block, never inside another harness block. An unknown name, a misplaced block, an unclosed block or a stray closing marker fails the render, naming the template and the line.
 

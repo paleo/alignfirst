@@ -35,7 +35,7 @@ When `skills-lock.json` is present, inspect it through the current skills CLI. I
 - Retired workspace files or registries: follow `{{CMD}} setup guide upgrade-workspaces`.
 - AlignDev settings with `platform`, `code.profile`, `portRange` or a profile `agent`, or a `.alignfirst-projects.json` marker: apply "Convert AlignDev Harness Settings" below.
 - CLI-backed skills: keep the current skills. Set `plans.autoArchive: true` in the selected `alignfirst.json` or `alignfirst.jsonc`; the user can remove it after the upgrade to opt out. If `plans-share` artifacts remain, apply the cleanup, command sweep and check of `{{CMD}} setup guide upgrade-v3`.
-- An assistant guide under another name than `ASSISTANTS.md`, when the user asks to rename it: apply "Optional: Rename the Assistant Guide" below.
+- `assistantInstructionsFile` or `developerInstructions` in the selected `alignfirst.json` or `.jsonc`: apply "Rename the Assistant Guide" below.
 - No detected installation: follow `{{CMD}} setup guide protocols`.
 
 The documentation and standalone-skill migrations preserve project knowledge before removing legacy layouts. Both then continue with `{{CMD}} setup guide upgrade-v3`.
@@ -290,12 +290,12 @@ Run-file rewrites at startup depend on changed ports or declared inputs. An expl
 
 When an `AGENTS.md` or `CLAUDE.md` has a `Docmap - Seek Documentation` section whose body says "Mandatory for every task", replace that body with the agent-instructions snippet of `{{CMD}} setup guide docmap`. Keep the heading and the project's docmap command.
 
-## Optional: Rename the Assistant Guide
+## Rename the Assistant Guide
 
-A project may keep its assistant guide under another name through `assistantInstructionsFile`. Rename it only when the user asks:
+The assistant guide is `ASSISTANTS.md`. The configuration properties `assistantInstructionsFile` and `developerInstructions` are deprecated: they still name a guide under another name, and every command warns about them on stderr. The `Legacy` item of the `{{CMD}} setup` report lists them. Migrate once:
 
-1. Rename the file to `ASSISTANTS.md`, in the location that `locations.assistantInstructionsFile` reports.
+1. Move the file that `locations.assistantInstructionsFile` reports to `ASSISTANTS.md`, at the root of the same project or companion directory.
 2. Retitle it `# Assistant Guide`.
-3. Remove `assistantInstructionsFile` from the selected `alignfirst.json` or `.jsonc`.
+3. Remove the property from the selected `alignfirst.json` or `.jsonc`.
 4. Update the links to the old name.
-5. Run `{{CMD}} assistant-instructions` and check that it prints the guide.
+5. Run `{{CMD}} assistant-instructions` and check that it prints the guide without a warning.

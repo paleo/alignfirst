@@ -2,7 +2,12 @@ import type { CommandContext } from "../context.js";
 import { renderConventionsSection } from "../conventions.js";
 import { readInstructions } from "../instructions.js";
 import { parseBareCommandArgs } from "../parse-args.js";
-import { type ItemLocation, layoutOf } from "../project-layout.js";
+import {
+  assertInstructionsInRoot,
+  type ItemLocation,
+  layoutOf,
+  type ProjectLayout,
+} from "../project-layout.js";
 import { renderWorkspaceGuidance } from "../workspace-guidance.js";
 
 export function runAssistantInstructions(ctx: CommandContext, args: string[]): number {
@@ -10,17 +15,18 @@ export function runAssistantInstructions(ctx: CommandContext, args: string[]): n
   if (parseBareCommandArgs(ctx, args, usage)) return 0;
   const layout = layoutOf(ctx);
   const location = layout.locations.assistantInstructionsFile;
-  const explicit = layout.projectConfig?.config.assistantInstructionsFile !== undefined;
-  const content = readGuide(location, explicit);
+  const content = readGuide(ctx, layout);
   ctx.stdout.write(renderConventionsSection(ctx));
   ctx.stdout.write(`\n${renderWorkspaceGuidance(ctx)}`);
   if (content !== undefined) ctx.stdout.write(`\n${renderGuideBlock(location, content)}`);
   return 0;
 }
 
-/** The trimmed guide, or `undefined` when a default file is missing or any file is blank. */
-function readGuide(location: ItemLocation, explicit: boolean): string | undefined {
-  if (!explicit && !location.exists) return;
+/** The trimmed guide, or `undefined` when the file is missing or blank. */
+function readGuide(ctx: CommandContext, layout: ProjectLayout): string | undefined {
+  const location = layout.locations.assistantInstructionsFile;
+  if (!location.exists) return;
+  assertInstructionsInRoot(ctx.cwd, layout);
   const content = readInstructions(location.path).trimEnd();
   return content.length === 0 ? undefined : content;
 }

@@ -2,4 +2,4 @@
 "alignfirst": minor
 ---
 
-`ASSISTANTS.md` became the default assistant guide, and `assistantInstructionsFile` now only names another path.
+`ASSISTANTS.md` became the assistant guide. `assistantInstructionsFile` is deprecated: `alignfirst setup guide upgrade` describes the rename.

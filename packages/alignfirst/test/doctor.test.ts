@@ -163,6 +163,17 @@ describe("doctor command", () => {
       expect(result.stdout).toContain(path);
   });
 
+  it("accepts a missing assistant guide in a companion placement", async () => {
+    const { root, home, project } = makeCompanionProject({
+      assistantInstructionsFile: "companion",
+      docs: "companion",
+    });
+    dirs.push(root);
+    const result = await runMain(["doctor"], { cwd: project, env: { PATH: "" }, home });
+    expect(result.stdout).toMatch(/^\[ok\] Companion: assistantInstructionsFile /mu);
+    expect(result.stdout).toMatch(/^\[warn\] Companion: docs /mu);
+  });
+
   it("warns about registry keys that name no git main worktree", async () => {
     const { root, home, project } = makeCompanionProject({});
     dirs.push(root);

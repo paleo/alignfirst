@@ -43,7 +43,6 @@ export interface WorkspaceConfigReport {
 
 export interface ProjectConfigView {
   conventions?: { ticketIdPattern?: string };
-  assistantInstructionsFile?: string;
   plans?: { repositoryFolder?: string };
 }
 
@@ -257,15 +256,11 @@ function parseConfig(value: unknown, path: string): ProjectConfigView | null {
     throw invalidReport(path);
   if (value.conventions !== undefined && !isRecord(value.conventions)) throw invalidReport(path);
   const ticketIdPattern = value.conventions?.ticketIdPattern;
-  const assistantInstructionsFile = value.assistantInstructionsFile;
-  if (assistantInstructionsFile !== undefined && typeof assistantInstructionsFile !== "string")
-    throw invalidReport(path);
   const plans = parsePlans(value.plans, path);
   if (ticketIdPattern !== undefined && typeof ticketIdPattern !== "string")
     throw invalidReport(path);
   return {
     ...(ticketIdPattern === undefined ? {} : { conventions: { ticketIdPattern } }),
-    ...(assistantInstructionsFile === undefined ? {} : { assistantInstructionsFile }),
     ...(plans === undefined ? {} : { plans }),
   };
 }

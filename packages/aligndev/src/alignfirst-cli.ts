@@ -53,6 +53,9 @@ function isSettingsWarning(line: string): boolean {
     /^Warning: developerInstructions is deprecated in .+; use assistantInstructionsFile instead\. assistantInstructionsFile takes precedence when both are set\.$/u.test(
       line,
     ) ||
+    /^Warning: (assistantInstructionsFile|developerInstructions) is deprecated in .+\. Rename the assistant guide to ASSISTANTS\.md and remove the property\.$/u.test(
+      line,
+    ) ||
     line === "Warning: developer-instructions is deprecated; use assistant-instructions instead."
   );
 }

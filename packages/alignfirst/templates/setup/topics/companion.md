@@ -31,7 +31,7 @@ The registration's `defaultLocation` applies to every item. An explicit item ove
 
 - `alignfirst` selects the whole `alignfirst.json`/`.jsonc` family. Both extensions in the selected location fail, and sections are never merged across sources.
 - `.alignfirst-instructions` holds `context.md`, described in step 4.
-- `assistantInstructionsFile` selects the root of the assistant guide: `ASSISTANTS.md`, or the configuration's relative reference.
+- `assistantInstructionsFile` selects the root of the assistant guide, `ASSISTANTS.md`.
 - `workspaceRuntime` uses external storage only when it is effectively `companion`. `project` and `auto` always keep the runtime local, whether or not a directory exists.
   A selection that moves the runtime is refused while the current storage holds workspace resources. Tear down or remove those workspaces first.
 - `docs` holds the Docmap tree.

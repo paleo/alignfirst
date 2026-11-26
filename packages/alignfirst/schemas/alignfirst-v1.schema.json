@@ -26,13 +26,14 @@
       }
     },
     "assistantInstructionsFile": {
-      "description": "Relative path of the assistant guide. Defaults to ASSISTANTS.md.",
+      "deprecated": true,
+      "description": "Deprecated. Relative path of an assistant guide not named ASSISTANTS.md. Rename the guide to ASSISTANTS.md and remove this property.",
       "type": "string",
       "pattern": "\\S"
     },
     "developerInstructions": {
       "deprecated": true,
-      "description": "Deprecated alias for assistantInstructionsFile. The new name takes precedence."
+      "description": "Deprecated alias for assistantInstructionsFile, which takes precedence. Rename the guide to ASSISTANTS.md and remove this property."
     },
     "conventions": {
       "type": "object",

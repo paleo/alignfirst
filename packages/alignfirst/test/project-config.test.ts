@@ -38,6 +38,13 @@ describe("project config", () => {
     expect(warn).toHaveBeenCalled();
   });
 
+  it("keeps a deprecated guide name and warns", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const input = { schemaVersion: 1, assistantInstructionsFile: "guides/team.md" };
+    expect(validateProjectConfig(input, "config")).toEqual(input);
+    expect(warn).toHaveBeenCalledOnce();
+  });
+
   it.each([null, false, "", "   "])(
     "rejects an invalid canonical instructions reference without using the legacy value %#",
     (assistantInstructionsFile) => {

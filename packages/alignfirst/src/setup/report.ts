@@ -228,6 +228,7 @@ function detectLegacySignals(ctx: CommandContext, root: string): LegacySignal[] 
     ...(registryHasPaths(ctx.home)
       ? [{ signal: "companion registry with paths", topic: "upgrade" }]
       : []),
+    ...guideNameSignals(ctx),
   ];
 }
 
@@ -261,6 +262,13 @@ function registryHasPaths(home: string): boolean {
     return false;
   }
   return isPlainObject(value) && Object.hasOwn(value, "paths");
+}
+
+/** The deprecated property keeps a guide under another name than `ASSISTANTS.md`. */
+function guideNameSignals(ctx: CommandContext): LegacySignal[] {
+  if (readableConfig(ctx)?.assistantInstructionsFile === undefined) return [];
+  const { path } = layoutOf(ctx).locations.alignfirst;
+  return [{ signal: `assistantInstructionsFile in ${path}`, topic: "upgrade" }];
 }
 
 function inspectSkillsState(ctx: CommandContext): string[] {

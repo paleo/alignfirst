@@ -20,9 +20,9 @@ It is titled `# Assistant Guide`. It contains the confirmed daily development co
 
 Local installation goes in the README, with public URLs when services exist. Tool-specific lifecycle hooks stay in the tool's configuration.
 
-`assistantInstructionsFile` in the selected `alignfirst.json` or `.jsonc` names another relative path. Leave it out for `ASSISTANTS.md`.
+The guide is optional. Run `{{CMD}} assistant-instructions` from the selected worktree to read it. The command prints the project guidance, then the guide in an `<assistant-instructions scope="project">` block that carries its absolute path. A missing or blank guide leaves the guidance alone. A guide that is a symbolic link leading out of its root makes the command fail.
 
-Run `{{CMD}} assistant-instructions` from the selected worktree to read the guide. It prints the project guidance, then the guide in an `<assistant-instructions scope="project">` block that carries its absolute path. A missing `ASSISTANTS.md` prints the guidance alone. A missing file named by `assistantInstructionsFile` is an error.
+The deprecated `assistantInstructionsFile` property of `alignfirst.json` names a guide under another name. To remove it, follow "Rename the Assistant Guide" in `{{CMD}} setup guide upgrade`.
 
 To find the file to edit or create, including under companion placement, read `locations.assistantInstructionsFile` in `{{CMD}} config --json`.
 
