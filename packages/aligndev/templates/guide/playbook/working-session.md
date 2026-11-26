@@ -364,6 +364,8 @@ Launching a background run ends the turn: the closing message is the launch ackn
 Coding runs are long: run `{{ALIGNDEV}} code` in the background, as the delegation guide describes for your harness. Runs in different worktrees can overlap, and one turn can launch several. The launch ends the turn on its acknowledgement, and each report moves to its run's completion. The agent's completed turn does not complete the whole request.
 {{/codingAgent}}
 
+A wait on something external, such as a CI run, a deployment or a review, never blocks the session. Run it as a background task, launched as the delegation guide launches a coding run, so that its completion brings the session back, or check again on a later turn.
+
 ### Questions for the user
 
 A decision on the work itself — behavior, scope, design — reaches the user as a numbered topic, whether the agent raised it or you did. A value or an approval that a procedure asks for keeps that procedure's wording: a ticket ID, a project path, a work-files approval, a lifecycle confirmation, the consultation's ticket question.

@@ -64,7 +64,7 @@ Before creating it: the applicable checks pass ("Tests, lint, build" in your wor
 After creating the MR/PR (via `{{ALIGNDEV}} code`):
 
 - Post the MR/PR link.
-- Watch the CI: report its result, and fix a failure.
+- Watch the CI in the background, as "A background run moves the report" in your working-session guide describes: report its result, and fix a failure.
 
 ## Protected directories
 
