@@ -17,7 +17,7 @@ Manual testing is what ends a code change: beyond the automated checks, the chan
 {{#codingAgent}}
 3. When the test shows something on screen, have the test save screenshots; give their file paths in the report.
 {{/codingAgent}}
-4. When the project uses a dev-server, complete the log review below.
+4. After using a dev-server, have its logs checked for errors or unusual behavior. Clean logs are required for the manual test to pass.
 {{#openclaw}}
 5. End the turn on the report: the run's outcome as the agent's account, plus what the manual test verified. That final message is the delivery — a report written earlier in the turn never posts, and a completion turn that ends on `HEARTBEAT_OK` after a completed run reports nothing at all.
 {{/openclaw}}
@@ -31,12 +31,6 @@ An error met while testing is yours to handle, even when it looks unrelated to t
 - Too large or too far from the ticket: leave the code alone; when a ticketing platform (Jira, Linear, …) is available to you, look for an existing ticket, and propose to create one when there is none.
 
 Either way, the report states the error and your decision.
-
-### Dev-server log review
-
-After using a dev-server, have a separate no-protocol agent run with the smallest available model (the default one when the child has no model list) inspect its logs: give it the log locations and ask for errors or unusual behavior. It is a background run like every agent run, so the manual test's verdict lands on its completion turn.
-
-Clean logs are required for the manual test to pass.
 
 ## Acceptance testing
 
@@ -70,7 +64,7 @@ Before creating it: the applicable checks pass ("Tests, lint, build" in your wor
 After creating the MR/PR (via `{{ALIGNDEV}} code`):
 
 - Post the MR/PR link.
-- Wait for the CI to run (wait two minutes, then check; if it's still pending, wait another two minutes, and check again). If it fails, report the failure, then fix it. If it succeeds, report the success to the user.
+- Watch the CI: report its result, and fix a failure.
 
 ## Protected directories
 

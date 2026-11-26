@@ -36,7 +36,7 @@ Retain `git rev-parse --short HEAD` after the refresh. Other sessions fast-forwa
 {{#codingAgent}}
 ## Step 2 — Record the revision
 
-Skip the refresh of the default branch: the tree stays as the user left it. A question is never a reason to switch branches, stash, commit, reset, or resolve a merge.
+The tree stays as the user left it: a question is never a reason to switch branches, stash, commit, reset, or resolve a merge.
 
 Retain `git rev-parse --short HEAD`, the revision the answer comes from. Report it when something in the answer looks inconsistent, and in the Step 5 record.
 {{/codingAgent}}
@@ -65,11 +65,7 @@ The message carries the complete question, however detailed, the selected branch
 Retain the printed session id. Later turns of the same topic resume that session, so the discussion accumulates in one place.
 {{/openclaw}}
 {{#codingAgent}}
-Retain the child session id. Follow the delegation guide instead of waiting for it at launch. Later turns of the same topic resume that session, so the discussion accumulates in one place.
-{{#pi}}
-
-For an asynchronous Pi launch, the session id comes from authoritative completion retrieval.
-{{/pi}}
+Retain the agent's session id from the run's result. Later turns of the same topic resume that session, so the discussion accumulates in one place.
 {{/codingAgent}}
 
 ## Step 4 — Relay

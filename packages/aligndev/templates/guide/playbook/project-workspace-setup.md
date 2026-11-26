@@ -9,18 +9,15 @@ The setup phase of a working session: decide the workplace and get it ready befo
 
 {{#openclaw}}
 ## Prerequisites — run both now, before Step 1
-{{/openclaw}}
-{{#codingAgent}}
-## Prerequisites — before Step 1
-{{/codingAgent}}
 
-{{#openclaw}}
 - `{{GUIDE}} code` (`exec`) — the delegation manual. Required every time you run this procedure, status requests included; do not skip it because no coding seems planned.
+- Run `{{ALIGNFIRST}} assistant-instructions` from the current workplace when known, otherwise deliberately from PROJECT_PATH — how to create a worktree or a branch. The command prints conventions even without an assistant guide.
 {{/openclaw}}
 {{#codingAgent}}
-- `{{GUIDE}} code` — the delegation manual. Required every time you run this procedure, status requests included; do not skip it because no coding seems planned.
+## Prerequisite — before Step 1
+
+Run `{{GUIDE}} code`, the delegation manual, when this session has not read it yet. A status request needs it too.
 {{/codingAgent}}
-- Run `{{ALIGNFIRST}} assistant-instructions` from the current workplace when known, otherwise deliberately from PROJECT_PATH — how to create a worktree or a branch. The command prints conventions even without an assistant guide.
 
 ## Step 1 — Requirements
 
@@ -48,31 +45,38 @@ Setting up a workspace takes a while, so tell the user it started before you sta
 
 The workplace is the first case that matches:
 
-1. **The user's request or instructions name the place** — a directory, a branch, a workspace: work there. For a directory, apply Step 4's existing-workplace preparation, post its banner and go to Step 5. For a branch, Step 4 finds or attaches that branch rather than choosing another ticket branch.
-2. **The session's branch carries TICKET_ID** — work in place. Skip the setup signal and branch selection: apply Step 4's existing-workplace preparation, post the `[WORKSPACE]` banner with the session's worktree and branch, then go to Step 5.
-3. **The session's worktree is a fresh harness worktree** — a linked worktree (its `git rev-parse --git-common-dir` is not its own `.git`) with a clean tree, on a branch that carries no ticket ID or on a detached HEAD, with no commit beyond the default branch: after `git fetch`, `git rev-list --count origin/<default>..HEAD` is `0`. OpenClaw (branch `openclaw/<name>`) and coding-agent harnesses create such worktrees. Work in place on the ticket branch, without asking. First run Step 4's two checks for TICKET_ID. A status request never creates a branch: with no ticket branch, it ends as sub-path 3 of Step 4 does. Otherwise:
+1. **The user's request or instructions name the place** — a directory, a branch or a workspace: work there. Step 4 finds or attaches a named branch rather than choosing another ticket branch.
+2. **The session's branch carries TICKET_ID** — work in place.
+3. **The session's worktree is a fresh harness worktree** — a clean linked worktree, on a detached HEAD or on a branch that carries no ticket ID, with no commit beyond the freshly fetched default branch. OpenClaw (branch `openclaw/<name>`) and coding-agent harnesses create such worktrees. Work in place on the ticket branch, without asking. First run Step 4's two checks for TICKET_ID:
    - The ticket branch has a registered workspace: use that workspace, as sub-path 1 of Step 4. The fresh worktree stays unused.
    - The ticket branch exists without a workspace: run `git switch <branch>` in the session's worktree.
-   - No ticket branch: run `git switch -c {TICKET_ID}/{1-3-words} origin/<default>` in the session's worktree.
-
-   After a switch, skip the setup signal: apply Step 4's existing-workplace preparation, post the `[WORKSPACE]` banner with the session's worktree and its new branch, then go to Step 5.
+   - No ticket branch: a status request ends as sub-path 3 of Step 4 does. Any other request runs `git switch -c {TICKET_ID}/{1-3-words} origin/<default>` in the session's worktree.
 4. **The session's branch is long-lived, or there is no session workplace** — the default branch, a name such as `main`, `master`, `develop`, `release` or `production`, or a conversation that started outside the project: open or create the ticket's workspace in Step 4, without asking.
-5. **Any other branch**, one carrying another ticket's ID included — end the turn on one message asking where to work. On the answer, "here" means the session's worktree as it is, handled as in case 2; a branch or a directory the user names falls under case 1.
+5. **Any other branch**, one carrying another ticket's ID included — end the turn on one message asking where to work. "Here" means the session's worktree as it is, as in case 2. A branch or a directory the user names falls under case 1.
 
-**Registration in place.** Before the `[WORKSPACE]` banner, run `{{ALIGNFIRST}} workspace setup --json` in the selected worktree, in the foreground. This adopts its exact path and branch with its branch-local manifest or defaults. The banner reports the state returned.
+When the work happens in place or in a directory the user named, skip Step 3 and Step 4's branch selection: apply Step 4's existing-workplace preparation, post the `[WORKSPACE]` banner, then go to Step 5.
 {{#app}}
 
 **An OpenClaw managed worktree.** A conversation created with a worktree runs in a checkout on branch `openclaw/<name>`, adopted by case 3. Switching it to the ticket branch takes it off `openclaw/<name>`, so OpenClaw retains it and never removes it, even when the conversation is archived or idle. From then on, the workspace rules apply to it like any other workspace, teardown and post-merge removal included. When OpenClaw owns deletion, run `{{ALIGNFIRST}} workspace teardown` before archiving it. Use `{{ALIGNFIRST}} workspace remove` only when the user has transferred deletion ownership.
 {{/app}}
+{{/conversation}}
 
+{{#app}}
 ## Step 3 — Post the setup signal
 
 Post the signal only when Step 2 opens or creates a workspace.
 
 Setting up a workspace takes a while, so tell the user it started before you start it. One short line, in their language, and nothing else — the user already knows the project, ticket and task, so restating them here just repeats what they have seen.
-{{/conversation}}
+{{/app}}
+{{#codingAgent}}
+## Step 3 — Announce the setup
 
+When Step 2 opens or creates a workspace, say so in one line before starting.
+{{/codingAgent}}
+
+{{#openclaw}}
 Vary the wording: "Je prépare le workspace", "Setting up the workspace", "Spinning up the environment", "Getting the worktree ready", "Preparing the branch". No questions, no waiting.
+{{/openclaw}}
 
 {{#thread}}
 On some surfaces this line never posts (mid-turn text — see the delivery note at the top). Write it anyway, and count on the end-of-turn message, not on it, for anything the user must see.
@@ -81,9 +85,9 @@ On some surfaces this line never posts (mid-turn text — see the delivery note 
 {{#thread}}
 When the task changed with the message that woke you — a ticket that just arrived in a conversation thread, a scope the user just corrected — add a one-line restatement of what you're now working on. That line is the thread's durable record of the new task, the way the starter was for the original one.
 {{/thread}}
-{{#conversation}}
+{{#app}}
 When the task changed with the user's latest message — a ticket that just arrived, a scope the user just corrected — add a one-line restatement of what you're now working on. That line is the conversation's record of the new task.
-{{/conversation}}
+{{/app}}
 
 {{#thread}}
 ## Step 3 — Name the thread (Discord-only)
@@ -108,9 +112,9 @@ That single call is the whole exception. The post right after it, and every one 
 When the user named a directory, or a recorded workplace's branch already carries TICKET_ID, retain that workplace: apply the existing-workplace preparation below, post its banner and go to Step 5. When the user named a branch, find or attach it below rather than choosing another ticket branch.
 {{/thread}}
 
-Run `{{ALIGNFIRST}} workspace --guide` from PROJECT_PATH. Use `{{ALIGNFIRST}} workspace` for configured and manifest-free projects. Never bypass it with raw `git worktree add`/`remove`/`prune` or directory deletion. An external owner retains Git creation and deletion; adopt its selected worktree and run teardown before it deletes the worktree.
+Run `{{ALIGNFIRST}} workspace --guide` from PROJECT_PATH.
 
-**Existing-workplace preparation:** run `{{ALIGNFIRST}} workspace setup --path <exact-worktree-root> --json` yourself before reporting readiness or delegating. Setup preserves the selected path and branch. Without a path it discovers the current root, including from nested cwd. Conflicts remain untouched. Repair the reported problem and retry setup; relay failures and delete nothing. Work-files preparation requires the separate authorization in `{{GUIDE}} work-files-setup`. Before setup, read selected runtime placement from `{{ALIGNFIRST}} config --json`. Only project-local runtime requires ignored, untracked `.local-wt/`; with approval, use local Git exclusions when tracked rules must stay unchanged. Companion runtime creates no checkout runtime directory or link.
+**Existing-workplace preparation:** run `{{ALIGNFIRST}} workspace setup --path <exact-worktree-root> --json` yourself before reporting readiness or delegating. Repair a reported problem and retry; relay a failure and delete nothing. Work-files preparation requires the separate authorization in `{{GUIDE}} work-files-setup`. When setup requires `.local-wt/` to be ignored and the tracked ignore rules must stay unchanged, add a local Git exclusion, with approval.
 
 First, select the base ref from the project or user instructions, otherwise use the base branch's configured upstream. Use the local base ref when the repository has no remote; ask when the choice is unclear. Fetch its remote from PROJECT_PATH with `git fetch --prune <remote>` when applicable, and retain the selected base ref for creation and synchronization. Then check what already exists for the explicitly selected branch, or otherwise for {TICKET_ID} — two checks, both required:
 
@@ -125,9 +129,9 @@ Whenever a branch exists, you work from its workspace — a status request inclu
 2. **Branch exists (local or remote), no workspace** → set up a workspace on the existing branch (don't create a new branch).
 3. **No branch** → for a status request, end the turn on a message reporting that no workspace or code work exists, with any request, spec, and summary files listed by the ticket preflight; create nothing. Any other request is new-work intent: name a new branch `{TICKET_ID}/{1-3-words}`, deriving the short description from the request. Start it from the selected base ref. Creating from that ref requires no checkout or clean main worktree.
 
-Run preparation yourself before coding delegation: `{{ALIGNFIRST}} workspace setup <existing-branch> --json` for sub-path 2, or `{{ALIGNFIRST}} workspace setup -c <new-branch> --from <explicit-base-ref> --json` for sub-path 3. Preserve a user-selected destination with `--path <absolute-path>`. Run in the foreground and wait for the returned readiness; setup does not start dev services. Use `{{ALIGNFIRST}} dev` separately when the task needs declared services.
+Run preparation yourself before coding delegation: `{{ALIGNFIRST}} workspace setup <existing-branch> --json` for sub-path 2, or `{{ALIGNFIRST}} workspace setup -c <new-branch> --from <explicit-base-ref> --json` for sub-path 3. Preserve a user-selected destination with `--path <absolute-path>`.
 
-The command refuses an occupied path, a dangling symlink included, a branch checked out elsewhere, an ambiguous remote branch, and missing or project-tracked plans. Relay the refusal instead of working around it: reuse the path it reports for an occupied branch, ask the user about an ambiguous remote, run `{{GUIDE}} work-files-setup` for plans and retry; never force a second checkout or invent another path. It returns once the worktree and its work files are ready. Report its warnings, such as a tracked `.local` that stays branch-local, and on a late failure relay its recovery instructions and delete nothing.
+Relay the command's refusal instead of working around it: reuse the path it reports for a branch checked out elsewhere, ask the user about an ambiguous remote branch, run `{{GUIDE}} work-files-setup` for missing or project-tracked plans and retry. Never force a second checkout or invent another path. Report its warnings. On a late failure, relay its recovery instructions and delete nothing.
 
 {{#thread}}
 {{#slack}}

@@ -76,7 +76,7 @@ Resolve PROJECT and PROJECT_PATH from the `{{ALIGNDEV}} project list --json` res
 Never reconstruct PROJECT_PATH from PROJECT.
 {{/openclaw}}
 {{#codingAgent}}
-Each task belongs to one project: by default, the repository where this session started. A session can carry tasks on several projects. Keep these values distinct for each task:
+Each task belongs to one project, and a session can carry tasks on several. Keep these values distinct for each task:
 
 - **PROJECT** — the main-worktree directory name shown to the user.
 - **PROJECT_PATH** — the absolute main-worktree path. It anchors main-worktree Git commands and workspace tooling.
@@ -84,7 +84,7 @@ Each task belongs to one project: by default, the repository where this session 
 
 Step 1 of the working session below resolves all three.
 
-Your session's working directory never moves. Each guide names the directory of its commands: PROJECT_PATH, the workplace or a selected worktree. When that directory is not the session's, set it for that command alone: `(cd <dir> && <command>)`, or your shell tool's working-directory option. When your harness refuses a command or a write there, stop and report the operation and its path.
+Your session's working directory never moves. When a guide names another directory for a command, set it for that command alone: `(cd <dir> && <command>)`, or your shell tool's working-directory option. Report a command or a write your harness refuses there.
 {{/codingAgent}}
 
 ## Tickets and AlignFirst protocols
@@ -139,7 +139,7 @@ For a `target` parameter, keep the whole `chat_id`, prefix included (e.g. `"chan
 {{/thread}}
 {{/openclaw}}
 {{#codingAgent}}
-Delegation always goes through `{{ALIGNDEV}} code` — never your own subagents, `subagent` tool or tasks, and never an AlignFirst protocol skill run by yourself. A Pi child can use its own `subagent` tool for plan/review assignments; that is a separate role. Before your first `{{ALIGNDEV}} code` run of a session, run `{{GUIDE}} code` and follow it — it is the delegation manual.
+Delegation always goes through `{{ALIGNDEV}} code` — never your own subagents, `subagent` tool or tasks, and never an AlignFirst protocol skill run by yourself. Before your first `{{ALIGNDEV}} code` run of a session, run `{{GUIDE}} code` and follow it — it is the delegation manual.
 {{/codingAgent}}
 
 ## Ephemeral artifacts
@@ -155,8 +155,7 @@ Delegation always goes through `{{ALIGNDEV}} code` — never your own subagents,
 - `/tmp/` is fine only for files you don't care about losing.
 {{/openclaw}}
 {{#codingAgent}}
-- Put screenshots, downloads, OCR/PDF scratch, temporary conversions, and other non-project artifacts in the project's gitignored `.local/` directory when it exists.
-- Otherwise, use a temporary directory.
+Put screenshots, downloads, OCR/PDF scratch, temporary conversions, and other non-project artifacts in the project's gitignored `.local/` directory when it exists, otherwise in a temporary directory.
 {{/codingAgent}}
 
 Keep scratch artifacts out of tracked git directories.
@@ -164,6 +163,5 @@ Keep scratch artifacts out of tracked git directories.
 ## Vocabulary
 
 - **the agent** — the coding agent you launch with `{{ALIGNDEV}} code`. Call it _the agent_ with the user too.
-- **ticket** — an issue or card.
 - **project workspace** — a branch in its own worktree, with an isolated dev server when the project runs one. The user might refer to it as _workspace_, _work env_, _local environment_, _worktree_, _branch_.
 - **dev server** (or *your server*) — the local instance of the project running in the worktree, with hot reload, etc. The user might refer to it as _server_, _local server_, or even the _env URL_.
