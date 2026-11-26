@@ -17,7 +17,7 @@ Changing the model never changes the agent runtime. Keep
 `models.providers.<provider>.agentRuntime.id` set to `openclaw`; the assistant requires OpenClaw's
 `exec` and `process` tools.
 
-The entire `~/.alignfirst/` tree, including `aligndev.settings.json`, stays service-owned and writable. Direct AlignFirst/AlignDev settings edits need no unlock. Re-seeding replaces those settings from the admin repository, so reconcile intended service-side changes there first. Existing locked hosts use [Writable AlignFirst home](../installations/06-security-hardening.md#writable-alignfirst-home).
+The entire `~/.alignfirst/` tree, including `aligndev.settings.json`, stays service-owned and writable. Direct AlignFirst/AlignDev settings edits need no unlock. Re-seeding replaces those settings from the admin repository, so reconcile intended service-side changes there first. The seed does not manage the optional global assistant instructions, [`ASSISTANTS.md`](../installations/06-security-hardening.md#writable-alignfirst-home). Existing locked hosts use [Writable AlignFirst home](../installations/06-security-hardening.md#writable-alignfirst-home).
 
 `openclaw.json` is immutable once [06](../installations/06-security-hardening.md) has run. The root-owned maintenance wrapper contains the assistant, refreshes the seed snapshot, unlocks only the requested paths, runs the seed, and restores the hardening policy through an `EXIT` trap.
 

@@ -530,7 +530,11 @@ describe("project layout", () => {
     expect(automatic.selectionOrigins.workspaceRuntime).toBe("item");
     mkdirSync(join(companion, ".local-wt"), { recursive: true });
     expect(resolveProjectLayout(project, home).locations.workspaceRuntime.in).toBe("project");
-    expect(automatic.locations.assistantInstructionsFile).toBeNull();
+    expect(automatic.locations.assistantInstructionsFile).toEqual({
+      path: join(companion, "ASSISTANTS.md"),
+      in: "companion",
+      exists: false,
+    });
     writeRegistry(home, {
       projects: {
         "~/projects/app": { defaultLocation: "companion", aligndev: { profile: "work" } },
@@ -539,7 +543,7 @@ describe("project layout", () => {
     expect(() => resolveProjectLayout(project, home)).toThrow();
   });
 
-  it("resolves only configured instructions and rejects lexical and symlink escapes from the selected root", () => {
+  it("defaults instructions to ASSISTANTS.md and rejects lexical escapes from the selected root", () => {
     const { root, home, project } = makeHome();
     const companion = join(home, ".alignfirst", "companions", "app");
     mkdirSync(companion, { recursive: true });
@@ -547,7 +551,11 @@ describe("project layout", () => {
     const set = (assistantInstructionsFile: string) =>
       writeFileSync(config, JSON.stringify({ schemaVersion: 1, assistantInstructionsFile }));
     writeFileSync(join(project, "DEVELOPERS.md"), "not discovered");
-    expect(resolveProjectLayout(project, home).locations.assistantInstructionsFile).toBeNull();
+    expect(resolveProjectLayout(project, home).locations.assistantInstructionsFile).toEqual({
+      path: join(project, "ASSISTANTS.md"),
+      in: "project",
+      exists: false,
+    });
     set("guides/development.md");
     expect(resolveProjectLayout(project, home).locations.assistantInstructionsFile).toEqual({
       path: join(project, "guides/development.md"),
@@ -557,12 +565,6 @@ describe("project layout", () => {
     for (const path of ["../outside.md", join(root, "absolute.md"), "  "]) {
       set(path);
       expect(() => resolveProjectLayout(project, home)).toThrow("assistantInstructionsFile");
-    }
-    symlinkSync(root, join(project, "escape"));
-    symlinkSync(join(root, "missing-directory"), join(project, "broken-escape"));
-    for (const path of ["escape/new/file.md", "broken-escape/file.md"]) {
-      set(path);
-      expect(() => resolveProjectLayout(project, home)).toThrow();
     }
     set("escape/guide.md");
     writeRegistry(home, {

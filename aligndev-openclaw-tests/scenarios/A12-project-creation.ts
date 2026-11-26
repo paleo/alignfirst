@@ -70,7 +70,7 @@ export default async function projectCreation(ctx: ScenarioContext): Promise<voi
       return (
         "Bootstrap complete in the main worktree. Created: package.json, pnpm-lock.yaml, " +
         "app.mjs, home-page.mjs, comparables.mjs, export-handler.mjs, app.test.mjs, " +
-        "README.md, DEVELOPERS.md, docs/, scripts/workspace/ (workspace tooling), local.env.example, " +
+        "README.md, ASSISTANTS.md, docs/, scripts/workspace/ (workspace tooling), local.env.example, " +
         ".local/, .gitignore and a merged alignfirst.json declaring the frontend and api ports. " +
         "This minimal scaffold is deliberate and " +
         "complete — nothing else is required before the initial commit on main."

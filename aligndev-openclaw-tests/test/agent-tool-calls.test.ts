@@ -16,7 +16,7 @@ test("instruction observation follows the command and selected worktree, not a f
     assert.equal(readsAssistantInstructions({ ...call, input }, "/projects/nimbus"), true);
   }
   for (const input of [
-    { command: "cat DEVELOPERS.md", workdir: "/projects/nimbus" },
+    { command: "cat ASSISTANTS.md", workdir: "/projects/nimbus" },
     { command: "alignfirst assistant-instructions", workdir: "/projects/nimbus-other" },
   ]) {
     assert.equal(readsAssistantInstructions({ ...call, input }, "/projects/nimbus"), false);

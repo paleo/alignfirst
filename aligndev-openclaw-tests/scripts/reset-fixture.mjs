@@ -108,7 +108,7 @@ async function resetFixture({ name, parent }) {
   runGit(dst, ["init", "-q", "--bare", "-b", BASE_BRANCH, origin], gitEnv);
   runGit(dst, ["remote", "add", "origin", origin], gitEnv);
   runGit(dst, ["push", "-q", "-u", "origin", BASE_BRANCH], gitEnv);
-  // A `production` branch too, so the remote matches DEVELOPERS.md's convention
+  // A `production` branch too, so the remote matches ASSISTANTS.md's convention
   // (base `main`, production `production`) and `git branch -a` reads realistically.
   runGit(dst, ["push", "-q", "origin", `${BASE_BRANCH}:refs/heads/production`], gitEnv);
   runGit(dst, ["remote", "set-head", "origin", BASE_BRANCH], gitEnv);
@@ -133,11 +133,7 @@ function patchFixture(dst, name) {
   // read distinctly — the app itself stays the "Comparables" product.
   const capitalized = name.charAt(0).toUpperCase() + name.slice(1);
   patchHeading(`${dst}/README.md`, /^# Comparables$/m, `# ${capitalized}`);
-  patchHeading(
-    `${dst}/DEVELOPERS.md`,
-    /^# Developer Reference$/m,
-    `# ${capitalized} Developer Reference`,
-  );
+  patchHeading(`${dst}/ASSISTANTS.md`, /^# Assistant Guide$/m, `# ${capitalized} Assistant Guide`);
 
   patchPortRange(dst, FIXTURE_PORT_RANGES[name]);
 }

@@ -88,7 +88,6 @@ for (const mode of ["shared", "missing", "tracked"] as const) {
       const config = {
         schemaVersion: 1,
         conventions: { ticketIdPattern: "^ABC-\\d+$" },
-        assistantInstructionsFile: "DEVELOPERS.md",
         plans: { autoArchive: true },
         workspace: { finalize: [{ name: "Must be removed", run: ["false"] }] },
         devServer: { maxConcurrentDevServers: 2 },
@@ -117,7 +116,7 @@ for (const mode of ["shared", "missing", "tracked"] as const) {
       );
       assert(
         cli(alignfirst, repo, "assistant-instructions").includes(
-          readFileSync(join(repo, "DEVELOPERS.md"), "utf8"),
+          readFileSync(join(repo, "ASSISTANTS.md"), "utf8"),
         ),
       );
       assert.equal(

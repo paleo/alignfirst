@@ -2,10 +2,10 @@
 name: alignfirst
 description: "Collaborative problem-solving protocols. Read when the user names AlignFirst or a protocol alias: alspec, alplan, AAD, alcatchup, alcatchupaad, alcatchupspec, almerge, alreview, or aldescription."
 license: CC0 1.0
-compatibility: Requires Node.js. The merge and review protocols also require Git.
+compatibility: Requires Node.js or Bun. The merge and review protocols also require Git.
 metadata:
   author: Paleo
-  version: "4.0.2"
+  version: "4.0.3"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -16,3 +16,5 @@ Protocol aliases: `alspec` → `spec`, `alplan` → `plan`, `al` or `AAD` → `a
 When no protocol is specified, run `npx -y alignfirst guide` to choose one. For workflow explanations, run `npx -y alignfirst guide overview`.
 
 To install, configure or upgrade AlignFirst tooling in a project, run `npx -y alignfirst setup` and follow it.
+
+With Bun instead of Node.js, replace `npx -y` with `bunx --bun`.

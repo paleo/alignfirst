@@ -28,7 +28,7 @@ Aim for 40 to 80 lines per document. Split a topic that is too broad.
 
 An entry point is read every session; `docs/` is read on demand. A procedure earns a document when it is followed occasionally and has several steps: the reader pays for it only when the task comes up, and there is room to write it properly.
 
-Left in `AGENTS.md` or `DEVELOPERS.md`, the same procedure gets compressed to a command or two, which is the useless half. The agent learns that a changeset exists, but not which packages to declare, which bump to pick, or what the CI rejects. The procedure also tends to reappear in `README.md` in a third wording, and the three copies drift.
+Left in `AGENTS.md` or `ASSISTANTS.md`, the same procedure gets compressed to a command or two, which is the useless half. The agent learns that a changeset exists, but not which packages to declare, which bump to pick, or what the CI rejects. The procedure also tends to reappear in `README.md` in a third wording, and the three copies drift.
 
 Move the whole procedure into `docs/` and leave nothing behind: no summary line, no pointer. Docmap already indexes the document, and its `read_when` entries fire when the task arises.
 

@@ -145,6 +145,10 @@ Codex CLI is not required to run Pi, including Pi's ChatGPT subscription route. 
 
 For an OpenClaw Pi deployment, installation and native authentication target the service account and its effective service environment instead; follow the `aligndev-openclaw-setup` skill.
 
+### Global assistant instructions
+
+`~/.alignfirst/ASSISTANTS.md` is optional. It holds the developer's instructions to the assistant for every project, such as which profile to use for each kind of task. See the [`aligndev` README](https://github.com/paleo/alignfirst/tree/main/packages/aligndev#global-assistant-instructions).
+
 ## 3. Install the skill globally
 
 The `aligndev` skill goes in the developer's global agent configuration. Use the installation command of `{{CMD}} setup guide skills`, which includes it; to install the playbook alone, keep only `--skill aligndev`. Restart the agent after installation.
@@ -182,7 +186,7 @@ Install current stable packages and inspect their declared Pi peer and Node runt
 
 ## 5. Start the assistant
 
-Start the assistant's harness in the project's repository and invoke `/aligndev` in Claude Code or Antigravity, `$aligndev` in Codex, or `/skill:aligndev` in Pi. The skill runs `npx -y aligndev guide`; no global AlignDev CLI installation is required. Confirm skill discovery and the requested tools without changing trust or settings merely to test them.
+Start the assistant's harness in the project's repository and invoke `/aligndev` in Claude Code or Antigravity, `$aligndev` in Codex, or `/skill:aligndev` in Pi. The skill runs `npx -y aligndev guide`, or `bunx --bun aligndev guide` with Bun; no global AlignDev CLI installation is required. Confirm skill discovery and the requested tools without changing trust or settings merely to test them.
 
 The session can start elsewhere, in a Git repository or not. The user's request or the starting directory's instructions then give the project's path. The assistant runs its commands there and writes work files, Git state and workspaces, never the codebase. The harness must allow it, for instance through `--add-dir <project>` in Claude Code or Codex.
 

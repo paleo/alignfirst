@@ -23,7 +23,7 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import { normalizeAssistantInstructionsFile } from "./assistant-instructions-setting.js";
+import { normalizeAssistantInstructionsItem } from "./assistant-instructions-setting.js";
 import { CliError } from "./cli-error.js";
 import type { CommandContext } from "./context.js";
 import { errorMessage } from "./errors.js";
@@ -55,6 +55,7 @@ export const ITEM_NAMES = [
 // The directory holding the companions and their registry. A symlink there moves them elsewhere.
 const COMPANIONS_ROOT = "~/.alignfirst/companions";
 const REGISTRY_FILE = "registry.json";
+const DEFAULT_INSTRUCTIONS_FILE = "ASSISTANTS.md";
 
 const itemSetting = literal("companion", "project", "auto");
 const registryProjectShape = object<RegistryProject>(
@@ -96,6 +97,8 @@ export type ItemName = (typeof ITEM_NAMES)[number];
 export interface ProjectLayout {
   aligndev: AligndevProjectSettings | null;
   companion: CompanionLayout | null;
+  /** The project root the locations resolve from: the worktree top level, or the cwd outside Git. */
+  root: string;
   locations: ProjectLocations;
   selectionOrigins: Record<ItemName, SelectionOrigin>;
   projectConfig?: ResolvedProjectConfig;
@@ -103,12 +106,7 @@ export interface ProjectLayout {
 }
 
 export type SelectionOrigin = "item" | "defaultLocation" | "builtin";
-export type ProjectLocations = Record<
-  Exclude<ItemName, "assistantInstructionsFile">,
-  ItemLocation
-> & {
-  assistantInstructionsFile: ItemLocation | null;
-};
+export type ProjectLocations = Record<ItemName, ItemLocation>;
 
 export interface AligndevProjectSettings {
   profile: string;
@@ -237,6 +235,7 @@ function layoutForEntry(
   return {
     aligndev: entry?.project.aligndev ?? null,
     companion,
+    root,
     projectConfig,
     selectionOrigins: selectionOriginsFor(entry?.project),
     storage,
@@ -298,7 +297,7 @@ function registryProjectValue(value: unknown, path: string, warningPath = path):
 
 function registryItemsValue(value: unknown, path: string, warningPath = path): RegistryItems {
   return registryItemsShape(
-    normalizeAssistantInstructionsFile(value, `companion registry ${warningPath}`),
+    normalizeAssistantInstructionsItem(value, `companion registry ${warningPath}`),
     path,
     warningPath,
   );
@@ -492,9 +491,9 @@ function locateConfigFamily(cwd: string, companion: CompanionLayout | null): Ite
 function locateInstructions(
   root: string,
   companion: CompanionLayout | null,
-  name: string | undefined,
-): ItemLocation | null {
-  if (name === undefined) return null;
+  configuredName: string | undefined,
+): ItemLocation {
+  const name = configuredName ?? DEFAULT_INSTRUCTIONS_FILE;
   if (name.trim().length === 0 || name.includes("\u0000") || isAbsolute(name))
     throw new CliError("assistantInstructionsFile must be a nonblank relative file path.");
   const setting = companion?.items.assistantInstructionsFile;
@@ -517,19 +516,38 @@ function instructionCopy(
   placement: "project" | "companion",
 ): ItemLocation {
   const path = resolve(root, name);
-  if (
-    !isSameOrInside(path, resolve(root)) ||
-    !isSameOrInside(canonicalInstructionPath(path), canonicalPath(root))
-  )
+  if (!isSameOrInside(path, resolve(root)))
     throw new CliError("assistantInstructionsFile must remain within its selected root.");
   return { path, in: placement, exists: pathExists(path) };
+}
+
+/**
+ * Refuses an assistant guide whose symbolic links lead out of its selected root. A missing guide
+ * is checked through its deepest reachable folder, so a broken link leaves it missing.
+ */
+export function assertInstructionsInRoot(layout: ProjectLayout): void {
+  const { path, in: placement, exists } = layout.locations.assistantInstructionsFile;
+  const root = placement === "companion" && layout.companion ? layout.companion.dir : layout.root;
+  const checked = exists ? path : deepestReachablePath(path);
+  if (isSameOrInside(canonicalInstructionPath(checked), canonicalPath(root))) return;
+  throw new CliError(
+    `The assistant guide ${path} leads outside ${root} through a symbolic link. ` +
+      `It must stay within ${root}.`,
+  );
+}
+
+function deepestReachablePath(path: string): string {
+  const parent = dirname(path);
+  return parent === path || existsSync(path) ? path : deepestReachablePath(parent);
 }
 
 function canonicalInstructionPath(path: string, links = new Set<string>()): string {
   const entry = lstatSync(path, { throwIfNoEntry: false });
   if (entry?.isSymbolicLink()) {
     if (links.has(path))
-      throw new CliError("assistantInstructionsFile contains a symbolic link cycle.");
+      throw new CliError(
+        `The path of the assistant guide loops through the symbolic link ${path}.`,
+      );
     links.add(path);
     return canonicalInstructionPath(resolve(dirname(path), readlinkSync(path)), links);
   }
@@ -556,11 +574,10 @@ function pathExists(path: string): boolean {
 /** One line: `<name>: <path> (<in>)`, with `, missing` when absent and the setting after the name. */
 export function renderItemLocation(
   name: ItemName,
-  location: ItemLocation | null,
+  location: ItemLocation,
   setting?: ItemSetting | AligndevSetting,
 ): string {
   const label = setting === undefined ? name : `${name} (${setting})`;
-  if (location === null) return `${label}: not configured`;
   return `${label}: ${location.path} (${location.in}${location.exists ? "" : ", missing"})`;
 }
 

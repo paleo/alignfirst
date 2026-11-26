@@ -468,22 +468,16 @@ async function profileOnlyChecks(f) {
       const report = await reportAt(f, cwd);
       assert.deepEqual(report.aligndev, { profile: "a" });
       assert.equal(report.companion, null);
-      assert.equal(report.locations.assistantInstructionsFile, null);
+      assert.equal(report.locations.assistantInstructionsFile.exists, false);
       assert.deepEqual(report.locations.workspaceRuntime, {
         in: "project",
         path: join(cwd, ".local-wt"),
         exists: false,
       });
       for (const [item, location] of Object.entries(report.locations)) {
-        if (item === "assistantInstructionsFile" || item === "workspaceRuntime") continue;
+        if (item === "workspaceRuntime") continue;
         assert.equal(location.in, "project");
-        assert.equal(
-          location.path,
-          join(
-            cwd,
-            item === "_aligndev" ? ".plans" : item === "alignfirst" ? "alignfirst.json" : item,
-          ),
-        );
+        assert.equal(location.path, join(cwd, itemFileName(item)));
       }
       const text = await command(f, cwd, "alignfirst", ["config"]);
       assert.match(text.stdout, /AlignDev profile: a/);
@@ -512,6 +506,13 @@ async function profileOnlyChecks(f) {
   console.log(
     "PASS: profile-only placement, linked-worktree selection, explicit override, help/guide",
   );
+}
+
+function itemFileName(item) {
+  if (item === "_aligndev") return ".plans";
+  if (item === "alignfirst") return "alignfirst.json";
+  if (item === "assistantInstructionsFile") return "ASSISTANTS.md";
+  return item;
 }
 
 async function readOnly(f, action) {
@@ -619,22 +620,16 @@ async function companionChecks(f) {
     assert.deepEqual(report.aligndev, { profile: "b" });
     assert.equal(report.companion.dir, f.companion);
     assert.equal(report.companion.exists, false);
-    assert.equal(report.locations.assistantInstructionsFile, null);
+    assert.equal(report.locations.assistantInstructionsFile.exists, false);
     assert.deepEqual(report.locations.workspaceRuntime, {
       in: "project",
       path: join(f.companionProject, ".local-wt"),
       exists: false,
     });
     for (const [item, location] of Object.entries(report.locations)) {
-      if (item === "assistantInstructionsFile" || item === "workspaceRuntime") continue;
+      if (item === "workspaceRuntime") continue;
       assert.equal(location.in, "companion");
-      assert.equal(
-        location.path,
-        join(
-          f.companion,
-          item === "_aligndev" ? ".plans" : item === "alignfirst" ? "alignfirst.json" : item,
-        ),
-      );
+      assert.equal(location.path, join(f.companion, itemFileName(item)));
     }
     await selectionHelp(f, f.companionProject, "b");
   });

@@ -301,11 +301,12 @@ test("reset recovers externally deleted running workspaces and retains failed cl
         command(repo, process.execPath, [alignfirst, "config", "--json"], env),
       );
       assert.equal(report.config.conventions.ticketIdPattern, "^ABC-\\d+$");
-      assert.equal(report.config.assistantInstructionsFile, "DEVELOPERS.md");
+      assert.equal(report.locations.assistantInstructionsFile.path, join(repo, "ASSISTANTS.md"));
+      assert.equal(report.locations.assistantInstructionsFile.exists, true);
       assert.equal(report.workspace.hasDevServer, true);
       assert(
         command(repo, process.execPath, [alignfirst, "assistant-instructions"], env).includes(
-          readFileSync(join(repo, "DEVELOPERS.md"), "utf8"),
+          readFileSync(join(repo, "ASSISTANTS.md"), "utf8"),
         ),
       );
     }

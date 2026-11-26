@@ -87,7 +87,7 @@ Any other key is a work conversation. Run `git rev-parse --path-format=absolute 
 
 - PROJECT_PATH is the main worktree of the session's working directory: the parent of `git rev-parse --path-format=absolute --git-common-dir`. PROJECT is its directory name.
 - The workplace is the session's worktree (`git rev-parse --show-toplevel`) and its branch (`git branch --show-current`).
-- Run `{{ALIGNFIRST}} config --json` and `{{ALIGNFIRST}} assistant-instructions` from the workplace. Retain the nullable `locations.assistantInstructionsFile` from the report to identify the configured source. The default branch is `config.conventions.git.defaultBranch` in the report, else the default branch identified by the project's instructions or configured remote. Ask when it is unclear. The report also names the project's companion directory, where its AlignFirst files may live.
+- Run `{{ALIGNFIRST}} config --json` and `{{ALIGNFIRST}} assistant-instructions` from the workplace. Retain `locations.assistantInstructionsFile` from the report: the project's assistant-instructions file, present or not. The default branch is `config.conventions.git.defaultBranch` in the report, else the default branch identified by the project's instructions or configured remote. Ask when it is unclear. The report also names the project's companion directory, where its AlignFirst files may live.
 {{/conversation}}
 {{#conversation}}
 
@@ -179,7 +179,7 @@ Resolve what the request leaves open:
 - Consultations require only PROJECT and PROJECT_PATH to start. Follow `{{GUIDE}} consultation` before ticket preflight, request capture, or workspace setup. A supplied ticket is context; the runbook decides whether to record the discussion.
 
 {{#openclaw}}
-Once a single-project request's PROJECT_PATH is known, run `{{ALIGNDEV}} project status <PROJECT_PATH>`. The report names its companion directory and nullable `locations.assistantInstructionsFile`. Run `{{ALIGNFIRST}} assistant-instructions` from the selected workplace, or deliberately from PROJECT_PATH when no workplace is selected.
+Once a single-project request's PROJECT_PATH is known, run `{{ALIGNDEV}} project status <PROJECT_PATH>`. The report names its companion directory and `locations.assistantInstructionsFile`. Run `{{ALIGNFIRST}} assistant-instructions` from the selected workplace, or deliberately from PROJECT_PATH when no workplace is selected.
 {{/openclaw}}
 
 For changes, protocol requests, and ticket status requests, complete `{{GUIDE}} work-files-setup` as soon as PROJECT_PATH is known, before known-ticket `sync`/`ticket`, side-ticket reservation, or request capture.

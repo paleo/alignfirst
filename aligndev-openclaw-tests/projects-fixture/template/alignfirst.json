@@ -1,6 +1,5 @@
 {
   "schemaVersion": 1,
-  "assistantInstructionsFile": "DEVELOPERS.md",
   "conventions": { "ticketIdPattern": "^ABC-\\d+$" },
   "workspace": {
     "finalize": [

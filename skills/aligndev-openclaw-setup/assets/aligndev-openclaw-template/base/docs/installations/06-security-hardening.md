@@ -62,6 +62,8 @@ Accepted gap: the heartbeat checklist is the `heartbeat:main` cron job's scratch
 
 The entire `~/.alignfirst/` tree stays service-owned and writable, including `aligndev.settings.json`, companions and their registry. The assistant can create, edit, atomically replace and remove entries without a maintenance window. Settings can change delegated commands and account routing; they are not a protected authorization boundary.
 
+`~/.alignfirst/ASSISTANTS.md` is optional. `aligndev guide` prints it on every activation as the global assistant instructions. It has the trust level of the settings: any process of the service account can rewrite it. A policy that needs protection belongs in the workspace `AGENTS.md`.
+
 For existing hosts, install the current maintenance wrapper first so later windows cannot re-lock this tree. While the account is contained, remove legacy immutable/append-only flags and restore owner access. These commands preserve content and do not follow symlinks:
 
 ```sh
@@ -72,6 +74,15 @@ sudo find /home/{{SERVICE_USER}}/.alignfirst -type f -exec chmod u+rw {} +
 ```
 
 Keep native-agent stores and protected resources outside this tree. OpenClaw configuration, skills and global packages retain their protections.
+
+### Optional: lock the AlignFirst home
+
+A fully locked deployment can make `~/.alignfirst/` read-only for the service account, except `companions/`. At run time, the CLIs write only inside `companions/`, under two conditions:
+
+- `machine-id` exists before the lock. The first `aligndev code` run creates it.
+- `companions/` exists before the lock. The seed creates it.
+
+The settings and `ASSISTANTS.md` then change only in a maintenance window. The maintenance wrapper does not manage this lock: unlock the directory around a re-seed that changes the settings, then lock it again. A release that adds a file at the root of `~/.alignfirst/` fails until the next window.
 
 ## Skills and instructions
 

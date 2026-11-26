@@ -24,12 +24,7 @@ export interface ProjectReport {
 }
 
 export type SelectionOrigin = "item" | "defaultLocation" | "builtin";
-export type ProjectLocations = Record<
-  Exclude<ItemName, "assistantInstructionsFile">,
-  ItemLocation
-> & {
-  assistantInstructionsFile: ItemLocation | null;
-};
+export type ProjectLocations = Record<ItemName, ItemLocation>;
 
 export interface AligndevProjectSettings {
   profile: string;
@@ -48,7 +43,6 @@ export interface WorkspaceConfigReport {
 
 export interface ProjectConfigView {
   conventions?: { ticketIdPattern?: string };
-  assistantInstructionsFile?: string;
   plans?: { repositoryFolder?: string };
 }
 
@@ -178,6 +172,7 @@ function isOutdatedReport(value: unknown): boolean {
         "alignfirst" in value.locations &&
         ".alignfirst-instructions" in value.locations &&
         "assistantInstructionsFile" in value.locations &&
+        value.locations.assistantInstructionsFile !== null &&
         "workspaceRuntime" in value.locations &&
         isRecord(value.workspace) &&
         "registryDir" in value.workspace &&
@@ -261,15 +256,11 @@ function parseConfig(value: unknown, path: string): ProjectConfigView | null {
     throw invalidReport(path);
   if (value.conventions !== undefined && !isRecord(value.conventions)) throw invalidReport(path);
   const ticketIdPattern = value.conventions?.ticketIdPattern;
-  const assistantInstructionsFile = value.assistantInstructionsFile;
-  if (assistantInstructionsFile !== undefined && typeof assistantInstructionsFile !== "string")
-    throw invalidReport(path);
   const plans = parsePlans(value.plans, path);
   if (ticketIdPattern !== undefined && typeof ticketIdPattern !== "string")
     throw invalidReport(path);
   return {
     ...(ticketIdPattern === undefined ? {} : { conventions: { ticketIdPattern } }),
-    ...(assistantInstructionsFile === undefined ? {} : { assistantInstructionsFile }),
     ...(plans === undefined ? {} : { plans }),
   };
 }
@@ -312,8 +303,7 @@ function parseLocations(value: unknown, path: string): ProjectLocations {
   return {
     alignfirst: location("alignfirst"),
     ".alignfirst-instructions": location(".alignfirst-instructions"),
-    assistantInstructionsFile:
-      value.assistantInstructionsFile === null ? null : location("assistantInstructionsFile"),
+    assistantInstructionsFile: location("assistantInstructionsFile"),
     workspaceRuntime: location("workspaceRuntime"),
     docs: location("docs"),
     ".plans": location(".plans"),
@@ -383,6 +373,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function companionInUse(report: ProjectReport, items: readonly ItemName[]): boolean {
   return items.some((item) => {
     const location = report.locations[item];
-    return location?.in === "companion" && location.exists;
+    return location.in === "companion" && location.exists;
   });
 }

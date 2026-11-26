@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -80,11 +80,7 @@ describe("assistant-instructions command", () => {
   it("keeps the legacy command as a warning alias with identical output", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const cwd = temp();
-    writeFileSync(
-      join(cwd, "alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, assistantInstructionsFile: "workflow.md" }),
-    );
-    writeFileSync(join(cwd, "workflow.md"), "Use the project workflow.\n");
+    writeFileSync(join(cwd, "ASSISTANTS.md"), "Use the project workflow.\n");
     const canonical = await runMain(["assistant-instructions"], { cwd });
     expect(canonical).toMatchObject({ code: 0, stderr: "" });
     expect(canonical.stdout).toContain("Use the project workflow.");
@@ -141,29 +137,103 @@ describe("assistant-instructions command", () => {
     const result = await runMain(["assistant-instructions"], { cwd });
     expect(result).toMatchObject({ code: 0, stderr: "" });
     expect(result.stdout).toContain(path);
-    expect(result.stdout).toContain(content);
+    expect(result.stdout).toContain(content.trimEnd());
   });
 
-  it.each(["missing", "directory"])(
-    "fails before output for a configured %s file",
-    async (kind) => {
-      const cwd = temp();
-      const path = join(cwd, "guide.md");
+  it("prints a default ASSISTANTS.md without any configuration file", async () => {
+    const cwd = temp();
+    const path = join(cwd, "ASSISTANTS.md");
+    writeFileSync(path, "Default assistant guide\n");
+    const result = await runMain(["assistant-instructions"], { cwd });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(result.stdout).toContain(path);
+    expect(result.stdout).toContain("Default assistant guide");
+  });
+
+  it.each([
+    { name: "a missing default file", file: undefined, content: undefined },
+    { name: "a blank default file", file: undefined, content: " \n\t\n" },
+    { name: "a missing configured file", file: "guide.md", content: undefined },
+  ])("prints the guidance alone for $name", async ({ file, content }) => {
+    const cwd = temp();
+    if (file !== undefined) {
       writeFileSync(
         join(cwd, "alignfirst.json"),
-        JSON.stringify({
-          schemaVersion: 1,
-          assistantInstructionsFile: "guide.md",
-        }),
+        JSON.stringify({ schemaVersion: 1, assistantInstructionsFile: file }),
       );
-      if (kind === "directory") mkdirSync(path);
-      const result = await runMain(["assistant-instructions"], { cwd });
-      expect(result.code).toBe(1);
-      expect(result.stdout).toBe("");
-      expect(result.stderr).toContain(path);
-      if (kind === "missing") expect(existsSync(path)).toBe(false);
-    },
-  );
+    }
+    if (content !== undefined) writeFileSync(join(cwd, file ?? "ASSISTANTS.md"), content);
+    const result = await runMain(["assistant-instructions"], { cwd });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(result.stdout).not.toContain("<assistant-instructions");
+  });
+
+  it("fails before output for an unreadable guide", async () => {
+    const cwd = temp();
+    const path = join(cwd, "ASSISTANTS.md");
+    mkdirSync(path);
+    const result = await runMain(["assistant-instructions"], { cwd });
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain(path);
+  });
+
+  it.each([
+    { name: "default", link: "ASSISTANTS.md", target: "shared.md", file: "ASSISTANTS.md" },
+    { name: "configured", link: "guide.md", target: "shared.md", file: "guide.md" },
+    { name: "configured nested", link: "guides", target: ".", file: "guides/shared.md" },
+    { name: "missing nested", link: "guides", target: ".", file: "guides/new/guide.md" },
+  ])("refuses only there a $name guide linked out of its root", async ({ link, target, file }) => {
+    const cwd = temp();
+    const outside = temp();
+    writeFileSync(join(outside, "shared.md"), "Shared guide\n");
+    symlinkSync(join(outside, target), join(cwd, link));
+    const config = file === "ASSISTANTS.md" ? undefined : { assistantInstructionsFile: file };
+    if (config !== undefined)
+      writeFileSync(join(cwd, "alignfirst.json"), JSON.stringify({ schemaVersion: 1, ...config }));
+    const refused = await runMain(["assistant-instructions"], { cwd });
+    expect(refused.code).toBe(1);
+    expect(refused.stdout).toBe("");
+    expect(refused.stderr).toContain(join(cwd, file));
+    expect((await runMain(["context"], { cwd })).code).toBe(0);
+    expect((await runMain(["config", "--json"], { cwd })).code).toBe(0);
+  });
+
+  it("refuses a companion guide linked out of the companion into the project", async () => {
+    const { root, home, project, companion } = makeCompanionProject({
+      assistantInstructionsFile: "companion",
+    });
+    dirs.push(root);
+    mkdirSync(companion, { recursive: true });
+    writeFileSync(join(project, "shared.md"), "Project file\n");
+    symlinkSync(join(project, "shared.md"), join(companion, "ASSISTANTS.md"));
+    const result = await runMain(["assistant-instructions"], { cwd: project, home });
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain(join(companion, "ASSISTANTS.md"));
+  });
+
+  it("refuses a guide whose symbolic link loops", async () => {
+    const cwd = temp();
+    const path = join(cwd, "ASSISTANTS.md");
+    symlinkSync(path, path);
+    const result = await runMain(["assistant-instructions"], { cwd });
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain(path);
+  });
+
+  it("treats a guide behind a broken folder link as missing", async () => {
+    const cwd = temp();
+    symlinkSync(join(temp(), "missing"), join(cwd, "guides"));
+    writeFileSync(
+      join(cwd, "alignfirst.json"),
+      JSON.stringify({ schemaVersion: 1, assistantInstructionsFile: "guides/guide.md" }),
+    );
+    const result = await runMain(["assistant-instructions"], { cwd });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(result.stdout).not.toContain("<assistant-instructions");
+  });
 
   it("uses linked-branch instructions and configuration from nested cwd, not main", async () => {
     const root = temp();
