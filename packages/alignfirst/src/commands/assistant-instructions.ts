@@ -25,8 +25,8 @@ export function runAssistantInstructions(ctx: CommandContext, args: string[]): n
 /** The trimmed guide, or `undefined` when the file is missing or blank. */
 function readGuide(layout: ProjectLayout): string | undefined {
   const location = layout.locations.assistantInstructionsFile;
-  if (!location.exists) return;
   assertInstructionsInRoot(layout);
+  if (!location.exists) return;
   const content = readInstructions(location.path).trimEnd();
   return content.length === 0 ? undefined : content;
 }

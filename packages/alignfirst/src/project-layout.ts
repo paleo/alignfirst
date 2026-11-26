@@ -521,15 +521,24 @@ function instructionCopy(
   return { path, in: placement, exists: pathExists(path) };
 }
 
-/** Refuses an assistant guide whose symbolic links lead out of its selected root. */
+/**
+ * Refuses an assistant guide whose symbolic links lead out of its selected root. A missing guide
+ * is checked through its deepest reachable folder, so a broken link leaves it missing.
+ */
 export function assertInstructionsInRoot(layout: ProjectLayout): void {
-  const { path, in: placement } = layout.locations.assistantInstructionsFile;
+  const { path, in: placement, exists } = layout.locations.assistantInstructionsFile;
   const root = placement === "companion" && layout.companion ? layout.companion.dir : layout.root;
-  if (isSameOrInside(canonicalInstructionPath(path), canonicalPath(root))) return;
+  const checked = exists ? path : deepestReachablePath(path);
+  if (isSameOrInside(canonicalInstructionPath(checked), canonicalPath(root))) return;
   throw new CliError(
     `The assistant guide ${path} leads outside ${root} through a symbolic link. ` +
       `It must stay within ${root}.`,
   );
+}
+
+function deepestReachablePath(path: string): string {
+  const parent = dirname(path);
+  return parent === path || existsSync(path) ? path : deepestReachablePath(parent);
 }
 
 function canonicalInstructionPath(path: string, links = new Set<string>()): string {

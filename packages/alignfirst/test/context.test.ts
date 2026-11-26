@@ -183,6 +183,7 @@ describe("assistant-instructions command", () => {
     { name: "default", link: "ASSISTANTS.md", target: "shared.md", file: "ASSISTANTS.md" },
     { name: "configured", link: "guide.md", target: "shared.md", file: "guide.md" },
     { name: "configured nested", link: "guides", target: ".", file: "guides/shared.md" },
+    { name: "missing nested", link: "guides", target: ".", file: "guides/new/guide.md" },
   ])("refuses only there a $name guide linked out of its root", async ({ link, target, file }) => {
     const cwd = temp();
     const outside = temp();
