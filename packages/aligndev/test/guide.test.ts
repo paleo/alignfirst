@@ -259,6 +259,66 @@ describe("guide project boundaries", () => {
   });
 });
 
+describe("global assistant instructions", () => {
+  const platforms = [
+    ["codingAgent", CODING_AGENT_CONFIG, { CLAUDECODE: "1" }],
+    ["openclaw", OPENCLAW_CONFIG, OPENCLAW_ENV],
+  ] as const;
+
+  it.each(platforms)("prints the file verbatim in the %s dispatcher", async (_, config, env) => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, config);
+    const content = "Prefer the `pi` profile.\n{{#openclaw}}\nRun {{ALIGNDEV}} guide first.";
+    const path = writeGlobalInstructions(fixture, `${content}\n\n \n`);
+    const result = await runGuide(fixture, [], { env });
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toContain(path);
+    expect(result.stdout).toContain(content);
+    expect(result.stdout).not.toContain(`${content}\n\n`);
+  });
+
+  it.each([
+    ["an absent", undefined],
+    ["a whitespace-only", " \n\t\n"],
+  ])("names the path only under codingAgent with %s file", async (_, text) => {
+    const fixture = makeFixture();
+    const path = join(fixture.home, ".alignfirst", "ASSISTANTS.md");
+    if (text !== undefined) writeGlobalInstructions(fixture, text);
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
+    const codingAgent = await runGuide(fixture, [], { env: { CLAUDECODE: "1" } });
+    expect(codingAgent.code, codingAgent.stderr).toBe(0);
+    expect(codingAgent.stdout).toContain(path);
+    expect(codingAgent.stdout).not.toContain("<assistant-instructions");
+    writeConfig(fixture.home, OPENCLAW_CONFIG);
+    const openclaw = await runGuide(fixture, [], { env: OPENCLAW_ENV });
+    expect(openclaw.code, openclaw.stderr).toBe(0);
+    expect(openclaw.stdout).not.toContain(path);
+    expect(openclaw.stdout).not.toContain("<assistant-instructions");
+  });
+
+  it("fails the dispatcher when the file cannot be read", async () => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
+    const path = join(fixture.home, ".alignfirst", "ASSISTANTS.md");
+    mkdirSync(path);
+    const result = await runGuide(fixture, [], { env: { CLAUDECODE: "1" } });
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("Cannot read");
+    expect(result.stderr).toContain(path);
+  });
+
+  it.each([["working-session"], ["code"]])("leaves the file out of guide %s", async (topic) => {
+    const fixture = makeFixture();
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
+    const path = writeGlobalInstructions(fixture, "Prefer the `pi` profile.\n");
+    const result = await runGuide(fixture, [topic], { env: { CLAUDECODE: "1" } });
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).not.toContain("Prefer the `pi` profile.");
+    expect(result.stdout).not.toContain(path);
+  });
+});
+
 describe("renderBlocks", () => {
   it("keeps the active platform's input and preserves non-block placeholders", () => {
     const text = [
@@ -385,4 +445,11 @@ describe("renderBlocks", () => {
 
 function runGuide(fixture: Fixture, args: string[], overrides?: RunOverrides): Promise<RunResult> {
   return runAligndev(fixture, ["guide", ...args], overrides);
+}
+
+function writeGlobalInstructions(fixture: Fixture, text: string): string {
+  const path = join(fixture.home, ".alignfirst", "ASSISTANTS.md");
+  mkdirSync(join(fixture.home, ".alignfirst"), { recursive: true });
+  writeFileSync(path, text);
+  return path;
 }

@@ -122,8 +122,7 @@ function renderCompanion(companion: CompanionReport | null): string {
   return renderPath(companion.dir, companion.exists);
 }
 
-function renderLocation(location: ItemLocation | null): string {
-  if (location === null) return "(not configured)";
+function renderLocation(location: ItemLocation): string {
   return renderPath(location.path, location.exists);
 }
 

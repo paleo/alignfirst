@@ -45,7 +45,7 @@ A project whose configuration report fails has an unknown range. Both commands s
 
 ## Companion locations
 
-A project's AlignFirst files may live in its companion directory, the `dir` of its entry in the companion registry `~/.alignfirst/companions/registry.json`. `{{ALIGNDEV}} project status <path>` gives each location, including nullable `locations.assistantInstructionsFile`. Run `{{ALIGNFIRST}} assistant-instructions` from the selected worktree for its conventions and configured assistant guide.
+A project's AlignFirst files may live in its companion directory, the `dir` of its entry in the companion registry `~/.alignfirst/companions/registry.json`. `{{ALIGNDEV}} project status <path>` gives each location, including `locations.assistantInstructionsFile`. Run `{{ALIGNFIRST}} assistant-instructions` from the selected worktree for its conventions and assistant guide.
 
 ## Reported issues
 

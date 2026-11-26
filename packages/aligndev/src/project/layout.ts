@@ -24,12 +24,7 @@ export interface ProjectReport {
 }
 
 export type SelectionOrigin = "item" | "defaultLocation" | "builtin";
-export type ProjectLocations = Record<
-  Exclude<ItemName, "assistantInstructionsFile">,
-  ItemLocation
-> & {
-  assistantInstructionsFile: ItemLocation | null;
-};
+export type ProjectLocations = Record<ItemName, ItemLocation>;
 
 export interface AligndevProjectSettings {
   profile: string;
@@ -178,6 +173,7 @@ function isOutdatedReport(value: unknown): boolean {
         "alignfirst" in value.locations &&
         ".alignfirst-instructions" in value.locations &&
         "assistantInstructionsFile" in value.locations &&
+        value.locations.assistantInstructionsFile !== null &&
         "workspaceRuntime" in value.locations &&
         isRecord(value.workspace) &&
         "registryDir" in value.workspace &&
@@ -312,8 +308,7 @@ function parseLocations(value: unknown, path: string): ProjectLocations {
   return {
     alignfirst: location("alignfirst"),
     ".alignfirst-instructions": location(".alignfirst-instructions"),
-    assistantInstructionsFile:
-      value.assistantInstructionsFile === null ? null : location("assistantInstructionsFile"),
+    assistantInstructionsFile: location("assistantInstructionsFile"),
     workspaceRuntime: location("workspaceRuntime"),
     docs: location("docs"),
     ".plans": location(".plans"),
@@ -383,6 +378,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function companionInUse(report: ProjectReport, items: readonly ItemName[]): boolean {
   return items.some((item) => {
     const location = report.locations[item];
-    return location?.in === "companion" && location.exists;
+    return location.in === "companion" && location.exists;
   });
 }

@@ -22,6 +22,7 @@ import { errorMessage } from "../errors.js";
 import { readProjectReport } from "../project/layout.js";
 import type { ProjectsCallerContext } from "../project/project-cli.js";
 import { renderCodeGuide } from "./code-guide.js";
+import { renderGlobalInstructions } from "./global-instructions.js";
 import {
   type ActiveBlocks,
   isSurface,
@@ -137,8 +138,8 @@ function renderTopic(
     harness: harness === "openclaw" ? undefined : harness,
   };
   if (topic === undefined) {
-    const name = channel === undefined ? PLAYBOOK_DISPATCHER : PLAYBOOK;
-    return renderPlaybookTemplate(name, active, config, ctx.forms);
+    if (channel === undefined) return renderDispatcher(active, config, ctx);
+    return renderPlaybookTemplate(PLAYBOOK, active, config, ctx.forms);
   }
   if (topic === "code") return renderCodeTopic(withCodeSurface(active), config, ctx, args.profile);
   return renderPlaybookTopic(topic, active, config, ctx);
@@ -162,6 +163,16 @@ function assertChannelUse({ topic, channel }: GuideArgs, platform: Platform): vo
       "Error: --channel is required with a playbook topic when the assistant's harness is openclaw.",
     );
   }
+}
+
+function renderDispatcher(
+  active: ActiveBlocks,
+  config: LoadedConfig,
+  ctx: ProjectsCallerContext,
+): string {
+  const dispatcher = renderPlaybookTemplate(PLAYBOOK_DISPATCHER, active, config, ctx.forms);
+  const global = renderGlobalInstructions(ctx.home, active.platform);
+  return global === undefined ? dispatcher : `${dispatcher}\n\n${global}`;
 }
 
 // Operators validate profiles through `guide code` outside any session; the app surface serves them.

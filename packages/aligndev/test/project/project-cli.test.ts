@@ -509,7 +509,11 @@ describe("project classification and companions", () => {
     const status = JSON.parse((await runProjects(fixture, ["status", "app", "--json"])).stdout);
     expect(status.configSource).toBeNull();
     expect(status.companion).toEqual(list.projects[0].companion);
-    expect(status.locations.assistantInstructionsFile).toBeNull();
+    expect(status.locations.assistantInstructionsFile).toEqual({
+      path: join(companion, "ASSISTANTS.md"),
+      in: "companion",
+      exists: false,
+    });
   });
 
   it("uses a selected companion range for inventory and free-port lookup without merging project settings", async () => {

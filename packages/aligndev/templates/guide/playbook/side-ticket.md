@@ -2,7 +2,7 @@
 
 For new single-project work where the user explicitly says there is no ticket or asks for a side ticket. Complete `{{GUIDE}} work-files-setup` from PROJECT_PATH, then:
 
-1. Run `{{ALIGNFIRST}} assistant-instructions` from the selected workplace, or deliberately from PROJECT_PATH when no workplace is selected. It prints project conventions and any explicitly configured content.
+1. Run `{{ALIGNFIRST}} assistant-instructions` from the selected workplace, or deliberately from PROJECT_PATH when no workplace is selected. It prints the project conventions and the project's assistant instructions.
 2. Run `{{ALIGNFIRST}} sync`, so identifier selection sees the current shared task set.
 {{#openclaw}}
 3. Run `{{ALIGNFIRST}} ticket --side` from PROJECT_PATH (`exec`). It creates the ticket directory and prints it as TICKET_DIR; TICKET_ID is the `side-N` it reports.

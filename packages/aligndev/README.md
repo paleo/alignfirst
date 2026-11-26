@@ -35,7 +35,7 @@ The assistant's harness and the agent's harness are independent: a coding profil
 
 ## Configuration boundary
 
-AlignDev requires the workspace-aware `alignfirst config --json` report: top-level `workspace` metadata with absolute registry/runtime paths, `selectionOrigins`, logical locations and independent `aligndev` selection. One selected `alignfirst.json`/`.jsonc` with `schemaVersion: 1` holds nested conventions, plans, explicit assistant instructions and optional recipes. Project configuration rejects unknown properties. Companion/global settings retain tolerant warnings. Inventory ranges come only from workspace `devServer.ports`. The scan reads every project's report through one `alignfirst config --json <dir>...` call. `project ports` prints the claimed ranges; `project free-ports --within <first>..<last>` looks up a free block inside the caller's bounds without reserving it.
+AlignDev requires the workspace-aware `alignfirst config --json` report: top-level `workspace` metadata with absolute registry/runtime paths, `selectionOrigins`, logical locations and independent `aligndev` selection. One selected `alignfirst.json`/`.jsonc` with `schemaVersion: 1` holds nested conventions, plans, optional recipes and the assistant guide path when it is not `ASSISTANTS.md`. Project configuration rejects unknown properties. Companion/global settings retain tolerant warnings. Inventory ranges come only from workspace `devServer.ports`. The scan reads every project's report through one `alignfirst config --json <dir>...` call. `project ports` prints the claimed ranges; `project free-ports --within <first>..<last>` looks up a free block inside the caller's bounds without reserving it.
 
 ## Start in Claude Code, Codex, Pi or Antigravity
 
@@ -79,7 +79,7 @@ Add this section to your global agent instructions (`~/.claude/CLAUDE.md`, `~/.c
 ```markdown
 ## AlignDev
 
-When the user mentions **aligndev**, follow the `aligndev` playbook if it is already in context. Otherwise, run `npx -y aligndev guide` and follow it. If your sandbox blocks `npx -y aligndev guide`, rerun it outside the sandbox.
+When the user mentions **aligndev**, follow the `aligndev` playbook if it is already in context. Otherwise, run `npx -y aligndev guide` and follow it. If your sandbox blocks `npx -y aligndev guide`, rerun it outside the sandbox. With Bun instead of Node.js, replace `npx -y` with `bunx --bun`.
 ```
 
 Then ask your session to work with aligndev.
@@ -221,11 +221,25 @@ Selection for new sessions, help, `guide code`, and quota:
 4. The assistant profile's `defaultAgentProfile`, or the assistant's profile itself.
 5. Without an assistant's profile: the built-in defaults of a Claude Code, Codex, Pi or Antigravity harness, or `code.fallbackProfile` for an `openclaw` or unrecognized harness. Without that key, the error names the remedies; with one enabled coding-agent profile, it prints the line to add.
 
-A named reference never falls through: a `--profile`, project selection, recorded profile, `defaultAgentProfile` or `code.fallbackProfile` that names a missing, disabled or `openclaw` profile fails. Project selections use the actual working directory, matching linked worktrees through AlignFirst; help/guide/quota need no `.plans` or Git repository. `--profile` is rejected on status and unrelated guide topics. `aligndev guide code` lists every enabled coding-agent profile with its harness and models, so the assistant passes `--profile <name>` when the user asks for another agent or account.
+A named reference never falls through: a `--profile`, project selection, recorded profile, `defaultAgentProfile` or `code.fallbackProfile` that names a missing, disabled or `openclaw` profile fails. Project selections use the actual working directory, matching linked worktrees through AlignFirst; help/guide/quota need no `.plans` or Git repository. `--profile` is rejected on status and unrelated guide topics. `aligndev guide code` lists every enabled coding-agent profile with its harness and models, so the assistant passes `--profile <name>` when the user or the global assistant instructions ask for another agent or account.
 
 `aligndev code quota [--profile <name>]` needs neither a ticket nor `.plans` and starts no coding session. Explicit quota settings start from the caller environment without its launcher variables, apply only their own `unset`, `env` and source-specific `configDir`, then strip the assistant's session identities. Coding-profile overrides and Pi credentials are not copied into the quota environment. The same path and validation rules apply. Select quota storage only when needed: omission inherits independently from the original caller, null removes the source's native directory variable, and a string selects explicit storage. Pair each Pi profile with the intended Codex or Claude account, using a custom quota directory when account separation is intended. Reports name the profile and native source; the limits belong to that CLI's account. AlignDev does not verify that it matches Pi's account or infer it from a model. Native requests time out after 30 seconds and await bounded process cleanup.
 
 For example, `"configDir": null` forces native-default mode despite an inherited directory variable; `"configDir": "~/.claude-work"` deliberately selects custom Claude storage. On macOS, explicitly setting `CLAUDE_CONFIG_DIR` to the default path can select different Keychain credentials from leaving it unset. Such a string remains valid and is distinct from omission or null. Confirm the intended mode before changing an existing selection; AlignDev performs no settings rewrite, credential transfer or automatic login. A null reset changes only directory routing, not HOME, PATH or API-key precedence.
+
+### Global Assistant Instructions
+
+`~/.alignfirst/ASSISTANTS.md` is optional. It holds the assistant instructions that apply to every project, such as:
+
+```markdown
+Use the `claude` profile by default, `pi` for code reviews and `agy` for consultations.
+```
+
+The instructions select among the profiles of `aligndev.settings.json` by name; a missing profile fails the launch. The assistant applies such an instruction through `--profile`, which outranks a project's profile selection in the companion registry.
+
+`aligndev guide` prints the file at the start of every session, and on every activation under OpenClaw. Keep it short: past about 20,000 characters, a harness may truncate it.
+
+Rules for the coding agents stay in each harness's own global files.
 
 ### Agent Environment
 
@@ -267,7 +281,7 @@ npx -y skills add https://github.com/paleo/alignfirst --global --skill aligndev-
 
 A deployment runs `alignfirst` and `aligndev` through `npx -y`, so the playbook follows each release. Its settings hold an `openclaw` profile whose `defaultAgentProfile` names the service profile. Deployments require null or a string for every enabled coding profile and enabled explicit quota source; omission is invalid there. Generated service defaults use null. Inventory still records absolute filesystem paths, while native commands unset the directory variable for null or set its resolved value for a string.
 
-Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code, Codex or Pi variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the preparation contract: project context, usable work files, docmap, runtime procedures and an explicitly referenced assistant guide, in the repository or its companion. `alignfirst assistant-instructions` reads project guidance and any explicitly referenced content. The workspace recipe is optional; default preparation is protocol-ready.
+Then ask the agent to create an assistant. The skill collects the deployment values, renders one Slack or Discord variant and one Claude Code, Codex or Pi variant, and writes the installation, security, operation and recovery runbooks. Each managed project receives the preparation contract: project context, usable work files, docmap, runtime procedures and an assistant guide, `ASSISTANTS.md` by default, in the repository or its companion. `alignfirst assistant-instructions` prints the project guidance, then the assistant guide. The workspace recipe is optional; default preparation is protocol-ready.
 
 ## Maintainer checks
 

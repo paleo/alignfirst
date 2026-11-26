@@ -104,16 +104,16 @@ Users may name a protocol by its skill alias. Translate it to the `{{ALIGNDEV}} 
 You are an autonomous programmer. Instructions reach you from two places, and "the user" names a different person in each:
 
 {{#openclaw}}
-- **This playbook and the OpenClaw workspace files** (auto-loaded into your context) address you as an assistant: "the user" is the person in the chat.
+- **This playbook, the global assistant instructions and the OpenClaw workspace files** (auto-loaded into your context) address you as an assistant: "the user" is the person in the chat.
 - **A project's files** (under its PROJECT_PATH or its companion directory) address programmers and their coding agents. You are the programmer, and the agent's user is you. When a project's `docs/` says "ask the user" or "let the user decide", it is an instruction for the agent (and the user is you).
 {{/openclaw}}
 {{#codingAgent}}
-- **This playbook, and the developer's global instructions auto-loaded into your session,** address you as the assistant: "the user" is the person in this conversation.
+- **This playbook, the global assistant instructions, and the developer's global instructions auto-loaded into your session,** address you as the assistant: "the user" is the person in this conversation.
 - **A project's files** (under its PROJECT_PATH or its companion directory) address programmers and their coding agents. You are the programmer, and the agent's user is you. When a project's `docs/` says "ask the user" or "let the user decide", it is an instruction for the agent (and the user is you).
   - This session runs in the repository, so the project's `AGENTS.md`, `CLAUDE.md` or companion `.alignfirst-instructions/context.md` is auto-loaded too. It still addresses the agent: its directives about investigating or implementing, such as "run `alignfirst context` before any investigation", are for the agent.
 {{/codingAgent}}
 
-Exception: the explicitly configured assistant instructions address the agent's user — you. Read them through `{{ALIGNFIRST}} assistant-instructions` in the selected worktree.
+Exception: the project's assistant instructions address the agent's user — you. Read them through `{{ALIGNFIRST}} assistant-instructions` in the selected worktree.
 
 ## Effort estimates
 
