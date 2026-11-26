@@ -734,6 +734,7 @@ function makeRun(resume?: string): { config: RunConfig; sessionFilePath: string 
     config: {
       prompt: "go",
       sessionFilePath,
+      authenticationFailure: "login instructions",
       cwd: dir,
       resume,
       executableModel: undefined,

@@ -7,6 +7,7 @@ const adapter = createAgyAdapter();
 const BASE: RunConfig = {
   prompt: "do the thing",
   sessionFilePath: "/tmp/x.md",
+  authenticationFailure: "login instructions",
   cwd: "/proj",
   executableModel: undefined,
   effort: undefined,

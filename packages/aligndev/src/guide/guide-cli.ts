@@ -10,7 +10,6 @@ import {
 } from "../assistant-harness.js";
 import { resolveEfforts } from "../code/efforts.js";
 import { resolveModels } from "../code/models.js";
-import { describeNativeStorage } from "../code/native-context.js";
 import type { CommandForms } from "../command-form.js";
 import {
   enabledCodingProfiles,
@@ -199,7 +198,6 @@ function renderCodeTopic(
     efforts: resolveEfforts(code.harness, code.efforts),
     defaultEffort: code.defaultEffort,
     profile: code.profile,
-    nativeStorage: describeNativeStorage(code),
     profiles: enabledCodingProfiles(config),
   });
 }

@@ -1,7 +1,11 @@
 import { type CodeConfig, CONFIG_DIRECTORY_VARIABLES } from "../config.js";
 
 // The storage of an agent without a native directory variable: Antigravity's.
-export const FIXED_NATIVE_STORAGE = "native store: fixed ~/.gemini; account in the OS keyring";
+const FIXED_NATIVE_STORAGE = "native store: fixed ~/.gemini; account in the OS keyring";
+
+export function describeProfile(code: CodeConfig): string {
+  return `${code.harness} profile ${JSON.stringify(code.profile ?? "(built-in)")}`;
+}
 
 export function describeNativeStorage(code: CodeConfig): string {
   const home = ["HOME", "USERPROFILE"]

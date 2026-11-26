@@ -15,7 +15,6 @@ export function createAgyAdapter(): AgentAdapter {
     interpretLine: interpretAgyLine,
     assess: assessAgyState,
     isAuthenticationError: isAgyAuthenticationError,
-    authenticationMessage: agyAuthenticationMessage,
     failureMessage: missingAgyOutcome,
   };
 }
@@ -189,15 +188,6 @@ function isAgyAuthenticationError(message: string): boolean {
   return message
     .split("\n")
     .some((line) => line.trim().startsWith("Error: authentication required"));
-}
-
-function agyAuthenticationMessage(detail?: string): string {
-  const base =
-    "Coding agent not authenticated: an administrator must run `agy` and sign in, under the same OS user, " +
-    "with the same effective environment and cwd as the child (apply profile unset/env, including HOME, PATH " +
-    "and credential routing) before another coding run.";
-  const reason = detail?.trim();
-  return reason === undefined || reason === "" ? base : `${base}\n\n${reason}`;
 }
 
 function missingAgyOutcome(state: AgentProtocolState): string {

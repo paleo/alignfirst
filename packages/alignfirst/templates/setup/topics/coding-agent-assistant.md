@@ -53,7 +53,7 @@ An `agy` profile takes no `configDir`. Antigravity keeps one store under `~/.gem
 
 Profiles can supply literal non-secret `env` values and remove inherited variables with `unset`. No shell expansion occurs. Credentials remain in native stores or provisioned process environments. A variable cannot appear in both fields.
 
-Before login, reproduce the agent's effective environment and cwd: apply `unset`, `env` and `configDir`, including HOME, PATH and credential routing. Help and guides identify storage-variable origins without printing their values. A bare login in another shell may select another account.
+Before login, reproduce the agent's effective environment and cwd: apply `unset`, `env` and `configDir`, including HOME, PATH and credential routing. `aligndev code --help` prints the login command of the selected profile, and so does a run that ends with `auth_required`. Both omit the profile's `env` values. A bare login in another shell may select another account.
 
 For Pi, prefer provider-qualified `modelAliases` targets. Exact IDs pin a model; fuzzy native selectors and thinking suffixes pass unchanged to Pi. For example, separate `pi-codex` and `pi-anthropic` profiles can map `sol` to `openai/sol` and `opus` to `anthropic/opus`, using separately provisioned native configurations. AlignDev never infers their providers or account identity. Targets are illustrative and depend on the native catalog. One alias expands after validating the chosen name, without recursion.
 

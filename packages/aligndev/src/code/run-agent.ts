@@ -27,6 +27,8 @@ export interface RunConfig {
   prompt: string;
   sessionFilePath: string;
   nativeContext?: string;
+  // The result of a run that ends with `auth_required`; the agent's own error follows it.
+  authenticationFailure: string;
   cwd: string;
   resume?: string;
   quiet?: boolean;
@@ -94,7 +96,6 @@ export interface AgentAdapter {
   interpretLine(line: string, state: AgentProtocolState): string | undefined;
   assess(state: AgentProtocolState): AgentAssessment;
   isAuthenticationError(message: string): boolean;
-  authenticationMessage(detail?: string): string;
   failureMessage?(state: AgentProtocolState): string;
   // Builds the child's stdin from the prompt. Absent: the prompt is sent as is.
   formatInput?(config: RunConfig): string;
@@ -124,11 +125,9 @@ export async function runAgent(
   // a 401, so evidence from a successful run must not produce an auth_required result.
   const authRequired =
     failed && (assessment.authEvidence || adapter.isAuthenticationError(outcome.stderr));
-  const selectedResult = selectResult(adapter, state, assessment, outcome, authRequired);
-  const result =
-    failed && config.nativeContext !== undefined
-      ? `${config.nativeContext}: ${selectedResult}`
-      : selectedResult;
+  const result = authRequired
+    ? authenticationResult(config, assessment.error ?? nonblank(outcome.stderr))
+    : selectResult(config, adapter, state, assessment, outcome, failed);
   // Durable identity belongs to the requested conversation, even when native validation fails.
   const sessionId = config.resume ?? assessment.sessionId ?? null;
   applyCompletion(config.sessionFilePath, {
@@ -166,25 +165,30 @@ interface ProcessOutcome {
   stderr: string;
 }
 
+function authenticationResult(config: RunConfig, detail: string | undefined): string {
+  const reason = detail === undefined ? undefined : nonblank(detail);
+  return reason === undefined
+    ? config.authenticationFailure
+    : `${config.authenticationFailure}\n\n${reason}`;
+}
+
 function selectResult(
+  config: RunConfig,
   adapter: AgentAdapter,
   state: AgentProtocolState,
   assessment: AgentAssessment,
   outcome: ProcessOutcome,
-  authRequired: boolean,
+  failed: boolean,
 ): string {
-  if (authRequired) {
-    return adapter.authenticationMessage(assessment.error ?? nonblank(outcome.stderr));
-  }
-  if (assessment.succeeded && outcome.exitCode === 0 && assessment.result !== undefined) {
-    return assessment.result;
-  }
-  return (
+  if (!failed && assessment.result !== undefined) return assessment.result;
+  const result =
     assessment.error ??
     nonblank(outcome.stderr) ??
     (!assessment.succeeded ? adapter.failureMessage?.(state) : undefined) ??
-    `${adapter.executable} exited with code ${outcome.exitCode ?? "unknown"}`
-  );
+    `${adapter.executable} exited with code ${outcome.exitCode ?? "unknown"}`;
+  return failed && config.nativeContext !== undefined
+    ? `${config.nativeContext}: ${result}`
+    : result;
 }
 
 function spawnAgent(

@@ -1,9 +1,8 @@
 import type { CodingAgent } from "../code/coding-agent.js";
 import { resolveEfforts } from "../code/efforts.js";
 import { resolveModels } from "../code/models.js";
-import { FIXED_NATIVE_STORAGE } from "../code/native-context.js";
 import type { CommandForms } from "../command-form.js";
-import { CONFIG_DIRECTORY_VARIABLES, type CodingProfile, type NamedProfile } from "../config.js";
+import type { CodingProfile, NamedProfile } from "../config.js";
 import { escapeControlCharacters } from "../project/format.js";
 import { type ActiveBlocks, renderGuideTemplate } from "./render-template.js";
 
@@ -17,7 +16,6 @@ export interface CodeGuideOptions {
   defaultEffort?: string;
   // The selected profile's name; null for built-in defaults.
   profile?: string | null;
-  nativeStorage?: string;
   // The enabled coding-agent profiles of the settings.
   profiles?: NamedProfile<CodingProfile>[];
 }
@@ -37,8 +35,6 @@ export function renderCodeGuide(options: CodeGuideOptions): string {
     AGENT: harness,
     PROFILE: profile ?? "(built-in)",
     PROFILES: renderProfiles(options.profiles ?? [], profile),
-    NATIVE_CONFIG: options.nativeStorage ?? defaultNativeStorage(harness),
-    AUTH_COMMAND: authCommand(harness),
     PERMISSIONS: permissions(harness),
     MODEL_POLICY:
       models === undefined
@@ -52,26 +48,6 @@ export function renderCodeGuide(options: CodeGuideOptions): string {
     ALIGNFIRST_SETUP: `The project must be prepared for AlignFirst. AlignDev uses \`${forms.alignfirst}\` for the AlignFirst CLI.`,
     ALIGNFIRST_USE: `\`${forms.aligndev} code\` and the agent use the same AlignFirst command: \`${forms.alignfirst} guide <protocol>\` in the project.`,
   });
-}
-
-function defaultNativeStorage(harness: CodingAgent): string {
-  const variable = CONFIG_DIRECTORY_VARIABLES[harness];
-  return variable === undefined
-    ? FIXED_NATIVE_STORAGE
-    : `${variable}: inherited/default native storage`;
-}
-
-function authCommand(harness: CodingAgent): string {
-  switch (harness) {
-    case "claude":
-      return "`claude`, then `/login` in the selected native configuration";
-    case "codex":
-      return "`codex login` in the selected native configuration";
-    case "pi":
-      return "`pi`, then `/login <provider>`, or configure provider credentials in the selected native configuration";
-    case "agy":
-      return "`agy`, then sign in, under the OS user that runs the agent";
-  }
 }
 
 function permissions(harness: CodingAgent): string {

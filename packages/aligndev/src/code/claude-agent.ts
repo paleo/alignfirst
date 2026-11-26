@@ -14,7 +14,6 @@ export function createClaudeAdapter(): AgentAdapter {
     interpretLine: interpretClaudeLine,
     assess: assessClaudeState,
     isAuthenticationError: () => false,
-    authenticationMessage: claudeAuthenticationMessage,
   };
 }
 
@@ -163,16 +162,6 @@ function renderToolResult(content: unknown): string {
     return content.map((block) => (isRecord(block) ? (asString(block.text) ?? "") : "")).join("");
   }
   return compactJson(content);
-}
-
-function claudeAuthenticationMessage(detail?: string): string {
-  const base =
-    "Coding agent not authenticated (authentication_failed): the host session is missing, " +
-    "expired, or rejected. An administrator must re-login with the same effective environment and cwd as the child " +
-    "(apply profile unset/env/configDir, including HOME, PATH and credential routing; run `claude`, then " +
-    "`/login`) before another coding run.";
-  const reason = detail?.trim();
-  return reason === undefined || reason === "" ? base : `${base}\n\n${reason}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

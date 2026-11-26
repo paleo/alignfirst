@@ -70,7 +70,7 @@ Reporting the run is not calling the work done: the report relays the agent's cl
 
 If the session file says the run failed, report that plainly and propose the next step; don't silently retry. When a session turns bad, keep everything in place — session files, directories, and records are the durable audit trail; never delete them; just start a new session.
 
-If the frontmatter's `exitReason` is `auth_required`, the coding agent is not authenticated on the host. An administrator must authenticate with {{AUTH_COMMAND}} before another run. Tell the user exactly that and do not retry.
+If the frontmatter's `exitReason` is `auth_required`, the coding agent is not authenticated on the host. The Result block holds the login instructions of the selected profile: relay them to the user unchanged, and do not retry.
 {{/openclaw}}
 {{#codingAgent}}
 ## How it runs
@@ -152,7 +152,7 @@ Never detach with `&` or a wrapper. A run is pending until its outcome is handle
 
 ## After a run completes
 
-An `exitReason` of `auth_required` (`{{ALIGNDEV}} code new/resume` exits `2`) means the agent is not authenticated on this machine. Tell the user to authenticate with {{AUTH_COMMAND}}, and do not retry. Other launch/run failures exit `1`; success exits `0`. A successful `status` query exits `0` even for a failed run: read its `status` and `exitReason`.
+An `exitReason` of `auth_required` (`{{ALIGNDEV}} code new/resume` exits `2`) means the agent is not authenticated on this machine. The command's diagnostic and the Result block hold the login instructions of the selected profile: relay them to the user unchanged, and do not retry. Other launch/run failures exit `1`; success exits `0`. A successful `status` query exits `0` even for a failed run: read its `status` and `exitReason`.
 
 Don't reconstruct what happened: no re-running the agent, no `git` archaeology to double-check its account — the session file is authoritative for that. For a run that changed code, run `{{GUIDE}} change-wrap-up` and follow it. A failing check is new work, in a new agent run; do not silently retry. Keep session files as the durable audit trail.
 {{/codingAgent}}
@@ -220,8 +220,6 @@ The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. A nonempty profi
 {{/codingAgent}}
 
 ### Profiles and resume
-
-Effective profile: `{{PROFILE}}`; agent's harness: `{{AGENT}}`; native configuration: `{{NATIVE_CONFIG}}`. Environment values are omitted. Login must use the same effective environment as the agent: apply profile `unset/env/configDir`, including HOME, PATH and credential routing, from the same working directory. A bare login in another shell may use a different account.
 
 {{PROFILES}}
 

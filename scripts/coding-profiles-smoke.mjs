@@ -557,14 +557,14 @@ async function selectionHelp(f, cwd, profile, explicit = false) {
       help.stdout.includes(`Effective profile: ${profile}`),
       "Help must show selected profile.",
     );
+    assert.ok(
+      help.stdout.includes(f.stores[profile]),
+      "Help must identify selected native context.",
+    );
     assert.match(help.stdout, /--profile/);
   }
   const guide = await command(f, cwd, "aligndev", ["guide", "code", ...override]);
-  assert.ok(guide.stdout.includes(`Effective profile: \`${profile}\``));
-  assert.ok(
-    guide.stdout.includes(f.stores[profile]),
-    "Guide must identify selected native context.",
-  );
+  assert.ok(guide.stdout.includes(`profile \`${profile}\``), "Guide must show selected profile.");
   assert.ok(guide.stdout.includes(profile === "a" ? "choice" : "sonnet"));
 }
 
