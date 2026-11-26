@@ -1,5 +1,15 @@
 # alignfirst
 
+## 0.22.0
+
+### Minor Changes
+
+- 32f7399: `ASSISTANTS.md` became the assistant guide. `assistantInstructionsFile` is deprecated: `alignfirst setup guide upgrade` describes the rename.
+
+### Patch Changes
+
+- be54e52: Documented, in the `coding-agent-assistant` setup topic, a coding-agent assistant that works on projects outside its starting directory.
+
 ## 0.21.0
 
 ### Minor Changes
