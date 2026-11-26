@@ -1,11 +1,25 @@
 {
-  "version": 1,
+  "version": 2,
   "skills": {
+    "sharp-testing": {
+      "source": "paleo/paleo-skills",
+      "commit": "aaafb48cb6c491236428c7c735a1ccae3a39c4c1",
+      "sourceType": "github",
+      "skillPath": "skills/sharp-testing/SKILL.md",
+      "computedHash": "1e349c0b697fa63286f7e1bcbf3928e80d55717ce106817680ddfdd47f576129"
+    },
+    "sharp-writing": {
+      "source": "paleo/paleo-skills",
+      "commit": "aaafb48cb6c491236428c7c735a1ccae3a39c4c1",
+      "sourceType": "github",
+      "skillPath": "skills/sharp-writing/SKILL.md",
+      "computedHash": "835884d9be56efae4bbaf9d417be033df825d2ce2c787a89c5dd9f45e9b5667c"
+    },
     "top-down-typescript": {
       "source": "paleo/paleo-skills",
       "sourceType": "github",
       "skillPath": "skills/top-down-typescript/SKILL.md",
-      "computedHash": "adeacd369f54154758034baa3e25c46bcb7fd3a546ab4ba63ef3c339bcd43660"
+      "computedHash": "9c4a20f349f327db7c047cb3dd314a3eec004394447d868bcd0d71a767027656"
     }
   }
 }
