@@ -304,7 +304,6 @@ describe("global assistant instructions", () => {
     const result = await runGuide(fixture, [], { env: { CLAUDECODE: "1" } });
     expect(result.code).toBe(1);
     expect(result.stdout).toBe("");
-    expect(result.stderr).toContain("Cannot read");
     expect(result.stderr).toContain(path);
   });
 

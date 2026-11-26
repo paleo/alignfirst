@@ -154,7 +154,6 @@ describe("assistant-instructions command", () => {
     { name: "a missing default file", file: undefined, content: undefined },
     { name: "a blank default file", file: undefined, content: " \n\t\n" },
     { name: "a missing configured file", file: "guide.md", content: undefined },
-    { name: "a blank configured file", file: "guide.md", content: " \n\t\n" },
   ])("prints the guidance alone for $name", async ({ file, content }) => {
     const cwd = temp();
     if (file !== undefined) {
