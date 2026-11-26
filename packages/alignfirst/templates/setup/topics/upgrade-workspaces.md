@@ -26,7 +26,7 @@ When the companion entry selects the old `.alignfirst.json` item, obtain approva
 
 Merge any `alignfirst-workspace.json` or `.jsonc` sections into the selected `alignfirst.json` or `.jsonc`, then remove the retired file. Keep one `schemaVersion: 1`.
 
-Record the chosen assistant guide's relative path as `assistantInstructionsFile`, as `{{CMD}} setup guide assistant-project` describes. Replace a filename-bound registry selection with the logical item: `{{CMD}} companion register --item assistantInstructionsFile=<location>`.
+When the chosen assistant guide is not named `ASSISTANTS.md`, record its relative path as `assistantInstructionsFile`, as `{{CMD}} setup guide assistant-project` describes. Replace a filename-bound registry selection with the logical item: `{{CMD}} companion register --item assistantInstructionsFile=<location>`.
 
 Extract wrapper callbacks into project-owned commands and scripts that follow "Script ABI" in `{{CMD}} setup guide workspace`. Move workspace preparation, file entries, finalize and purge into `workspace`. Move infrastructure setup, run files, input selection and servers into `devServer`. Replace callbacks with command services and explicit log-ready spawn descriptors. A managed environment needs a spawn service. Remove unused wrapper and package dependencies only after their behavior is represented.
 

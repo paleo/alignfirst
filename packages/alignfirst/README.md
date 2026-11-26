@@ -8,7 +8,7 @@ Supported systems: Linux and macOS, and Windows through WSL.
 
 ## Agent skills
 
-Nine Agent Skill stubs expose the CLI as commands in Claude Code, Codex, Pi, Antigravity, GitHub Copilot, and Cursor. Install them globally:
+Nine Agent Skill stubs expose the CLI as commands in Claude Code, Codex, Pi, Antigravity, GitHub Copilot, and Cursor. They run with Node.js or Bun. Install them globally:
 
 ```sh
 npx skills add https://github.com/paleo/alignfirst --global \
@@ -85,7 +85,7 @@ Without `alignfirst.json`, a `### Conventions` sub-section under the bootstrap s
 - `companion register` — Register the current project in the companion registry. `--dir` sets its companion directory; `--create-dir` also creates it. `--default-location` sets the registration's default location; `--item <name>=<location>` sets one item and is repeatable.
 - `companion unregister` — Remove the current project from the companion registry. `--remove-dir` also removes its companion directory.
 - `config` — Report the effective project configuration, the companion directory and the location of each AlignFirst file.
-- `assistant-instructions` — Print project guidance and explicitly configured assistant instructions.
+- `assistant-instructions` — Print project guidance and the project's assistant guide.
 - `doctor` — Diagnose an AlignFirst setup.
 - `workspace` — Create/adopt, list, inspect, wait for, teardown, remove or prune workspaces. `workspace --guide` describes effective capabilities.
 - `dev` — Prepare declared ports/run files/infrastructure and start, stop or inspect managed services.
@@ -104,7 +104,7 @@ One selected `alignfirst.json`/`.jsonc` holds `schemaVersion: 1`, optional URI-v
 
 `context` places this guidance after optional project instructions and before Docmap. Embedded Docmap asks readers to read task-relevant documents and omits the bare invocation example.
 
-`assistant-instructions` places guidance before referenced content and its absolute source path. Without a reference, only guidance is printed; there is no filename fallback. A configured missing or unreadable file fails before any body output. It does not load coding-agent context, Docmap or protocols.
+`assistant-instructions` prints guidance, then the assistant guide in an `<assistant-instructions scope="project">` block with its absolute path. The guide is `ASSISTANTS.md`, or the relative path that `assistantInstructionsFile` names. A missing `ASSISTANTS.md` or a blank guide prints guidance alone. A configured missing or unreadable file fails before any output. It does not load coding-agent context, Docmap or protocols.
 
 The legacy `developerInstructions` key remains readable in configuration and companion registry items. Reads warn and expose `assistantInstructionsFile` without rewriting either file. A defined `assistantInstructionsFile` takes precedence, including when invalid; invalid canonical values fail validation. The legacy `developer-instructions` command prints the same output as `assistant-instructions` and warns.
 
@@ -112,7 +112,7 @@ External owners adopt through setup and run teardown before their own deletion. 
 
 ## Companion directories
 
-A companion directory holds a project's AlignFirst files (`alignfirst.json`/`.jsonc`, `.plans`, `docs`, project instructions) outside its repository. Protocols and Docmap can leave repository files untouched; runtime can also live externally. `defaultLocation` supplies per-registration placement below explicit item settings. Logical `assistantInstructionsFile` selects the reference root; `workspaceRuntime` uses companion storage only when effectively companion, while project/auto stays local. Ordinary auto selects existing companion files, then project files, then the companion destination. Commands, generated application files and shared directories may still write project files. Each project has its own, declared in `~/.alignfirst/companions/registry.json`.
+A companion directory holds a project's AlignFirst files (`alignfirst.json`/`.jsonc`, `.plans`, `docs`, project instructions) outside its repository. Protocols and Docmap can leave repository files untouched; runtime can also live externally. `defaultLocation` supplies per-registration placement below explicit item settings. Logical `assistantInstructionsFile` selects the root of the assistant guide; `workspaceRuntime` uses companion storage only when effectively companion, while project/auto stays local. Ordinary auto selects existing companion files, then project files, then the companion destination. Commands, generated application files and shared directories may still write project files. Each project has its own, declared in `~/.alignfirst/companions/registry.json`.
 
 Ask your agent:
 

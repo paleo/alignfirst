@@ -32,7 +32,7 @@ const CONTRACT_PLACEHOLDERS = [
   "{{PROJECT_PATH}}",
 ];
 // Fixed facts the guide states whatever the caller's launcher.
-const FIXED_LAUNCHERS = ["npx -y aligndev", "bunx --bun alignfirst"];
+const FIXED_LAUNCHERS = ["npx -y aligndev", "bunx --bun aligndev", "bunx --bun alignfirst"];
 const SETUP_TEMPLATES = fileURLToPath(new URL("../templates/setup/", import.meta.url));
 
 afterEach(() => {

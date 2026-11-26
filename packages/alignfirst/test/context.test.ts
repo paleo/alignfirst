@@ -141,7 +141,35 @@ describe("assistant-instructions command", () => {
     const result = await runMain(["assistant-instructions"], { cwd });
     expect(result).toMatchObject({ code: 0, stderr: "" });
     expect(result.stdout).toContain(path);
-    expect(result.stdout).toContain(content);
+    expect(result.stdout).toContain(content.trimEnd());
+  });
+
+  it("prints a default ASSISTANTS.md without any configuration file", async () => {
+    const cwd = temp();
+    const path = join(cwd, "ASSISTANTS.md");
+    writeFileSync(path, "Default assistant guide\n");
+    const result = await runMain(["assistant-instructions"], { cwd });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(result.stdout).toContain(path);
+    expect(result.stdout).toContain("Default assistant guide");
+  });
+
+  it.each([
+    { name: "a missing default file", file: undefined, content: undefined },
+    { name: "a blank default file", file: undefined, content: " \n\t\n" },
+    { name: "a blank configured file", file: "guide.md", content: " \n\t\n" },
+  ])("prints the guidance alone for $name", async ({ file, content }) => {
+    const cwd = temp();
+    if (file !== undefined) {
+      writeFileSync(
+        join(cwd, "alignfirst.json"),
+        JSON.stringify({ schemaVersion: 1, assistantInstructionsFile: file }),
+      );
+    }
+    if (content !== undefined) writeFileSync(join(cwd, file ?? "ASSISTANTS.md"), content);
+    const result = await runMain(["assistant-instructions"], { cwd });
+    expect(result).toMatchObject({ code: 0, stderr: "" });
+    expect(result.stdout).not.toContain("<assistant-instructions");
   });
 
   it.each(["missing", "directory"])(

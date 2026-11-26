@@ -9,24 +9,24 @@ An assistant coordinates the conversation and delegates coding to a coding agent
 3. **Documentation.** The project has Docmap and meaningful docs. When `docs/` is absent and documentation is part of the preparation, follow `{{CMD}} setup guide docmap-bootstrap`.
 4. **Workspace.** Every stack is prepared through `{{CMD}} workspace`, with or without a recipe. Without `workspace` or `devServer`, setup is protocol-ready and performs no install, build or start; document the separate stack commands. Prepare effective plans and the selected runtime storage first. Only project-local runtime requires an ignored, untracked `.local-wt/`. A companion runtime needs no checkout runtime directory or exclusions. See `{{CMD}} setup guide workspace`.
 5. **Runtime requirements.** They are confirmed. A Node project's `.nvmrc`, `.node-version` or `engines.node` is honored. Without a declaration, use the current Node LTS unless the project's requirements say otherwise. Python and other runtimes keep their documented tools. Running the CLI through Node or Bun does not change project commands.
-6. **Assistant guide.** The project has an assistant guide, recorded as `assistantInstructionsFile`. See "The Assistant Guide" below.
+6. **Assistant guide.** The project has an assistant guide, `ASSISTANTS.md`. See "The Assistant Guide" below.
 7. **Inventory.** `aligndev project doctor` passes after the configuration and recipe are written, and before workspace setup. It scans `projectsRoot` of the aligndev settings, else the working directory; `--root <path>` scans another root. A port range belongs solely in `devServer.ports`. `aligndev project free-ports --size <n> --within <first>..<last>` looks up a free block inside the bounds that the deployment's or the team's instructions give.
 
 ## The Assistant Guide
 
-The assistant guide is the project-specific entry point of an assistant session, commonly `DEVELOPERS.md` or `README.md`.
+The assistant guide is the project-specific entry point of an assistant session: `ASSISTANTS.md`, at the root of the project or of its companion directory.
 
-A `DEVELOPERS.md` is titled `# Developer Reference`. It contains the confirmed daily development commands, especially build and test, and the project-specific guidance needed to use them. It lists relevant project constraints. It links to the most important documentation when that helps the assistant begin work; keep this selection short. When these details are undecided, the title alone is sufficient. Omit generic AlignFirst explanations, full documentation indexes, status filler and verification lists for the setup itself. Detailed project documentation belongs in `docs/`, discovered through Docmap.
+It is titled `# Assistant Guide`. It contains the confirmed daily development commands, especially build and test, and the project-specific guidance needed to use them. It lists relevant project constraints. It links to the most important documentation when that helps the assistant begin work; keep this selection short. When these details are undecided, the title alone is sufficient. Omit generic AlignFirst explanations, full documentation indexes, status filler and verification lists for the setup itself. Detailed project documentation belongs in `docs/`, discovered through Docmap.
 
 Local installation goes in the README, with public URLs when services exist. Tool-specific lifecycle hooks stay in the tool's configuration.
 
-Record the guide's relative path explicitly as `assistantInstructionsFile` in the selected `alignfirst.json` or `.jsonc`. Without this reference, no filename fallback applies.
+`assistantInstructionsFile` in the selected `alignfirst.json` or `.jsonc` names another relative path. Leave it out for `ASSISTANTS.md`.
 
-Run `{{CMD}} assistant-instructions` from the selected worktree to read the guide. It prints the project guidance and any configured content with its absolute source path. Missing configured content is an error.
+Run `{{CMD}} assistant-instructions` from the selected worktree to read the guide. It prints the project guidance, then the guide in an `<assistant-instructions scope="project">` block that carries its absolute path. A missing `ASSISTANTS.md` prints the guidance alone. A missing file named by `assistantInstructionsFile` is an error.
 
-To find the file to edit, including under companion placement, read the nullable `locations.assistantInstructionsFile` in `{{CMD}} config --json`.
+To find the file to edit or create, including under companion placement, read `locations.assistantInstructionsFile` in `{{CMD}} config --json`.
 
-Keep this human and assistant guide distinct from the coding agent's `AGENTS.md` or companion context. Do not copy entire documents between them.
+Keep the assistant guide distinct from the coding agent's `AGENTS.md` or companion context. Do not copy entire documents between them.
 
 ## Boundaries
 

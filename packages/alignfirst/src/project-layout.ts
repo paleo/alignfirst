@@ -55,6 +55,7 @@ export const ITEM_NAMES = [
 // The directory holding the companions and their registry. A symlink there moves them elsewhere.
 const COMPANIONS_ROOT = "~/.alignfirst/companions";
 const REGISTRY_FILE = "registry.json";
+const DEFAULT_INSTRUCTIONS_FILE = "ASSISTANTS.md";
 
 const itemSetting = literal("companion", "project", "auto");
 const registryProjectShape = object<RegistryProject>(
@@ -103,12 +104,7 @@ export interface ProjectLayout {
 }
 
 export type SelectionOrigin = "item" | "defaultLocation" | "builtin";
-export type ProjectLocations = Record<
-  Exclude<ItemName, "assistantInstructionsFile">,
-  ItemLocation
-> & {
-  assistantInstructionsFile: ItemLocation | null;
-};
+export type ProjectLocations = Record<ItemName, ItemLocation>;
 
 export interface AligndevProjectSettings {
   profile: string;
@@ -492,9 +488,9 @@ function locateConfigFamily(cwd: string, companion: CompanionLayout | null): Ite
 function locateInstructions(
   root: string,
   companion: CompanionLayout | null,
-  name: string | undefined,
-): ItemLocation | null {
-  if (name === undefined) return null;
+  configuredName: string | undefined,
+): ItemLocation {
+  const name = configuredName ?? DEFAULT_INSTRUCTIONS_FILE;
   if (name.trim().length === 0 || name.includes("\u0000") || isAbsolute(name))
     throw new CliError("assistantInstructionsFile must be a nonblank relative file path.");
   const setting = companion?.items.assistantInstructionsFile;
@@ -556,11 +552,10 @@ function pathExists(path: string): boolean {
 /** One line: `<name>: <path> (<in>)`, with `, missing` when absent and the setting after the name. */
 export function renderItemLocation(
   name: ItemName,
-  location: ItemLocation | null,
+  location: ItemLocation,
   setting?: ItemSetting | AligndevSetting,
 ): string {
   const label = setting === undefined ? name : `${name} (${setting})`;
-  if (location === null) return `${label}: not configured`;
   return `${label}: ${location.path} (${location.in}${location.exists ? "" : ", missing"})`;
 }
 

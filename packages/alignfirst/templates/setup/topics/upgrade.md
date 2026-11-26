@@ -35,6 +35,7 @@ When `skills-lock.json` is present, inspect it through the current skills CLI. I
 - Retired workspace files or registries: follow `{{CMD}} setup guide upgrade-workspaces`.
 - AlignDev settings with `platform`, `code.profile`, `portRange` or a profile `agent`, or a `.alignfirst-projects.json` marker: apply "Convert AlignDev Harness Settings" below.
 - CLI-backed skills: keep the current skills. Set `plans.autoArchive: true` in the selected `alignfirst.json` or `alignfirst.jsonc`; the user can remove it after the upgrade to opt out. If `plans-share` artifacts remain, apply the cleanup, command sweep and check of `{{CMD}} setup guide upgrade-v3`.
+- An assistant guide under another name than `ASSISTANTS.md`, when the user asks to rename it: apply "Optional: Rename the Assistant Guide" below.
 - No detected installation: follow `{{CMD}} setup guide protocols`.
 
 The documentation and standalone-skill migrations preserve project knowledge before removing legacy layouts. Both then continue with `{{CMD}} setup guide upgrade-v3`.
@@ -262,7 +263,7 @@ Ports and infrastructure belong to the dev-server's first `dev setup`. Migrate a
 5. Give each spawn server the name of its port, such as `port: "frontend"`.
 6. Offer to pin the main worktree's current ports, read from its run files, to keep them: each becomes the `mainWorktree` of its `declare` entry, as `{ name, mainWorktree }`. Linked workspaces get new ports at their next start. Their infrastructure, already provisioned, follows a moved port only when a callback `start` recreates it, as `docker compose up -d` does; otherwise run `dev setup --force` in the workspace.
 7. Make `purgeInfrastructure` tear down by the workspace name, as "Teardown by name" in `{{CMD}} setup guide workspace` describes. Keep reading `purgeData` while existing workspaces carry one: the old `finalizeWorkspace` returned it, and their entries still pass it.
-8. In the workspaces section of `AGENTS.md` and `DEVELOPERS.md`, say that ports and infrastructure arrive with the first `dev` or `dev setup`. See "Project documentation" in `{{CMD}} setup guide workspace`.
+8. In the workspaces section of `AGENTS.md` and `ASSISTANTS.md`, say that ports and infrastructure arrive with the first `dev` or `dev setup`. See "Project documentation" in `{{CMD}} setup guide workspace`.
 
 On an AlignDev OpenClaw host with the dev-server gateway, `REMOTE_DEV_DOMAIN` already comes from `environment.d/common.conf`. A project needs no remote setup step anymore.
 
@@ -288,3 +289,13 @@ Run-file rewrites at startup depend on changed ports or declared inputs. An expl
 ## Update the Docmap Snippet
 
 When an `AGENTS.md` or `CLAUDE.md` has a `Docmap - Seek Documentation` section whose body says "Mandatory for every task", replace that body with the agent-instructions snippet of `{{CMD}} setup guide docmap`. Keep the heading and the project's docmap command.
+
+## Optional: Rename the Assistant Guide
+
+A project may keep its assistant guide under another name through `assistantInstructionsFile`. Rename it only when the user asks:
+
+1. Rename the file to `ASSISTANTS.md`, in the location that `locations.assistantInstructionsFile` reports.
+2. Retitle it `# Assistant Guide`.
+3. Remove `assistantInstructionsFile` from the selected `alignfirst.json` or `.jsonc`.
+4. Update the links to the old name.
+5. Run `{{CMD}} assistant-instructions` and check that it prints the guide.

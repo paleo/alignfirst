@@ -138,7 +138,7 @@ function describeItem(
 ): DoctorLine {
   const location = layout.locations[name];
   const setting = companion.items[name];
-  const missingCopy = setting === "companion" && location !== null && !location.exists;
+  const missingCopy = setting === "companion" && !location.exists;
   return {
     level: missingCopy ? "warn" : "ok",
     text: renderItemLocation(name, location, setting),

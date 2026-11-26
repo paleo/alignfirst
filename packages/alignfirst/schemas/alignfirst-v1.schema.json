@@ -26,6 +26,7 @@
       }
     },
     "assistantInstructionsFile": {
+      "description": "Relative path of the assistant guide. Defaults to ASSISTANTS.md.",
       "type": "string",
       "pattern": "\\S"
     },
