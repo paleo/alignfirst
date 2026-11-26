@@ -1,6 +1,6 @@
 # A Coding Agent as the Assistant
 
-Claude Code, Codex, Antigravity or a persistent Pi session can act as the AlignFirst assistant on one project: by default, the repository where its session starts. It follows the `aligndev` playbook and delegates through `aligndev code`. The assistant's harness and the agent's harness are independent. No OpenClaw deployment is needed.
+Claude Code, Codex, Antigravity or a persistent Pi session can act as the AlignFirst assistant. It works on the repository where its session starts, and on any project designated by a path. It follows the `aligndev` playbook and delegates through `aligndev code`. The assistant's harness and the agent's harness are independent. No OpenClaw deployment is needed.
 
 Supported systems: Linux and macOS, and Windows through WSL.
 
@@ -188,7 +188,7 @@ Install current stable packages and inspect their declared Pi peer and Node runt
 
 Start the assistant's harness in the project's repository and invoke `/aligndev` in Claude Code or Antigravity, `$aligndev` in Codex, or `/skill:aligndev` in Pi. The skill runs `npx -y aligndev guide`, or `bunx --bun aligndev guide` with Bun; no global AlignDev CLI installation is required. Confirm skill discovery and the requested tools without changing trust or settings merely to test them.
 
-The session can start elsewhere, in a Git repository or not. The user's request or the starting directory's instructions then give the project's path. The assistant runs its commands there and writes work files, Git state and workspaces, never the codebase. The harness must allow it, for instance through `--add-dir <project>` in Claude Code or Codex.
+A session can also work on other projects, and its starting directory need not be a Git repository. The user's request, the starting directory's instructions or `~/.alignfirst/ASSISTANTS.md` give each project's path. The assistant stays in its starting directory and runs each command in the project's directory. There it writes work files, Git state and workspaces, never the codebase. The harness must allow those directories, for instance through `--add-dir` in Claude Code or Codex.
 
 ## Permissions
 

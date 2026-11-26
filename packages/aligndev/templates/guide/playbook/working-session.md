@@ -70,7 +70,9 @@ A takeover turn starts with the plugin's `Take over this thread.` message from `
 {{#codingAgent}}
 ### Step 1 — Resolve the project
 
-When the user or your instructions designate the project by a path, change to that directory first: it replaces the session's working directory in every guide. Outside a git repository, ask the user for the project's path. Otherwise, resolve the project before any other step:
+A request names its project by a path, given by the user or by your instructions. Without one, the project is the repository where this session started, unless the request continues a task on another project. Ask when a new request could belong to either. Outside a git repository, ask for the project's path.
+
+Resolve a project before any other step of its first task. For the repository where this session started:
 {{/codingAgent}}
 {{#app}}
 ### Step 1 — Identify the conversation
@@ -89,10 +91,16 @@ Any other key is a work conversation. Run `git rev-parse --path-format=absolute 
 - The workplace is the session's worktree (`git rev-parse --show-toplevel`) and its branch (`git branch --show-current`).
 - Run `{{ALIGNFIRST}} config --json` and `{{ALIGNFIRST}} assistant-instructions` from the workplace. Retain `locations.assistantInstructionsFile` from the report: the project's assistant-instructions file, present or not. The default branch is `config.conventions.git.defaultBranch` in the report, else the default branch identified by the project's instructions or configured remote. Ask when it is unclear. The report also names the project's companion directory, where its AlignFirst files may live.
 {{/conversation}}
-{{#conversation}}
+{{#app}}
 
 These values hold for the whole session. Only `{{GUIDE}} project-workspace-setup` moves the workplace.
-{{/conversation}}
+{{/app}}
+{{#codingAgent}}
+
+For a project designated by a path, resolve PROJECT_PATH and PROJECT from that directory in the same way. Its tasks have no session workplace: run `{{ALIGNFIRST}} config --json` and `{{ALIGNFIRST}} assistant-instructions` from PROJECT_PATH.
+
+A project's values hold for the whole session. Each task has its own TICKET_ID and workplace, and only `{{GUIDE}} project-workspace-setup` moves a workplace.
+{{/codingAgent}}
 {{#app}}
 
 **Started anywhere else** — the agent workspace, or a repository the inventory does not list. Resolve PROJECT and PROJECT_PATH from the request, with the inventory and the playbook's rules, "Resolving a project from the inventory". There is no session workplace.
@@ -174,6 +182,7 @@ Resolve what the request leaves open:
 - Single-project changes, code reviews, protocol requests, and ticket status requests require PROJECT, PROJECT_PATH, and TICKET_ID. Ask only after the available resource, inventory, request, and ticket integration fail to supply them. An explicit no-ticket request follows Step 5 instead of asking for an external ID.
 {{/openclaw}}
 {{#codingAgent}}
+- Work that spans several projects runs as one single-project task per project. The projects may share a TICKET_ID or have one each. Carry between the agents what each needs from the others.
 - Single-project changes, code reviews, protocol requests, and ticket status requests require PROJECT, PROJECT_PATH, and TICKET_ID. Ask only after the available resource, request, and ticket integration fail to supply them. An explicit no-ticket request follows Step 5 instead of asking for an external ID.
 {{/codingAgent}}
 - Consultations require only PROJECT and PROJECT_PATH to start. Follow `{{GUIDE}} consultation` before ticket preflight, request capture, or workspace setup. A supplied ticket is context; the runbook decides whether to record the discussion.
@@ -357,7 +366,7 @@ The agent reads the project's instructions, documentation and work files on its 
 Launching a background run ends the turn: the closing message is the launch acknowledgement, and the report moves to the run's completion turn. Each further run launched from that turn moves the report again.
 {{/openclaw}}
 {{#codingAgent}}
-Coding runs are long: run `{{ALIGNDEV}} code` in the background, as the delegation guide describes for your harness. The launch ends the turn on its acknowledgement, and the report moves to the run's completion. The agent's completed turn does not complete the whole request.
+Coding runs are long: run `{{ALIGNDEV}} code` in the background, as the delegation guide describes for your harness. Runs in different worktrees can overlap, and one turn can launch several. The launch ends the turn on its acknowledgement, and each report moves to its run's completion. The agent's completed turn does not complete the whole request.
 {{/codingAgent}}
 
 ### Questions for the user

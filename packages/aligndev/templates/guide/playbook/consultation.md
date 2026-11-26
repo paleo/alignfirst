@@ -15,7 +15,7 @@ Use the main worktree on the configured default branch. When the question explic
 When this conversation started in a linked worktree of the project, use that worktree and its branch as they are. Otherwise use the main worktree on the configured default branch. When the question explicitly concerns another branch or a PR, or follows ongoing branch work in this conversation, use that branch's existing registered workspace instead: resolve it through `{{ALIGNFIRST}} workspace list --json`. Report the limitation rather than inspecting a different branch when no worktree exists. Do not create a worktree merely to answer a question.
 {{/app}}
 {{#codingAgent}}
-Use the session's worktree and its branch as they are. When the question explicitly concerns another branch or a PR, use that branch's existing registered workspace instead: resolve it through `{{ALIGNFIRST}} workspace list --json`. Report the limitation rather than inspecting a different branch when no worktree exists. Do not create a worktree merely to answer a question.
+Use the session's worktree and its branch as they are. For a project the session did not start in, use its main worktree as it is. When the question explicitly concerns another branch or a PR, use that branch's existing registered workspace instead: resolve it through `{{ALIGNFIRST}} workspace list --json`. Report the limitation rather than inspecting a different branch when no worktree exists. Do not create a worktree merely to answer a question.
 {{/codingAgent}}
 
 {{#openclaw}}

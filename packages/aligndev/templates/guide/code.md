@@ -83,6 +83,8 @@ Choose the launch facility from **your own harness**, independently of the agent
 
 ## Background runs and reporting
 
+A `Session file:` path can be relative to the run's worktree. Retain the worktree with the path: `{{ALIGNDEV}} code status` runs from it, and a relative path resolves from it.
+
 {{#pi}}
 ### Your harness: Pi
 

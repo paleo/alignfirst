@@ -2,4 +2,4 @@
 "aligndev": minor
 ---
 
-Allowed a coding-agent assistant to work on a project designated by a path, wherever its session started.
+Allowed a coding-agent assistant to carry tasks on several projects, each designated by a path, without leaving its starting directory.

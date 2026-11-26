@@ -27,7 +27,7 @@ A task can also start at any intermediate step.
 
 ## Two Ways to Run the Assistant
 
-**In your coding agent.** A Claude Code, Codex, Antigravity or persistent Pi session becomes the assistant of one project: by default, the repository it starts in. You keep chatting in the same session; the agents it launches work in the background.
+**In your coding agent.** A Claude Code, Codex, Antigravity or persistent Pi session becomes the assistant. Started on a ticket branch, it works on that ticket in place. Started on `main`, it drives several tasks, each in its own worktree, in its repository or in any project you designate by a path. You keep chatting in the same session; the agents it launches work in the background.
 
 **As an OpenClaw bot.** [AlignDev for OpenClaw](#start-as-an-openclaw-bot) deploys the assistant on a server, under its own name in Slack or Discord. It works on every project of the host, one thread per task.
 
