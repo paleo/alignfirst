@@ -113,14 +113,14 @@ The `contextTokens` line reports what the run left in the agent's context window
 
 ### Authentication
 
-When the agent's login on the host is missing or expired, `aligndev code` detects the failure in the agent's stream, seals the session file with `exitReason: auth_required`, and exits `2`. `renderAuthenticationFailure` (`src/code/login.ts`) writes one text as the Result block and as the stderr diagnostic: an OpenClaw assistant reads the session file only. The agent's own error follows it in the Result block. The guide tells the assistant to relay the text, never to retry.
+When the agent's login on the host is missing or expired, `aligndev code` detects the failure in the agent's stream, seals the session file with `exitReason: auth_required`, and exits `2`. `renderAuthenticationFailure` (`src/code/login.ts`) writes one text as the Result block and as the stderr diagnostic: an OpenClaw assistant reads the session file only. The agent's own error follows it in the Result block, under a label line: provider output may hold a credential, so it stays out of the diagnostic. The guide tells the assistant to relay the text without that error, and to retry only once the agent is authenticated.
 
 The text names the profile and gives its login command: `cd` to the run's directory, then the native CLI under `env`, followed by the harness's own step, such as `/login` for Claude Code. `env` reproduces what selects the account:
 
 - the profile's `unset` and the names of its `env`;
 - the native directory variable as the agent ran with it, set or removed: another shell may hold a different one.
 
-Three values are printed, all directory paths: a `configDir` string, the native directory variable inherited from the assistant's session, and the inherited HOME, which identifies the agent's OS user. A profile `env` value is never printed, whatever its name: it prints as `<omitted>`, with a pointer to the settings file. The rest of the inherited environment is never listed. These paths reach the work-files repository with the session file. Values are shell-quoted, with ANSI-C quoting for a control character.
+Three values are printed, all directory paths: a `configDir` string, the native directory variable inherited from the assistant's session, and the inherited HOME, which identifies the agent's OS user. A profile `env` value is never printed, whatever its name: its place holds a `${OMITTED:?…}` expansion, which the shell refuses until the value from the settings file replaces it. The rest of the inherited environment is never listed. These paths reach the work-files repository with the session file. The command targets bash or zsh. Values are shell-quoted; a control character is written as its UTF-8 bytes in ANSI-C quoting, which decodes under any locale.
 
 Help prints the same command through `renderLoginInstructions`, for the directory it runs from. `describeNativeStorage` gives help and the other failures their storage-origin labels, with no environment value: string `configDir`, explicit unset by `configDir: null` with native defaults, profile environment override, inherited variable or profile removal, including HOME/USERPROFILE context.
 

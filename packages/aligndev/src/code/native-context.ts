@@ -30,5 +30,5 @@ function describeVariable(code: CodeConfig, name: string): string {
   if (code.unset?.includes(name)) return `${name}: unset by profile; native defaults apply`;
   return code.childEnv[name] === undefined
     ? `${name}: native default storage`
-    : `${name}: inherited environment (value omitted)`;
+    : `${name}: inherited environment`;
 }

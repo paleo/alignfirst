@@ -640,7 +640,7 @@ async function runSession(
     stdout.write(`\nSession ID: ${result.sessionId}\n`);
   }
   if (result.authRequired) {
-    writeFailureDiagnostic(ctx, completedPath, renderAuthenticationFailure(code, cwd));
+    writeFailureDiagnostic(ctx, completedPath, runConfig.authenticationFailure.instructions);
     return EXIT_AUTH_REQUIRED;
   }
   if (result.status === "succeeded") return 0;

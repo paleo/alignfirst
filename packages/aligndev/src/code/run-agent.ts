@@ -27,8 +27,7 @@ export interface RunConfig {
   prompt: string;
   sessionFilePath: string;
   nativeContext?: string;
-  // The result of a run that ends with `auth_required`; the agent's own error follows it.
-  authenticationFailure: string;
+  authenticationFailure: AuthenticationFailure;
   cwd: string;
   resume?: string;
   quiet?: boolean;
@@ -39,6 +38,14 @@ export interface RunConfig {
   additionalDirectories: readonly string[];
   // Finalized by profile resolution; discovery, state and spawn share this exact object.
   env: NodeJS.ProcessEnv;
+}
+
+// The result of a run that ends with `auth_required`.
+export interface AuthenticationFailure {
+  // Also printed as the run's diagnostic.
+  instructions: string;
+  // Introduces the agent's own error, which follows the instructions in the Result block.
+  errorLabel: string;
 }
 
 export interface RunResult {
@@ -166,10 +173,9 @@ interface ProcessOutcome {
 }
 
 function authenticationResult(config: RunConfig, detail: string | undefined): string {
+  const { instructions, errorLabel } = config.authenticationFailure;
   const reason = detail === undefined ? undefined : nonblank(detail);
-  return reason === undefined
-    ? config.authenticationFailure
-    : `${config.authenticationFailure}\n\n${reason}`;
+  return reason === undefined ? instructions : `${instructions}\n\n${errorLabel}\n\n${reason}`;
 }
 
 function selectResult(

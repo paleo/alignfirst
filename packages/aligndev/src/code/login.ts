@@ -1,17 +1,21 @@
 import { type CodeConfig, CONFIG_DIRECTORY_VARIABLES } from "../config.js";
 import { escapeControlCharacters } from "../project/format.js";
-import type { CodingAgent } from "./coding-agent.js";
+import { CODING_AGENT_NAMES, type CodingAgent } from "./coding-agent.js";
 import { describeProfile } from "./native-context.js";
+import type { AuthenticationFailure } from "./run-agent.js";
 
-const OMITTED_VALUE = "<omitted>";
+// A word the shell refuses to expand: the command fails until the value replaces it.
+const OMITTED_VALUE = `"\${OMITTED:?replace it with the settings value}"`;
 
-/** The result of a run that ends with `auth_required`, also printed as its diagnostic. */
-export function renderAuthenticationFailure(code: CodeConfig, cwd: string): string {
-  return (
-    `Coding agent not authenticated: ${describeProfile(code)}. ` +
-    "Do not retry: an administrator must first log in on this host.\n\n" +
-    renderLoginInstructions(code, cwd)
-  );
+export function renderAuthenticationFailure(code: CodeConfig, cwd: string): AuthenticationFailure {
+  const name = CODING_AGENT_NAMES[code.harness];
+  return {
+    instructions:
+      `Coding agent not authenticated: ${describeProfile(code)}. ` +
+      `Do not retry until ${name} is authenticated:\n\n` +
+      renderLoginInstructions(code, cwd),
+    errorLabel: `Error reported by ${name}:`,
+  };
 }
 
 /**
@@ -58,7 +62,7 @@ function nativeEnvironment(code: CodeConfig): NativeEnvironment {
     }
     const fromProfile = profileEnv.includes(name);
     omitted ||= fromProfile;
-    assignments.push(`${name}=${quoteShell(fromProfile ? OMITTED_VALUE : value)}`);
+    assignments.push(`${name}=${fromProfile ? OMITTED_VALUE : quoteShell(value)}`);
   }
   return { removals: [...removals], assignments, omitted };
 }
@@ -67,7 +71,17 @@ function quoteShell(value: string): string {
   if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(value)) return value;
   if (escapeControlCharacters(value) === value) return `'${value.replaceAll("'", "'\\''")}'`;
   // ANSI-C quoting keeps a control character on the command's line.
-  return `$'${escapeControlCharacters(value.replaceAll("\\", "\\\\").replaceAll("'", "\\'"))}'`;
+  return `$'${Array.from(value, escapeAnsiC).join("")}'`;
+}
+
+// A control character becomes its UTF-8 bytes: `\u` only decodes under a UTF-8 locale.
+function escapeAnsiC(character: string): string {
+  if (character === "\\" || character === "'") return `\\${character}`;
+  if (escapeControlCharacters(character) === character) return character;
+  return Array.from(
+    Buffer.from(character),
+    (byte) => `\\x${byte.toString(16).padStart(2, "0")}`,
+  ).join("");
 }
 
 function loginCommand(harness: CodingAgent): string {
@@ -91,7 +105,7 @@ function loginStep(harness: CodingAgent): string[] {
 }
 
 function omittedValuesNote(code: CodeConfig): string {
-  return `Replace each \`${OMITTED_VALUE}\` with the value in \`code.profiles[${JSON.stringify(code.profile)}].env\` of \`~/.alignfirst/aligndev.settings.json\`.`;
+  return `Replace each \`${OMITTED_VALUE}\` with the value in \`code.profiles[${JSON.stringify(code.profile)}].env\` of \`~/.alignfirst/aligndev.settings.json\`. The shell refuses the command until then.`;
 }
 
 function inheritedHome(code: CodeConfig): string {

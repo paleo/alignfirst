@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { type SpawnSyncReturns, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,6 +21,7 @@ interface LoginCase {
 // What the fake native CLI saw when the login command ran.
 interface Observed {
   executable: string;
+  args: string[];
   cwd: string;
   directory?: string;
   token?: string;
@@ -59,7 +60,7 @@ describe("login instructions", () => {
     base = realpathSync(mkdtempSync(join(tmpdir(), "aligndev-login-")));
     home = join(base, "home");
     bin = join(base, "bin");
-    cwd = join(base, "it's a\nproject");
+    cwd = join(base, "it's a\n\u0085project");
     for (const directory of [home, bin, cwd]) mkdirSync(directory);
     for (const agent of CODING_AGENTS) installFakeAgent(agent);
   });
@@ -78,6 +79,7 @@ describe("login instructions", () => {
 
     expect(observed).toEqual({
       executable: code.harness,
+      args: code.harness === "codex" ? ["login"] : [],
       cwd,
       ...(variable === undefined ? {} : { directory: code.childEnv[variable] }),
     });
@@ -102,6 +104,18 @@ describe("login instructions", () => {
     expect(instructions).toContain("API_ROUTE=");
   });
 
+  it("refuse to start the CLI until an omitted value is replaced", () => {
+    const code = resolve(
+      { harness: "claude", env: { API_ROUTE: "private-route" } },
+      { HOME: home },
+    );
+
+    const result = spawnLoginCommand(renderLoginInstructions(code, cwd), {});
+
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toBe("");
+  });
+
   function resolve(profile: object, env: NodeJS.ProcessEnv): CodeConfig {
     writeSettings(home, { code: { fallbackProfile: "test", profiles: { test: profile } } });
     return resolveCodeConfig(loadConfig(home, "alignfirst"), env);
@@ -109,15 +123,23 @@ describe("login instructions", () => {
 
   // Runs the command line of the instructions in the administrator's shell.
   function runLoginCommand(instructions: string, administratorEnv: NodeJS.ProcessEnv): Observed {
+    const result = spawnLoginCommand(instructions, administratorEnv);
+    if (result.status !== 0) throw new Error(`${instructions}\n${result.stderr}`);
+    return JSON.parse(result.stdout);
+  }
+
+  // The administrator's shell has no locale: the command must not depend on one.
+  function spawnLoginCommand(
+    instructions: string,
+    administratorEnv: NodeJS.ProcessEnv,
+  ): SpawnSyncReturns<string> {
     const [command, ...others] = instructions.split("\n").filter((line) => line.startsWith("  "));
     if (command === undefined || others.length > 0) throw new Error(instructions);
-    const result = spawnSync("bash", ["-c", command], {
+    return spawnSync("bash", ["-c", command], {
       cwd: base,
       env: { ...administratorEnv, PATH: `${bin}:${process.env.PATH}` },
       encoding: "utf8",
     });
-    if (result.status !== 0) throw new Error(`${command}\n${result.stderr}`);
-    return JSON.parse(result.stdout);
   }
 
   function installFakeAgent(agent: string): void {
@@ -125,7 +147,7 @@ describe("login instructions", () => {
       join(bin, agent),
       `#!${process.execPath}
 const directory = [process.env.CLAUDE_CONFIG_DIR, process.env.CODEX_HOME, process.env.PI_CODING_AGENT_DIR].find((value) => value !== undefined);
-process.stdout.write(JSON.stringify({ executable: ${JSON.stringify(agent)}, cwd: process.cwd(), directory, token: process.env.TOKEN }));
+process.stdout.write(JSON.stringify({ executable: ${JSON.stringify(agent)}, args: process.argv.slice(2), cwd: process.cwd(), directory, token: process.env.TOKEN }));
 `,
       { mode: 0o755 },
     );

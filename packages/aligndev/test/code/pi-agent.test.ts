@@ -6,7 +6,7 @@ import type { RunConfig } from "../../src/code/run-agent.js";
 const BASE: RunConfig = {
   prompt: "literal prompt",
   sessionFilePath: "/tmp/run.md",
-  authenticationFailure: "login instructions",
+  authenticationFailure: { instructions: "login instructions", errorLabel: "Agent error:" },
   cwd: "/project",
   executableModel: undefined,
   effort: undefined,
