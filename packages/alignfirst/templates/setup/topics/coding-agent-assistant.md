@@ -188,7 +188,7 @@ Install current stable packages and inspect their declared Pi peer and Node runt
 
 Start the assistant's harness in the project's repository and invoke `/aligndev` in Claude Code or Antigravity, `$aligndev` in Codex, or `/skill:aligndev` in Pi. The skill runs `npx -y aligndev guide`, or `bunx --bun aligndev guide` with Bun; no global AlignDev CLI installation is required. Confirm skill discovery and the requested tools without changing trust or settings merely to test them.
 
-A session can also work on other projects, and its starting directory need not be a Git repository. The user's request, the starting directory's instructions or `~/.alignfirst/ASSISTANTS.md` give each project's path. The assistant stays in its starting directory and runs each command in the project's directory. There it writes work files, Git state and workspaces, never the codebase. The harness must allow those directories, for instance through `--add-dir` in Claude Code or Codex.
+A session can also work on other projects, and its starting directory need not be a Git repository. The user's request, the starting directory's instructions or `~/.alignfirst/ASSISTANTS.md` give each project's path. The assistant stays in its starting directory and runs each command in the project's directory. There it writes work files, Git state and workspaces, never the codebase. The harness must allow a directory that holds the projects and their workspaces, typically their common parent, with `--add-dir` in Claude Code or Codex.
 
 ## Permissions
 
