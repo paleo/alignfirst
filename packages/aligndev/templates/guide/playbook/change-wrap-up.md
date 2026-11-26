@@ -17,7 +17,7 @@ Manual testing is what ends a code change: beyond the automated checks, the chan
 {{#codingAgent}}
 3. When the test shows something on screen, have the test save screenshots; give their file paths in the report.
 {{/codingAgent}}
-4. After using a dev-server, have its logs checked for errors or unusual behavior. Clean logs are required for the manual test to pass.
+4. After using a dev-server, have a separate no-protocol agent run with the smallest available model (the default one when the agent has no model list) inspect its logs for errors or unusual behavior. Give it the log locations. It is a background run, so the manual test's verdict lands on its completion turn. Clean logs are required for the manual test to pass.
 {{#openclaw}}
 5. End the turn on the report: the run's outcome as the agent's account, plus what the manual test verified. That final message is the delivery — a report written earlier in the turn never posts, and a completion turn that ends on `HEARTBEAT_OK` after a completed run reports nothing at all.
 {{/openclaw}}

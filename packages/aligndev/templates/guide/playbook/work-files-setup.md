@@ -8,8 +8,6 @@ For explicit companion-only onboarding, start at section 3 under the onboarding 
 
 Run `{{ALIGNFIRST}} plans check --json` from PROJECT_PATH. It passes when the effective `.plans` location is a usable directory that this project's repository does not track.
 
-If `--json` is rejected, the selected AlignFirst CLI needs upgrading alongside AlignDev. Check the AlignFirst installation selected by `{{ALIGNFIRST}}`. For npm/npx, check the project's local `alignfirst` dependency first. Retry the JSON check after upgrading; do not substitute a plain-text check.
-
 When an existing linked worktree is selected, run the command there too: it also requires the same effective target as the main worktree. A different location is an error: do not create a second history or repair links silently.
 
 Usable, non-project-tracked effective plans need no preparation: resume the interrupted operation. Any other failure (broken links, invalid configuration, unreadable paths, conflicting non-directory files) is reported, not repaired.
