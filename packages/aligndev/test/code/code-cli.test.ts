@@ -1978,7 +1978,7 @@ describe("pi launches", () => {
     expect(newest().frontmatter.model).toBe(selected);
   });
 
-  it.each([undefined, "terra", " provider/model:high "])(
+  it.each([undefined, "terra:high", " provider/model:high "])(
     "preserves native model selection %j",
     async (model) => {
       const result = await launch([

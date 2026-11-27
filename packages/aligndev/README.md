@@ -141,7 +141,6 @@ For multiple accounts and independent quota sources:
       "codex-personal": { "harness": "codex", "defaultModel": "sol" },
       "pi-codex": {
         "harness": "pi", "defaultModel": "sol",
-        "modelAliases": { "sol": "openai/sol" },
         "quota": { "source": "codex" }
       },
       "pi-anthropic": {
@@ -157,7 +156,7 @@ For multiple accounts and independent quota sources:
 
 A Claude Code session without `CLAUDE_CONFIG_DIR` is described by `claude-personal` and delegates to `codex-personal`. A session whose `CLAUDE_CONFIG_DIR` is `~/.claude-work` is described by `claude-work` and delegates to it. A Pi assistant delegates to `pi-codex`; `pi-anthropic` is disabled.
 
-The Pi targets illustrate native shorthand; availability depends on Pi's catalog and account. Exact provider-qualified IDs pin a model. Provider-qualified fuzzy selectors and thinking suffixes pass unchanged to Pi, which owns their resolution. `--effort` and `defaultEffort` override a thinking suffix. AlignDev neither guesses providers nor implements newest-family ordering.
+Under `pi-codex`, `sol` resolves to the newest unsuffixed `gpt-…-sol` model that `pi --list-models` lists, such as `openai/gpt-6.2-sol`; availability depends on Pi's catalog and credentials. Under `pi-anthropic`, `opus` is a profile alias pinning `anthropic/opus`. Other selectors and thinking suffixes pass unchanged to Pi, which owns their resolution. `--effort` and `defaultEffort` override a thinking suffix.
 
 On an account shared by OpenClaw and coding-agent sessions:
 
@@ -191,8 +190,8 @@ A coding-agent profile accepts:
 - `env` — literal environment values for non-secret configuration. No interpolation or shell expansion. Keep credentials in native stores or separately provisioned process environments.
 - `unset` — inherited variables to remove, including API keys that select an unintended authentication route. A variable cannot occur in both `env` and `unset`. A string or null `configDir` cannot coexist with its native directory variable in either field.
 - `defaultModel` — new-session default, validated against accepted names. Omission uses the native default.
-- `models` — a nonempty list replaces accepted names. Otherwise Claude accepts `fable`, `opus`, `sonnet`, `haiku`, Codex accepts `astra`, `sol`, `terra`, `luna`, and both add configured alias names. Pi and Antigravity accept every nonblank selector. For Antigravity, prefer a base name with an effort: a name with an effort suffix conflicts with a different effort, `defaultEffort` included. An empty list adds no override.
-- `modelAliases` — one-step user-facing name → native selector mappings. Validate the chosen name first, expand once, then apply native handling. A Codex alias target such as `sol` still resolves through its bundled catalog.
+- `models` — a nonempty list replaces accepted names. Otherwise Claude accepts `fable`, `opus`, `sonnet`, `haiku`, Codex accepts `astra`, `sol`, `terra`, `luna`, and both add configured alias names. Pi and Antigravity accept every nonblank selector. When selected, built-in aliases resolve to the newest unsuffixed model of the native catalog: Pi's `astra`, `sol`, `terra`, `luna` to `<provider>/gpt-…`, Antigravity's `neon`, `hydrogen`, `argon`, `carbon`, `flash` to a base name. For Antigravity, prefer a base name with an effort: a name with an effort suffix conflicts with a different effort, `defaultEffort` included. An empty list adds no override.
+- `modelAliases` — one-step user-facing name → native selector mappings. Validate the chosen name first, expand once, then apply native handling. A built-in alias target such as `sol` still resolves through the native catalog. A full selector pins a model, such as `"sol": "openai/gpt-6.2-sol-healthcare"` for a suffixed variant.
 - `efforts` — a nonempty list replaces the harness's built-in effort levels and bounds what AlignDev passes. An empty list adds no override. Entries are free strings, so a level AlignDev does not know can be listed.
 - `defaultEffort` — pins new sessions to one of the accepted levels. Without it, a session launched without `--effort` runs at the native default, which AlignDev does not read.
 

@@ -25,7 +25,12 @@ import { type CodingAgent, createAgentAdapter } from "./coding-agent.js";
 import { readLinkedGitCommonDir } from "./linked-worktree.js";
 import { readMachineId } from "./machine-id.js";
 import { resolveEfforts } from "./efforts.js";
-import { expandModelAlias, type ExecutableModelResolver, resolveModels } from "./models.js";
+import {
+  type ExecutableModelResolver,
+  expandModelAlias,
+  modelAliasHint,
+  resolveModels,
+} from "./models.js";
 import { renderAuthenticationFailure, renderLoginInstructions } from "./login.js";
 import { describeNativeStorage, describeProfile } from "./native-context.js";
 import { buildPrompt, PROTOCOLS } from "./prompt.js";
@@ -601,12 +606,11 @@ async function runSession(
       env: code.childEnv,
     });
   } catch {
+    const hint = modelAliasHint(agent);
     const message =
       `Could not resolve the ${agent} model; check --model, profile.models/modelAliases and the agent installation. ` +
       `${nativeContext(code)}.` +
-      (agent === "codex"
-        ? " For Codex aliases, update the Codex CLI or select an explicit full model slug."
-        : "");
+      (hint !== undefined ? ` ${hint}` : "");
     const completedPath = applyCompletion(sessionFilePath, {
       status: "failed",
       endedAt: new Date().toISOString(),
