@@ -1173,8 +1173,8 @@ describe("launch guards", () => {
       "sol",
       {
         exitCode: 0,
-        stdout: "No models available. Use /login to log into a provider. secret-catalog-text\n",
-        stderr: "",
+        stdout: `${JSON.stringify({ id: "aligndev-models", type: "response", success: true, data: { models: [] } })}\n`,
+        stderr: "Warning: No models available. secret-catalog-text\n",
       },
     ],
     [

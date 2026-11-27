@@ -1146,7 +1146,7 @@ function modelBehavior(agent: CodingAgent): string {
     case "codex":
       return "Codex aliases astra, sol, terra, and luna resolve on demand; configured full slugs pass through.";
     case "pi":
-      return "Pi aliases astra, sol, terra, and luna resolve on demand to the newest unsuffixed provider/gpt-… model of pi --list-models; other selectors (including provider/model:thinking) pass through unchanged. --effort overrides a thinking suffix of the model selector.";
+      return "Pi aliases astra, sol, terra, and luna resolve on demand to the newest unsuffixed provider/gpt-… model of Pi's catalog; other selectors (including provider/model:thinking) pass through unchanged. --effort overrides a thinking suffix of the model selector.";
     case "agy":
       return "Antigravity aliases neon, hydrogen, argon, carbon, and flash resolve on demand to the newest unsuffixed base name of agy models; other names pass through unchanged. Prefer a base name with --effort: a name with an effort suffix conflicts with a different effort.";
   }

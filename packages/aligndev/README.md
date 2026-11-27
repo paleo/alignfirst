@@ -156,7 +156,7 @@ For multiple accounts and independent quota sources:
 
 A Claude Code session without `CLAUDE_CONFIG_DIR` is described by `claude-personal` and delegates to `codex-personal`. A session whose `CLAUDE_CONFIG_DIR` is `~/.claude-work` is described by `claude-work` and delegates to it. A Pi assistant delegates to `pi-codex`; `pi-anthropic` is disabled.
 
-Under `pi-codex`, `sol` resolves to the newest unsuffixed `gpt-…-sol` model that `pi --list-models` lists, such as `openai/gpt-6.2-sol`; availability depends on Pi's catalog and credentials. Under `pi-anthropic`, the profile alias `opus` selects Pi's shorthand `anthropic/opus`, which Pi resolves against its catalog. Other selectors and thinking suffixes pass unchanged to Pi, which owns their resolution. `--effort` and `defaultEffort` override a thinking suffix.
+Under `pi-codex`, `sol` resolves to the newest unsuffixed `gpt-…-sol` model of Pi's catalog, such as `openai/gpt-6.2-sol`; availability depends on Pi's catalog and credentials. Under `pi-anthropic`, the profile alias `opus` selects Pi's shorthand `anthropic/opus`, which Pi resolves against its catalog. Other selectors and thinking suffixes pass unchanged to Pi, which owns their resolution. `--effort` and `defaultEffort` override a thinking suffix.
 
 On an account shared by OpenClaw and coding-agent sessions:
 

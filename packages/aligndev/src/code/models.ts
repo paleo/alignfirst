@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 
 import type { CodingAgent } from "./coding-agent.js";
 import { resolveEfforts } from "./efforts.js";
@@ -29,9 +29,8 @@ const MODEL_ALIAS_HELP: Readonly<Record<CatalogAgent, ModelAliasHelp>> = {
 };
 const CATALOG_MAX_BUFFER = 8 * 1024 * 1024;
 const CATALOG_TIMEOUT_MS = 30_000;
-// Pi separates single-word column names by at least two spaces; metadata columns may change.
-const PI_HEADER = /^provider {2,}model(?: {2,}\S+)*\s*$/;
-const PI_NO_MODELS = /^(?:Warning:\s*)?No models available\. Use \/login to log into a provider\b/;
+const CATALOG_KILL_GRACE_MS = 5_000;
+const PI_REQUEST_ID = "aligndev-models";
 
 export type CatalogAgent = "codex" | "pi" | "agy";
 
@@ -136,9 +135,9 @@ function createCatalogEntries(
     },
     pi: {
       aliases: new Set<string>(CODEX_DEFAULT_MODELS),
-      run: runners.pi ?? ((context) => runModelCatalog("pi", ["--list-models"], context)),
+      run: runners.pi ?? runPiModelCatalog,
       isSignInRequired: isPiCatalogSignInRequired,
-      parse: parsePiModelList,
+      parse: parsePiModels,
       prefix: "gpt",
       suffixes: [],
       toSelector: toPiSelector,
@@ -284,48 +283,45 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-// A successful Pi prints its login guidance instead of the table when no provider has credentials.
+// Pi answers with an empty list when no provider has credentials.
 function isPiCatalogSignInRequired(output: CatalogOutput): boolean {
-  if (output.exitCode !== 0) return false;
-  return (
-    readPiTable(output.stdout) === undefined &&
-    nonblankLines(output.stdout).some((line) => PI_NO_MODELS.test(line.trim()))
-  );
+  return output.exitCode === 0 && readPiModels(output.stdout)?.length === 0;
 }
 
-function parsePiModelList(output: string): readonly CatalogModel[] {
-  const models = readPiTable(output);
-  if (models === undefined) throw new Error("Pi returned no model table");
+function parsePiModels(stdout: string): readonly CatalogModel[] {
+  const models = readPiModels(stdout);
+  if (models === undefined) throw new Error("Pi returned no model list");
   return models;
 }
 
-// Pi pads fixed-width columns, and a model id may contain spaces: fields are read at the column
-// starts of the header. Extensions may print output before the header or after the rows: the
-// table ends at the first line that is not a row, and needs one row.
-function readPiTable(output: string): CatalogModel[] | undefined {
-  const lines = output.split(/\r?\n/);
-  for (const [index, line] of lines.entries()) {
-    if (!PI_HEADER.test(line)) continue;
-    const starts = [...line.matchAll(/\S+/g)].map((match) => match.index);
-    const models: CatalogModel[] = [];
-    for (const row of lines.slice(index + 1)) {
-      const fields = readPiRow(row, starts);
-      if (fields === undefined) break;
-      models.push({ provider: fields[0], id: fields[1] });
+// The RPC response to `get_available_models`, among the other protocol records of stdout.
+function readPiModels(stdout: string): CatalogModel[] | undefined {
+  const response = findPiResponse(stdout);
+  if (response?.success !== true || !isRecord(response.data)) return;
+  const { models } = response.data;
+  if (!Array.isArray(models)) return;
+  const result: CatalogModel[] = [];
+  for (const model of models) {
+    if (!isRecord(model) || typeof model.provider !== "string" || typeof model.id !== "string") {
+      return;
     }
-    if (models.length > 0) return models;
+    result.push({ provider: model.provider, id: model.id });
   }
+  return result;
 }
 
-// Every field starts at its column start, after a space, and is nonblank.
-function readPiRow(line: string, starts: readonly number[]): string[] | undefined {
-  const fields: string[] = [];
-  for (const [index, start] of starts.entries()) {
-    if (start > 0 && line[start - 1] !== " ") return;
-    if (line[start] === undefined || line[start] === " ") return;
-    fields.push(line.slice(start, starts[index + 1]).trim());
+function findPiResponse(stdout: string): Record<string, unknown> | undefined {
+  for (const line of stdout.split("\n")) {
+    let record: unknown;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (isRecord(record) && record.type === "response" && record.id === PI_REQUEST_ID) {
+      return record;
+    }
   }
-  return fields;
 }
 
 function parseAgyModelList(output: string): readonly CatalogModel[] {
@@ -382,5 +378,51 @@ function runModelCatalog(
       },
     );
     child.stdin?.end();
+  });
+}
+
+// Pi's RPC mode keeps stdout for protocol records: extension output goes to stderr. Closing stdin
+// after the response starts Pi's orderly shutdown; a deadline sends SIGTERM, which also shuts down
+// in order, then SIGKILL.
+function runPiModelCatalog(context: ModelDiscoveryContext): Promise<CatalogOutput> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("pi", ["--mode", "rpc", "--no-session"], {
+      cwd: context.cwd,
+      env: context.env,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const fail = (): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      child.kill("SIGTERM");
+      setTimeout(() => child.kill("SIGKILL"), CATALOG_KILL_GRACE_MS).unref();
+      reject(new Error("The model catalog command failed."));
+    };
+    const deadline = setTimeout(fail, CATALOG_TIMEOUT_MS);
+    child.on("error", fail);
+    child.stdin.on("error", () => {});
+    child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+      stdout += chunk;
+      if (stdout.length + stderr.length > CATALOG_MAX_BUFFER) fail();
+      else if (!child.stdin.writableEnded && findPiResponse(stdout) !== undefined) {
+        child.stdin.end();
+      }
+    });
+    child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+      stderr += chunk;
+      if (stdout.length + stderr.length > CATALOG_MAX_BUFFER) fail();
+    });
+    child.on("close", (code) => {
+      clearTimeout(deadline);
+      if (settled) return;
+      settled = true;
+      if (code === null) reject(new Error("The model catalog command failed."));
+      else resolve({ exitCode: code, stdout, stderr });
+    });
+    child.stdin.write(`${JSON.stringify({ id: PI_REQUEST_ID, type: "get_available_models" })}\n`);
   });
 }

@@ -15,17 +15,13 @@ import {
 } from "../../src/code/models.js";
 
 const CONTEXT = { cwd: "/project", env: { PATH: "/bin" } };
-const PI_MODELS = `provider  model                    context  max-out  thinking  images
-openai    gpt-6.1-sol              272K     128K     yes       yes
-openai    gpt-6.2-sol              272K     128K     yes       yes
-openai    gpt-6.2-sol-healthcare   1.1M     128K     yes       yes
-openai    gpt-6.10-sol-healthcare  1.1M     128K     yes       yes
-openai    gpt-5.6-terra            272K     128K     yes       yes
-`;
-const PI_MULTI_PROVIDER_MODELS = `provider    model                    context  max-out  thinking  images
-openai      gpt-6.2-sol              272K     128K     yes       yes
-openrouter  gpt-6.2-sol              272K     128K     yes       yes
-`;
+const PI_MODELS = piResponse([
+  ["openai", "gpt-6.1-sol"],
+  ["openai", "gpt-6.2-sol"],
+  ["openai", "gpt-6.2-sol-healthcare"],
+  ["openai", "gpt-6.10-sol-healthcare"],
+  ["openai", "gpt-5.6-terra"],
+]);
 const AGY_MODELS = [
   "gemini-4-neon-high\tGemini 4 Neon (High)",
   "gemini-4-neon-lite-high\tGemini 4 Neon Lite (High)",
@@ -38,6 +34,18 @@ const AGY_MODELS = [
 
 function completed(stdout: string): CatalogOutput {
   return { exitCode: 0, stdout, stderr: "" };
+}
+
+// Pi's RPC stdout: an unrelated protocol record, then the response to the catalog request.
+function piResponse(models: readonly (readonly [string, string])[]): string {
+  const response = {
+    id: "aligndev-models",
+    type: "response",
+    command: "get_available_models",
+    success: true,
+    data: { models: models.map(([provider, id]) => ({ provider, id, name: id })) },
+  };
+  return `${JSON.stringify({ type: "extension_ui_request", id: "x" })}\n${JSON.stringify(response)}\n`;
 }
 
 describe("resolveModels", () => {
@@ -224,7 +232,13 @@ describe("Pi and Antigravity executable model resolution", () => {
 
   it("rejects a Pi alias whose newest model appears under several providers", async () => {
     const resolve = createExecutableModelResolver({
-      pi: async () => completed(PI_MULTI_PROVIDER_MODELS),
+      pi: async () =>
+        completed(
+          piResponse([
+            ["openai", "gpt-6.2-sol"],
+            ["openrouter", "gpt-6.2-sol"],
+          ]),
+        ),
     });
     await expect(resolve("pi", "sol", CONTEXT)).rejects.toThrow(Error);
   });
@@ -241,73 +255,53 @@ describe("Pi and Antigravity executable model resolution", () => {
   });
 
   it.each([
-    ["pi", "sol", PI_MODELS.split("\n").slice(1).join("\n")],
+    ["pi", "sol", PI_MODELS.replaceAll("aligndev-models", "other-request")],
+    ["pi", "sol", PI_MODELS.replace('"success":true', '"success":false')],
     ["agy", "neon", "gemini-4-neon-high Gemini 4 Neon (High)\n"],
   ] as const)("rejects malformed %s catalog output", async (agent, alias, output) => {
     const resolve = createExecutableModelResolver({ [agent]: async () => completed(output) });
     await expect(resolve(agent, alias, CONTEXT)).rejects.toThrow(Error);
   });
 
-  it("reads a Pi model id containing a space as one id", async () => {
-    const catalog = `provider  model                   context  max-out  thinking  images
-openai    gpt-6.2-sol             272K     128K     yes       yes
-openai    gpt-7-sol experimental  272K     128K     yes       yes
-`;
-    const resolve = createExecutableModelResolver({ pi: async () => completed(catalog) });
-    await expect(resolve("pi", "sol", CONTEXT)).resolves.toBe("openai/gpt-6.2-sol");
-  });
-
-  it("parses the Pi table after startup output", async () => {
-    const catalog = `[my-extension] provider registered\n${PI_MODELS}`;
-    const resolve = createExecutableModelResolver({ pi: async () => completed(catalog) });
-    await expect(resolve("pi", "sol", CONTEXT)).resolves.toBe("openai/gpt-6.2-sol");
-  });
-
-  it.each([
-    [
-      "an added",
-      `provider  model        context  max-out  thinking  images  audio
-openai    gpt-6.1-sol  272K     128K     yes       yes     no
-openai    gpt-6.2-sol  272K     128K     yes       yes     no
-`,
-    ],
-    [
-      "a renamed",
-      `provider  model        context  output  thinking  images
-openai    gpt-6.1-sol  272K     128K    adaptive  yes
-openai    gpt-6.2-sol  272K     128K    adaptive  yes
-`,
-    ],
-  ])("reads a Pi table with %s metadata column", async (_name, catalog) => {
-    const resolve = createExecutableModelResolver({ pi: async () => completed(catalog) });
-    await expect(resolve("pi", "sol", CONTEXT)).resolves.toBe("openai/gpt-6.2-sol");
-  });
-
-  it("ends the Pi table at an extension log after the rows", async () => {
+  it("keeps a failed Pi command out of the sign-in handoff", async () => {
     const resolve = createExecutableModelResolver({
-      pi: async () => completed(`${PI_MODELS}Catalog done\n`),
-    });
-    await expect(resolve("pi", "sol", CONTEXT)).resolves.toBe("openai/gpt-6.2-sol");
-  });
-
-  it.each([
-    ["an extension message", 0, "No models available. The local cache is missing.\n"],
-    ["a failed command", 7, "No models available. Use /login to log into a provider.\n"],
-  ])("keeps %s from Pi out of the sign-in handoff", async (_name, exitCode, stdout) => {
-    const resolve = createExecutableModelResolver({
-      pi: async () => ({ exitCode, stdout, stderr: "" }),
+      pi: async () => ({ exitCode: 7, stdout: piResponse([]), stderr: "" }),
     });
     const attempt = resolve("pi", "sol", CONTEXT);
     await expect(attempt).rejects.toThrow(Error);
     await expect(attempt).rejects.not.toBeInstanceOf(ModelSignInRequiredError);
   });
 
+  it("reads Pi's catalog over RPC and closes its input", async () => {
+    const root = mkdtempSync(join(tmpdir(), "aligndev-pi-catalog-"));
+    try {
+      writeFileSync(
+        join(root, "pi"),
+        `#!${process.execPath}
+process.stderr.write("[extension] provider  model  ready\\n");
+let input = "";
+process.stdin.setEncoding("utf8").on("data", (chunk) => {
+  input += chunk;
+  if (!input.includes("\\n")) return;
+  const { id, type } = JSON.parse(input.slice(0, input.indexOf("\\n")));
+  if (type !== "get_available_models") process.exit(3);
+  const models = [{ provider: "openai", id: "gpt-6.2-sol" }];
+  process.stdout.write(JSON.stringify({ id, type: "response", success: true, data: { models } }) + "\\n");
+});
+process.stdin.on("end", () => process.exit(0));
+`,
+        { mode: 0o755 },
+      );
+      const resolve = createExecutableModelResolver();
+      const context = { cwd: root, env: { HOME: root, PATH: root } };
+      await expect(resolve("pi", "sol", context)).resolves.toBe("openai/gpt-6.2-sol");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it.each([
-    [
-      "pi",
-      "sol",
-      completed("No models available. Use /login to log into a provider via OAuth or API key.\n"),
-    ],
+    ["pi", "sol", completed(piResponse([]))],
     [
       "agy",
       "neon",
