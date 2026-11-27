@@ -35,6 +35,7 @@ const codingOnlyProfileKeys = [
   "defaultModel",
   "models",
   "modelAliases",
+  "modelFamilies",
   "defaultEffort",
   "efforts",
   "skipPermissions",
@@ -42,6 +43,12 @@ const codingOnlyProfileKeys = [
   "unset",
   "quota",
 ];
+// The aliases that a `modelFamilies` entry declares in a pi profile, as in the CLI.
+const modelFamilyAliases = {
+  gpt: ["astra", "sol", "terra", "luna"],
+  claude: ["fable", "opus", "sonnet", "haiku"],
+  gemini: ["carbon", "neon", "hydrogen", "flash"],
+};
 
 if (resolve(process.argv[1] ?? ".") === fileURLToPath(import.meta.url)) {
   try {
@@ -74,6 +81,7 @@ export function inventoryProfiles(settingsFile, serviceHome, deployedSettingsFil
   const coding = enabled.filter(([, profile]) => profile.harness !== "openclaw");
   validateReferences(settings.code, profiles, enabled, settingsFile);
   validateDefaults(coding, settingsFile);
+  validatePiDefaultModels(coding, settingsFile);
   const selectedName = deploymentDefault(enabled, settingsFile);
   const stores = [];
   for (const [name, profile] of coding) {
@@ -207,6 +215,8 @@ function readProfile(value) {
     throw new Error(`${path}.defaultAgentProfile must be a nonblank string`);
   validateDisabled(profile, path);
   validateLaunchFields(profile, path);
+  if (profile.modelFamilies !== undefined && profile.harness !== "pi")
+    throw new Error(`${path}.modelFamilies must be removed: it is valid only in a pi profile`);
   if (profile.quota !== undefined) {
     profile.quota = settingsObject(
       profile.quota,
@@ -311,6 +321,14 @@ function validateLaunchFields(value, path) {
   )
     throw new Error(`${path}.modelAliases must map nonblank names to nonblank strings`);
   if (
+    value.modelFamilies !== undefined &&
+    (!isObject(value.modelFamilies) ||
+      !Object.entries(value.modelFamilies).every(
+        ([family, prefix]) => Object.hasOwn(modelFamilyAliases, family) && nonblank(prefix),
+      ))
+  )
+    throw new Error(`${path}.modelFamilies must map gpt, claude or gemini to nonblank strings`);
+  if (
     value.env !== undefined &&
     (!isObject(value.env) ||
       !Object.entries(value.env).every(
@@ -362,6 +380,27 @@ function validateDefaults(coding, settingsFile) {
       throw new Error(
         `${settingsFile}: multiple default: true profiles for ${harness}: ${names.join(", ")}; ` +
           `leave only one default: true for ${harness}`,
+      );
+  }
+}
+
+// Like the CLI, a pi profile accepts only the model names it declares.
+function validatePiDefaultModels(coding, settingsFile) {
+  for (const [name, profile] of coding) {
+    if (profile.harness !== "pi" || profile.defaultModel === undefined) continue;
+    const accepted =
+      profile.models?.length > 0
+        ? profile.models
+        : [
+            ...Object.keys(profile.modelFamilies ?? {}).flatMap(
+              (family) => modelFamilyAliases[family],
+            ),
+            ...Object.keys(profile.modelAliases ?? {}),
+          ];
+    if (!accepted.includes(profile.defaultModel))
+      throw new Error(
+        `${settingsFile}: code.profiles[${quoteName(name)}].defaultModel must be a model that ` +
+          "the pi profile declares through models, modelFamilies or modelAliases",
       );
   }
 }

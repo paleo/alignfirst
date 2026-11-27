@@ -5,28 +5,40 @@ import { resolveEfforts } from "./efforts.js";
 
 export const CLAUDE_DEFAULT_MODELS = ["fable", "opus", "sonnet", "haiku"] as const;
 export const CODEX_DEFAULT_MODELS = ["astra", "sol", "terra", "luna"] as const;
-const AGY_MODEL_ALIASES = ["carbon", "neon", "hydrogen", "flash"] as const;
+// The version placeholder of a model pattern.
+export const LATEST = "{latest}";
+export const NO_DECLARED_MODEL =
+  "the profile declares no Pi model; declare modelFamilies, modelAliases or models";
 
-const MODEL_ALIAS_HELP: Readonly<Record<CatalogAgent, ModelAliasHelp>> = {
+const AGY_MODEL_ALIASES = ["carbon", "neon", "hydrogen", "flash"] as const;
+// Each family lists its aliases from the biggest model to the smallest.
+const MODEL_FAMILIES: Readonly<Record<string, ModelFamily>> = {
+  gpt: { aliases: CODEX_DEFAULT_MODELS, toPattern: (alias) => `gpt-${LATEST}-${alias}` },
+  claude: { aliases: CLAUDE_DEFAULT_MODELS, toPattern: (alias) => `claude-${alias}-${LATEST}` },
+  gemini: { aliases: AGY_MODEL_ALIASES, toPattern: (alias) => `gemini-${LATEST}-${alias}` },
+};
+export const MODEL_FAMILY_NAMES: readonly string[] = Object.keys(MODEL_FAMILIES);
+
+const MODEL_PATTERN_HELP: Readonly<Record<CatalogAgent, ModelPatternHelp>> = {
   codex: {
     label: "Codex",
-    remedy:
-      "update the Codex CLI, or set `code.profiles.<name>.models` in the aligndev settings to an " +
-      "explicit full model slug and select that value.",
+    remedy: "update the Codex CLI, or pin a full slug in the profile's `modelAliases`.",
   },
   pi: {
     label: "Pi",
     remedy:
-      "update Pi or its model catalogs (`pi update`), check the provider credentials, or pin a " +
-      "full `provider/model` selector in the profile's `modelAliases`.",
+      "check the pattern against `pi --list-models` (a Pi pattern is `provider/model`), update " +
+      "Pi or its model catalogs (`pi update`), check the provider credentials, or pin a full " +
+      "`provider/model` selector in the profile's `modelAliases`.",
   },
   agy: {
     label: "Antigravity",
     remedy:
-      "update Antigravity, check its sign-in, or pin a full model name in the profile's " +
-      "`modelAliases`.",
+      "check the pattern against `agy models`, update Antigravity, check its sign-in, or pin a " +
+      "full model name in the profile's `modelAliases`.",
   },
 };
+const VERSION_EXPRESSION = "(\\d{1,3})(?:[.-](\\d{1,3}))?";
 const CATALOG_MAX_BUFFER = 8 * 1024 * 1024;
 const CATALOG_TIMEOUT_MS = 30_000;
 const CATALOG_KILL_GRACE_MS = 5_000;
@@ -36,9 +48,22 @@ const LF = 0x0a;
 
 export type CatalogAgent = "codex" | "pi" | "agy";
 
-interface ModelAliasHelp {
+interface ModelFamily {
+  aliases: readonly string[];
+  toPattern(alias: string): string;
+}
+
+interface ModelPatternHelp {
   label: string;
   remedy: string;
+}
+
+// What the model functions read from a profile.
+export interface ModelSettings {
+  harness: CodingAgent;
+  models?: readonly string[];
+  modelAliases?: Readonly<Record<string, string>>;
+  modelFamilies?: Readonly<Record<string, string>>;
 }
 
 export interface ModelDiscoveryContext {
@@ -61,19 +86,11 @@ export type ExecutableModelResolver = (
   context: ModelDiscoveryContext,
 ) => Promise<string | undefined>;
 
-export interface CatalogModel {
-  id: string;
-  provider?: string;
-}
-
 interface CatalogEntry {
-  aliases: ReadonlySet<string>;
   run: ModelCatalogRunner;
   isSignInRequired(output: CatalogOutput): boolean;
-  parse(stdout: string): readonly CatalogModel[];
-  prefix: "gpt" | "gemini";
-  suffixes: readonly string[];
-  toSelector(base: string, models: readonly CatalogModel[]): string;
+  // The executable selectors of the catalog.
+  parse(stdout: string): readonly string[];
 }
 
 interface CatalogCommand {
@@ -88,23 +105,47 @@ interface CatalogCommand {
 // `endInput` closes the command's stdin; an error fails the command.
 type CatalogLineAction = "endInput" | Error;
 
-type CatalogCache = WeakMap<NodeJS.ProcessEnv, Map<CatalogAgent, Promise<readonly CatalogModel[]>>>;
+type CatalogCache = WeakMap<NodeJS.ProcessEnv, Map<CatalogAgent, Promise<readonly string[]>>>;
 
-export function resolveModels(
-  agent: CodingAgent,
-  override: readonly string[] | undefined,
-  aliases: Readonly<Record<string, string>> = {},
-): readonly string[] | undefined {
-  if (override !== undefined && override.length > 0) return override;
-  switch (agent) {
+// The accepted model names of a profile: `undefined` means any nonblank name, an empty list none.
+export function resolveModels(profile: ModelSettings): readonly string[] | undefined {
+  if (profile.models !== undefined && profile.models.length > 0) return profile.models;
+  if (profile.harness === "agy") return;
+  return [
+    ...new Set([...builtInAliases(profile).keys(), ...Object.keys(profile.modelAliases ?? {})]),
+  ];
+}
+
+export function expandBuiltInAlias(
+  profile: ModelSettings,
+  model: string | undefined,
+): string | undefined {
+  if (model === undefined) return;
+  return builtInAliases(profile).get(model) ?? model;
+}
+
+// Maps each built-in alias of the profile to its selector, biggest model first.
+function builtInAliases(profile: ModelSettings): ReadonlyMap<string, string> {
+  switch (profile.harness) {
     case "claude":
-      return [...new Set([...CLAUDE_DEFAULT_MODELS, ...Object.keys(aliases)])];
+      return new Map(CLAUDE_DEFAULT_MODELS.map((alias) => [alias, alias]));
     case "codex":
-      return [...new Set([...CODEX_DEFAULT_MODELS, ...Object.keys(aliases)])];
-    case "pi":
+      return new Map(familyAliases("gpt"));
     case "agy":
-      return;
+      return new Map(familyAliases("gemini"));
+    case "pi":
+      return new Map(
+        Object.entries(profile.modelFamilies ?? {}).flatMap(([family, prefix]) =>
+          familyAliases(family, `${prefix}/`),
+        ),
+      );
   }
+}
+
+function familyAliases(family: string, prefix = ""): [string, string][] {
+  if (!Object.hasOwn(MODEL_FAMILIES, family)) return [];
+  const { aliases, toPattern } = MODEL_FAMILIES[family];
+  return aliases.map((alias) => [alias, `${prefix}${toPattern(alias)}`]);
 }
 
 export function createExecutableModelResolver(
@@ -114,19 +155,15 @@ export function createExecutableModelResolver(
   const catalogs: CatalogCache = new WeakMap();
   return async (agent, selectedModel, context) => {
     if (selectedModel === undefined) return;
-    if (!isCatalogAgent(agent)) return selectedModel;
-    const entry = entries[agent];
-    if (!entry.aliases.has(selectedModel)) return selectedModel;
+    if (!isCatalogAgent(agent) || !selectedModel.includes(LATEST)) return selectedModel;
     try {
-      const models = await loadCatalog(catalogs, agent, entry, context);
-      const newest = selectNewestModel(models, selectedModel, entry.prefix, entry.suffixes);
-      if (newest === undefined) throw new Error("the model catalog contains no matching model");
-      return entry.toSelector(newest.base, newest.models);
+      const selectors = await loadCatalog(catalogs, agent, entries[agent], context);
+      return selectNewestModel(selectors, selectedModel);
     } catch (error) {
       if (error instanceof ModelSignInRequiredError || error instanceof PiStartupDialogError) {
         throw error;
       }
-      throw new Error(modelAliasError(agent, selectedModel));
+      throw new Error(modelPatternError(agent, selectedModel));
     }
   };
 }
@@ -143,41 +180,29 @@ function createCatalogEntries(
 ): Readonly<Record<CatalogAgent, CatalogEntry>> {
   return {
     codex: {
-      aliases: new Set<string>(CODEX_DEFAULT_MODELS),
       run:
         runners.codex ??
         ((context) =>
           runCatalogCommand({ name: "codex", args: ["debug", "models", "--bundled"] }, context)),
       isSignInRequired: () => false,
       parse: parseBundledModelSlugs,
-      prefix: "gpt",
-      suffixes: [],
-      toSelector: (base) => base,
     },
     pi: {
-      aliases: new Set<string>(CODEX_DEFAULT_MODELS),
       run: runners.pi ?? runPiModelCatalog,
       isSignInRequired: isPiCatalogSignInRequired,
       parse: parsePiModels,
-      prefix: "gpt",
-      suffixes: [],
-      toSelector: toPiSelector,
     },
     agy: {
-      aliases: new Set<string>(AGY_MODEL_ALIASES),
       run:
         runners.agy ?? ((context) => runCatalogCommand({ name: "agy", args: ["models"] }, context)),
       isSignInRequired: isAgyCatalogSignInRequired,
       parse: parseAgyModelList,
-      prefix: "gemini",
-      suffixes: resolveEfforts("agy", undefined),
-      toSelector: (base) => base,
     },
   };
 }
 
 function isCatalogAgent(agent: CodingAgent): agent is CatalogAgent {
-  return Object.hasOwn(MODEL_ALIAS_HELP, agent);
+  return Object.hasOwn(MODEL_PATTERN_HELP, agent);
 }
 
 function loadCatalog(
@@ -185,7 +210,7 @@ function loadCatalog(
   agent: CatalogAgent,
   entry: CatalogEntry,
   context: ModelDiscoveryContext,
-): Promise<readonly CatalogModel[]> {
+): Promise<readonly string[]> {
   let byAgent = catalogs.get(context.env);
   if (byAgent === undefined) {
     byAgent = new Map();
@@ -203,75 +228,70 @@ function readCatalog(
   entry: CatalogEntry,
   agent: CatalogAgent,
   output: CatalogOutput,
-): readonly CatalogModel[] {
+): readonly string[] {
   if (entry.isSignInRequired(output)) {
-    throw new ModelSignInRequiredError(`${MODEL_ALIAS_HELP[agent].label} requires sign-in.`);
+    throw new ModelSignInRequiredError(`${MODEL_PATTERN_HELP[agent].label} requires sign-in.`);
   }
   if (output.exitCode !== 0) throw new Error("The model catalog command failed.");
   return entry.parse(output.stdout);
 }
 
-interface NewestModel {
-  base: string;
-  models: readonly CatalogModel[];
+// The selector whose text is the pattern with the newest version in place of `{latest}`.
+function selectNewestModel(selectors: readonly string[], pattern: string): string {
+  const expression = toVersionExpression(pattern);
+  const candidates = selectors.flatMap((selector): VersionedSelector[] => {
+    const match = expression.exec(selector);
+    return match ? [{ selector, major: Number(match[1]), minor: Number(match[2] ?? 0) }] : [];
+  });
+  if (candidates.length === 0) throw new Error("The model catalog contains no matching model.");
+  const newest = candidates.reduce((best, candidate) =>
+    compareVersions(candidate, best) > 0 ? candidate : best,
+  );
+  const [selector, ...others] = new Set(
+    candidates.filter((c) => compareVersions(c, newest) === 0).map((c) => c.selector),
+  );
+  if (others.length > 0) throw new Error("Several models share the newest version.");
+  return selector;
 }
 
-function selectNewestModel(
-  models: readonly CatalogModel[],
-  alias: string,
-  prefix: string,
-  suffixes: readonly string[],
-): NewestModel | undefined {
-  const suffix = suffixes.length > 0 ? `(?:-(?:${suffixes.map(escapeRegExp).join("|")}))?` : "";
-  const pattern = new RegExp(
-    `^(${escapeRegExp(prefix)}-([0-9]+)(?:\\.([0-9]+))?-${escapeRegExp(alias)})${suffix}$`,
-  );
-  const candidates = models.flatMap((model) => {
-    const match = pattern.exec(model.id);
-    if (!match) return [];
-    return [{ base: match[1], major: Number(match[2]), minor: Number(match[3] ?? 0), model }];
-  });
-  const newest = candidates.reduce<(typeof candidates)[number] | undefined>(
-    (best, candidate) =>
-      best === undefined ||
-      candidate.major > best.major ||
-      (candidate.major === best.major && candidate.minor > best.minor)
-        ? candidate
-        : best,
-    undefined,
-  );
-  if (newest === undefined) return;
-  return {
-    base: newest.base,
-    models: candidates.filter((c) => c.base === newest.base).map((c) => c.model),
-  };
+interface VersionedSelector {
+  selector: string;
+  major: number;
+  minor: number;
+}
+
+function compareVersions(a: VersionedSelector, b: VersionedSelector): number {
+  return a.major === b.major ? a.minor - b.minor : a.major - b.major;
+}
+
+// A second `{latest}` stays literal text, which no catalog holds.
+function toVersionExpression(pattern: string): RegExp {
+  const at = pattern.indexOf(LATEST);
+  const before = pattern.slice(0, at);
+  const after = pattern.slice(at + LATEST.length);
+  return new RegExp(`^${escapeRegExp(before)}${VERSION_EXPRESSION}${escapeRegExp(after)}$`);
 }
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function toPiSelector(base: string, models: readonly CatalogModel[]): string {
-  const providers = [...new Set(models.map((model) => model.provider))];
-  const [provider] = providers;
-  if (providers.length !== 1 || provider === undefined) {
-    throw new Error("Pi lists the model under several providers");
-  }
-  return `${provider}/${base}`;
-}
-
-function modelAliasError(agent: CatalogAgent, alias: string): string {
-  const { label, remedy } = MODEL_ALIAS_HELP[agent];
+function modelPatternError(agent: CatalogAgent, pattern: string): string {
+  const { label, remedy } = MODEL_PATTERN_HELP[agent];
   return (
-    `Unable to resolve ${label} model alias ${JSON.stringify(alias)} from its model catalog. ` +
+    `Unable to resolve ${label} model pattern ${JSON.stringify(pattern)} from its model catalog. ` +
     `To fix it, ${remedy}`
   );
 }
 
-export function modelAliasHint(agent: CodingAgent): string | undefined {
-  if (!isCatalogAgent(agent)) return;
-  const { label, remedy } = MODEL_ALIAS_HELP[agent];
-  return `For ${label} aliases, ${remedy}`;
+// The remedy for a selector that the catalog of its harness resolves.
+export function modelPatternHint(
+  agent: CodingAgent,
+  selector: string | undefined,
+): string | undefined {
+  if (selector === undefined || !isCatalogAgent(agent) || !selector.includes(LATEST)) return;
+  const { label, remedy } = MODEL_PATTERN_HELP[agent];
+  return `For the ${label} model pattern ${JSON.stringify(selector)}, ${remedy}`;
 }
 
 export function expandModelAlias(
@@ -281,7 +301,7 @@ export function expandModelAlias(
   return model !== undefined && Object.hasOwn(aliases, model) ? aliases[model] : model;
 }
 
-function parseBundledModelSlugs(output: string): readonly CatalogModel[] {
+function parseBundledModelSlugs(output: string): readonly string[] {
   let value: unknown;
   try {
     value = JSON.parse(output);
@@ -291,14 +311,14 @@ function parseBundledModelSlugs(output: string): readonly CatalogModel[] {
   if (!isRecord(value) || !Array.isArray(value.models)) {
     throw new Error("Codex returned an unexpected model catalog shape");
   }
-  const models: CatalogModel[] = [];
+  const slugs: string[] = [];
   for (const model of value.models) {
     if (!isRecord(model) || typeof model.slug !== "string") {
       throw new Error("Codex returned an unexpected model catalog shape");
     }
-    models.push({ id: model.slug });
+    slugs.push(model.slug);
   }
-  return models;
+  return slugs;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -310,24 +330,25 @@ function isPiCatalogSignInRequired(output: CatalogOutput): boolean {
   return output.exitCode === 0 && readPiModels(output.stdout)?.length === 0;
 }
 
-function parsePiModels(stdout: string): readonly CatalogModel[] {
+function parsePiModels(stdout: string): readonly string[] {
   const models = readPiModels(stdout);
   if (models === undefined) throw new Error("Pi returned no model list");
   return models;
 }
 
-// The RPC response to `get_available_models`, among the other protocol records of stdout.
-function readPiModels(stdout: string): CatalogModel[] | undefined {
+// The `<provider>/<id>` selectors of the RPC response to `get_available_models`, among the other
+// protocol records of stdout.
+function readPiModels(stdout: string): string[] | undefined {
   const response = findPiResponse(stdout);
   if (response?.success !== true || !isRecord(response.data)) return;
   const { models } = response.data;
   if (!Array.isArray(models)) return;
-  const result: CatalogModel[] = [];
+  const result: string[] = [];
   for (const model of models) {
     if (!isRecord(model) || typeof model.provider !== "string" || typeof model.id !== "string") {
       return;
     }
-    result.push({ provider: model.provider, id: model.id });
+    result.push(`${model.provider}/${model.id}`);
   }
   return result;
 }
@@ -353,14 +374,17 @@ function isPiCatalogResponse(record: Record<string, unknown>): boolean {
   return record.type === "response" && record.id === PI_REQUEST_ID;
 }
 
-function parseAgyModelList(output: string): readonly CatalogModel[] {
-  return nonblankLines(output).map((line) => {
+// Antigravity lists one id per effort of a model: each id also gives its name without the effort.
+function parseAgyModelList(output: string): readonly string[] {
+  const efforts = resolveEfforts("agy", undefined);
+  return nonblankLines(output).flatMap((line) => {
     const tab = line.indexOf("\t");
     const id = tab === -1 ? undefined : line.slice(0, tab).trim();
     if (id === undefined || id.length === 0) {
       throw new Error("Antigravity returned a malformed model line");
     }
-    return { id };
+    const effort = efforts.find((level) => id.endsWith(`-${level}`));
+    return effort === undefined ? [id] : [id, id.slice(0, -effort.length - 1)];
   });
 }
 

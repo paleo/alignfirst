@@ -7,6 +7,7 @@
         "harness": "pi",
         "configDir": {{PI_CONFIG_DIR_JSON}},
         "defaultModel": "{{PI_PROVIDER}}/{{PI_MODEL}}",
+        "models": ["{{PI_PROVIDER}}/{{PI_MODEL}}"],
         "quota": {{PI_QUOTA_JSON}}
       }
     }

@@ -88,7 +88,7 @@ Then ask your session to work with aligndev.
 
 - Node.js 22.11 or later with `npx -y aligndev`, or Bun with `bunx aligndev` (`bun x` is equivalent). Bun 1.4.4 is the tested CLI baseline; compatibility with every older release is not promised.
 - The selected child installed and authenticated under the same effective environment and cwd as the child. `aligndev code --help` prints the login command of the selected profile, and so does a run that ends with `auth_required`. The command applies the profile's `unset/env/configDir` to `claude` then `/login`, `codex login`, `pi` then `/login <provider>` (or configured provider credentials), or `agy` then sign in. A bare login in another shell may select another account. Pi keeps its own runtime requirements; see the [extension compatibility baseline](https://github.com/paleo/alignfirst/blob/main/docs/pi-extensions.md#supported-and-tested-baseline).
-- For Pi, select a usable native model, preferably `provider/model` (optional thinking suffix). Authenticate in the same account/configuration used by the child; never expose credential values in diagnostics.
+- For Pi, declare the models in the profile: see `modelFamilies` under [Settings](#settings). Authenticate in the same account/configuration used by the child; never expose credential values in diagnostics.
 - Linux or macOS, or Windows through WSL.
 
 Published bins retain Node shebangs. Ordinary `bunx aligndev` runs Node when it is installed and Bun when Node is absent; `--bun` selects Bun explicitly. Direct `bun <installed-entry.mjs>` and transparent project scripts launched with `bun --bun run <script>` preserve Bun in follow-up commands and internal AlignFirst calls. npm scripts retain their `--` argument separator.
@@ -141,11 +141,12 @@ For multiple accounts and independent quota sources:
       "codex-personal": { "harness": "codex", "defaultModel": "sol" },
       "pi-codex": {
         "harness": "pi", "defaultModel": "sol",
+        "modelFamilies": { "gpt": "openai-codex" },
         "quota": { "source": "codex" }
       },
       "pi-anthropic": {
         "harness": "pi", "configDir": "~/.pi/anthropic", "defaultModel": "opus",
-        "modelAliases": { "opus": "anthropic/opus" },
+        "modelFamilies": { "claude": "anthropic" },
         "quota": { "source": "claude" },
         "disabled": true
       }
@@ -156,7 +157,7 @@ For multiple accounts and independent quota sources:
 
 A Claude Code session without `CLAUDE_CONFIG_DIR` is described by `claude-personal` and delegates to `codex-personal`. A session whose `CLAUDE_CONFIG_DIR` is `~/.claude-work` is described by `claude-work` and delegates to it. A Pi assistant delegates to `pi-codex`; `pi-anthropic` is disabled.
 
-Under `pi-codex`, `sol` resolves to the newest unsuffixed `gpt-…-sol` model of Pi's catalog, such as `openai/gpt-6.2-sol`; availability depends on Pi's catalog and credentials. Under `pi-anthropic`, the profile alias `opus` selects Pi's shorthand `anthropic/opus`, which Pi resolves against its catalog. Other selectors and thinking suffixes pass unchanged to Pi, which owns their resolution. `--effort` and `defaultEffort` override a thinking suffix.
+A Pi profile accepts only the models it declares. The `modelFamilies` of `pi-codex` declares `astra`, `sol`, `terra` and `luna`: `sol` selects the newest `gpt-…-sol` model that Pi lists under its `openai-codex` provider. `pi-anthropic` declares `fable`, `opus`, `sonnet` and `haiku` under `anthropic`. Availability depends on Pi's catalog and credentials.
 
 On an account shared by OpenClaw and coding-agent sessions:
 
@@ -190,15 +191,24 @@ A coding-agent profile accepts:
 - `env` — literal environment values for non-secret configuration. No interpolation or shell expansion. Keep credentials in native stores or separately provisioned process environments.
 - `unset` — inherited variables to remove, including API keys that select an unintended authentication route. A variable cannot occur in both `env` and `unset`. A string or null `configDir` cannot coexist with its native directory variable in either field.
 - `defaultModel` — new-session default, validated against accepted names. Omission uses the native default.
-- `models` — a nonempty list replaces accepted names. An empty list adds no override. Otherwise Claude and Codex accept their built-in aliases plus configured alias names, and Pi and Antigravity accept every nonblank selector. Codex, Pi and Antigravity resolve a selected built-in alias to the newest unsuffixed model of the native catalog. Aliases go from the biggest model to the smallest:
+- `models` — a nonempty list replaces the accepted names. An empty list adds no override. Otherwise Claude, Codex and Pi accept their built-in aliases plus the `modelAliases` names, and Antigravity accepts every nonblank name. A Pi profile that declares nothing accepts no model: it runs Pi's own default and rejects `--model` and `defaultModel`. Built-in aliases go from the biggest model to the smallest:
 
-  | Harness | Built-in aliases | Native model |
+  | Harness | Built-in aliases | Pattern |
   | --- | --- | --- |
-  | `claude` | `fable`, `opus`, `sonnet`, `haiku` | the alias, unchanged |
-  | `codex` | `astra`, `sol`, `terra`, `luna` | a bundled slug |
-  | `pi` | `astra`, `sol`, `terra`, `luna` | `<provider>/gpt-…` |
-  | `agy` | `carbon`, `neon`, `hydrogen`, `flash` | a model name, such as `gemini-4-neon` |
-- `modelAliases` — one-step user-facing name → native selector mappings. Validate the chosen name first, expand once, then apply native handling. A built-in alias target such as `sol` still resolves through the native catalog. A full selector pins a model, such as `"sol": "openai/gpt-6.2-sol-healthcare"` for a suffixed variant.
+  | `claude` | `fable`, `opus`, `sonnet`, `haiku` | none: the name passes unchanged |
+  | `codex` | `astra`, `sol`, `terra`, `luna` | `gpt-{latest}-<alias>` |
+  | `agy` | `carbon`, `neon`, `hydrogen`, `flash` | `gemini-{latest}-<alias>` |
+  | `pi` | those of its `modelFamilies`, in the order of the settings | see `modelFamilies` |
+- `modelFamilies` — Pi only. Maps a model family to the text placed before its model names: a Pi provider, optionally followed by the id prefix of a gateway, as in `openrouter/openai`. Each entry declares the aliases of its family:
+
+  | Family | Aliases | Pattern |
+  | --- | --- | --- |
+  | `gpt` | `astra`, `sol`, `terra`, `luna` | `<prefix>/gpt-{latest}-<alias>` |
+  | `claude` | `fable`, `opus`, `sonnet`, `haiku` | `<prefix>/claude-<alias>-{latest}` |
+  | `gemini` | `carbon`, `neon`, `hydrogen`, `flash` | `<prefix>/gemini-{latest}-<alias>` |
+
+  An id of another shape, such as Bedrock's `us.anthropic.claude-opus-…`, is declared through `modelAliases`.
+- `modelAliases` — one-step name → selector mappings. AlignDev validates the chosen name, expands it once, then replaces a built-in alias with its pattern. An entry named like a built-in alias overrides it. A target with `{latest}` is a pattern: the placeholder stands for the version, and AlignDev selects the newest one the agent's catalog lists. `"glm": "zai/glm-{latest}"` follows the newest `glm` model of Pi's `zai` provider; `"kimi": "moonshotai/kimi-k3.1-pro"` pins one model. A pattern holds `{latest}` once and matches a whole name, so a variant with a further suffix never matches. A version is a major number, optionally followed by `.` or `-` and a minor number. The launch fails when several names share the newest version. A pattern takes no thinking suffix, and a `claude` profile rejects `{latest}`.
 - `efforts` — a nonempty list replaces the harness's built-in effort levels and bounds what AlignDev passes. An empty list adds no override. Entries are free strings, so a level AlignDev does not know can be listed.
 - `defaultEffort` — pins new sessions to one of the accepted levels. Without it, a session launched without `--effort` runs at the native default, which AlignDev does not read.
 

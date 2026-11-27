@@ -27,9 +27,11 @@ import { readMachineId } from "./machine-id.js";
 import { resolveEfforts } from "./efforts.js";
 import {
   type ExecutableModelResolver,
+  expandBuiltInAlias,
   expandModelAlias,
-  modelAliasHint,
+  modelPatternHint,
   ModelSignInRequiredError,
+  NO_DECLARED_MODEL,
   PiStartupDialogError,
   resolveModels,
 } from "./models.js";
@@ -82,7 +84,7 @@ const TICKET_PATH_ERROR =
   "(letters, digits, '.', '-', '_'); no path separators or '..'.";
 const PI_STARTUP_DIALOG_ERROR =
   "A Pi extension opened a dialog at startup, which Pi's RPC mode cannot answer, so the model " +
-  "alias cannot be resolved from Pi's catalog. To fix it, pin a full `provider/model` selector " +
+  "pattern cannot be resolved from Pi's catalog. To fix it, pin a full `provider/model` selector " +
   "in the profile's `modelAliases`, or make the extension skip the dialog outside the terminal " +
   'UI (`ctx.mode !== "tui"`).';
 
@@ -168,7 +170,7 @@ export async function runCode(
       recorded: previous?.frontmatter.profile,
     });
     if (command.kind === "quota") return await showQuota(ctx, code);
-    const models = resolveModels(code.harness, code.models, code.modelAliases);
+    const models = resolveModels(code);
     const efforts = resolveEfforts(code.harness, code.efforts);
     if (command.kind === "help") {
       ctx.stdout.write(renderHelp(code, models, efforts, ctx));
@@ -495,6 +497,9 @@ export function validateSessionArgs(
   }
   if (args.model !== undefined) {
     if (args.model.trim() === "") return "Error: --model must be nonblank.";
+    if (models?.length === 0) {
+      return `Error: --model is not accepted: ${NO_DECLARED_MODEL}, or omit --model.`;
+    }
     if (models !== undefined && !models.includes(args.model)) {
       return `Error: --model must be one of: ${models.join(", ")}.`;
     }
@@ -606,14 +611,12 @@ async function runSession(
   );
   stdout.write(`Session file: ${displayPath(tree.cwd, sessionFilePath)}\n\n`);
 
+  const selector = expandBuiltInAlias(code, expandModelAlias(model, code.modelAliases));
   let executableModel: string | undefined;
   try {
-    executableModel = await modelResolver(agent, expandModelAlias(model, code.modelAliases), {
-      cwd,
-      env: code.childEnv,
-    });
+    executableModel = await modelResolver(agent, selector, { cwd, env: code.childEnv });
   } catch (error) {
-    return failModelResolution(ctx, code, args, sessionFilePath, error);
+    return failModelResolution(ctx, code, args, sessionFilePath, selector, error);
   }
 
   const runConfig = buildRunConfig({
@@ -657,12 +660,13 @@ function failModelResolution(
   code: CodeConfig,
   args: SessionArgs,
   sessionFilePath: string,
+  selector: string | undefined,
   error: unknown,
 ): number {
   const authRequired = error instanceof ModelSignInRequiredError;
   const message = authRequired
     ? renderAuthenticationFailure(code, ctx.cwd).instructions
-    : modelResolutionError(code, error);
+    : modelResolutionError(code, selector, error);
   const completedPath = applyCompletion(sessionFilePath, {
     status: "failed",
     endedAt: new Date().toISOString(),
@@ -674,12 +678,18 @@ function failModelResolution(
   return authRequired ? EXIT_AUTH_REQUIRED : 1;
 }
 
-function modelResolutionError(code: CodeConfig, error: unknown): string {
+// Names the selector, never the resolver's own message.
+function modelResolutionError(
+  code: CodeConfig,
+  selector: string | undefined,
+  error: unknown,
+): string {
   if (error instanceof PiStartupDialogError)
     return `${PI_STARTUP_DIALOG_ERROR} ${nativeContext(code)}.`;
-  const hint = modelAliasHint(code.harness);
+  const hint = modelPatternHint(code.harness, selector);
   return (
-    `Could not resolve the ${code.harness} model; check --model, profile.models/modelAliases and the agent installation. ` +
+    `Could not resolve the ${code.harness} model; check --model, ` +
+    "profile.models/modelAliases/modelFamilies and the agent installation. " +
     `${nativeContext(code)}.` +
     (hint !== undefined ? ` ${hint}` : "")
   );
@@ -848,7 +858,7 @@ function selectModel(
   if (args.model !== undefined) return args.model;
   if (args.resume === undefined) return code.defaultModel;
   const model = previous?.frontmatter.model ?? undefined;
-  const models = resolveModels(code.harness, code.models, code.modelAliases);
+  const models = resolveModels(code);
   if (
     model !== undefined &&
     (model.trim() === "" || (models !== undefined && !models.includes(model)))
@@ -1008,7 +1018,11 @@ function renderHelp(
   const { harness: agent, profile, defaultModel, defaultEffort } = code;
   const { aligndev, alignfirst } = forms;
   const modelPolicy =
-    models === undefined ? "Any nonblank native selector" : `One of ${models.join(", ")}`;
+    models === undefined
+      ? "Any nonblank native selector"
+      : models.length === 0
+        ? "None: the profile declares no model"
+        : `One of ${models.join(", ")}`;
   const requires = `Requires: the AlignFirst CLI through \`${forms.alignfirst}\`, for the project layout, side\ntickets and the delegated protocols.`;
   return `aligndev code — run a coding agent through AlignFirst protocols.
 
@@ -1069,7 +1083,7 @@ Config (~/.alignfirst/aligndev.settings.json):
   code.profiles         Complete named profiles, without inheritance. harness (required): claude,
                         codex, pi, agy or openclaw. Other keys: defaultAgentProfile, disabled,
                         default, configDir, env, unset, defaultModel, models, modelAliases,
-                        defaultEffort, efforts, skipPermissions, quota.
+                        modelFamilies, defaultEffort, efforts, skipPermissions, quota.
   profile.defaultAgentProfile
                         The profile a session delegates to when this profile is the assistant's
                         profile; omitted means the profile itself. Followed once.
@@ -1106,7 +1120,8 @@ Config (~/.alignfirst/aligndev.settings.json):
                         resume without a recorded profile uses the built-ins of the assistant's
                         harness unless a named selection replaces them.
   Model default         ${defaultModel ?? "native default"} (new only). Resume retains and validates its model.
-                        One configured alias expands before native model handling.
+                        One configured alias expands; {latest} in an alias target selects the
+                        newest version in the agent's catalog.
   Effort default        ${defaultEffort ?? "native default"} (new only). Resume retains and validates its effort.
 
 Native configuration: ${describeNativeStorage(code)}.
@@ -1152,10 +1167,10 @@ function modelBehavior(agent: CodingAgent): string {
     case "claude":
       return "Claude model values pass through unchanged.";
     case "codex":
-      return "Codex aliases astra, sol, terra and luna (biggest first) select the newest version of their model in Codex's bundled catalog; a configured full slug passes unchanged.";
+      return "Codex accepts astra, sol, terra and luna, from the biggest model to the smallest.";
     case "pi":
-      return "Pi aliases astra, sol, terra and luna (biggest first) select the newest version of their model in Pi's catalog; variants with a further suffix never match. Every other selector, provider/model:thinking included, passes unchanged. --effort overrides a thinking suffix of the model selector.";
+      return "Pi accepts only the names its profile declares through modelFamilies, modelAliases or models. --effort overrides a thinking suffix of a declared selector.";
     case "agy":
-      return "Antigravity aliases carbon, neon, hydrogen and flash (biggest first) select the newest version of their model in `agy models`; variants with a further suffix never match. Every other name passes unchanged.";
+      return "Antigravity accepts carbon, neon, hydrogen and flash, from the biggest model to the smallest. Every other name passes unchanged.";
   }
 }

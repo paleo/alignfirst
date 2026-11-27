@@ -54,7 +54,7 @@ describe("command forms", () => {
       active: { platform: "codingAgent" },
       forms,
       harness: "pi",
-      models: undefined,
+      models: [],
       efforts: [],
     });
     const row = guide.split("\n").find((line) => line.startsWith('{"action":"start"'));
@@ -101,7 +101,7 @@ describe("command forms", () => {
         active: { platform: "codingAgent" },
         forms,
         harness: "pi",
-        models: undefined,
+        models: [],
         efforts: [],
       });
       const row = guide.split("\n").find((line) => line.startsWith('{"action":"start"'));

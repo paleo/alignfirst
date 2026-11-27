@@ -20,10 +20,7 @@ export interface MockAgentSettings {
 
 export function buildCodingAgentSettings(env: CodingAgentEnvironment): MockAgentSettings {
   const agent = readConfiguredAgent(env);
-  const models = (env.CODING_AGENT_MODELS ?? "")
-    .split(",")
-    .map((model) => model.trim())
-    .filter((model) => model !== "");
+  const models = declaredModels(agent, env.CODING_AGENT_MODELS ?? "");
   return {
     projectsRoot: "/home/assistant/projects",
     code: {
@@ -33,6 +30,15 @@ export function buildCodingAgentSettings(env: CodingAgentEnvironment): MockAgent
       },
     },
   };
+}
+
+// A Pi profile accepts only the models it declares: without a list, it declares the contract model.
+function declaredModels(agent: CodingAgent, list: string): string[] {
+  const models = list
+    .split(",")
+    .map((model) => model.trim())
+    .filter((model) => model !== "");
+  return models.length === 0 && agent === "pi" ? [PI_CONTRACT_MODEL] : models;
 }
 
 export function readConfiguredAgent(env: CodingAgentEnvironment): CodingAgent {

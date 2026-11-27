@@ -311,6 +311,7 @@ test("inventory deduplicates shared stores and includes custom, mixed-agent and 
       harness: "pi",
       configDir: "~/native/pi",
       defaultModel: "openai/fixture-model",
+      models: ["openai/fixture-model"],
       quota: { source: "claude", configDir: "~/native/claude-quota" },
     };
     fixture.settings.code.profiles.other = {
@@ -486,6 +487,48 @@ test("inventory ignores disabled profiles but still validates their shape", () =
     fixture.settings.code.profiles.retired.skipPermissions = "yes";
     saveSettings(fixture);
     assertInventoryRejected(fixture);
+  });
+});
+
+test("inventory accepts a Pi defaultModel only among the names its profile declares", () => {
+  withFixture("pi", "slack", {}, (fixture) => {
+    const original = structuredClone(fixture.settings);
+    const selected = selectedProfile(original);
+    const { defaultModel } = original.code.profiles[selected];
+    const withProfile = (changes) => {
+      fixture.settings = structuredClone(original);
+      Object.assign(fixture.settings.code.profiles[selected], changes);
+      saveSettings(fixture);
+    };
+    for (const invalid of [
+      { models: [] },
+      { models: ["other/model"] },
+      { models: undefined, modelFamilies: { gpt: "openai" } },
+      { models: undefined, modelAliases: { other: defaultModel } },
+      { modelFamilies: { glm: "zai" } },
+      { modelFamilies: { gpt: " " } },
+      { modelFamilies: ["gpt"] },
+    ]) {
+      withProfile(invalid);
+      assertInventoryRejected(fixture);
+    }
+    for (const valid of [
+      { models: undefined, defaultModel: "opus", modelFamilies: { claude: "anthropic" } },
+      { models: undefined, defaultModel: "main", modelAliases: { main: defaultModel } },
+      { models: undefined, defaultModel: undefined },
+    ]) {
+      withProfile(valid);
+      assert.deepEqual(readInventory(fixture).profiles, [selected]);
+    }
+    withProfile({});
+    fixture.settings.code.profiles.retired = {
+      harness: "pi",
+      disabled: true,
+      configDir: "~/native/pi",
+      defaultModel: "undeclared/model",
+    };
+    saveSettings(fixture);
+    assert.deepEqual(readInventory(fixture).profiles, [selected]);
   });
 });
 
@@ -691,6 +734,7 @@ test("inventory and real CLI still reject malformed recognized fields alongside 
       { skipPermissions: "yes" },
       { models: "sol" },
       { modelAliases: { custom: 3 } },
+      { modelFamilies: { gpt: "openai" } },
       { efforts: "high" },
       { defaultEffort: " " },
       { env: { CUSTOM: 3 } },

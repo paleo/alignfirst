@@ -34,6 +34,7 @@ When `skills-lock.json` is present, inspect it through the current skills CLI. I
 - Full-content protocol skills or `plans-share`: follow `{{CMD}} setup guide upgrade-v3`.
 - Retired workspace files or registries: follow `{{CMD}} setup guide upgrade-workspaces`.
 - AlignDev settings with `platform`, `code.profile`, `portRange` or a profile `agent`, or a `.alignfirst-projects.json` marker: apply "Convert AlignDev Harness Settings" below.
+- AlignDev settings with a `pi` profile: apply "Declare AlignDev Pi Models" below.
 - CLI-backed skills: keep the current skills. Set `plans.autoArchive: true` in the selected `alignfirst.json` or `alignfirst.jsonc`; the user can remove it after the upgrade to opt out. If `plans-share` artifacts remain, apply the cleanup, command sweep and check of `{{CMD}} setup guide upgrade-v3`.
 - `assistantInstructionsFile` or `developerInstructions` in the selected `alignfirst.json` or `.jsonc`: apply "Rename the Assistant Guide" below.
 - No detected installation: follow `{{CMD}} setup guide protocols`.
@@ -204,6 +205,46 @@ After:
 ```
 
 On an AlignDev OpenClaw host, port the settings and project changes of the current `aligndev-openclaw-setup` template to the admin repository, then re-seed through controlled maintenance, preserving the writable service AlignFirst home (see "Keep the Service AlignFirst Home Writable").
+
+## Declare AlignDev Pi Models
+
+A `pi` profile accepts only the model names it declares. A profile that sets `defaultModel` or receives `--model` fails until it declares the model. A profile that does neither runs Pi's own default and needs no change.
+
+For each `pi` profile of `aligndev.settings.json`, collect its `defaultModel` and the `--model` values that scripts and instructions pass, then declare each model:
+
+1. A model of the `gpt`, `claude` or `gemini` family: map the family to its Pi provider in `modelFamilies`. The entry declares the aliases of the family, such as `astra`, `sol`, `terra` and `luna` for `gpt`, and each alias selects the newest version of its model.
+2. Another model: add a `modelAliases` entry that targets `provider/model`, with `{latest}` in place of the version to follow the newest one.
+3. A full id selected as is: list it in `models`. A nonempty `models` replaces the accepted names, so it lists every name the profile accepts.
+
+A `modelAliases` entry that pins a full id only to avoid a wrong variant can become a family or a `{latest}` target: neither matches a variant with a further suffix.
+
+Then run `aligndev guide code --profile <name>` for each `pi` profile.
+
+Before:
+
+```json
+{
+  "code": {
+    "profiles": {
+      "solo": { "harness": "pi", "defaultModel": "openai/gpt-6.2-sol" }
+    }
+  }
+}
+```
+
+After:
+
+```json
+{
+  "code": {
+    "profiles": {
+      "solo": { "harness": "pi", "defaultModel": "sol", "modelFamilies": { "gpt": "openai" } }
+    }
+  }
+}
+```
+
+On an AlignDev OpenClaw host, add `models` beside `defaultModel` in the admin repository's `infra/openclaw/aligndev.settings.json` and bring `infra/openclaw/deployment-profiles.mjs` to the current `aligndev-openclaw-setup` template. Then re-seed through controlled maintenance, preserving the writable service AlignFirst home (see "Keep the Service AlignFirst Home Writable").
 
 ## Rename the AlignDev Message-Tool Topics
 

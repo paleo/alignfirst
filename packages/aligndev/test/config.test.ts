@@ -187,6 +187,7 @@ describe("settings shape", () => {
     { default: true },
     { configDir: null },
     { models: [] },
+    { modelFamilies: { gpt: "openai" } },
     { defaultEffort: "high" },
     { env: {} },
     { quota: { source: "none" } },
@@ -221,6 +222,29 @@ describe("settings shape", () => {
     [profileConfig({ harness: "pi", defaultEffort: " " }), "defaultEffort"],
     [profileConfig({ harness: "pi", modelAliases: { " ": "x" } }), "modelAliases"],
     [profileConfig({ harness: "pi", modelAliases: { x: " " } }), "modelAliases"],
+    [profileConfig({ harness: "pi", modelFamilies: { gpt: " " } }), "modelFamilies"],
+    [profileConfig({ harness: "pi", modelFamilies: { glm: "zai" } }), "unknown family"],
+    [profileConfig({ harness: "pi", modelFamilies: { gpt: "openai/{latest}" } }), "family prefix"],
+    [profileConfig({ harness: "codex", modelFamilies: { gpt: "openai" } }), "family outside pi"],
+    [
+      profileConfig({ harness: "codex", disabled: true, modelFamilies: { gpt: "openai" } }),
+      "disabled family outside pi",
+    ],
+    [
+      profileConfig({ harness: "pi", modelAliases: { x: "zai/glm-{latest}-{latest}" } }),
+      "two placeholders",
+    ],
+    [profileConfig({ harness: "pi", models: ["zai/glm-{latest}-{latest}"] }), "two placeholders"],
+    [profileConfig({ harness: "pi", defaultModel: "zai/{latest}-{latest}" }), "two placeholders"],
+    [
+      profileConfig({ harness: "claude", modelAliases: { x: "claude-opus-{latest}" } }),
+      "claude placeholder",
+    ],
+    [profileConfig({ harness: "claude", models: ["claude-opus-{latest}"] }), "claude placeholder"],
+    [
+      profileConfig({ harness: "claude", defaultModel: "claude-opus-{latest}" }),
+      "claude placeholder",
+    ],
     [profileConfig({ harness: "pi", env: { "bad-name": "x" } }), "env"],
     [profileConfig({ harness: "pi", env: { X: 2 } }), "env"],
     [profileConfig({ harness: "pi", env: { X: "a\0b" } }), "NUL"],
@@ -717,7 +741,7 @@ describe("profile resolution", () => {
         profiles: {
           claude: { harness: "claude", default: true, defaultModel: "opus" },
           codex: { harness: "codex", default: true, defaultModel: "sol" },
-          pi: { harness: "pi", default: true, defaultModel: "openai/sol" },
+          pi: { harness: "pi", default: true, defaultModel: "openai/sol", models: ["openai/sol"] },
         },
       },
     });
@@ -795,13 +819,19 @@ describe("profile resolution", () => {
       }),
     );
     expect(() => resolveCodeConfig(loadConfig(home, "alignfirst"), {})).toThrow(Error);
+  });
+
+  it("accepts a Pi defaultModel only among the names the profile declares", () => {
+    const home = makeHome(profileConfig({ harness: "pi", defaultModel: "sol", models: [] }));
+    expect(() => resolveCodeConfig(loadConfig(home, "alignfirst"), {})).toThrow(Error);
     writeConfig(
       home,
-      profileConfig({ harness: "pi", defaultModel: " provider/model:high ", models: [] }),
+      profileConfig({ harness: "pi", defaultModel: "sol", modelFamilies: { gpt: "openai" } }),
     );
-    expect(resolveCodeConfig(loadConfig(home, "alignfirst"), {}).defaultModel).toBe(
-      " provider/model:high ",
-    );
+    expect(resolveCodeConfig(loadConfig(home, "alignfirst"), {})).toMatchObject({
+      defaultModel: "sol",
+      modelFamilies: { gpt: "openai" },
+    });
   });
 
   it.each([{}, { disabled: true }])(

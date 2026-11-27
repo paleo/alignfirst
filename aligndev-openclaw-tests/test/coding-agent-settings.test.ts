@@ -16,6 +16,10 @@ import {
 const WRITER = fileURLToPath(new URL("../scripts/write-coding-agent-settings.ts", import.meta.url));
 
 for (const agent of ["claude", "codex", "pi"] as const) {
+  // A Pi profile accepts only the models it declares.
+  const defaultModels = agent === "pi" ? [PI_CONTRACT_MODEL] : undefined;
+  const defaultProfile = { harness: agent, ...(defaultModels ? { models: defaultModels } : {}) };
+
   test(`${agent} settings delegate from the openclaw profile through the real config resolver`, () => {
     const home = mkdtempSync(join(tmpdir(), "harness-settings-"));
     try {
@@ -25,7 +29,7 @@ for (const agent of ["claude", "codex", "pi"] as const) {
         code: {
           profiles: {
             openclaw: { harness: "openclaw", defaultAgentProfile: MOCK_AGENT_PROFILE },
-            [MOCK_AGENT_PROFILE]: { harness: agent },
+            [MOCK_AGENT_PROFILE]: defaultProfile,
           },
         },
       });
@@ -38,7 +42,7 @@ for (const agent of ["claude", "codex", "pi"] as const) {
       assert.equal(effective.profile, MOCK_AGENT_PROFILE);
       assert.equal(effective.harness, agent);
       assert.equal(effective.defaultModel, undefined);
-      assert.deepEqual(effective.models, undefined);
+      assert.deepEqual(effective.models, defaultModels);
       assert.deepEqual(readdirSync(home), [".alignfirst"]);
     } finally {
       rmSync(home, { recursive: true, force: true });
@@ -56,7 +60,7 @@ for (const agent of ["claude", "codex", "pi"] as const) {
       buildCodingAgentSettings({ CODING_AGENT: agent, CODING_AGENT_MODELS: ", ," }).code.profiles[
         MOCK_AGENT_PROFILE
       ],
-      { harness: agent },
+      defaultProfile,
     );
   });
 }

@@ -230,7 +230,10 @@ async function checkCatalog() {
     ["process.stdout.write('x'.repeat(8 * 1024 * 1024 + 1));", false],
   ]) {
     writeFileSync(executable, `#!${process.execPath}\n${script}\n`, { mode: 0o755 });
-    const result = createExecutableModelResolver()("codex", "terra", { cwd, env: { PATH: bin } });
+    const result = createExecutableModelResolver()("codex", "gpt-{latest}-terra", {
+      cwd,
+      env: { PATH: bin },
+    });
     if (success) assert.equal(await result, "gpt-9-terra");
     else await assert.rejects(result, Error);
   }

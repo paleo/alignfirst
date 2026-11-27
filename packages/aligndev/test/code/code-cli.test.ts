@@ -28,6 +28,7 @@ import { readMachineId } from "../../src/code/machine-id.js";
 import {
   CLAUDE_DEFAULT_MODELS,
   createExecutableModelResolver,
+  type ExecutableModelResolver,
   PiStartupDialogError,
 } from "../../src/code/models.js";
 import {
@@ -1176,7 +1177,7 @@ describe("launch guards", () => {
 
   it.each([
     [
-      "pi",
+      { harness: "pi", modelFamilies: { gpt: "openai" } },
       "sol",
       {
         exitCode: 0,
@@ -1185,15 +1186,15 @@ describe("launch guards", () => {
       },
     ],
     [
-      "agy",
+      { harness: "agy" },
       "neon",
       { exitCode: 1, stdout: "", stderr: "Error: Please sign in. secret-catalog-text\n" },
     ],
   ] as const)(
-    "hands a %s catalog sign-in over to the login instructions",
-    async (harness, alias, output) => {
+    "hands the catalog sign-in of %j over to the login instructions",
+    async (profile, alias, output) => {
       const stderr = makeSink();
-      const agentHome = makeHome({ code: { harness } });
+      const agentHome = makeHome({ code: profile });
       const code = await main({
         argv: ["node", "aligndev", "code", "new", "--message", "go", "--model", alias],
         cwd: dir,
@@ -1202,7 +1203,7 @@ describe("launch guards", () => {
         alignfirstCommand: ALIGNFIRST,
         stdout: makeSink(),
         stderr,
-        modelResolver: createExecutableModelResolver({ [harness]: async () => output }),
+        modelResolver: createExecutableModelResolver({ [profile.harness]: async () => output }),
       });
 
       expect(code).toBe(2);
@@ -1960,6 +1961,7 @@ describe("quiet execution", () => {
 });
 
 describe("pi launches", () => {
+  const DECLARED_MODELS = ["provider/model:high", "terra:high", " provider/model:high "];
   let base: string;
   let home: string;
   let project: string;
@@ -1972,7 +1974,7 @@ describe("pi launches", () => {
     project = join(base, "project");
     plans = join(project, ".plans");
     mkdirSync(plans, { recursive: true });
-    writeConfig(home, { code: { harness: "pi" } });
+    writeConfig(home, { code: { harness: "pi", models: DECLARED_MODELS } });
     fake = installFakePi(base);
   });
 
@@ -2027,23 +2029,56 @@ describe("pi launches", () => {
     expect(newest().frontmatter.model).toBe(selected);
   });
 
-  it.each([undefined, "terra:high", " provider/model:high "])(
-    "preserves native model selection %j",
+  it.each(["terra:high", " provider/model:high "])(
+    "passes the declared selector %j unchanged",
     async (model) => {
-      const result = await launch([
-        "new",
-        "-m",
-        "go",
-        ...(model === undefined ? [] : ["--model", model]),
-      ]);
+      const result = await launch(["new", "-m", "go", "--model", model]);
       expect(result.code, result.stderr).toBe(0);
-      expect(fake.received().args).toEqual([
-        "--mode",
-        "json",
-        ...(model === undefined ? [] : ["--model", model]),
-      ]);
+      expect(fake.received().args).toEqual(["--mode", "json", "--model", model]);
     },
   );
+
+  it("runs Pi's own default on a profile that declares no model", async () => {
+    writeConfig(home, { code: { harness: "pi" } });
+    const result = await launch(["new", "-m", "go"]);
+    expect(result.code, result.stderr).toBe(0);
+    expect(fake.received().args).toEqual(["--mode", "json"]);
+  });
+
+  it("rejects --model on a profile that declares no model before creating a run", async () => {
+    writeConfig(home, { code: { harness: "pi" } });
+    expect((await launch(["new", "-m", "go", "--model", "provider/model"])).code).toBe(1);
+    expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(0);
+  });
+
+  it("hands the resolver the selector of the chosen name", async () => {
+    writeConfig(home, {
+      code: {
+        harness: "pi",
+        modelFamilies: { gpt: "openai" },
+        modelAliases: { sol: "openai/gpt-6.2-sol-healthcare", small: "luna" },
+      },
+    });
+    const modelResolver = vi.fn<ExecutableModelResolver>(async () => undefined);
+    for (const model of ["terra", "sol", "small"]) {
+      const code = await main({
+        argv: ["node", "aligndev", "code", "new", "-m", "go", "--model", model],
+        cwd: project,
+        home,
+        env: { HOME: home, PATH: fake.path },
+        alignfirstCommand: ALIGNFIRST,
+        stdout: makeSink(),
+        stderr: makeSink(),
+        modelResolver,
+      });
+      expect(code).toBe(0);
+    }
+    expect(modelResolver.mock.calls.map(([, selector]) => selector)).toEqual([
+      "openai/gpt-{latest}-terra",
+      "openai/gpt-6.2-sol-healthcare",
+      "openai/gpt-{latest}-luna",
+    ]);
+  });
 
   it("validates blank selectors and exact configured allowlists before creating runs", async () => {
     for (const model of ["", " \t "]) {

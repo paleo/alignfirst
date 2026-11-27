@@ -193,7 +193,7 @@ function renderCodeTopic(
     active,
     forms: ctx.forms,
     harness: code.harness,
-    models: resolveModels(code.harness, code.models, code.modelAliases),
+    models: resolveModels(code),
     defaultModel: code.defaultModel,
     efforts: resolveEfforts(code.harness, code.efforts),
     defaultEffort: code.defaultEffort,

@@ -212,15 +212,15 @@ Don't reconstruct what happened: no re-running the agent, no `git` archaeology t
 The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. The profile's nonempty `models` replaces its displayed allowlist.
 {{/openclaw}}
 {{#codingAgent}}
-The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. A nonempty profile `models` list replaces its accepted model list. Pi has no finite allowlist by default: it takes any native selector, preferably `provider/model`, with optional thinking suffix; `--effort` overrides that suffix. For a Pi agent without `--model`, a new run uses profile `defaultModel`, else Pi's own default; a resume retains and validates its recorded model.
+The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`. A nonempty profile `models` list replaces its accepted model list. For a Pi agent without `--model`, a new run uses profile `defaultModel`, else Pi's own default; a resume retains and validates its recorded model.
 {{/codingAgent}}
 
-A built-in alias selects the newest version of its model in the agent's catalog. A variant with a further suffix, such as `gpt-6.2-sol-healthcare`, never matches. Each list goes from the biggest model to the smallest:
+A built-in alias selects the newest version of its model in the agent's catalog. Each list goes from the biggest model to the smallest:
 
-- Codex and Pi — `astra`, `sol`, `terra`, `luna`
+- Codex — `astra`, `sol`, `terra`, `luna`
 - Antigravity — `carbon`, `neon`, `hydrogen`, `flash`
 
-Every other accepted name passes to the agent unchanged.
+A Pi profile declares its own names. Every other accepted name passes to the agent unchanged.
 
 {{#openclaw}}
 `{{ALIGNDEV}} code status` seals a `running` record only when its `machineId` matches this installation and its pid is conclusively gone or reused. Foreign, legacy and uncertain records stay `running`; a sealed run reports `status: failed`, `exitReason: terminated`. `{{ALIGNDEV}} code quota` works without a `.plans` directory and does not start a coding session. Its output belongs to the selected native quota CLI's account; account pairing with the coding child is not verified.

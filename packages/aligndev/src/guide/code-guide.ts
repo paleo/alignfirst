@@ -6,6 +6,10 @@ import type { CodingProfile, NamedProfile } from "../config.js";
 import { escapeControlCharacters } from "../project/format.js";
 import { type ActiveBlocks, renderGuideTemplate } from "./render-template.js";
 
+// Antigravity alone takes any model name.
+const OPEN_MODEL_POLICY =
+  "A built-in alias (`carbon`, `neon`, `hydrogen`, `flash`) or any Antigravity model name";
+
 export interface CodeGuideOptions {
   active: ActiveBlocks;
   forms: CommandForms;
@@ -36,10 +40,7 @@ export function renderCodeGuide(options: CodeGuideOptions): string {
     PROFILE: profile ?? "(built-in)",
     PROFILES: renderProfiles(options.profiles ?? [], profile),
     PERMISSIONS: permissions(harness),
-    MODEL_POLICY:
-      models === undefined
-        ? openModelPolicy(harness)
-        : `One of ${models.map((model) => `\`${model}\``).join(", ")}`,
+    MODEL_POLICY: modelPolicy(models),
     DEFAULT_MODEL:
       defaultModel === undefined ? "the coding agent's default" : `\`${defaultModel}\``,
     EFFORT_POLICY: `One of ${efforts.map((level) => `\`${level}\``).join(", ")}`,
@@ -63,11 +64,10 @@ function permissions(harness: CodingAgent): string {
   }
 }
 
-// The policy of a harness without a finite model list.
-function openModelPolicy(harness: CodingAgent): string {
-  return harness === "agy"
-    ? "A built-in alias (`carbon`, `neon`, `hydrogen`, `flash`) or any Antigravity model name"
-    : "A built-in alias (`astra`, `sol`, `terra`, `luna`) or any Pi selector, preferably `provider/model` (thinking suffixes supported; `--effort` overrides them)";
+function modelPolicy(models: readonly string[] | undefined): string {
+  if (models === undefined) return OPEN_MODEL_POLICY;
+  if (models.length === 0) return "None: the profile declares no model, so omit `--model`";
+  return `One of ${models.map((model) => `\`${model}\``).join(", ")}`;
 }
 
 // Trusts the settings: no executable, login or environment value is consulted.
@@ -97,11 +97,13 @@ function renderProfiles(profiles: NamedProfile<CodingProfile>[], selected: strin
 }
 
 function renderModels(profile: CodingProfile): string {
-  const models = resolveModels(profile.harness, profile.models, profile.modelAliases);
-  if (models !== undefined) return models.map(cell).join(", ");
-  const aliases = Object.keys(profile.modelAliases ?? {});
-  if (aliases.length === 0) return "any native selector";
-  return `any native selector; aliases ${aliases.map(cell).join(", ")}`;
+  const models = resolveModels(profile);
+  if (models === undefined) {
+    const aliases = Object.keys(profile.modelAliases ?? {});
+    if (aliases.length === 0) return "any native selector";
+    return `any native selector; aliases ${aliases.map(cell).join(", ")}`;
+  }
+  return models.length === 0 ? "none" : models.map(cell).join(", ");
 }
 
 function cell(value: string): string {
