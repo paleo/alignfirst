@@ -80,6 +80,11 @@ const CONTEXT_COMPANION_ITEMS: readonly ItemName[] = [
 const TICKET_PATH_ERROR =
   "Error: --ticket must be a single path segment " +
   "(letters, digits, '.', '-', '_'); no path separators or '..'.";
+const PI_STARTUP_DIALOG_ERROR =
+  "A Pi extension opened a dialog at startup, which Pi's RPC mode cannot answer, so the model " +
+  "alias cannot be resolved from Pi's catalog. To fix it, pin a full `provider/model` selector " +
+  "in the profile's `modelAliases`, or make the extension skip the dialog outside the terminal " +
+  'UI (`ctx.mode !== "tui"`).';
 
 export interface CodeContext {
   cwd: string;
@@ -670,7 +675,8 @@ function failModelResolution(
 }
 
 function modelResolutionError(code: CodeConfig, error: unknown): string {
-  if (error instanceof PiStartupDialogError) return `${error.message} ${nativeContext(code)}.`;
+  if (error instanceof PiStartupDialogError)
+    return `${PI_STARTUP_DIALOG_ERROR} ${nativeContext(code)}.`;
   const hint = modelAliasHint(code.harness);
   return (
     `Could not resolve the ${code.harness} model; check --model, profile.models/modelAliases and the agent installation. ` +

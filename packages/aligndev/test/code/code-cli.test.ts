@@ -25,7 +25,11 @@ import {
 } from "../../src/code/code-cli.js";
 import { resolveEfforts } from "../../src/code/efforts.js";
 import { readMachineId } from "../../src/code/machine-id.js";
-import { CLAUDE_DEFAULT_MODELS, createExecutableModelResolver } from "../../src/code/models.js";
+import {
+  CLAUDE_DEFAULT_MODELS,
+  createExecutableModelResolver,
+  PiStartupDialogError,
+} from "../../src/code/models.js";
 import {
   appendTranscript,
   applyCompletion,
@@ -1139,7 +1143,10 @@ describe("launch guards", () => {
     expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(before);
   });
 
-  it("sanitizes injected model-discovery failures on every output surface", async () => {
+  it.each([
+    new Error("catalog unavailable: injected-resolver-secret"),
+    new PiStartupDialogError("injected-resolver-secret"),
+  ])("sanitizes injected model-discovery failures on every output surface: %s", async (failure) => {
     const stdout = makeSink();
     const stderr = makeSink();
     const codexHome = makeHome({ code: { harness: "codex" } });
@@ -1152,7 +1159,7 @@ describe("launch guards", () => {
       stdout,
       stderr,
       modelResolver: async () => {
-        throw new Error("catalog unavailable: injected-resolver-secret");
+        throw failure;
       },
     });
 

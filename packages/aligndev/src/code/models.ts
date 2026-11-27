@@ -134,7 +134,8 @@ export function createExecutableModelResolver(
 // The catalog command reports that the harness has no signed-in account or credentials.
 export class ModelSignInRequiredError extends Error {}
 
-// A Pi extension opened a dialog before Pi served its catalog. The message is fixed and safe to show.
+// A Pi extension opened a dialog that blocks Pi before it serves its catalog. The CLI renders a fixed
+// diagnostic from the type.
 export class PiStartupDialogError extends Error {}
 
 function createCatalogEntries(
@@ -435,8 +436,14 @@ function catalogFailure(): Error {
 // Closes stdin and sends `SIGTERM`, then `SIGKILL` after a grace. Calls `onExit` once the process
 // has exited, so that the caller cannot exit first and leave it running.
 function stopChild(child: ChildProcessWithoutNullStreams, onExit: () => void): void {
-  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) {
+  // A descendant can still hold the pipes after the child exits.
+  const finish = (): void => {
+    child.stdout.destroy();
+    child.stderr.destroy();
     onExit();
+  };
+  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) {
+    finish();
     return;
   }
   child.stdin.end();
@@ -444,9 +451,7 @@ function stopChild(child: ChildProcessWithoutNullStreams, onExit: () => void): v
   const escalation = setTimeout(() => child.kill("SIGKILL"), CATALOG_KILL_GRACE_MS);
   child.once("exit", () => {
     clearTimeout(escalation);
-    child.stdout.destroy();
-    child.stderr.destroy();
-    onExit();
+    finish();
   });
 }
 
@@ -466,29 +471,35 @@ function createLineReader(onLine: (line: string) => void): (chunk: Buffer) => vo
 
 // Pi's RPC mode keeps stdout for protocol records: extension output goes to stderr. Closing stdin
 // after the response starts Pi's orderly shutdown. Pi reads stdin only after the extensions'
-// startup handlers, so a startup dialog can never be answered: it fails at once.
+// startup handlers, so a dialog before the response can never be answered: unless it expires
+// before the deadline, it fails at once.
 function runPiModelCatalog(context: ModelDiscoveryContext): Promise<CatalogOutput> {
   return runCatalogCommand(
     {
       name: "pi",
       args: ["--mode", "rpc", "--no-session"],
       input: `${JSON.stringify({ id: PI_REQUEST_ID, type: "get_available_models" })}\n`,
-      readLine: readPiCatalogLine,
+      readLine: createPiCatalogLineReader(),
     },
     context,
   );
 }
 
-function readPiCatalogLine(line: string): CatalogLineAction | undefined {
-  const record = parsePiRecord(line);
-  if (record === undefined) return;
-  if (isPiCatalogResponse(record)) return "endInput";
-  if (record.type === "extension_ui_request" && PI_DIALOG_METHODS.has(record.method)) {
-    return new PiStartupDialogError(
-      "A Pi extension opened a dialog at startup, which Pi's RPC mode cannot answer, so the " +
-        "model alias cannot be resolved from Pi's catalog. To fix it, pin a full " +
-        "`provider/model` selector in the profile's `modelAliases`, or make the extension skip " +
-        'the dialog outside the terminal UI (`ctx.mode !== "tui"`).',
-    );
-  }
+function createPiCatalogLineReader(): (line: string) => CatalogLineAction | undefined {
+  let answered = false;
+  return (line) => {
+    const record = parsePiRecord(line);
+    if (answered || record === undefined) return;
+    if (isPiCatalogResponse(record)) {
+      answered = true;
+      return "endInput";
+    }
+    if (isBlockingPiDialog(record)) return new PiStartupDialogError();
+  };
+}
+
+function isBlockingPiDialog(record: Record<string, unknown>): boolean {
+  if (record.type !== "extension_ui_request" || !PI_DIALOG_METHODS.has(record.method)) return false;
+  const { timeout } = record;
+  return !(typeof timeout === "number" && timeout > 0 && timeout < CATALOG_TIMEOUT_MS);
 }

@@ -338,6 +338,68 @@ setInterval(() => {}, 1000);
   });
 
   it.each([
+    [
+      "a startup dialog that expires",
+      `process.stdout.write(JSON.stringify({ ...DIALOG_REQUEST, timeout: 100 }) + "\\n");
+${ANSWER_CATALOG_REQUEST}
+process.stdin.on("end", () => process.exit(0));
+`,
+    ],
+    [
+      "a dialog after the response",
+      `${ANSWER_CATALOG_REQUEST}
+process.stdin.on("end", () => {
+  process.stdout.write(JSON.stringify(DIALOG_REQUEST) + "\\n", () => process.exit(0));
+});
+`,
+    ],
+  ])("resolves a Pi catalog despite %s", async (_name, script) => {
+    await withFakePi(
+      `const DIALOG_REQUEST = { type: "extension_ui_request", id: "d", method: "confirm", title: "T" };
+${script}`,
+      async (resolve) => {
+        await expect(resolve()).resolves.toBe("openai/gpt-6.2-sol");
+      },
+    );
+  });
+
+  it("closes the output pipes that a descendant holds after the command exits", async () => {
+    const root = mkdtempSync(join(tmpdir(), "aligndev-catalog-pipe-"));
+    try {
+      const result = join(root, "result");
+      // The helper inherits stderr and writes past the output limit once the command has exited.
+      const helper = `const waitForParent = () => {
+  try {
+    process.kill(Number(process.argv[1]), 0);
+    setTimeout(waitForParent, 10);
+  } catch {
+    process.stderr.on("error", () => {});
+    process.stderr.write("x".repeat(9_000_000), (error) => {
+      require("node:fs").writeFileSync(${JSON.stringify(result)}, error ? "closed" : "open");
+    });
+  }
+};
+waitForParent();`;
+      writeFileSync(
+        join(root, "codex"),
+        `#!${process.execPath}
+const args = ["-e", ${JSON.stringify(helper)}, String(process.pid)];
+const stdio = ["ignore", "ignore", "inherit"];
+require("node:child_process").spawn(process.execPath, args, { stdio }).unref();
+`,
+        { mode: 0o755 },
+      );
+      const context = { cwd: root, env: { HOME: root, CODEX_HOME: root, PATH: root } };
+      await expect(createExecutableModelResolver()("codex", "sol", context)).rejects.toThrow(Error);
+      await vi.waitFor(() => expect(readFileSync(result, "utf8")).toBe("closed"), {
+        timeout: 5_000,
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
     ["pi", "sol", completed(piResponse([]))],
     [
       "agy",
