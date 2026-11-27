@@ -152,7 +152,7 @@ describe("Codex executable model resolution", () => {
     await expect(resolve("codex", undefined, CONTEXT)).resolves.toBeUndefined();
     await expect(resolve("claude", "opus", CONTEXT)).resolves.toBe("opus");
     await expect(resolve("agy", "gemini-4-neon", CONTEXT)).resolves.toBe("gemini-4-neon");
-    await expect(resolve("agy", "argon", CONTEXT)).resolves.toBe("argon");
+    await expect(resolve("agy", "custom-model", CONTEXT)).resolves.toBe("custom-model");
     await expect(resolve("pi", " provider/model:high ", CONTEXT)).resolves.toBe(
       " provider/model:high ",
     );
