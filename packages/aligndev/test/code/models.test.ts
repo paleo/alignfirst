@@ -195,6 +195,9 @@ describe("pattern resolution", () => {
     await expect(resolve("agy", "gemini-{latest}-flash", CONTEXT)).resolves.toBe(
       "gemini-3.8-flash",
     );
+    await expect(resolve("agy", "gemini-{latest}-flash-low", CONTEXT)).resolves.toBe(
+      "gemini-3.8-flash",
+    );
     const variantsOnly = "gemini-4-neon-lite-high\tLite\ngemini-pro-orchestrator-neon\tO\n";
     const resolveVariants = createExecutableModelResolver({
       agy: async () => completed(variantsOnly),

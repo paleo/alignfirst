@@ -89,8 +89,13 @@ export type ExecutableModelResolver = (
 interface CatalogEntry {
   run: ModelCatalogRunner;
   isSignInRequired(output: CatalogOutput): boolean;
-  // The executable selectors of the catalog.
-  parse(stdout: string): readonly string[];
+  parse(stdout: string): readonly CatalogModel[];
+}
+
+// A text that a pattern matches, and the selector that launches its model.
+interface CatalogModel {
+  text: string;
+  selector: string;
 }
 
 interface CatalogCommand {
@@ -105,7 +110,7 @@ interface CatalogCommand {
 // `endInput` closes the command's stdin; an error fails the command.
 type CatalogLineAction = "endInput" | Error;
 
-type CatalogCache = WeakMap<NodeJS.ProcessEnv, Map<CatalogAgent, Promise<readonly string[]>>>;
+type CatalogCache = WeakMap<NodeJS.ProcessEnv, Map<CatalogAgent, Promise<readonly CatalogModel[]>>>;
 
 // The accepted model names of a profile: `undefined` means any nonblank name, an empty list none.
 export function resolveModels(profile: ModelSettings): readonly string[] | undefined {
@@ -157,8 +162,8 @@ export function createExecutableModelResolver(
     if (selectedModel === undefined) return;
     if (!isCatalogAgent(agent) || !selectedModel.includes(LATEST)) return selectedModel;
     try {
-      const selectors = await loadCatalog(catalogs, agent, entries[agent], context);
-      return selectNewestModel(selectors, selectedModel);
+      const models = await loadCatalog(catalogs, agent, entries[agent], context);
+      return selectNewestModel(models, selectedModel);
     } catch (error) {
       if (error instanceof ModelSignInRequiredError || error instanceof PiStartupDialogError) {
         throw error;
@@ -185,12 +190,12 @@ function createCatalogEntries(
         ((context) =>
           runCatalogCommand({ name: "codex", args: ["debug", "models", "--bundled"] }, context)),
       isSignInRequired: () => false,
-      parse: parseBundledModelSlugs,
+      parse: (stdout) => parseBundledModelSlugs(stdout).map(toCatalogModel),
     },
     pi: {
       run: runners.pi ?? runPiModelCatalog,
       isSignInRequired: isPiCatalogSignInRequired,
-      parse: parsePiModels,
+      parse: (stdout) => parsePiModels(stdout).map(toCatalogModel),
     },
     agy: {
       run:
@@ -199,6 +204,10 @@ function createCatalogEntries(
       parse: parseAgyModelList,
     },
   };
+}
+
+function toCatalogModel(selector: string): CatalogModel {
+  return { text: selector, selector };
 }
 
 function isCatalogAgent(agent: CodingAgent): agent is CatalogAgent {
@@ -210,7 +219,7 @@ function loadCatalog(
   agent: CatalogAgent,
   entry: CatalogEntry,
   context: ModelDiscoveryContext,
-): Promise<readonly string[]> {
+): Promise<readonly CatalogModel[]> {
   let byAgent = catalogs.get(context.env);
   if (byAgent === undefined) {
     byAgent = new Map();
@@ -228,7 +237,7 @@ function readCatalog(
   entry: CatalogEntry,
   agent: CatalogAgent,
   output: CatalogOutput,
-): readonly string[] {
+): readonly CatalogModel[] {
   if (entry.isSignInRequired(output)) {
     throw new ModelSignInRequiredError(`${MODEL_PATTERN_HELP[agent].label} requires sign-in.`);
   }
@@ -237,10 +246,10 @@ function readCatalog(
 }
 
 // The selector whose text is the pattern with the newest version in place of `{latest}`.
-function selectNewestModel(selectors: readonly string[], pattern: string): string {
+function selectNewestModel(models: readonly CatalogModel[], pattern: string): string {
   const expression = toVersionExpression(pattern);
-  const candidates = selectors.flatMap((selector): VersionedSelector[] => {
-    const match = expression.exec(selector);
+  const candidates = models.flatMap(({ text, selector }): VersionedSelector[] => {
+    const match = expression.exec(text);
     return match ? [{ selector, major: Number(match[1]), minor: Number(match[2] ?? 0) }] : [];
   });
   if (candidates.length === 0) throw new Error("The model catalog contains no matching model.");
@@ -374,8 +383,9 @@ function isPiCatalogResponse(record: Record<string, unknown>): boolean {
   return record.type === "response" && record.id === PI_REQUEST_ID;
 }
 
-// Antigravity lists one id per effort of a model: each id also gives its name without the effort.
-function parseAgyModelList(output: string): readonly string[] {
+// Antigravity lists one id per effort of a model. A pattern matches the id or its name without the
+// effort, and both launch that name.
+function parseAgyModelList(output: string): readonly CatalogModel[] {
   const efforts = resolveEfforts("agy", undefined);
   return nonblankLines(output).flatMap((line) => {
     const tab = line.indexOf("\t");
@@ -384,7 +394,9 @@ function parseAgyModelList(output: string): readonly string[] {
       throw new Error("Antigravity returned a malformed model line");
     }
     const effort = efforts.find((level) => id.endsWith(`-${level}`));
-    return effort === undefined ? [id] : [id, id.slice(0, -effort.length - 1)];
+    if (effort === undefined) return [toCatalogModel(id)];
+    const selector = id.slice(0, -effort.length - 1);
+    return [{ text: id, selector }, toCatalogModel(selector)];
   });
 }
 

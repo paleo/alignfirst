@@ -57,6 +57,10 @@ import {
 // operator re-login rather than a retry.
 const EXIT_AUTH_REQUIRED = 2;
 
+// A session recorded without a profile resumes on Pi's built-ins, which declare nothing.
+const NO_DECLARED_RESUME_MODEL =
+  "the selected profile declares no Pi model; pass --profile with a pi profile that declares models";
+
 const SESSION_OPTIONS = {
   protocol: { type: "string" },
   catchup: { type: "boolean", default: false },
@@ -498,7 +502,9 @@ export function validateSessionArgs(
   if (args.model !== undefined) {
     if (args.model.trim() === "") return "Error: --model must be nonblank.";
     if (models?.length === 0) {
-      return `Error: --model is not accepted: ${NO_DECLARED_MODEL}, or omit --model.`;
+      return isNew
+        ? `Error: --model is not accepted: ${NO_DECLARED_MODEL}, or omit --model.`
+        : `Error: --model is not accepted: ${NO_DECLARED_RESUME_MODEL}.`;
     }
     if (models !== undefined && !models.includes(args.model)) {
       return `Error: --model must be one of: ${models.join(", ")}.`;
@@ -858,11 +864,12 @@ function selectModel(
   if (args.model !== undefined) return args.model;
   if (args.resume === undefined) return code.defaultModel;
   const model = previous?.frontmatter.model ?? undefined;
+  if (model === undefined) return;
   const models = resolveModels(code);
-  if (
-    model !== undefined &&
-    (model.trim() === "" || (models !== undefined && !models.includes(model)))
-  ) {
+  if (models?.length === 0) {
+    throw new Error(`Error: retained session model is not accepted: ${NO_DECLARED_RESUME_MODEL}.`);
+  }
+  if (model.trim() === "" || (models !== undefined && !models.includes(model))) {
     throw new Error(
       "Error: retained session model is not accepted by the selected profile; supply --model with an accepted replacement.",
     );
@@ -1167,10 +1174,10 @@ function modelBehavior(agent: CodingAgent): string {
     case "claude":
       return "Claude model values pass through unchanged.";
     case "codex":
-      return "Codex accepts astra, sol, terra and luna, from the biggest model to the smallest.";
+      return "Codex's built-in aliases are astra, sol, terra and luna, from the biggest model to the smallest.";
     case "pi":
       return "Pi accepts only the names its profile declares through modelFamilies, modelAliases or models. --effort overrides a thinking suffix of a declared selector.";
     case "agy":
-      return "Antigravity accepts carbon, neon, hydrogen and flash, from the biggest model to the smallest. Every other name passes unchanged.";
+      return "Antigravity's built-in aliases are carbon, neon, hydrogen and flash, from the biggest model to the smallest.";
   }
 }

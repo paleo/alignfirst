@@ -212,13 +212,15 @@ A `pi` profile accepts only the model names it declares. A profile that sets `de
 
 For each `pi` profile of `aligndev.settings.json`, collect its `defaultModel` and the `--model` values that scripts and instructions pass, then declare each model:
 
-1. A model of the `gpt`, `claude` or `gemini` family: map the family to its Pi provider in `modelFamilies`. The entry declares the aliases of the family, such as `astra`, `sol`, `terra` and `luna` for `gpt`, and each alias selects the newest version of its model.
-2. Another model: add a `modelAliases` entry that targets `provider/model`, with `{latest}` in place of the version to follow the newest one.
+1. A model whose id follows the pattern of its `gpt`, `claude` or `gemini` family, given under `modelFamilies` in the `aligndev` README: map the family to its Pi provider in `modelFamilies`. The entry declares the aliases of the family, such as `astra`, `sol`, `terra` and `luna` for `gpt`, and each alias selects the newest version of its model.
+2. Another model: add a `modelAliases` entry that targets `provider/model`, with `{latest}` in place of the version to follow the newest one. Write an id without a version number in full.
 3. A full id selected as is: list it in `models`. A nonempty `models` replaces the accepted names, so it lists every name the profile accepts.
 
 A `modelAliases` entry that pins a full id only to avoid a wrong variant can become a family or a `{latest}` target: neither matches a variant with a further suffix.
 
-Then run `aligndev guide code --profile <name>` for each `pi` profile.
+Then run `aligndev guide code --profile <name>` for each enabled `pi` profile.
+
+A session keeps the model name it recorded. After a `defaultModel` changes from a full id to an alias, resume such a session with `--model <alias>`. A session recorded without a profile resumes on Pi's built-in profile, which declares nothing: resume it with `--profile <name>`, naming a `pi` profile that declares models.
 
 Before:
 
@@ -244,7 +246,7 @@ After:
 }
 ```
 
-On an AlignDev OpenClaw host, add `models` beside `defaultModel` in the admin repository's `infra/openclaw/aligndev.settings.json` and bring `infra/openclaw/deployment-profiles.mjs` to the current `aligndev-openclaw-setup` template. Then re-seed through controlled maintenance, preserving the writable service AlignFirst home (see "Keep the Service AlignFirst Home Writable").
+On an AlignDev OpenClaw host, add `models` beside `defaultModel` in the admin repository's `infra/openclaw/aligndev.settings.json`. The list replaces the accepted names: include the `defaultModel` and every `modelAliases` name in use. Bring `infra/openclaw/deployment-profiles.mjs` to the current `aligndev-openclaw-setup` template, then re-seed through controlled maintenance, preserving the writable service AlignFirst home (see "Keep the Service AlignFirst Home Writable").
 
 ## Rename the AlignDev Message-Tool Topics
 

@@ -220,7 +220,7 @@ A built-in alias selects the newest version of its model in the agent's catalog.
 - Codex — `astra`, `sol`, `terra`, `luna`
 - Antigravity — `carbon`, `neon`, `hydrogen`, `flash`
 
-A Pi profile declares its own names. Every other accepted name passes to the agent unchanged.
+A Pi profile declares its own names.
 
 {{#openclaw}}
 `{{ALIGNDEV}} code status` seals a `running` record only when its `machineId` matches this installation and its pid is conclusively gone or reused. Foreign, legacy and uncertain records stay `running`; a sealed run reports `status: failed`, `exitReason: terminated`. `{{ALIGNDEV}} code quota` works without a `.plans` directory and does not start a coding session. Its output belongs to the selected native quota CLI's account; account pairing with the coding child is not verified.

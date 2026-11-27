@@ -490,43 +490,24 @@ test("inventory ignores disabled profiles but still validates their shape", () =
   });
 });
 
-test("inventory accepts a Pi defaultModel only among the names its profile declares", () => {
+test("inventory accepts the Pi settings deployed before model declarations", () => {
   withFixture("pi", "slack", {}, (fixture) => {
-    const original = structuredClone(fixture.settings);
-    const selected = selectedProfile(original);
-    const { defaultModel } = original.code.profiles[selected];
-    const withProfile = (changes) => {
-      fixture.settings = structuredClone(original);
-      Object.assign(fixture.settings.code.profiles[selected], changes);
+    const selected = selectedProfile(fixture.settings);
+    delete fixture.settings.code.profiles[selected].models;
+    saveSettings(fixture);
+    assert.deepEqual(readInventory(fixture).profiles, [selected]);
+  });
+});
+
+test("inventory rejects a malformed Pi modelFamilies", () => {
+  withFixture("pi", "slack", {}, (fixture) => {
+    const selected = selectedProfile(fixture.settings);
+    for (const modelFamilies of [{ glm: "zai" }, { gpt: " " }, ["gpt"]]) {
+      fixture.settings.code.profiles[selected].modelFamilies = modelFamilies;
       saveSettings(fixture);
-    };
-    for (const invalid of [
-      { models: [] },
-      { models: ["other/model"] },
-      { models: undefined, modelFamilies: { gpt: "openai" } },
-      { models: undefined, modelAliases: { other: defaultModel } },
-      { modelFamilies: { glm: "zai" } },
-      { modelFamilies: { gpt: " " } },
-      { modelFamilies: ["gpt"] },
-    ]) {
-      withProfile(invalid);
       assertInventoryRejected(fixture);
     }
-    for (const valid of [
-      { models: undefined, defaultModel: "opus", modelFamilies: { claude: "anthropic" } },
-      { models: undefined, defaultModel: "main", modelAliases: { main: defaultModel } },
-      { models: undefined, defaultModel: undefined },
-    ]) {
-      withProfile(valid);
-      assert.deepEqual(readInventory(fixture).profiles, [selected]);
-    }
-    withProfile({});
-    fixture.settings.code.profiles.retired = {
-      harness: "pi",
-      disabled: true,
-      configDir: "~/native/pi",
-      defaultModel: "undeclared/model",
-    };
+    fixture.settings.code.profiles[selected].modelFamilies = { gpt: "openai" };
     saveSettings(fixture);
     assert.deepEqual(readInventory(fixture).profiles, [selected]);
   });

@@ -43,12 +43,7 @@ const codingOnlyProfileKeys = [
   "unset",
   "quota",
 ];
-// The aliases that a `modelFamilies` entry declares in a pi profile, as in the CLI.
-const modelFamilyAliases = {
-  gpt: ["astra", "sol", "terra", "luna"],
-  claude: ["fable", "opus", "sonnet", "haiku"],
-  gemini: ["carbon", "neon", "hydrogen", "flash"],
-};
+const modelFamilyNames = ["gpt", "claude", "gemini"];
 
 if (resolve(process.argv[1] ?? ".") === fileURLToPath(import.meta.url)) {
   try {
@@ -81,7 +76,6 @@ export function inventoryProfiles(settingsFile, serviceHome, deployedSettingsFil
   const coding = enabled.filter(([, profile]) => profile.harness !== "openclaw");
   validateReferences(settings.code, profiles, enabled, settingsFile);
   validateDefaults(coding, settingsFile);
-  validatePiDefaultModels(coding, settingsFile);
   const selectedName = deploymentDefault(enabled, settingsFile);
   const stores = [];
   for (const [name, profile] of coding) {
@@ -324,7 +318,7 @@ function validateLaunchFields(value, path) {
     value.modelFamilies !== undefined &&
     (!isObject(value.modelFamilies) ||
       !Object.entries(value.modelFamilies).every(
-        ([family, prefix]) => Object.hasOwn(modelFamilyAliases, family) && nonblank(prefix),
+        ([family, prefix]) => modelFamilyNames.includes(family) && nonblank(prefix),
       ))
   )
     throw new Error(`${path}.modelFamilies must map gpt, claude or gemini to nonblank strings`);
@@ -380,27 +374,6 @@ function validateDefaults(coding, settingsFile) {
       throw new Error(
         `${settingsFile}: multiple default: true profiles for ${harness}: ${names.join(", ")}; ` +
           `leave only one default: true for ${harness}`,
-      );
-  }
-}
-
-// Like the CLI, a pi profile accepts only the model names it declares.
-function validatePiDefaultModels(coding, settingsFile) {
-  for (const [name, profile] of coding) {
-    if (profile.harness !== "pi" || profile.defaultModel === undefined) continue;
-    const accepted =
-      profile.models?.length > 0
-        ? profile.models
-        : [
-            ...Object.keys(profile.modelFamilies ?? {}).flatMap(
-              (family) => modelFamilyAliases[family],
-            ),
-            ...Object.keys(profile.modelAliases ?? {}),
-          ];
-    if (!accepted.includes(profile.defaultModel))
-      throw new Error(
-        `${settingsFile}: code.profiles[${quoteName(name)}].defaultModel must be a model that ` +
-          "the pi profile declares through models, modelFamilies or modelAliases",
       );
   }
 }
