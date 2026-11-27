@@ -610,6 +610,38 @@ test("seed rejects a mismatched overlay before writing instructions or installed
   });
 });
 
+for (const deployed of [true, false]) {
+  const state = deployed ? "the deployed settings" : "the settings absent";
+  test(`seed leaves ${state} when the real CLI rejects the candidate`, () => {
+    withFixture("pi", "slack", {}, (fixture) => {
+      if (deployed) installSettings(fixture);
+      const before = deployed ? readFileSync(fixture.deployedSettings, "utf8") : undefined;
+      const selected = selectedProfile(fixture.settings);
+      // The inventory accepts an undeclared default; only the CLI rejects it.
+      fixture.settings.code.profiles[selected].models = ["fixture/another-model"];
+      saveSettings(fixture);
+      const result = spawnSync(
+        "bash",
+        [
+          "-euc",
+          'source "$1"; DIR="$2"; load_modules; load_deployment_profiles; install_aligndev_config',
+          "fixture",
+          seedFunctions(fixture),
+          fixture.infra,
+        ],
+        options(fixture),
+      );
+      assert.notEqual(result.status, 0);
+      assert.equal(readFileSync(join(fixture.home, "guide-calls"), "utf8"), `${selected}\n`);
+      assert.deepEqual(
+        readdirSync(dirname(fixture.deployedSettings)),
+        deployed ? ["aligndev.settings.json"] : [],
+      );
+      if (deployed) assert.equal(readFileSync(fixture.deployedSettings, "utf8"), before);
+    });
+  });
+}
+
 test("inventory and real CLI ignore stale settings without leaking values or rewriting input", () => {
   withFixture("codex", "slack", {}, (fixture) => {
     const selected = selectedProfile(fixture.settings);

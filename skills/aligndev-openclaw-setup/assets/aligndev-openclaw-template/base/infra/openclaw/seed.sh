@@ -176,14 +176,37 @@ install_aligndev_config() {
   echo "[seed] aligndev settings — $ALIGNDEV_CONFIG_FILE"
   # Settings and the entire AlignFirst home stay service-owned and writable.
   if [ ! -d "$ALIGNFIRST_HOME" ]; then install -d -m 755 "$ALIGNFIRST_HOME"; fi
-  if ! cmp -s "$DIR/aligndev.settings.json" "$ALIGNDEV_CONFIG_FILE"; then
-    install -m 644 "$DIR/aligndev.settings.json" "$ALIGNDEV_CONFIG_FILE"
+  if cmp -s "$DIR/aligndev.settings.json" "$ALIGNDEV_CONFIG_FILE"; then
+    validate_coding_profiles
+    return
   fi
+  # AlignDev judges the settings where it reads them: the candidate is installed, and a rejected
+  # one gives way to the previous settings.
+  local previous="$ALIGNDEV_CONFIG_FILE.previous"
+  rm -f "$previous"
+  if [ -f "$ALIGNDEV_CONFIG_FILE" ]; then cp -p "$ALIGNDEV_CONFIG_FILE" "$previous"; fi
+  install -m 644 "$DIR/aligndev.settings.json" "$ALIGNDEV_CONFIG_FILE"
+  if validate_coding_profiles; then
+    rm -f "$previous"
+    return
+  fi
+  if [ -f "$previous" ]; then
+    mv -f "$previous" "$ALIGNDEV_CONFIG_FILE"
+  else
+    rm -f "$ALIGNDEV_CONFIG_FILE"
+  fi
+  echo "[seed] aligndev rejected $DIR/aligndev.settings.json;" \
+    "$ALIGNDEV_CONFIG_FILE keeps its previous state." >&2
+  exit 1
+}
+
+validate_coding_profiles() {
   # Explicit overrides avoid the seed cwd's project-registry selection. Validate every enabled
   # coding profile, including profiles reachable only through --profile or a project registry.
   local profile
   while IFS= read -r profile; do
-    ALIGNDEV_ASSISTANT_HARNESS=openclaw npx -y aligndev guide code --profile "$profile" >/dev/null
+    ALIGNDEV_ASSISTANT_HARNESS=openclaw npx -y aligndev guide code --profile "$profile" \
+      >/dev/null || return 1
   done < <(jq -r '.profiles[]' <<<"$DEPLOYMENT_PROFILES")
 }
 

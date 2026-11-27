@@ -149,7 +149,7 @@ sudo /opt/{{SERVICE_USER}}/libexec/install-pi-launcher.sh
 Then verify:
 
 ```sh
-sudo -i -u {{SERVICE_USER}} -- bash -lc 'openclaw --version && npx -y alignfirst --version && npx -y aligndev --version && ALIGNDEV_ASSISTANT_HARNESS=openclaw npx -y aligndev code --help >/dev/null && echo aligndev-ok && ctx7 --version'
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'openclaw --version && npx -y alignfirst --version && npx -y aligndev --version && ctx7 --version'
 sudo -i -u {{SERVICE_USER}} -- /opt/{{SERVICE_USER}}/libexec/admin-npm ls -g --depth=0
 sudo -H -u {{SERVICE_USER}} bash -lc '
 PROJECT_SHELL=/opt/{{SERVICE_USER}}/libexec/project-shell \
@@ -210,6 +210,12 @@ Read its output: every imported or removed file is a change to port into the rep
 Re-seed after a core bump, and whenever the `git pull` above changed anything under `infra/openclaw/`: the seed is the configuration's source of truth, and a release that adds a plugin or a tool ships as a seed change. Re-seed through [configure-assistant.md](configure-assistant.md).
 
 A new OpenClaw release can retire keys the seed sets, change defaults and widen the channel plugin's declared capabilities. `config set` under the new binary rewrites the config in the current schema, and the surface module re-records the plugin consent. A `config set` that fails names a retired key: port its replacement into the seed modules before starting the gateway. The trailing interactive `openclaw doctor` shows the changed defaults; adopt them and record each one in [configuration.md](../configuration.md#stock-defaults).
+
+Then check the current AlignDev against the service settings, with or without a re-seed:
+
+```sh
+sudo -i -u {{SERVICE_USER}} -- bash -lc 'ALIGNDEV_ASSISTANT_HARNESS=openclaw npx -y aligndev code --help >/dev/null && echo aligndev-ok'
+```
 
 ## Gateway unit and restart
 
