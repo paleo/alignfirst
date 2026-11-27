@@ -263,6 +263,26 @@ openai    gpt-7-sol experimental  272K     128K     yes       yes
     await expect(resolve("pi", "sol", CONTEXT)).resolves.toBe("openai/gpt-6.2-sol");
   });
 
+  it.each([
+    [
+      "an added",
+      `provider  model        context  max-out  thinking  images  audio
+openai    gpt-6.1-sol  272K     128K     yes       yes     no
+openai    gpt-6.2-sol  272K     128K     yes       yes     no
+`,
+    ],
+    [
+      "a renamed",
+      `provider  model        context  output  thinking  images
+openai    gpt-6.1-sol  272K     128K    adaptive  yes
+openai    gpt-6.2-sol  272K     128K    adaptive  yes
+`,
+    ],
+  ])("reads a Pi table with %s metadata column", async (_name, catalog) => {
+    const resolve = createExecutableModelResolver({ pi: async () => completed(catalog) });
+    await expect(resolve("pi", "sol", CONTEXT)).resolves.toBe("openai/gpt-6.2-sol");
+  });
+
   it("ends the Pi table at an extension log after the rows", async () => {
     const resolve = createExecutableModelResolver({
       pi: async () => completed(`${PI_MODELS}Catalog done\n`),
