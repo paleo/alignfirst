@@ -208,7 +208,7 @@ On an AlignDev OpenClaw host, port the settings and project changes of the curre
 
 ## Declare AlignDev Pi Models
 
-A `pi` profile accepts only the model names it declares. A profile that sets `defaultModel` or receives `--model` fails until it declares the model. A profile that does neither runs Pi's own default and needs no change.
+A `pi` profile accepts only the model names it declares: without a declaration, it rejects `--model` and `defaultModel`. A host that runs `aligndev` through `npx` picks up the release at once. Convert the settings with the upgrade, or before it through step 3 alone: earlier versions know neither `modelFamilies` nor `{latest}`. A profile that uses neither `defaultModel` nor `--model` runs Pi's own default and needs no change.
 
 For each `pi` profile of `aligndev.settings.json`, collect its `defaultModel` and the `--model` values that scripts and instructions pass, then declare each model:
 
