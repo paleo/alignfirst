@@ -25,7 +25,7 @@ import {
 } from "../../src/code/code-cli.js";
 import { resolveEfforts } from "../../src/code/efforts.js";
 import { readMachineId } from "../../src/code/machine-id.js";
-import { CLAUDE_DEFAULT_MODELS } from "../../src/code/models.js";
+import { CLAUDE_DEFAULT_MODELS, createExecutableModelResolver } from "../../src/code/models.js";
 import {
   appendTranscript,
   applyCompletion,
@@ -1166,6 +1166,44 @@ describe("launch guards", () => {
     });
     expect(readFileSync(records[0].path, "utf8")).not.toContain("injected-resolver-secret");
   });
+
+  it.each([
+    [
+      "pi",
+      "sol",
+      { exitCode: 0, stdout: "No models available. secret-catalog-text\n", stderr: "" },
+    ],
+    [
+      "agy",
+      "neon",
+      { exitCode: 1, stdout: "", stderr: "Error: Please sign in. secret-catalog-text\n" },
+    ],
+  ] as const)(
+    "hands a %s catalog sign-in over to the login instructions",
+    async (harness, alias, output) => {
+      const stderr = makeSink();
+      const agentHome = makeHome({ code: { harness } });
+      const code = await main({
+        argv: ["node", "aligndev", "code", "new", "--message", "go", "--model", alias],
+        cwd: dir,
+        env: { HOME: agentHome },
+        home: agentHome,
+        alignfirstCommand: ALIGNFIRST,
+        stdout: makeSink(),
+        stderr,
+        modelResolver: createExecutableModelResolver({ [harness]: async () => output }),
+      });
+
+      expect(code).toBe(2);
+      expect(stderr.text()).not.toContain("secret-catalog-text");
+      const [record] = listSessionRecords(plans, readMachineId(agentHome));
+      expect(readCompletion(record.path).frontmatter).toMatchObject({
+        status: "failed",
+        exitReason: "auth_required",
+      });
+      expect(readFileSync(record.path, "utf8")).not.toContain("secret-catalog-text");
+    },
+  );
 
   it("reserves the next side ticket through alignfirst for --no-ticket", async () => {
     mkdirSync(join(dir, ".plans", "side-1"));

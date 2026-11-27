@@ -29,6 +29,7 @@ import {
   type ExecutableModelResolver,
   expandModelAlias,
   modelAliasHint,
+  ModelSignInRequiredError,
   resolveModels,
 } from "./models.js";
 import { renderAuthenticationFailure, renderLoginInstructions } from "./login.js";
@@ -605,21 +606,8 @@ async function runSession(
       cwd,
       env: code.childEnv,
     });
-  } catch {
-    const hint = modelAliasHint(agent);
-    const message =
-      `Could not resolve the ${agent} model; check --model, profile.models/modelAliases and the agent installation. ` +
-      `${nativeContext(code)}.` +
-      (hint !== undefined ? ` ${hint}` : "");
-    const completedPath = applyCompletion(sessionFilePath, {
-      status: "failed",
-      endedAt: new Date().toISOString(),
-      exitReason: "error",
-      sessionId: args.resume ?? null,
-      result: message,
-    });
-    writeFailureDiagnostic(ctx, completedPath, message);
-    return 1;
+  } catch (error) {
+    return failModelResolution(ctx, code, args, sessionFilePath, error);
   }
 
   const runConfig = buildRunConfig({
@@ -654,6 +642,39 @@ async function runSession(
     `${nativeContext(code)}: ${failureDiagnostic(agent, result.result)}${args.resume === undefined ? "" : " Check that the native conversation exists in this configuration; select the correct --profile or start a new session. No account fallback was attempted."}`,
   );
   return 1;
+}
+
+// A catalog that requires sign-in takes the login handoff of a native authentication failure,
+// without the catalog's output.
+function failModelResolution(
+  ctx: CodeContext,
+  code: CodeConfig,
+  args: SessionArgs,
+  sessionFilePath: string,
+  error: unknown,
+): number {
+  const authRequired = error instanceof ModelSignInRequiredError;
+  const message = authRequired
+    ? renderAuthenticationFailure(code, ctx.cwd).instructions
+    : modelResolutionError(code);
+  const completedPath = applyCompletion(sessionFilePath, {
+    status: "failed",
+    endedAt: new Date().toISOString(),
+    exitReason: authRequired ? "auth_required" : "error",
+    sessionId: args.resume ?? null,
+    result: message,
+  });
+  writeFailureDiagnostic(ctx, completedPath, message);
+  return authRequired ? EXIT_AUTH_REQUIRED : 1;
+}
+
+function modelResolutionError(code: CodeConfig): string {
+  const hint = modelAliasHint(code.harness);
+  return (
+    `Could not resolve the ${code.harness} model; check --model, profile.models/modelAliases and the agent installation. ` +
+    `${nativeContext(code)}.` +
+    (hint !== undefined ? ` ${hint}` : "")
+  );
 }
 
 function nativeContext(code: CodeConfig): string {
@@ -1125,8 +1146,8 @@ function modelBehavior(agent: CodingAgent): string {
     case "codex":
       return "Codex aliases astra, sol, terra, and luna resolve on demand; configured full slugs pass through.";
     case "pi":
-      return "Pi native selectors (including provider/model:thinking) pass through unchanged. --effort overrides a thinking suffix of the model selector.";
+      return "Pi aliases astra, sol, terra, and luna resolve on demand to the newest unsuffixed provider/gpt-… model of pi --list-models; other selectors (including provider/model:thinking) pass through unchanged. --effort overrides a thinking suffix of the model selector.";
     case "agy":
-      return "Antigravity model names pass through unchanged. Prefer a base name with --effort: a name with an effort suffix conflicts with a different effort.";
+      return "Antigravity aliases neon, hydrogen, argon, carbon, and flash resolve on demand to the newest unsuffixed base name of agy models; other names pass through unchanged. Prefer a base name with --effort: a name with an effort suffix conflicts with a different effort.";
   }
 }

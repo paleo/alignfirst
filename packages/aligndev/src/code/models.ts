@@ -5,7 +5,7 @@ import { resolveEfforts } from "./efforts.js";
 
 export const CLAUDE_DEFAULT_MODELS = ["fable", "opus", "sonnet", "haiku"] as const;
 export const CODEX_DEFAULT_MODELS = ["astra", "sol", "terra", "luna"] as const;
-export const AGY_MODEL_ALIASES = ["neon", "hydrogen", "argon", "carbon", "flash"] as const;
+const AGY_MODEL_ALIASES = ["neon", "hydrogen", "argon", "carbon", "flash"] as const;
 
 const MODEL_ALIAS_HELP: Readonly<Record<CatalogAgent, ModelAliasHelp>> = {
   codex: {
@@ -29,10 +29,11 @@ const MODEL_ALIAS_HELP: Readonly<Record<CatalogAgent, ModelAliasHelp>> = {
 };
 const CATALOG_MAX_BUFFER = 8 * 1024 * 1024;
 const CATALOG_TIMEOUT_MS = 30_000;
+const PI_HEADER = /^provider\s+model\s+context\s/;
 
 export type CatalogAgent = "codex" | "pi" | "agy";
 
-export interface ModelAliasHelp {
+interface ModelAliasHelp {
   label: string;
   remedy: string;
 }
@@ -42,7 +43,14 @@ export interface ModelDiscoveryContext {
   env: NodeJS.ProcessEnv;
 }
 
-export type ModelCatalogRunner = (context: ModelDiscoveryContext) => Promise<string>;
+export type ModelCatalogRunner = (context: ModelDiscoveryContext) => Promise<CatalogOutput>;
+
+// A catalog command that ran to completion, whatever its exit code.
+export interface CatalogOutput {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}
 
 export type ExecutableModelResolver = (
   agent: CodingAgent,
@@ -58,7 +66,8 @@ export interface CatalogModel {
 interface CatalogEntry {
   aliases: ReadonlySet<string>;
   run: ModelCatalogRunner;
-  parse(output: string): readonly CatalogModel[];
+  isSignInRequired(output: CatalogOutput): boolean;
+  parse(stdout: string): readonly CatalogModel[];
   prefix: "gpt" | "gemini";
   suffixes: readonly string[];
   toSelector(base: string, models: readonly CatalogModel[]): string;
@@ -98,11 +107,15 @@ export function createExecutableModelResolver(
       const newest = selectNewestModel(models, selectedModel, entry.prefix, entry.suffixes);
       if (newest === undefined) throw new Error("the model catalog contains no matching model");
       return entry.toSelector(newest.base, newest.models);
-    } catch {
+    } catch (error) {
+      if (error instanceof ModelSignInRequiredError) throw error;
       throw new Error(modelAliasError(agent, selectedModel));
     }
   };
 }
+
+// The catalog command reports that the harness has no signed-in account or credentials.
+export class ModelSignInRequiredError extends Error {}
 
 function createCatalogEntries(
   runners: Partial<Record<CatalogAgent, ModelCatalogRunner>>,
@@ -113,6 +126,7 @@ function createCatalogEntries(
       run:
         runners.codex ??
         ((context) => runModelCatalog("codex", ["debug", "models", "--bundled"], context)),
+      isSignInRequired: () => false,
       parse: parseBundledModelSlugs,
       prefix: "gpt",
       suffixes: [],
@@ -121,6 +135,7 @@ function createCatalogEntries(
     pi: {
       aliases: new Set<string>(CODEX_DEFAULT_MODELS),
       run: runners.pi ?? ((context) => runModelCatalog("pi", ["--list-models"], context)),
+      isSignInRequired: isPiCatalogSignInRequired,
       parse: parsePiModelList,
       prefix: "gpt",
       suffixes: [],
@@ -129,6 +144,7 @@ function createCatalogEntries(
     agy: {
       aliases: new Set<string>(AGY_MODEL_ALIASES),
       run: runners.agy ?? ((context) => runModelCatalog("agy", ["models"], context)),
+      isSignInRequired: isAgyCatalogSignInRequired,
       parse: parseAgyModelList,
       prefix: "gemini",
       suffixes: resolveEfforts("agy", undefined),
@@ -154,18 +170,30 @@ function loadCatalog(
   }
   let catalog = byAgent.get(agent);
   if (catalog === undefined) {
-    catalog = entry.run(context).then(entry.parse);
+    catalog = entry.run(context).then((output) => readCatalog(entry, agent, output));
     byAgent.set(agent, catalog);
   }
   return catalog;
 }
 
-export interface NewestModel {
+function readCatalog(
+  entry: CatalogEntry,
+  agent: CatalogAgent,
+  output: CatalogOutput,
+): readonly CatalogModel[] {
+  if (entry.isSignInRequired(output)) {
+    throw new ModelSignInRequiredError(`${MODEL_ALIAS_HELP[agent].label} requires sign-in.`);
+  }
+  if (output.exitCode !== 0) throw new Error("The model catalog command failed.");
+  return entry.parse(output.stdout);
+}
+
+interface NewestModel {
   base: string;
   models: readonly CatalogModel[];
 }
 
-export function selectNewestModel(
+function selectNewestModel(
   models: readonly CatalogModel[],
   alias: string,
   prefix: string,
@@ -254,13 +282,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+// Pi prints this guidance instead of the table when no provider has credentials.
+function isPiCatalogSignInRequired(output: CatalogOutput): boolean {
+  const lines = nonblankLines(output.stdout);
+  return (
+    !lines.some((line) => PI_HEADER.test(line)) &&
+    lines.some((line) => /^(?:Warning:\s*)?No models available\./.test(line.trim()))
+  );
+}
+
+// Pi pads fixed-width columns, and a model id may contain spaces: fields are read at the header's
+// column offsets. Extensions may print startup output before the header.
 function parsePiModelList(output: string): readonly CatalogModel[] {
-  const [header, ...rows] = nonblankLines(output).map((line) => line.trim().split(/\s+/));
-  if (header?.[0] !== "provider" || header[1] !== "model") {
-    throw new Error("Pi returned a model list without its header");
-  }
-  return rows.map(([provider, id]) => {
-    if (provider === undefined || id === undefined) {
+  const lines = nonblankLines(output);
+  const headerIndex = lines.findIndex((line) => PI_HEADER.test(line));
+  if (headerIndex === -1) throw new Error("Pi returned a model list without its header");
+  const header = lines[headerIndex];
+  const modelStart = header.indexOf("model");
+  const contextStart = header.indexOf("context");
+  return lines.slice(headerIndex + 1).map((line) => {
+    const provider = line.slice(0, modelStart).trim();
+    const id = line.slice(modelStart, contextStart).trim();
+    if (provider.length === 0 || id.length === 0 || line[contextStart - 1] !== " ") {
       throw new Error("Pi returned a malformed model row");
     }
     return { provider, id };
@@ -278,6 +321,15 @@ function parseAgyModelList(output: string): readonly CatalogModel[] {
   });
 }
 
+function isAgyCatalogSignInRequired(output: CatalogOutput): boolean {
+  return (
+    output.exitCode !== 0 &&
+    output.stderr
+      .split("\n")
+      .some((line) => /^Error: (?:Please sign in\b|authentication required)/.test(line.trim()))
+  );
+}
+
 function nonblankLines(output: string): string[] {
   return output.split(/\r?\n/).filter((line) => line.trim().length > 0);
 }
@@ -286,7 +338,7 @@ function runModelCatalog(
   command: string,
   args: readonly string[],
   context: ModelDiscoveryContext,
-): Promise<string> {
+): Promise<CatalogOutput> {
   return new Promise((resolve, reject) => {
     const child = execFile(
       command,
@@ -298,12 +350,17 @@ function runModelCatalog(
         maxBuffer: CATALOG_MAX_BUFFER,
         timeout: CATALOG_TIMEOUT_MS,
       },
-      (error, stdout) => {
-        if (error) {
+      (error, stdout, stderr) => {
+        if (error === null) {
+          resolve({ exitCode: 0, stdout, stderr });
+          return;
+        }
+        // Spawn failures, timeouts and buffer overflows carry no numeric exit code.
+        if (typeof error.code !== "number") {
           reject(new Error("The model catalog command failed."));
           return;
         }
-        resolve(stdout);
+        resolve({ exitCode: error.code, stdout, stderr });
       },
     );
     child.stdin?.end();
