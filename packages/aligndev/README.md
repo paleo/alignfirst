@@ -197,9 +197,7 @@ A coding-agent profile accepts:
   | `claude` | `fable`, `opus`, `sonnet`, `haiku` | the alias, unchanged |
   | `codex` | `astra`, `sol`, `terra`, `luna` | a bundled slug |
   | `pi` | `astra`, `sol`, `terra`, `luna` | `<provider>/gpt-…` |
-  | `agy` | `carbon`, `neon`, `hydrogen`, `flash` | a base name, such as `gemini-4-neon` |
-
-  For Antigravity, configure base names: a name with an effort suffix, such as `gemini-4-neon-high`, fails the run under any other effort, `defaultEffort` included.
+  | `agy` | `carbon`, `neon`, `hydrogen`, `flash` | a model name, such as `gemini-4-neon` |
 - `modelAliases` — one-step user-facing name → native selector mappings. Validate the chosen name first, expand once, then apply native handling. A built-in alias target such as `sol` still resolves through the native catalog. A full selector pins a model, such as `"sol": "openai/gpt-6.2-sol-healthcare"` for a suffixed variant.
 - `efforts` — a nonempty list replaces the harness's built-in effort levels and bounds what AlignDev passes. An empty list adds no override. Entries are free strings, so a level AlignDev does not know can be listed.
 - `defaultEffort` — pins new sessions to one of the accepted levels. Without it, a session launched without `--effort` runs at the native default, which AlignDev does not read.
@@ -211,7 +209,7 @@ A coding-agent profile accepts:
   | `pi` | `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` | `--thinking <level>` |
   | `agy` | `low`, `medium`, `high`, `xhigh`, `max` | `--effort <level>` |
 
-  The level reaches the native CLI unchanged. AlignDev checks no level against the model: Claude falls back to a supported level, Pi clamps it, Codex passes it through, and Antigravity fails the run on a model and effort that conflict.
+  The level reaches the native CLI unchanged. AlignDev checks no level against the model: Claude falls back to a supported level, Pi clamps it, Codex passes it through, and Antigravity fails the run on a level the model lacks.
 - `skipPermissions` — defaults to false. Claude uses `--permission-mode auto`, or `--dangerously-skip-permissions`; Codex uses `--sandbox workspace-write`, or `--dangerously-bypass-approvals-and-sandbox`; Antigravity uses its auto mode, or `--dangerously-skip-permissions` (see "Antigravity permissions" in `npx -y alignfirst setup guide coding-agent-assistant`). Pi ignores this setting.
 - `quota` — independent native usage reader: `source` is `claude`, `codex`, `agy` or `none`, with optional `configDir`, `env`, `unset`. An `agy` source rejects `configDir`. `none` disables quota and accepts no other recognized options. Omitted quota uses a native Claude, Codex or Antigravity profile's coding environment; Pi requires an explicit source.
 
