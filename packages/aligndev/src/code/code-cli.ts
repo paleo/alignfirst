@@ -1152,10 +1152,10 @@ function modelBehavior(agent: CodingAgent): string {
     case "claude":
       return "Claude model values pass through unchanged.";
     case "codex":
-      return "Codex aliases astra, sol, terra, and luna (biggest first) resolve on demand; configured full slugs pass through.";
+      return "Codex aliases astra, sol, terra and luna (biggest first) select the newest version of their model in Codex's bundled catalog; a configured full slug passes unchanged.";
     case "pi":
-      return "Pi aliases astra, sol, terra, and luna (biggest first) resolve on demand to the newest unsuffixed provider/gpt-… model of Pi's catalog; other selectors (including provider/model:thinking) pass through unchanged. --effort overrides a thinking suffix of the model selector.";
+      return "Pi aliases astra, sol, terra and luna (biggest first) select the newest version of their model in Pi's catalog; variants with a further suffix never match. Every other selector, provider/model:thinking included, passes unchanged. --effort overrides a thinking suffix of the model selector.";
     case "agy":
-      return "Antigravity aliases carbon, neon, hydrogen, and flash (biggest first) resolve on demand to the newest unsuffixed base name of agy models; other names pass through unchanged. Prefer a base name with --effort: a name with an effort suffix conflicts with a different effort.";
+      return "Antigravity aliases carbon, neon, hydrogen and flash (biggest first) select the newest version of their model in `agy models`; variants with a further suffix never match. Every other name passes unchanged.";
   }
 }

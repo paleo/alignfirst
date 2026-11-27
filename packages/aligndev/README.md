@@ -199,7 +199,7 @@ A coding-agent profile accepts:
   | `pi` | `astra`, `sol`, `terra`, `luna` | `<provider>/gpt-…` |
   | `agy` | `carbon`, `neon`, `hydrogen`, `flash` | a base name, such as `gemini-4-neon` |
 
-  For Antigravity, prefer a base name with an effort: a name with an effort suffix conflicts with a different effort, `defaultEffort` included.
+  For Antigravity, configure base names: a name with an effort suffix, such as `gemini-4-neon-high`, fails the run under any other effort, `defaultEffort` included.
 - `modelAliases` — one-step user-facing name → native selector mappings. Validate the chosen name first, expand once, then apply native handling. A built-in alias target such as `sol` still resolves through the native catalog. A full selector pins a model, such as `"sol": "openai/gpt-6.2-sol-healthcare"` for a suffixed variant.
 - `efforts` — a nonempty list replaces the harness's built-in effort levels and bounds what AlignDev passes. An empty list adds no override. Entries are free strings, so a level AlignDev does not know can be listed.
 - `defaultEffort` — pins new sessions to one of the accepted levels. Without it, a session launched without `--effort` runs at the native default, which AlignDev does not read.
