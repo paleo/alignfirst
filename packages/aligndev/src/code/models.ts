@@ -5,7 +5,7 @@ import { resolveEfforts } from "./efforts.js";
 
 export const CLAUDE_DEFAULT_MODELS = ["fable", "opus", "sonnet", "haiku"] as const;
 export const CODEX_DEFAULT_MODELS = ["astra", "sol", "terra", "luna"] as const;
-const AGY_MODEL_ALIASES = ["neon", "hydrogen", "argon", "carbon", "flash"] as const;
+const AGY_MODEL_ALIASES = ["carbon", "neon", "hydrogen", "flash"] as const;
 
 const MODEL_ALIAS_HELP: Readonly<Record<CatalogAgent, ModelAliasHelp>> = {
   codex: {

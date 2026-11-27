@@ -24,6 +24,7 @@ const PI_MODELS = piResponse([
   ["openai", "gpt-5.6-terra"],
 ]);
 const AGY_MODELS = [
+  "gemini-4-carbon-max\tGemini 4 Carbon (Max)",
   "gemini-4-neon-high\tGemini 4 Neon (High)",
   "gemini-4-neon-lite-high\tGemini 4 Neon Lite (High)",
   "gemini-4-hydrogen-xhigh\tGemini 4 Hydrogen (XHigh)",
@@ -151,6 +152,7 @@ describe("Codex executable model resolution", () => {
     await expect(resolve("codex", undefined, CONTEXT)).resolves.toBeUndefined();
     await expect(resolve("claude", "opus", CONTEXT)).resolves.toBe("opus");
     await expect(resolve("agy", "gemini-4-neon", CONTEXT)).resolves.toBe("gemini-4-neon");
+    await expect(resolve("agy", "argon", CONTEXT)).resolves.toBe("argon");
     await expect(resolve("pi", " provider/model:high ", CONTEXT)).resolves.toBe(
       " provider/model:high ",
     );
@@ -258,6 +260,7 @@ describe("Pi and Antigravity executable model resolution", () => {
   it("resolves an Antigravity alias to the newest base name, ignoring variants", async () => {
     const resolve = createExecutableModelResolver({ agy: async () => completed(AGY_MODELS) });
     await expect(resolve("agy", "neon", CONTEXT)).resolves.toBe("gemini-4-neon");
+    await expect(resolve("agy", "carbon", CONTEXT)).resolves.toBe("gemini-4-carbon");
     await expect(resolve("agy", "flash", CONTEXT)).resolves.toBe("gemini-3.8-flash");
     const variantsOnly = "gemini-4-neon-lite-high\tLite\ngemini-pro-orchestrator-neon\tO\n";
     const resolveVariants = createExecutableModelResolver({

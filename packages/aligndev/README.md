@@ -190,7 +190,16 @@ A coding-agent profile accepts:
 - `env` — literal environment values for non-secret configuration. No interpolation or shell expansion. Keep credentials in native stores or separately provisioned process environments.
 - `unset` — inherited variables to remove, including API keys that select an unintended authentication route. A variable cannot occur in both `env` and `unset`. A string or null `configDir` cannot coexist with its native directory variable in either field.
 - `defaultModel` — new-session default, validated against accepted names. Omission uses the native default.
-- `models` — a nonempty list replaces accepted names. Otherwise Claude accepts `fable`, `opus`, `sonnet`, `haiku`, Codex accepts `astra`, `sol`, `terra`, `luna`, and both add configured alias names. Pi and Antigravity accept every nonblank selector. When selected, built-in aliases resolve to the newest unsuffixed model of the native catalog: Pi's `astra`, `sol`, `terra`, `luna` to `<provider>/gpt-…`, Antigravity's `neon`, `hydrogen`, `argon`, `carbon`, `flash` to a base name. For Antigravity, prefer a base name with an effort: a name with an effort suffix conflicts with a different effort, `defaultEffort` included. An empty list adds no override.
+- `models` — a nonempty list replaces accepted names. An empty list adds no override. Otherwise Claude and Codex accept their built-in aliases plus configured alias names, and Pi and Antigravity accept every nonblank selector. Codex, Pi and Antigravity resolve a selected built-in alias to the newest unsuffixed model of the native catalog. Aliases go from the biggest model to the smallest:
+
+  | Harness | Built-in aliases | Native model |
+  | --- | --- | --- |
+  | `claude` | `fable`, `opus`, `sonnet`, `haiku` | the alias, unchanged |
+  | `codex` | `astra`, `sol`, `terra`, `luna` | a bundled slug |
+  | `pi` | `astra`, `sol`, `terra`, `luna` | `<provider>/gpt-…` |
+  | `agy` | `carbon`, `neon`, `hydrogen`, `flash` | a base name, such as `gemini-4-neon` |
+
+  For Antigravity, prefer a base name with an effort: a name with an effort suffix conflicts with a different effort, `defaultEffort` included.
 - `modelAliases` — one-step user-facing name → native selector mappings. Validate the chosen name first, expand once, then apply native handling. A built-in alias target such as `sol` still resolves through the native catalog. A full selector pins a model, such as `"sol": "openai/gpt-6.2-sol-healthcare"` for a suffixed variant.
 - `efforts` — a nonempty list replaces the harness's built-in effort levels and bounds what AlignDev passes. An empty list adds no override. Entries are free strings, so a level AlignDev does not know can be listed.
 - `defaultEffort` — pins new sessions to one of the accepted levels. Without it, a session launched without `--effort` runs at the native default, which AlignDev does not read.
