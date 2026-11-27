@@ -1171,7 +1171,11 @@ describe("launch guards", () => {
     [
       "pi",
       "sol",
-      { exitCode: 0, stdout: "No models available. secret-catalog-text\n", stderr: "" },
+      {
+        exitCode: 0,
+        stdout: "No models available. Use /login to log into a provider. secret-catalog-text\n",
+        stderr: "",
+      },
     ],
     [
       "agy",

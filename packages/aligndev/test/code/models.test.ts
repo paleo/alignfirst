@@ -263,6 +263,25 @@ openai    gpt-7-sol experimental  272K     128K     yes       yes
     await expect(resolve("pi", "sol", CONTEXT)).resolves.toBe("openai/gpt-6.2-sol");
   });
 
+  it("ends the Pi table at an extension log after the rows", async () => {
+    const resolve = createExecutableModelResolver({
+      pi: async () => completed(`${PI_MODELS}Catalog done\n`),
+    });
+    await expect(resolve("pi", "sol", CONTEXT)).resolves.toBe("openai/gpt-6.2-sol");
+  });
+
+  it.each([
+    ["an extension message", 0, "No models available. The local cache is missing.\n"],
+    ["a failed command", 7, "No models available. Use /login to log into a provider.\n"],
+  ])("keeps %s from Pi out of the sign-in handoff", async (_name, exitCode, stdout) => {
+    const resolve = createExecutableModelResolver({
+      pi: async () => ({ exitCode, stdout, stderr: "" }),
+    });
+    const attempt = resolve("pi", "sol", CONTEXT);
+    await expect(attempt).rejects.toThrow(Error);
+    await expect(attempt).rejects.not.toBeInstanceOf(ModelSignInRequiredError);
+  });
+
   it.each([
     [
       "pi",

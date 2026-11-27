@@ -29,7 +29,10 @@ const MODEL_ALIAS_HELP: Readonly<Record<CatalogAgent, ModelAliasHelp>> = {
 };
 const CATALOG_MAX_BUFFER = 8 * 1024 * 1024;
 const CATALOG_TIMEOUT_MS = 30_000;
-const PI_HEADER = /^provider\s+model\s+context\s/;
+const PI_HEADER = /^provider\s+model\s+context\s+max-out\s+thinking\s+images\s*$/;
+// The columns after the model id: context, max-out, thinking, images.
+const PI_ROW_TAIL = /^\S+\s+\S+\s+(?:yes|no)\s+(?:yes|no)\s*$/;
+const PI_NO_MODELS = /^(?:Warning:\s*)?No models available\. Use \/login to log into a provider\b/;
 
 export type CatalogAgent = "codex" | "pi" | "agy";
 
@@ -282,32 +285,47 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-// Pi prints this guidance instead of the table when no provider has credentials.
+// A successful Pi prints its login guidance instead of the table when no provider has credentials.
 function isPiCatalogSignInRequired(output: CatalogOutput): boolean {
+  if (output.exitCode !== 0) return false;
   const lines = nonblankLines(output.stdout);
   return (
     !lines.some((line) => PI_HEADER.test(line)) &&
-    lines.some((line) => /^(?:Warning:\s*)?No models available\./.test(line.trim()))
+    lines.some((line) => PI_NO_MODELS.test(line.trim()))
   );
 }
 
 // Pi pads fixed-width columns, and a model id may contain spaces: fields are read at the header's
-// column offsets. Extensions may print startup output before the header.
+// column offsets. Extensions may print output before the header or after the rows: the table ends
+// at the first line that is not a row.
 function parsePiModelList(output: string): readonly CatalogModel[] {
-  const lines = nonblankLines(output);
+  const lines = output.split(/\r?\n/);
   const headerIndex = lines.findIndex((line) => PI_HEADER.test(line));
   if (headerIndex === -1) throw new Error("Pi returned a model list without its header");
   const header = lines[headerIndex];
   const modelStart = header.indexOf("model");
   const contextStart = header.indexOf("context");
-  return lines.slice(headerIndex + 1).map((line) => {
-    const provider = line.slice(0, modelStart).trim();
-    const id = line.slice(modelStart, contextStart).trim();
-    if (provider.length === 0 || id.length === 0 || line[contextStart - 1] !== " ") {
-      throw new Error("Pi returned a malformed model row");
-    }
-    return { provider, id };
-  });
+  const models: CatalogModel[] = [];
+  for (const line of lines.slice(headerIndex + 1)) {
+    const model = readPiRow(line, modelStart, contextStart);
+    if (model === undefined) break;
+    models.push(model);
+  }
+  if (models.length === 0) throw new Error("Pi returned a model list without rows");
+  return models;
+}
+
+function readPiRow(
+  line: string,
+  modelStart: number,
+  contextStart: number,
+): CatalogModel | undefined {
+  const provider = line.slice(0, modelStart).trim();
+  const id = line.slice(modelStart, contextStart).trim();
+  if (provider.length === 0 || id.length === 0) return;
+  if (line[modelStart - 1] !== " " || line[contextStart - 1] !== " ") return;
+  if (!PI_ROW_TAIL.test(line.slice(contextStart))) return;
+  return { provider, id };
 }
 
 function parseAgyModelList(output: string): readonly CatalogModel[] {
