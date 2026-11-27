@@ -30,6 +30,7 @@ import {
   expandModelAlias,
   modelAliasHint,
   ModelSignInRequiredError,
+  PiStartupDialogError,
   resolveModels,
 } from "./models.js";
 import { renderAuthenticationFailure, renderLoginInstructions } from "./login.js";
@@ -656,7 +657,7 @@ function failModelResolution(
   const authRequired = error instanceof ModelSignInRequiredError;
   const message = authRequired
     ? renderAuthenticationFailure(code, ctx.cwd).instructions
-    : modelResolutionError(code);
+    : modelResolutionError(code, error);
   const completedPath = applyCompletion(sessionFilePath, {
     status: "failed",
     endedAt: new Date().toISOString(),
@@ -668,7 +669,8 @@ function failModelResolution(
   return authRequired ? EXIT_AUTH_REQUIRED : 1;
 }
 
-function modelResolutionError(code: CodeConfig): string {
+function modelResolutionError(code: CodeConfig, error: unknown): string {
+  if (error instanceof PiStartupDialogError) return `${error.message} ${nativeContext(code)}.`;
   const hint = modelAliasHint(code.harness);
   return (
     `Could not resolve the ${code.harness} model; check --model, profile.models/modelAliases and the agent installation. ` +

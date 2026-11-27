@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 
 import type { CodingAgent } from "./coding-agent.js";
 import { resolveEfforts } from "./efforts.js";
@@ -31,6 +31,8 @@ const CATALOG_MAX_BUFFER = 8 * 1024 * 1024;
 const CATALOG_TIMEOUT_MS = 30_000;
 const CATALOG_KILL_GRACE_MS = 5_000;
 const PI_REQUEST_ID = "aligndev-models";
+const PI_DIALOG_METHODS: ReadonlySet<unknown> = new Set(["select", "confirm", "input", "editor"]);
+const LF = 0x0a;
 
 export type CatalogAgent = "codex" | "pi" | "agy";
 
@@ -74,6 +76,18 @@ interface CatalogEntry {
   toSelector(base: string, models: readonly CatalogModel[]): string;
 }
 
+interface CatalogCommand {
+  name: string;
+  args: readonly string[];
+  // Written to stdin, which stays open until `readLine` asks to end it. Without input, stdin closes
+  // at once.
+  input?: string;
+  readLine?(line: string): CatalogLineAction | undefined;
+}
+
+// `endInput` closes the command's stdin; an error fails the command.
+type CatalogLineAction = "endInput" | Error;
+
 type CatalogCache = WeakMap<NodeJS.ProcessEnv, Map<CatalogAgent, Promise<readonly CatalogModel[]>>>;
 
 export function resolveModels(
@@ -109,7 +123,9 @@ export function createExecutableModelResolver(
       if (newest === undefined) throw new Error("the model catalog contains no matching model");
       return entry.toSelector(newest.base, newest.models);
     } catch (error) {
-      if (error instanceof ModelSignInRequiredError) throw error;
+      if (error instanceof ModelSignInRequiredError || error instanceof PiStartupDialogError) {
+        throw error;
+      }
       throw new Error(modelAliasError(agent, selectedModel));
     }
   };
@@ -117,6 +133,9 @@ export function createExecutableModelResolver(
 
 // The catalog command reports that the harness has no signed-in account or credentials.
 export class ModelSignInRequiredError extends Error {}
+
+// A Pi extension opened a dialog before Pi served its catalog. The message is fixed and safe to show.
+export class PiStartupDialogError extends Error {}
 
 function createCatalogEntries(
   runners: Partial<Record<CatalogAgent, ModelCatalogRunner>>,
@@ -126,7 +145,8 @@ function createCatalogEntries(
       aliases: new Set<string>(CODEX_DEFAULT_MODELS),
       run:
         runners.codex ??
-        ((context) => runModelCatalog("codex", ["debug", "models", "--bundled"], context)),
+        ((context) =>
+          runCatalogCommand({ name: "codex", args: ["debug", "models", "--bundled"] }, context)),
       isSignInRequired: () => false,
       parse: parseBundledModelSlugs,
       prefix: "gpt",
@@ -144,7 +164,8 @@ function createCatalogEntries(
     },
     agy: {
       aliases: new Set<string>(AGY_MODEL_ALIASES),
-      run: runners.agy ?? ((context) => runModelCatalog("agy", ["models"], context)),
+      run:
+        runners.agy ?? ((context) => runCatalogCommand({ name: "agy", args: ["models"] }, context)),
       isSignInRequired: isAgyCatalogSignInRequired,
       parse: parseAgyModelList,
       prefix: "gemini",
@@ -310,18 +331,25 @@ function readPiModels(stdout: string): CatalogModel[] | undefined {
   return result;
 }
 
+// Only LF-terminated lines are records: the text after the last LF is dropped.
 function findPiResponse(stdout: string): Record<string, unknown> | undefined {
-  for (const line of stdout.split("\n")) {
-    let record: unknown;
-    try {
-      record = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (isRecord(record) && record.type === "response" && record.id === PI_REQUEST_ID) {
-      return record;
-    }
+  for (const line of stdout.split("\n").slice(0, -1)) {
+    const record = parsePiRecord(line);
+    if (record !== undefined && isPiCatalogResponse(record)) return record;
   }
+}
+
+function parsePiRecord(line: string): Record<string, unknown> | undefined {
+  try {
+    const record: unknown = JSON.parse(line);
+    return isRecord(record) ? record : undefined;
+  } catch {
+    return;
+  }
+}
+
+function isPiCatalogResponse(record: Record<string, unknown>): boolean {
+  return record.type === "response" && record.id === PI_REQUEST_ID;
 }
 
 function parseAgyModelList(output: string): readonly CatalogModel[] {
@@ -348,81 +376,119 @@ function nonblankLines(output: string): string[] {
   return output.split(/\r?\n/).filter((line) => line.trim().length > 0);
 }
 
-function runModelCatalog(
-  command: string,
-  args: readonly string[],
+// A catalog command runs under a deadline and an output limit in bytes. A failure stops buffering
+// and settles once the process has exited.
+function runCatalogCommand(
+  command: CatalogCommand,
   context: ModelDiscoveryContext,
 ): Promise<CatalogOutput> {
   return new Promise((resolve, reject) => {
-    const child = execFile(
-      command,
-      args,
-      {
-        cwd: context.cwd,
-        env: context.env,
-        encoding: "utf8",
-        maxBuffer: CATALOG_MAX_BUFFER,
-        timeout: CATALOG_TIMEOUT_MS,
-      },
-      (error, stdout, stderr) => {
-        if (error === null) {
-          resolve({ exitCode: 0, stdout, stderr });
-          return;
-        }
-        // Spawn failures, timeouts and buffer overflows carry no numeric exit code.
-        if (typeof error.code !== "number") {
-          reject(new Error("The model catalog command failed."));
-          return;
-        }
-        resolve({ exitCode: error.code, stdout, stderr });
-      },
-    );
-    child.stdin?.end();
+    const child = spawn(command.name, command.args, { cwd: context.cwd, env: context.env });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    let bytes = 0;
+    let failing = false;
+    const fail = (error = catalogFailure()): void => {
+      if (failing) return;
+      failing = true;
+      clearTimeout(deadline);
+      stopChild(child, () => reject(error));
+    };
+    const collect = (chunks: Buffer[], chunk: Buffer): boolean => {
+      if (failing) return false;
+      bytes += chunk.length;
+      if (bytes > CATALOG_MAX_BUFFER) fail();
+      else chunks.push(chunk);
+      return !failing;
+    };
+    const readLines = createLineReader((line) => {
+      const action = failing ? undefined : command.readLine?.(line);
+      if (action instanceof Error) fail(action);
+      else if (action === "endInput") child.stdin.end();
+    });
+    const deadline = setTimeout(() => fail(), CATALOG_TIMEOUT_MS);
+    child.on("error", () => fail());
+    child.stdin.on("error", () => {});
+    child.stdout.on("data", (chunk: Buffer) => {
+      if (collect(stdout, chunk)) readLines(chunk);
+    });
+    child.stderr.on("data", (chunk: Buffer) => collect(stderr, chunk));
+    child.on("close", (code) => {
+      if (failing) return;
+      clearTimeout(deadline);
+      if (code === null) {
+        reject(catalogFailure());
+        return;
+      }
+      const decode = (chunks: Buffer[]) => Buffer.concat(chunks).toString("utf8");
+      resolve({ exitCode: code, stdout: decode(stdout), stderr: decode(stderr) });
+    });
+    if (command.input === undefined) child.stdin.end();
+    else child.stdin.write(command.input);
   });
 }
 
-// Pi's RPC mode keeps stdout for protocol records: extension output goes to stderr. Closing stdin
-// after the response starts Pi's orderly shutdown; a deadline sends SIGTERM, which also shuts down
-// in order, then SIGKILL.
-function runPiModelCatalog(context: ModelDiscoveryContext): Promise<CatalogOutput> {
-  return new Promise((resolve, reject) => {
-    const child = spawn("pi", ["--mode", "rpc", "--no-session"], {
-      cwd: context.cwd,
-      env: context.env,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    let settled = false;
-    const fail = (): void => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(deadline);
-      child.kill("SIGTERM");
-      setTimeout(() => child.kill("SIGKILL"), CATALOG_KILL_GRACE_MS).unref();
-      reject(new Error("The model catalog command failed."));
-    };
-    const deadline = setTimeout(fail, CATALOG_TIMEOUT_MS);
-    child.on("error", fail);
-    child.stdin.on("error", () => {});
-    child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
-      stdout += chunk;
-      if (stdout.length + stderr.length > CATALOG_MAX_BUFFER) fail();
-      else if (!child.stdin.writableEnded && findPiResponse(stdout) !== undefined) {
-        child.stdin.end();
-      }
-    });
-    child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
-      stderr += chunk;
-      if (stdout.length + stderr.length > CATALOG_MAX_BUFFER) fail();
-    });
-    child.on("close", (code) => {
-      clearTimeout(deadline);
-      if (settled) return;
-      settled = true;
-      if (code === null) reject(new Error("The model catalog command failed."));
-      else resolve({ exitCode: code, stdout, stderr });
-    });
-    child.stdin.write(`${JSON.stringify({ id: PI_REQUEST_ID, type: "get_available_models" })}\n`);
+function catalogFailure(): Error {
+  return new Error("The model catalog command failed.");
+}
+
+// Closes stdin and sends `SIGTERM`, then `SIGKILL` after a grace. Calls `onExit` once the process
+// has exited, so that the caller cannot exit first and leave it running.
+function stopChild(child: ChildProcessWithoutNullStreams, onExit: () => void): void {
+  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) {
+    onExit();
+    return;
+  }
+  child.stdin.end();
+  child.kill("SIGTERM");
+  const escalation = setTimeout(() => child.kill("SIGKILL"), CATALOG_KILL_GRACE_MS);
+  child.once("exit", () => {
+    clearTimeout(escalation);
+    child.stdout.destroy();
+    child.stderr.destroy();
+    onExit();
   });
+}
+
+// Calls `onLine` for each LF-terminated line; an unterminated tail is not a line.
+function createLineReader(onLine: (line: string) => void): (chunk: Buffer) => void {
+  let partial: Buffer[] = [];
+  return (chunk) => {
+    let start = 0;
+    for (let end = chunk.indexOf(LF); end !== -1; end = chunk.indexOf(LF, start)) {
+      onLine(Buffer.concat([...partial, chunk.subarray(start, end)]).toString("utf8"));
+      partial = [];
+      start = end + 1;
+    }
+    if (start < chunk.length) partial.push(chunk.subarray(start));
+  };
+}
+
+// Pi's RPC mode keeps stdout for protocol records: extension output goes to stderr. Closing stdin
+// after the response starts Pi's orderly shutdown. Pi reads stdin only after the extensions'
+// startup handlers, so a startup dialog can never be answered: it fails at once.
+function runPiModelCatalog(context: ModelDiscoveryContext): Promise<CatalogOutput> {
+  return runCatalogCommand(
+    {
+      name: "pi",
+      args: ["--mode", "rpc", "--no-session"],
+      input: `${JSON.stringify({ id: PI_REQUEST_ID, type: "get_available_models" })}\n`,
+      readLine: readPiCatalogLine,
+    },
+    context,
+  );
+}
+
+function readPiCatalogLine(line: string): CatalogLineAction | undefined {
+  const record = parsePiRecord(line);
+  if (record === undefined) return;
+  if (isPiCatalogResponse(record)) return "endInput";
+  if (record.type === "extension_ui_request" && PI_DIALOG_METHODS.has(record.method)) {
+    return new PiStartupDialogError(
+      "A Pi extension opened a dialog at startup, which Pi's RPC mode cannot answer, so the " +
+        "model alias cannot be resolved from Pi's catalog. To fix it, pin a full " +
+        "`provider/model` selector in the profile's `modelAliases`, or make the extension skip " +
+        'the dialog outside the terminal UI (`ctx.mode !== "tui"`).',
+    );
+  }
 }

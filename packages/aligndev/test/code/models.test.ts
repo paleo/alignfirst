@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -11,6 +11,7 @@ import {
   expandModelAlias,
   type ModelDiscoveryContext,
   ModelSignInRequiredError,
+  PiStartupDialogError,
   resolveModels,
 } from "../../src/code/models.js";
 
@@ -31,6 +32,17 @@ const AGY_MODELS = [
   "gemini-3.8-flash-low\tGemini 3.8 Flash (Low)",
   "",
 ].join("\n");
+
+// Answers the first `get_available_models` request with one model.
+const ANSWER_CATALOG_REQUEST = `let input = "";
+process.stdin.setEncoding("utf8").on("data", (chunk) => {
+  input += chunk;
+  if (!input.includes("\\n")) return;
+  const { id, type } = JSON.parse(input.slice(0, input.indexOf("\\n")));
+  if (type !== "get_available_models") process.exit(3);
+  const models = [{ provider: "openai", id: "gpt-6.2-sol" }];
+  process.stdout.write(JSON.stringify({ id, type: "response", success: true, data: { models } }) + "\\n");
+});`;
 
 function completed(stdout: string): CatalogOutput {
   return { exitCode: 0, stdout, stderr: "" };
@@ -257,6 +269,7 @@ describe("Pi and Antigravity executable model resolution", () => {
   it.each([
     ["pi", "sol", PI_MODELS.replaceAll("aligndev-models", "other-request")],
     ["pi", "sol", PI_MODELS.replace('"success":true', '"success":false')],
+    ["pi", "sol", PI_MODELS.trimEnd()],
     ["agy", "neon", "gemini-4-neon-high Gemini 4 Neon (High)\n"],
   ] as const)("rejects malformed %s catalog output", async (agent, alias, output) => {
     const resolve = createExecutableModelResolver({ [agent]: async () => completed(output) });
@@ -273,31 +286,55 @@ describe("Pi and Antigravity executable model resolution", () => {
   });
 
   it("reads Pi's catalog over RPC and closes its input", async () => {
-    const root = mkdtempSync(join(tmpdir(), "aligndev-pi-catalog-"));
-    try {
-      writeFileSync(
-        join(root, "pi"),
-        `#!${process.execPath}
-process.stderr.write("[extension] provider  model  ready\\n");
-let input = "";
-process.stdin.setEncoding("utf8").on("data", (chunk) => {
-  input += chunk;
-  if (!input.includes("\\n")) return;
-  const { id, type } = JSON.parse(input.slice(0, input.indexOf("\\n")));
-  if (type !== "get_available_models") process.exit(3);
-  const models = [{ provider: "openai", id: "gpt-6.2-sol" }];
-  process.stdout.write(JSON.stringify({ id, type: "response", success: true, data: { models } }) + "\\n");
-});
+    await withFakePi(
+      `process.stderr.write("[extension] provider  model  ready\\n");
+${ANSWER_CATALOG_REQUEST}
 process.stdin.on("end", () => process.exit(0));
 `,
-        { mode: 0o755 },
-      );
-      const resolve = createExecutableModelResolver();
-      const context = { cwd: root, env: { HOME: root, PATH: root } };
-      await expect(resolve("pi", "sol", context)).resolves.toBe("openai/gpt-6.2-sol");
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+      async (resolve) => {
+        await expect(resolve()).resolves.toBe("openai/gpt-6.2-sol");
+      },
+    );
+  });
+
+  it("counts Pi's output limit in bytes", async () => {
+    await withFakePi(
+      `process.stderr.write("é".repeat(4_500_000), () => {
+${ANSWER_CATALOG_REQUEST.replace('[{ provider: "openai", id: "gpt-6.2-sol" }]', "[]")}
+process.stdin.on("end", () => process.exit(0));
+});
+`,
+      async (resolve) => {
+        await expect(resolve()).rejects.not.toBeInstanceOf(ModelSignInRequiredError);
+      },
+    );
+  });
+
+  it("kills a Pi process that ignores SIGTERM before reporting the failure", async () => {
+    await withFakePi(
+      `process.on("SIGTERM", () => {});
+require("node:fs").writeFileSync(require("node:path").join(__dirname, "pid"), String(process.pid));
+process.stderr.write("x".repeat(9_000_000));
+setInterval(() => {}, 1000);
+`,
+      async (resolve, root) => {
+        await expect(resolve()).rejects.toThrow(Error);
+        const pid = Number(readFileSync(join(root, "pid"), "utf8"));
+        expect(isRunning(pid)).toBe(false);
+      },
+    );
+  }, 15_000);
+
+  it("fails at once when a Pi extension opens a startup dialog", async () => {
+    await withFakePi(
+      `const request = { type: "extension_ui_request", id: "d", method: "confirm", title: "Trust?" };
+process.stdout.write(JSON.stringify(request) + "\\n");
+setInterval(() => {}, 1000);
+`,
+      async (resolve) => {
+        await expect(resolve()).rejects.toBeInstanceOf(PiStartupDialogError);
+      },
+    );
   });
 
   it.each([
@@ -316,3 +353,28 @@ process.stdin.on("end", () => process.exit(0));
     await expect(resolve(agent, alias, CONTEXT)).rejects.toThrow(ModelSignInRequiredError);
   });
 });
+
+// Runs `test` with a resolver whose PATH holds only a `pi` executable running `script`.
+async function withFakePi(
+  script: string,
+  test: (resolve: () => Promise<string | undefined>, root: string) => Promise<void>,
+): Promise<void> {
+  const root = mkdtempSync(join(tmpdir(), "aligndev-pi-catalog-"));
+  try {
+    writeFileSync(join(root, "pi"), `#!${process.execPath}\n${script}`, { mode: 0o755 });
+    const resolver = createExecutableModelResolver();
+    const context = { cwd: root, env: { HOME: root, PATH: root } };
+    await test(() => resolver("pi", "sol", context), root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function isRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
