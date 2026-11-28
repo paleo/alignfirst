@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -610,15 +611,20 @@ test("seed rejects a mismatched overlay before writing instructions or installed
   });
 });
 
-for (const deployed of [true, false]) {
-  const state = deployed ? "the deployed settings" : "the settings absent";
-  test(`seed leaves ${state} when the real CLI rejects the candidate`, () => {
+for (const state of ["deployed", "absent", "backed up by an interrupted seed"]) {
+  test(`seed leaves the settings ${state} when the real CLI rejects the candidate`, () => {
     withFixture("pi", "slack", {}, (fixture) => {
-      if (deployed) installSettings(fixture);
-      const before = deployed ? readFileSync(fixture.deployedSettings, "utf8") : undefined;
+      if (state !== "absent") installSettings(fixture);
+      const before = state === "absent" ? undefined : readFileSync(fixture.deployedSettings);
       const selected = selectedProfile(fixture.settings);
       // The inventory accepts an undeclared default; only the CLI rejects it.
       fixture.settings.code.profiles[selected].models = ["fixture/another-model"];
+      if (state === "backed up by an interrupted seed") {
+        // That seed stopped during its check: its candidate is installed beside the backup.
+        renameSync(fixture.deployedSettings, `${fixture.deployedSettings}.previous`);
+        writeFileSync(fixture.deployedSettings, JSON.stringify(fixture.settings));
+        fixture.settings.code.profiles[selected].models = ["fixture/a-third-model"];
+      }
       saveSettings(fixture);
       const result = spawnSync(
         "bash",
@@ -635,9 +641,9 @@ for (const deployed of [true, false]) {
       assert.equal(readFileSync(join(fixture.home, "guide-calls"), "utf8"), `${selected}\n`);
       assert.deepEqual(
         readdirSync(dirname(fixture.deployedSettings)),
-        deployed ? ["aligndev.settings.json"] : [],
+        before === undefined ? [] : ["aligndev.settings.json"],
       );
-      if (deployed) assert.equal(readFileSync(fixture.deployedSettings, "utf8"), before);
+      if (before !== undefined) assert.deepEqual(readFileSync(fixture.deployedSettings), before);
     });
   });
 }

@@ -220,7 +220,7 @@ A `modelAliases` entry that pins a full id only to avoid a wrong variant can bec
 
 Then run `aligndev guide code --profile <name>` for each enabled `pi` profile.
 
-A session keeps the model name it recorded. After a `defaultModel` changes from a full id to an alias, resume such a session with `--model <alias>`. A session recorded without a profile resumes on Pi's built-in profile, which declares nothing. When it recorded a model, resume it with `--profile <name>`, naming a `pi` profile that accepts that model, or add `--model` with a name the profile accepts.
+A session keeps the model name it recorded. After a `defaultModel` changes from a full id to an alias, resume such a session with `--model <alias>`. A session recorded without a profile resumes on Pi's built-in profile, which declares nothing. When it recorded a model, resume it with `--profile <name>`, naming a `pi` profile that accepts that model. To choose another model, keep `--profile` and add `--model <name>`.
 
 Before:
 

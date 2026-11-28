@@ -176,15 +176,16 @@ install_aligndev_config() {
   echo "[seed] aligndev settings — $ALIGNDEV_CONFIG_FILE"
   # Settings and the entire AlignFirst home stay service-owned and writable.
   if [ ! -d "$ALIGNFIRST_HOME" ]; then install -d -m 755 "$ALIGNFIRST_HOME"; fi
+  # A backup left by an interrupted seed holds the settings in place before it.
+  local previous="$ALIGNDEV_CONFIG_FILE.previous"
+  if [ -f "$previous" ]; then mv -f "$previous" "$ALIGNDEV_CONFIG_FILE"; fi
   if cmp -s "$DIR/aligndev.settings.json" "$ALIGNDEV_CONFIG_FILE"; then
     validate_coding_profiles
     return
   fi
   # AlignDev judges the settings where it reads them: the candidate is installed, and a rejected
   # one gives way to the previous settings.
-  local previous="$ALIGNDEV_CONFIG_FILE.previous"
-  rm -f "$previous"
-  if [ -f "$ALIGNDEV_CONFIG_FILE" ]; then cp -p "$ALIGNDEV_CONFIG_FILE" "$previous"; fi
+  if [ -f "$ALIGNDEV_CONFIG_FILE" ]; then mv "$ALIGNDEV_CONFIG_FILE" "$previous"; fi
   install -m 644 "$DIR/aligndev.settings.json" "$ALIGNDEV_CONFIG_FILE"
   if validate_coding_profiles; then
     rm -f "$previous"
