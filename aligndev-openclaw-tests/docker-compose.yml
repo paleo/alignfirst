@@ -1,8 +1,8 @@
 # Thin consumer overlay. Pulls in the parameterized base from
 # @alignfirst/openclaw-test. Requires Docker Compose v2.20+.
 #
-# `.env.local` needs OPENROUTER_API_KEY (judge), OPENCLAW_CODEX_HOME (Terra),
-# OPENCLAW_WORKSPACE_DIR, ALIGNFIRST_REPO_DIR, CODING_AGENT.
+# `.env.local` needs OPENROUTER_API_KEY and OPENCLAW_TEST_JUDGE_MODEL (judge),
+# OPENCLAW_CODEX_HOME (Terra), OPENCLAW_WORKSPACE_DIR, ALIGNFIRST_REPO_DIR, CODING_AGENT.
 # All other paths default to subdirs of the project dir; override in
 # .env.local if you need a different layout. OPENCLAW_TEST_PROJECT_DIR, OPENCLAW_TEST_PACKAGE_DIR,
 # ASSISTANT_UID, ASSISTANT_GID are set automatically by `openclaw-test env|run`.
@@ -39,7 +39,8 @@ services:
 
   runner:
     environment:
-      OPENCLAW_TEST_JUDGE_MODEL: ${OPENCLAW_TEST_JUDGE_MODEL:-openrouter/anthropic/claude-haiku-5.5}
+      # Every scenario calls the judge: refuse to start without its model.
+      OPENCLAW_TEST_JUDGE_MODEL: ${OPENCLAW_TEST_JUDGE_MODEL:?set OPENCLAW_TEST_JUDGE_MODEL to the judge's provider/model ref}
       CODING_AGENT: ${CODING_AGENT:?set CODING_AGENT to codex, claude or pi}
       CODING_AGENT_MODELS: ${CODING_AGENT_MODELS:-}
     volumes:

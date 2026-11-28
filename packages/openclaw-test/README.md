@@ -35,7 +35,8 @@ For a Bun host, run `bunx --bun @alignfirst/openclaw-test init <project-dir>`. N
 
 Edit `openclaw.json`:
 
-- `agents.entries.main.model` — default `provider/model` ref; `run --model` overrides it per run.
+- `agents.entries.main.model` — a placeholder: `run` and `env up` overwrite it with the selected model's ref.
+- Model IDs — write each as a whole-string `${VAR}` reference set in `.env.local`, for example `"id": "${OPENCLAW_TEST_OPENAI_MODEL}"`. A provider whose model ID or `apiKey` resolves empty is dropped from the rendered config.
 - `agents.entries.main.workspace` — host path to your OpenClaw workspace. Field name is **`workspace`**, not `workspaceDir`.
 - `channels.slack-mock.replyToMode` — `"all"` (default) routes eligible roots and replies through
   one thread session; `"off"` leaves root turns in the channel session and threads only explicit
@@ -49,9 +50,12 @@ OPENROUTER_API_KEY=sk-or-… # Required for an OpenRouter agent or judge.
 OPENCLAW_WORKSPACE_DIR=/path/to/your/openclaw-workspace
 
 # Model catalog: full LiteLLM refs. `run --model` picks by bare id (suffix after the last "/").
-OPENCLAW_TEST_MODELS=anthropic/claude-sonnet-5-5,custom-openrouter/qwen/qwen3.8-flash
-OPENCLAW_DEFAULT_TEST_MODEL=claude-sonnet-5-5
+# `env up` and a run without `--model` use OPENCLAW_DEFAULT_TEST_MODEL.
+OPENCLAW_TEST_MODELS=anthropic/model-a,custom-openrouter/vendor/model-b
+OPENCLAW_DEFAULT_TEST_MODEL=model-a
 
+# Judge: see "Judge model" below.
+OPENCLAW_TEST_JUDGE_MODEL=anthropic/judge-model
 ```
 
 See `.env.local.example` for the optional overrides (paths, raw stream log).
@@ -90,8 +94,8 @@ npm run e2e -- --channel all <scenario>                             # one scenar
 npm run e2e -- --channel all --all                                  # every scenario, every surface it supports
 npm run e2e -- --channel discord-mock <scenario>                    # restrict to one channel
 npm run e2e -- --channel webchat <scenario>                         # the apps' surface
-npm run e2e -- --channel all --model qwen3.8-flash <scenario>        # pick a model by bare id
-npm run e2e -- --channel all --model claude-sonnet-5-5,qwen3.8-flash <s>  # a comma list of bare ids
+npm run e2e -- --channel all --model model-b <scenario>              # pick a model by bare id
+npm run e2e -- --channel all --model model-a,model-b <s>             # a comma list of bare ids
 npm run e2e -- --channel all --model all <scenario>                 # run every model in OPENCLAW_TEST_MODELS
 npm run e2e -- --channel all --iterations 5 <scenario>              # repeat each (scenario, channel) pair 5×
 npm run e2e -- --channel all --iterations 5 --max-failures 1 <s>    # abort a pair after >1 failure
@@ -129,11 +133,11 @@ Assert on `conversation.id` / `threadId`, not envelope formatting.
 
 ## Judge model
 
-Defaults to `openrouter/anthropic/claude-haiku-5.5`, billed to `OPENROUTER_API_KEY`. Override it
-via `OPENCLAW_TEST_JUDGE_MODEL` on the `runner` service (set in your consumer overlay). OpenRouter
-refs use `openrouter/<model>`; direct Anthropic refs use `anthropic/<model>`, for example
-`anthropic/claude-haiku-5-5`. The judge is **not** an OpenClaw agent — don't
-configure it in `openclaw.json`.
+The judge is **not** an OpenClaw agent: configure it in `.env.local`, not in `openclaw.json`. The base stack passes these variables to the `runner` service:
+
+- `OPENCLAW_TEST_JUDGE_MODEL` — required. An OpenRouter ref, `openrouter/<vendor>/<model>`, billed to `OPENROUTER_API_KEY`, or an Anthropic ref, `anthropic/<model>`, billed to `ANTHROPIC_API_KEY`. The judge fails without it.
+- `OPENCLAW_TEST_JUDGE_EFFORT` — optional reasoning effort: `low`, `medium`, `high`, `xhigh` or `max`; OpenRouter also accepts `none` and `minimal`. Unset, the request sends no effort, and OpenRouter requests send `temperature: 0`.
+- `OPENCLAW_TEST_JUDGE_INPUT_USD_PER_MTOK`, `OPENCLAW_TEST_JUDGE_OUTPUT_USD_PER_MTOK` — optional judge prices, in USD per million tokens. Without both, reports show the judge cost as unknown.
 
 ## Attribution
 

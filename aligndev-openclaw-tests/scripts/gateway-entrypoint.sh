@@ -8,8 +8,8 @@
 # See docs/aligndev-openclaw/upgrading-openclaw.md for the removal condition.
 #
 # The import is deliberately not fatal. A stale or partial Codex credential must
-# fail the openai/Terra cells only, not keep the gateway from starting and take
-# the Sonnet, GLM and qwen matrices down with it.
+# fail the openai cells only, not keep the gateway from starting and take the
+# other providers' matrices down with it.
 
 set -u
 

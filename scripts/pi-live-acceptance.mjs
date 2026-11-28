@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,7 +21,7 @@ const sourceAgent = process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi/agen
 try {
   assert(
     process.argv.includes("--run"),
-    "Opt in explicitly with --run; this command makes live Terra requests.",
+    "Opt in explicitly with --run; this command makes live model requests.",
   );
   run();
 } finally {
@@ -22,12 +30,12 @@ try {
 }
 
 function run() {
-  const model = process.env.PI_ACCEPTANCE_MODEL ?? "openai/gpt-6.1-terra";
-  assert.match(model, /^[^/]+\/gpt-[\d.]+-terra$/, "Only an explicit Terra selector is authorized");
+  const model = readAcceptanceModel();
   const agentDir = join(root, "home/.pi/agent");
   mkdirSync(agentDir, { recursive: true });
   const auth = JSON.parse(readFileSync(join(sourceAgent, "auth.json"), "utf8"));
   const provider = model.split("/")[0];
+  const modelId = model.slice(provider.length + 1);
   assert(auth[provider], `BLOCKED: no existing credential for ${provider}`);
   writeFileSync(join(agentDir, "auth.json"), JSON.stringify({ [provider]: auth[provider] }), {
     mode: 0o600,
@@ -90,7 +98,7 @@ function run() {
         join(root, "node_modules/@alignfirst/pi-background"),
       ],
       defaultProvider: provider,
-      defaultModel: model.slice(provider.length + 1),
+      defaultModel: modelId,
       defaultThinkingLevel: "low",
       retry: { enabled: false },
       compaction: { enabled: false },
@@ -106,7 +114,7 @@ function run() {
     }),
   );
   const cli = join(root, "node_modules/@earendil-works/pi-coding-agent/dist/cli.js");
-  const catalog = execFileSync(process.execPath, [cli, "--list-models", "terra"], {
+  const catalog = execFileSync(process.execPath, [cli, "--list-models", modelId], {
     cwd: root,
     env,
     encoding: "utf8",
@@ -117,7 +125,7 @@ function run() {
       const [name, id] = line.trim().split(/\s+/);
       return `${name}/${id}` === model;
     }),
-    "BLOCKED: requested exact Terra provider/model absent",
+    "BLOCKED: requested exact provider/model absent",
   );
   execFileSync(
     process.execPath,
@@ -132,4 +140,16 @@ function run() {
     stdio: "inherit",
     timeout: 900000,
   });
+}
+
+// The environment wins over the git-ignored scripts/.env, which keeps model versions out of git.
+function readAcceptanceModel() {
+  const envFile = join(repository, "scripts/.env");
+  if (existsSync(envFile)) process.loadEnvFile(envFile);
+  const model = process.env.PI_ACCEPTANCE_MODEL;
+  assert(
+    model !== undefined && /^[^/]+\/./.test(model),
+    "Set PI_ACCEPTANCE_MODEL to an explicit provider/model selector, in the environment or scripts/.env.",
+  );
+  return model;
 }

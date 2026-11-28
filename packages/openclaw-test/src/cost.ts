@@ -1,45 +1,34 @@
 import type { JudgeUsage } from "./judge.js";
 
-// USD per million tokens. Judge never uses prompt caching. Keys are LiteLLM-style
-// "provider/model" refs. Add models as needed.
-const HAIKU_5_5_PRICING = {
-  input: 0.1,
-  output: 0.5,
-  longContext: { threshold: 100_000, input: 0.5, output: 2.5 },
-};
-const JUDGE_PRICING: Record<
-  string,
-  {
-    input: number;
-    output: number;
-    longContext?: { threshold: number; input: number; output: number };
-  }
-> = {
-  "anthropic/claude-haiku-5-5": HAIKU_5_5_PRICING,
-  "openrouter/anthropic/claude-haiku-5.5": HAIKU_5_5_PRICING,
-  "anthropic/claude-haiku-4-5": { input: 1.0, output: 5.0 },
-  "openrouter/anthropic/claude-haiku-4.5": { input: 1.0, output: 5.0 },
-};
+/**
+ * USD cost of one judge call, priced from `OPENCLAW_TEST_JUDGE_INPUT_USD_PER_MTOK` and
+ * `OPENCLAW_TEST_JUDGE_OUTPUT_USD_PER_MTOK`; `undefined` (unknown) when either is unset.
+ */
+export function judgeCostUsd(usage: JudgeUsage): number | undefined {
+  const inputPrice = readPricePerMtok("OPENCLAW_TEST_JUDGE_INPUT_USD_PER_MTOK");
+  const outputPrice = readPricePerMtok("OPENCLAW_TEST_JUDGE_OUTPUT_USD_PER_MTOK");
+  if (inputPrice === undefined || outputPrice === undefined) return;
+  return (usage.inputTokens * inputPrice + usage.outputTokens * outputPrice) / 1_000_000;
+}
 
-const warnedUnknownModels = new Set<string>();
-
-export function judgeCostUsd(usage: JudgeUsage): number {
-  const key = usage.model.replace(/-\d{8}$/, "");
-  const pricing = JUDGE_PRICING[key];
-  if (!pricing) {
-    if (!warnedUnknownModels.has(key)) {
-      warnedUnknownModels.add(key);
-      console.warn(
-        `cost: no JUDGE_PRICING entry for ${JSON.stringify(key)}; judge cost will report 0. Add it to src/cost.ts.`,
-      );
-    }
-    return 0;
+/** Sums costs; one unknown cost makes the sum unknown. */
+export function sumCosts(costs: (number | undefined)[]): number | undefined {
+  let total = 0;
+  for (const cost of costs) {
+    if (cost === undefined) return;
+    total += cost;
   }
-  const price =
-    pricing.longContext && usage.inputTokens > pricing.longContext.threshold
-      ? pricing.longContext
-      : pricing;
-  return (
-    (usage.inputTokens * price.input) / 1_000_000 + (usage.outputTokens * price.output) / 1_000_000
-  );
+  return total;
+}
+
+function readPricePerMtok(name: string): number | undefined {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return;
+  const price = Number(raw);
+  if (!Number.isFinite(price) || price < 0) {
+    throw new Error(
+      `${name} must be a non-negative number of USD per million tokens; got ${JSON.stringify(raw)}`,
+    );
+  }
+  return price;
 }

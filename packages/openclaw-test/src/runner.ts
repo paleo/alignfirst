@@ -9,7 +9,7 @@ import {
   type ScenarioContext,
   type ScenarioInternals,
 } from "./context.js";
-import { judgeCostUsd } from "./cost.js";
+import { judgeCostUsd, sumCosts } from "./cost.js";
 import { archiveGatewayLog } from "./gateway-log.js";
 import {
   aggregateAgentToolCalls,
@@ -91,7 +91,7 @@ async function runCell(args: RunnerArgs): Promise<number> {
     await waitForTranscriptQuiescence(transcriptScope);
     const snapshot = await fetchTranscriptSnapshot(transcriptScope);
     const { cost: agentCostUsd, turns: agentTurns } = readTranscriptCost(snapshot);
-    const judgeUsd = judgeUsages.reduce((sum, u) => sum + judgeCostUsd(u), 0);
+    const judgeUsd = sumCosts(judgeUsages.map(judgeCostUsd));
 
     // The per-session store dies with the stack recreation, so keep the raw
     // transcripts as a cell artifact for post-mortems.
@@ -129,7 +129,7 @@ async function runCell(args: RunnerArgs): Promise<number> {
       cost: {
         agentUsd: agentCostUsd,
         judgeUsd,
-        totalUsd: agentCostUsd + judgeUsd,
+        totalUsd: judgeUsd === undefined ? undefined : agentCostUsd + judgeUsd,
         agentTurns,
       },
       result,

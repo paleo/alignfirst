@@ -2,13 +2,28 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { extractTaggedBlock } from "./parse-tagged-json.js";
 
-const DEFAULT_JUDGE_MODEL = "openrouter/anthropic/claude-haiku-5.5";
 const DEFAULT_MAX_TOKENS = 4096;
 const RESULT_TAG = "result-json";
+// The efforts each API accepts: Anthropic's `output_config.effort`, OpenRouter's
+// OpenAI-compatible `reasoning_effort`.
+const ANTHROPIC_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+const OPENROUTER_EFFORTS = ["none", "minimal", ...ANTHROPIC_EFFORTS] as const;
 
 type JudgeClient =
-  | { provider: "anthropic"; client: Anthropic; model: string; bareModel: string }
-  | { provider: "openrouter"; client: OpenAI; model: string; bareModel: string };
+  | {
+      provider: "anthropic";
+      client: Anthropic;
+      model: string;
+      bareModel: string;
+      effort?: (typeof ANTHROPIC_EFFORTS)[number];
+    }
+  | {
+      provider: "openrouter";
+      client: OpenAI;
+      model: string;
+      bareModel: string;
+      effort?: (typeof OPENROUTER_EFFORTS)[number];
+    };
 
 let cached: JudgeClient | undefined;
 
@@ -162,9 +177,7 @@ async function callJudgeOnce(
   const resp = await judge.client.messages.create({
     model: judge.bareModel,
     max_tokens: maxTokens,
-    ...(judge.bareModel === "claude-haiku-5-5"
-      ? { output_config: { effort: "low" as const } }
-      : {}),
+    ...(judge.effort === undefined ? {} : { output_config: { effort: judge.effort } }),
     messages: [{ role: "user", content: prompt }],
   });
   const raw = resp.content.map((b) => (b.type === "text" ? b.text : "")).join("");
@@ -185,9 +198,7 @@ async function callOpenRouterOnce(
   const response = await judge.client.chat.completions.create({
     model: judge.bareModel,
     max_tokens: maxTokens,
-    ...(judge.bareModel === "anthropic/claude-haiku-5.5"
-      ? { reasoning_effort: "low" as const }
-      : { temperature: 0 }),
+    ...(judge.effort === undefined ? { temperature: 0 } : { reasoning_effort: judge.effort }),
     messages: [{ role: "user", content: prompt }],
   });
   const raw = response.choices.map((choice) => choice.message.content ?? "").join("");
@@ -212,7 +223,12 @@ function parseJson(body: string, raw: string): unknown {
 
 function getJudge(): JudgeClient {
   if (cached) return cached;
-  const model = process.env.OPENCLAW_TEST_JUDGE_MODEL ?? DEFAULT_JUDGE_MODEL;
+  const model = readJudgeEnv("OPENCLAW_TEST_JUDGE_MODEL");
+  if (model === undefined) {
+    throw new Error(
+      'OPENCLAW_TEST_JUDGE_MODEL is not set — set a "provider/model" reference in your project\'s .env.local',
+    );
+  }
   const { provider, bareModel } = parseJudgeModelRef(model);
   // Container DNS blips (EAI_AGAIN) outlast the SDK's default 2 retries and have
   // killed whole cells at once; 5 retries ride out a multi-second outage.
@@ -226,13 +242,38 @@ function getJudge(): JudgeClient {
       client: new OpenAI({ apiKey, baseURL: "https://openrouter.ai/api/v1", maxRetries: 5 }),
       model,
       bareModel,
+      effort: readJudgeEffort(OPENROUTER_EFFORTS),
     };
     return cached;
   }
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set — fill in your project's .env.local");
-  cached = { provider, client: new Anthropic({ apiKey, maxRetries: 5 }), model, bareModel };
+  cached = {
+    provider,
+    client: new Anthropic({ apiKey, maxRetries: 5 }),
+    model,
+    bareModel,
+    effort: readJudgeEffort(ANTHROPIC_EFFORTS),
+  };
   return cached;
+}
+
+// Compose passes an unset variable through as an empty string.
+function readJudgeEnv(name: string): string | undefined {
+  const value = process.env[name];
+  return value === "" ? undefined : value;
+}
+
+function readJudgeEffort<T extends string>(accepted: readonly T[]): T | undefined {
+  const effort = readJudgeEnv("OPENCLAW_TEST_JUDGE_EFFORT");
+  if (effort === undefined) return;
+  const match = accepted.find((value) => value === effort);
+  if (match === undefined) {
+    throw new Error(
+      `OPENCLAW_TEST_JUDGE_EFFORT must be one of ${accepted.join(", ")} for this judge provider; got ${JSON.stringify(effort)}`,
+    );
+  }
+  return match;
 }
 
 function parseJudgeModelRef(ref: string): {
@@ -242,7 +283,7 @@ function parseJudgeModelRef(ref: string): {
   const slash = ref.indexOf("/");
   if (slash < 0) {
     throw new Error(
-      `OPENCLAW_TEST_JUDGE_MODEL must be a LiteLLM-style "provider/model" reference (for example, "anthropic/claude-haiku-5-5" or "openrouter/anthropic/claude-haiku-5.5"); got ${JSON.stringify(ref)}`,
+      `OPENCLAW_TEST_JUDGE_MODEL must be a LiteLLM-style "provider/model" reference (for example, "anthropic/vendor-alpha" or "openrouter/vendor/beta"); got ${JSON.stringify(ref)}`,
     );
   }
   const provider = ref.slice(0, slash);

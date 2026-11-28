@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { CellResult } from "./cell-result.js";
-import { judgeCostUsd } from "./cost.js";
+import { sumCosts } from "./cost.js";
 
 function artifactsRoot(): string {
   return process.env.OPENCLAW_TEST_ARTIFACTS_DIR ?? "/opt/openclaw-test/artifacts";
@@ -72,11 +72,12 @@ export function printTotalCost(results: CellResult[]): void {
 }
 
 function costLine(results: CellResult[]): string {
-  const judgeCost = results
-    .flatMap((r) => r.judgeUsages)
-    .reduce((sum, u) => sum + judgeCostUsd(u), 0);
+  const judgeCost = sumCosts(results.map((r) => r.judgeUsd));
   const agentCost = results.reduce((sum, r) => sum + r.agentCostUsd, 0);
   const agentTurns = results.reduce((sum, r) => sum + r.agentTurns, 0);
-  const totalCost = agentCost + judgeCost;
-  return `Total LLM cost: $${totalCost.toFixed(4)} (agent: $${agentCost.toFixed(4)} over ${agentTurns} turns, judge: $${judgeCost.toFixed(4)})`;
+  const agent = `agent: $${agentCost.toFixed(4)} over ${agentTurns} turns`;
+  if (judgeCost === undefined) {
+    return `Total LLM cost: $${agentCost.toFixed(4)} plus judge (${agent}, judge: unknown)`;
+  }
+  return `Total LLM cost: $${(agentCost + judgeCost).toFixed(4)} (${agent}, judge: $${judgeCost.toFixed(4)})`;
 }

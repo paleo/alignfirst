@@ -187,8 +187,9 @@ export interface ScenarioFailure {
 
 export interface CostBreakdown {
   agentUsd: number;
-  judgeUsd: number;
-  totalUsd: number;
+  /** Absent when the judge prices are not configured. */
+  judgeUsd?: number;
+  totalUsd?: number;
   agentTurns: number;
 }
 

@@ -13,7 +13,8 @@ export interface CellResult {
   artifactDirName: string;
   agentCostUsd: number;
   agentTurns: number;
-  judgeUsd: number;
+  /** Absent when the judge prices are not configured. */
+  judgeUsd?: number;
   judgeUsages: JudgeUsage[];
 }
 

@@ -74,6 +74,11 @@ services:
       OPENCLAW_CONFIG_PATH: /home/assistant/.openclaw/openclaw.json
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      # The judge rejects an empty model; effort and prices are optional.
+      OPENCLAW_TEST_JUDGE_MODEL: ${OPENCLAW_TEST_JUDGE_MODEL:-}
+      OPENCLAW_TEST_JUDGE_EFFORT: ${OPENCLAW_TEST_JUDGE_EFFORT:-}
+      OPENCLAW_TEST_JUDGE_INPUT_USD_PER_MTOK: ${OPENCLAW_TEST_JUDGE_INPUT_USD_PER_MTOK:-}
+      OPENCLAW_TEST_JUDGE_OUTPUT_USD_PER_MTOK: ${OPENCLAW_TEST_JUDGE_OUTPUT_USD_PER_MTOK:-}
     entrypoint: ["node", "/opt/openclaw-test/src/dist/runner.js"]
     volumes: *common-volumes
     depends_on:

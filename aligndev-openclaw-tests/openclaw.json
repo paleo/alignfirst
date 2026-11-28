@@ -51,8 +51,8 @@
         "api": "openai-chatgpt-responses",
         "models": [
           {
-            "id": "gpt-6.1-terra",
-            "name": "GPT-6.1 Terra",
+            "id": "${OPENCLAW_TEST_OPENAI_MODEL}",
+            "name": "OpenAI model",
             "reasoning": true,
             "input": ["text", "image"],
             "contextWindow": 1050000,
@@ -75,8 +75,8 @@
         "api": "anthropic-messages",
         "models": [
           {
-            "id": "claude-sonnet-5-5",
-            "name": "Claude Sonnet 5.5",
+            "id": "${OPENCLAW_TEST_ANTHROPIC_MODEL}",
+            "name": "Anthropic model",
             "reasoning": true,
             "input": ["text", "image"],
             "cost": { "input": 2, "output": 10, "cacheRead": 0.1, "cacheWrite": 2.5 },
@@ -92,8 +92,8 @@
         "api": "openai-completions",
         "models": [
           {
-            "id": "qwen/qwen3.8-flash",
-            "name": "Qwen 3.8 Flash (OpenRouter)",
+            "id": "${OPENCLAW_TEST_OPENROUTER_MODEL}",
+            "name": "OpenRouter model",
             "reasoning": false,
             "input": ["text"],
             "cost": { "input": 0.15, "output": 0.47, "cacheRead": 0.016, "cacheWrite": 0.2 },
@@ -109,8 +109,8 @@
         "api": "openai-completions",
         "models": [
           {
-            "id": "glm-5.3",
-            "name": "GLM-5.3",
+            "id": "${OPENCLAW_TEST_ZAI_MODEL}",
+            "name": "Z.AI model",
             "reasoning": true,
             "input": ["text"],
             "cost": { "input": 0.84, "output": 2.64, "cacheRead": 0.156, "cacheWrite": 0 },
@@ -138,7 +138,7 @@
     "entries": {
       "main": {
         "name": "OpenClaw Main",
-        "model": "openai/gpt-6.1-terra",
+        "model": "<set-by-openclaw-test>",
         "workspace": "/home/assistant/.openclaw/workspace"
       }
     }

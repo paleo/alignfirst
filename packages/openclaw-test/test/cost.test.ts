@@ -1,18 +1,23 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { judgeCostUsd } from "../src/cost.js";
 
-describe("Haiku 5.5 judge pricing", () => {
-  it.each(["anthropic/claude-haiku-5-5", "openrouter/anthropic/claude-haiku-5.5"])(
-    "prices the entire request by prompt length for %s",
-    (model) => {
-      expect(judgeCostUsd({ model, inputTokens: 100_000, outputTokens: 1_000 })).toBeCloseTo(
-        0.0105,
-        10,
-      );
-      expect(judgeCostUsd({ model, inputTokens: 100_001, outputTokens: 1_000 })).toBeCloseTo(
-        0.0525005,
-        10,
-      );
-    },
-  );
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+describe("judgeCostUsd", () => {
+  it.each<{ input: string | undefined; output: string | undefined; expected: number | undefined }>([
+    { input: "0.5", output: "2", expected: 1.5 },
+    { input: undefined, output: "2", expected: undefined },
+    { input: "0.5", output: "", expected: undefined },
+  ])("prices with input $input and output $output USD/MTok", ({ input, output, expected }) => {
+    vi.stubEnv("OPENCLAW_TEST_JUDGE_INPUT_USD_PER_MTOK", input);
+    vi.stubEnv("OPENCLAW_TEST_JUDGE_OUTPUT_USD_PER_MTOK", output);
+    const usage = {
+      model: "openrouter/vendor/beta",
+      inputTokens: 1_000_000,
+      outputTokens: 500_000,
+    };
+    expect(judgeCostUsd(usage)).toBe(expected);
+  });
 });

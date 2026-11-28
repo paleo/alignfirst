@@ -41,8 +41,8 @@ const RUN_USAGE = `usage: openclaw-test run --channel <id|id,id,…|all> [<scena
                       surfaces its "export const surfaces" lists, by default on every channel
                       except webchat; unsupported pairs are skipped.
   --model <id|id,id,…|all>
-                      select the agent model(s): a bare id (e.g. claude-sonnet-5-5), a
-                      comma list of bare ids, or "all". Defaults to OPENCLAW_DEFAULT_TEST_MODEL.
+                      select the agent model(s): a bare id (e.g. model-a), a comma
+                      list of bare ids, or "all". Defaults to OPENCLAW_DEFAULT_TEST_MODEL.
                       The catalog is OPENCLAW_TEST_MODELS (.env.local), a comma list of full
                       provider/model refs; the bare id is the suffix after the last "/".
                       "all" needs credentials for every selected provider.
@@ -75,7 +75,8 @@ const ENV_USAGE = `usage: openclaw-test env <build|up|down>
 
   build               build the base and consumer images.
   up [--parallel K]   bring up worker stacks w1…wK warm (K defaults to
-                      OPENCLAW_TEST_PARALLEL, fallback 1).
+                      OPENCLAW_TEST_PARALLEL, fallback 1) on the model
+                      OPENCLAW_DEFAULT_TEST_MODEL.
   down                tear down every <base>-w* worker stack, whatever K was.`;
 
 export async function envCommand(
@@ -98,11 +99,12 @@ export async function envCommand(
     process.exit(execComposeSync(buildConsumerImageArgs(workerComposeArgs(1))));
   }
   const parallel = resolveParallel(parallelFlag, readEnvVar("OPENCLAW_TEST_PARALLEL"));
+  const defaultModel = resolveEnvUpModel();
   const workers = buildWorkerContexts(parallel);
   ensureHostOutputDirs(workers);
   ensureBaseImage(packageDir, { force: false });
   ensureConsumerImage(workerComposeArgs(1));
-  const configPath = renderRuntimeConfig(canonicalConfigPath());
+  const configPath = renderRuntimeConfig(canonicalConfigPath(), defaultModel);
   for (const worker of workers) refreshWorkerWorkspace(worker);
   const codes = await Promise.all(
     workers.map((worker) =>
@@ -119,6 +121,19 @@ export async function envCommand(
 
 function buildConsumerImageArgs(composeArgs: string[]): string[] {
   return [...composeArgs, "build", "bus"];
+}
+
+function resolveEnvUpModel(): SelectedModel {
+  const defaultEnv = readEnvVar("OPENCLAW_DEFAULT_TEST_MODEL");
+  if (!defaultEnv) {
+    throw new Error("env up: OPENCLAW_DEFAULT_TEST_MODEL is unset; set it to a bare model id");
+  }
+  const [model] = resolveSelectedModels({
+    selection: undefined,
+    modelsEnv: readEnvVar("OPENCLAW_TEST_MODELS"),
+    defaultEnv,
+  });
+  return model;
 }
 
 export async function runCommand(
@@ -334,35 +349,33 @@ function ensureConsumerImage(composeArgs: string[]): void {
  * canonical file is never mutated and `process.env` is never repointed — callers
  * pass the path to worker spawns via per-spawn env.
  *
- * When a `model` is given, `agents.entries.main.model` is set to its full ref so
- * the gateway boots on the selected model. Rendered per model (own private file).
+ * `agents.entries.main.model` is set to the model's full ref so the gateway boots
+ * on the selected model. Rendered per model (own private file).
  *
- * A `${VAR}` resolving to empty drops its enclosing `models.providers.*` entry so
- * a defined-but-unused provider with no key can't trip OpenClaw boot validation.
+ * A `models.providers.*` entry whose API key or model ID resolves empty is dropped,
+ * so a defined-but-unused provider can't trip OpenClaw boot validation.
  */
-function renderRuntimeConfig(canonicalPath: string, model?: SelectedModel): string {
+function renderRuntimeConfig(canonicalPath: string, model: SelectedModel): string {
   const projectDir = process.env.OPENCLAW_TEST_PROJECT_DIR ?? process.cwd();
   const dotenv = readDotenvFile(projectDir);
   const config = JSON.parse(readFileSync(canonicalPath, "utf8")) as Record<string, unknown>;
   const rendered = expandEnvRefs(config, dotenv) as Record<string, unknown>;
-  const droppedProviders = dropProvidersMissingKey(rendered);
-  if (model) {
-    assertModelProviderPresent(model, droppedProviders);
-    setMainAgentModel(rendered, model.ref);
-  }
+  const droppedProviders = dropUnusableProviders(rendered);
+  assertModelProviderPresent(model, droppedProviders);
+  setMainAgentModel(rendered, model.ref);
   return writeRuntimeConfig(projectDir, rendered);
 }
 
 // A model's provider is the ref's first segment (`provider/model`); built-in
 // providers (e.g. `anthropic`) aren't declared in config and never get dropped.
-// Fail fast only when the selected model's provider was declared but dropped for
-// an empty key — otherwise `setMainAgentModel` would point `main` at a missing
-// provider and the gateway would boot-fail with an opaque error.
+// Fail fast only when the selected model's provider was declared but dropped —
+// otherwise `setMainAgentModel` would point `main` at a missing provider and the
+// gateway would boot-fail with an opaque error.
 function assertModelProviderPresent(model: SelectedModel, droppedProviders: Set<string>): void {
   const provider = model.ref.split("/")[0];
   if (droppedProviders.has(provider)) {
     throw new Error(
-      `openclaw-test: selected model "${model.ref}" needs provider "${provider}", but its API key expanded empty. Set the provider's API key in .env.local.`,
+      `openclaw-test: selected model "${model.ref}" needs provider "${provider}", but its API key or a model ID expanded empty. Set them in .env.local.`,
     );
   }
 }
@@ -412,26 +425,30 @@ function expandEnvRefs(value: unknown, dotenv: Record<string, string>): unknown 
   return value;
 }
 
-// On the rendered config, an empty `apiKey` means its `${VAR}` reference expanded
-// to an unset value. Drop the whole provider so boot validation for a
-// defined-but-unused provider can't fail on the empty key.
-function dropProvidersMissingKey(config: Record<string, unknown>): Set<string> {
+// On the rendered config, an empty `apiKey` or `models[].id` means its `${VAR}`
+// reference expanded to an unset value. Drop the whole provider so boot validation
+// for a defined-but-unused provider can't fail on the empty value.
+function dropUnusableProviders(config: Record<string, unknown>): Set<string> {
   const dropped = new Set<string>();
   const models = config.models;
   if (!models || typeof models !== "object") return dropped;
   const providers = (models as Record<string, unknown>).providers;
   if (!providers || typeof providers !== "object") return dropped;
   for (const [id, provider] of Object.entries(providers)) {
-    if (
-      provider &&
-      typeof provider === "object" &&
-      (provider as { apiKey?: unknown }).apiKey === ""
-    ) {
+    if (provider && typeof provider === "object" && hasEmptyKeyOrModelId(provider)) {
       delete (providers as Record<string, unknown>)[id];
       dropped.add(id);
     }
   }
   return dropped;
+}
+
+function hasEmptyKeyOrModelId(provider: { apiKey?: unknown; models?: unknown }): boolean {
+  if (provider.apiKey === "") return true;
+  if (!Array.isArray(provider.models)) return false;
+  return provider.models.some(
+    (model) => model && typeof model === "object" && (model as { id?: unknown }).id === "",
+  );
 }
 
 const BASE_IMAGE_NAME = "paleo/openclaw-test-base";

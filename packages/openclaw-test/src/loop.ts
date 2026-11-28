@@ -2,7 +2,6 @@ import type { ChildProcess } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type CellResult, cellLeafName, readCellResult } from "./cell-result.js";
-import { judgeCostUsd } from "./cost.js";
 import type { SelectedModel } from "./models.js";
 import { printSummary, printTotalCost } from "./summary.js";
 import { spawnHostProcess } from "./host-process.js";
@@ -460,9 +459,11 @@ async function spawnTracked(
 
 function formatCellDone(workerIndex: number, leaf: string, r: CellResult): string {
   const verdict = r.verdict === "pass" ? "PASS" : "FAIL";
-  const judgeCost = r.judgeUsages.reduce((sum, u) => sum + judgeCostUsd(u), 0);
-  const cost = r.agentCostUsd + judgeCost;
-  return `[w${workerIndex}] ${leaf} ${verdict} (${Math.round(r.durationMs / 1000)}s, $${cost.toFixed(4)})`;
+  const cost =
+    r.judgeUsd === undefined
+      ? `$${r.agentCostUsd.toFixed(4)} plus judge`
+      : `$${(r.agentCostUsd + r.judgeUsd).toFixed(4)}`;
+  return `[w${workerIndex}] ${leaf} ${verdict} (${Math.round(r.durationMs / 1000)}s, ${cost})`;
 }
 
 function synthesizeFailedResult(params: {

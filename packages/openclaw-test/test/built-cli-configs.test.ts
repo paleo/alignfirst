@@ -50,6 +50,28 @@ describe("built harness runtime configs", () => {
     expect(existsSync(third)).toBe(false);
   });
 
+  it("renders env up's config on the default model, without unusable providers", () => {
+    const fixture = consumer();
+    writeFileSync(
+      join(fixture.root, "openclaw.json"),
+      JSON.stringify({
+        channels: { mock: {} },
+        agents: { entries: { main: { model: "placeholder" } } },
+        models: {
+          providers: {
+            local: { apiKey: envRef("HARNESS_PRIVATE_TEST_KEY"), models: [{ id: "offline" }] },
+            keyless: { apiKey: envRef("HARNESS_UNSET_KEY"), models: [{ id: "other" }] },
+            unversioned: { models: [{ id: envRef("HARNESS_UNSET_MODEL") }] },
+          },
+        },
+      }),
+    );
+    expect(run(fixture, ["env", "up"]).status).toBe(0);
+    const config = JSON.parse(readFileSync(lastConfigPath(fixture), "utf8"));
+    expect(Object.keys(config.models.providers)).toEqual(["local"]);
+    expect(config.agents.entries.main.model).toBe("local/offline");
+  });
+
   it("discovers configs under a symlinked state ancestor across TMPDIR changes", () => {
     const fixture = consumer();
     const physical = join(dirname(fixture.root), "physical-state");
@@ -118,3 +140,7 @@ describe("built harness runtime configs", () => {
     expect(existsSync(config)).toBe(false);
   });
 });
+
+function envRef(name: string): string {
+  return `\${${name}}`;
+}

@@ -118,6 +118,7 @@ function consumerEnvironment(paths: {
     OPENCLAW_WORKSPACE_DIR: join(paths.root, "workspace"),
     OPENCLAW_TEST_PROJECT_DIR: paths.root,
     OPENCLAW_TEST_MODELS: "local/offline",
+    OPENCLAW_DEFAULT_TEST_MODEL: "offline",
     HARNESS_PRIVATE_TEST_KEY: "private-test-secret",
   };
   for (const key of [
