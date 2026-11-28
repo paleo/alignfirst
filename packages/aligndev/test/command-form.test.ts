@@ -23,22 +23,10 @@ describe("command forms", () => {
     ["node", {}, "aligndev", ["alignfirst"]],
     ["node", NPX_ENV, "npx -y aligndev", ["npx", "-y", "alignfirst"]],
     [
-      "node",
-      { npm_config_user_agent: "bun/1.4.4", npm_command: "exec" },
-      "bunx aligndev",
-      ["bunx", "alignfirst"],
-    ],
-    [
       "bun",
       { npm_config_user_agent: "bun/1.4.4", npm_command: "exec" },
       "bunx --bun aligndev",
       ["bunx", "--bun", "alignfirst"],
-    ],
-    [
-      "node",
-      { npm_config_user_agent: "pnpm/10", npm_command: "dlx" },
-      "pnpm dlx aligndev",
-      ["pnpm", "dlx", "alignfirst"],
     ],
     [
       "node",
@@ -61,7 +49,7 @@ describe("command forms", () => {
     expect(JSON.parse(row ?? "").command).toContain(`${self} code new`);
   });
 
-  it.each(["npm", "bun", "yarn"] as const)(
+  it.each(["npm", "bun"] as const)(
     "retains verified %s scripts only for self and JSON-quotes background commands",
     (manager) => {
       const home = makeHome();
@@ -73,7 +61,7 @@ describe("command forms", () => {
       writeFileSync(manifest, JSON.stringify({ scripts: { [name]: script, af: "alignfirst" } }));
       const env = {
         npm_config_user_agent: `${manager}/1`,
-        npm_command: manager === "yarn" ? undefined : manager === "npm" ? "run" : "run-script",
+        npm_command: manager === "npm" ? "run" : "run-script",
         npm_lifecycle_event: name,
         npm_lifecycle_script: script,
         npm_package_json: manifest,

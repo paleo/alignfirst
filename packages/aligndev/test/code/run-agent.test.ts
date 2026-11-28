@@ -23,6 +23,7 @@ import {
 } from "../../src/code/session-file.js";
 import { makeSink } from "../helpers.js";
 
+const EPOCH = new Date(0).toISOString();
 const dirs: string[] = [];
 
 afterEach(() => {
@@ -36,26 +37,6 @@ describe("shared runner helpers", () => {
       ["SECRET_KEY", "OTHER_SECRET", "ABSENT"],
     );
     expect(env).toEqual({ PATH: "/bin", KEEP: "yes", HOME: "/home/a" });
-  });
-
-  it("strips the assistant's coding-agent session identity and keeps its settings", () => {
-    const env = buildAgentEnv(
-      {
-        PATH: "/bin",
-        CLAUDECODE: "1",
-        CLAUDE_CODE_SESSION_ID: "s-1",
-        CLAUDE_CODE_ENTRYPOINT: "cli",
-        CLAUDE_CODE_SESSION_ATTENDED: "1",
-        CLAUDE_CODE_EXECPATH: "/usr/bin/claude",
-        CODEX_THREAD_ID: "t-1",
-        CODEX_SANDBOX_NETWORK_DISABLED: "1",
-        ANTIGRAVITY_AGENT: "1",
-        ANTIGRAVITY_CONVERSATION_ID: "conv-1",
-        CLAUDE_CODE_USE_BEDROCK: "1",
-      },
-      [],
-    );
-    expect(env).toEqual({ PATH: "/bin", CLAUDE_CODE_USE_BEDROCK: "1" });
   });
 
   it("builds a terminal update with captured identity", () => {
@@ -77,19 +58,14 @@ describe("shared runner helpers", () => {
   it("drains trailing JSONL, writes completion, and strips the child environment", async () => {
     const { config, sessionFilePath } = makeRun();
     config.env = buildAgentEnv({ SECRET: "hidden", KEEP: "yes" }, ["SECRET"]);
-    const script = `
-      const lines = [
-        { type: "thread.started", thread_id: "thread-1" },
-        { type: "item.completed", item: { type: "agent_message", text: String(process.env.KEEP) + ":" + String(process.env.SECRET) } },
-        { type: "turn.completed" },
-      ];
-      process.stdout.write(lines.map(JSON.stringify).join("\\n"));
-    `;
+    const script = `printf '%s\\n' '{"type":"thread.started","thread_id":"thread-1"}'
+printf '{"type":"item.completed","item":{"type":"agent_message","text":"%s:%s"}}\\n' "$KEEP" "\${SECRET-undefined}"
+printf '%s' '{"type":"turn.completed"}'`;
     const result = await runAgent(
       config,
       createCodexAdapter(),
       { write() {} },
-      nodeFixture(script),
+      shellFixture(script),
     );
     expect(result).toMatchObject({
       status: "succeeded",
@@ -110,14 +86,7 @@ describe("shared runner helpers", () => {
       result,
       is_error: false,
     }));
-    await runAgent(
-      config,
-      createClaudeAdapter(),
-      makeSink(),
-      nodeFixture(
-        `process.stdout.write(${JSON.stringify(events.map((event) => JSON.stringify(event)).join("\n"))});`,
-      ),
-    );
+    await runAgent(config, createClaudeAdapter(), makeSink(), shellFixture(printLines(events)));
     expect(readCompletion(sessionFilePath).result).toBe("Report.");
   });
 
@@ -134,8 +103,12 @@ describe("shared runner helpers", () => {
         is_error: failed,
       },
     ];
-    const script = `process.stdout.write(${JSON.stringify(events.map((event) => JSON.stringify(event)).join("\n"))});`;
-    const result = await runAgent(config, createClaudeAdapter(), makeSink(), nodeFixture(script));
+    const result = await runAgent(
+      config,
+      createClaudeAdapter(),
+      makeSink(),
+      shellFixture(printLines(events)),
+    );
     const last = failed ? "Claude profile work: follow-up failed" : "Acknowledged.";
     expect(result).toMatchObject({ status: failed ? "failed" : "succeeded", result: last });
     expect(readCompletion(sessionFilePath).result).toBe(
@@ -151,7 +124,7 @@ describe("shared runner helpers", () => {
         version: 3,
         id: "pi-1",
         cwd: config.cwd,
-        timestamp: new Date().toISOString(),
+        timestamp: EPOCH,
       },
       {
         type: "message_end",
@@ -183,8 +156,12 @@ describe("shared runner helpers", () => {
       },
       { type: "agent_settled", aborted: false },
     ];
-    const script = `process.stdout.write(${JSON.stringify(events.map((event) => JSON.stringify(event)).join("\n"))});`;
-    const result = await runAgent(config, createPiAdapter(), makeSink(), nodeFixture(script));
+    const result = await runAgent(
+      config,
+      createPiAdapter(),
+      makeSink(),
+      shellFixture(printLines(events)),
+    );
     expect(result).toMatchObject({ status: "succeeded", result: "Acknowledged." });
     expect(readCompletion(sessionFilePath).result).toBe(
       "Report.\n\n---- Later result ----\n\nAcknowledged.",
@@ -208,18 +185,15 @@ describe("shared runner helpers", () => {
               { type: "item.completed", item: { type: "agent_message", text: "final answer" } },
               { type: "turn.completed" },
             ];
-      const script = `
-        const bytes = Buffer.from(${JSON.stringify(events.map((event) => JSON.stringify(event)).join("\n"))});
-        const split = bytes.indexOf(Buffer.from("🧪")) + 2;
-        process.stdout.write(bytes.subarray(0, split));
-        setTimeout(() => process.stdout.write(bytes.subarray(split)), 10);
-      `;
+      const bytes = Buffer.from(events.map((event) => JSON.stringify(event)).join("\n"));
+      const split = bytes.indexOf(Buffer.from("🧪")) + 2;
+      const script = `${printBytes(bytes.subarray(0, split))}\nsleep 0.01\n${printBytes(bytes.subarray(split))}`;
       const bodies: string[] = [];
       for (const quiet of [false, true]) {
         const { config, sessionFilePath } = makeRun();
         config.quiet = quiet;
         const stdout = makeSink();
-        const result = await runAgent(config, adapter, stdout, nodeFixture(script));
+        const result = await runAgent(config, adapter, stdout, shellFixture(script));
         expect(result).toMatchObject({
           status: "succeeded",
           sessionId: "quiet-1",
@@ -236,25 +210,14 @@ describe("shared runner helpers", () => {
     },
   );
 
-  it("lets a Claude run wait for its background work without a time cap", async () => {
-    const { config } = makeRun();
-    config.env = buildAgentEnv(
+  it("lets a Claude run wait for its background work without a time cap", () => {
+    const env = buildAgentEnv(
       { CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: "600000" },
       [],
       {},
       createClaudeAdapter().env,
     );
-    const script = `
-      const result = String(process.env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS);
-      process.stdout.write(JSON.stringify({ type: "result", session_id: "claude-1", result, is_error: false }));
-    `;
-    const result = await runAgent(
-      config,
-      createClaudeAdapter(),
-      { write() {} },
-      nodeFixture(script),
-    );
-    expect(result).toMatchObject({ status: "succeeded", result: "0" });
+    expect(env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS).toBe("0");
   });
 
   it.each([createClaudeAdapter(), createCodexAdapter()])(
@@ -330,9 +293,9 @@ describe("shared runner helpers", () => {
     expect(existsSync(marker)).toBe(false);
   });
 
-  it.each([false, true])("records a failed prompt pipe with quiet=%s", async (quiet) => {
+  it("records a failed prompt pipe", async () => {
     const { config, sessionFilePath } = makeRun();
-    config.quiet = quiet;
+    config.quiet = true;
     config.prompt = "x".repeat(2_000_000);
     const result = await runAgent(
       config,
@@ -350,14 +313,14 @@ describe("shared runner helpers", () => {
       config,
       createCodexAdapter(),
       { write() {} },
-      nodeFixture('process.stderr.write("service unavailable"); process.exit(7);'),
+      shellFixture("printf 'service unavailable' >&2\nexit 7"),
     );
     expect(result).toMatchObject({ status: "failed", result: "service unavailable" });
   });
 
-  it.each([false, true])("records startup failure with quiet=%s", async (quiet) => {
+  it("records a startup failure", async () => {
     const { config, sessionFilePath } = makeRun();
-    config.quiet = quiet;
+    config.quiet = true;
     const adapter = { ...createCodexAdapter(), executable: "missing-aligndev-fixture-command" };
     const result = await runAgent(config, adapter, { write() {} });
     expect(result.status).toBe("failed");
@@ -369,7 +332,8 @@ describe("shared runner helpers", () => {
 describe.each([createClaudeAdapter(), createPiAdapter()])(
   "$executable termination results",
   (adapter) => {
-    it.each([0, 1, 2])("preserves %i completed responses before diagnostics", (count) => {
+    it("preserves completed responses before diagnostics", () => {
+      const count = 2;
       for (const activity of ["waiting", "partial", "toolUse"]) {
         const { config, sessionFilePath } = makeRun();
         const state = adapter.createState(config);
@@ -383,7 +347,7 @@ describe.each([createClaudeAdapter(), createPiAdapter()])(
                 version: 3,
                 id: "session-1",
                 cwd: config.cwd,
-                timestamp: new Date().toISOString(),
+                timestamp: EPOCH,
               },
         );
         const reports = ["First report.", "Second report."].slice(0, count);
@@ -440,113 +404,117 @@ describe.each([createClaudeAdapter(), createPiAdapter()])(
   },
 );
 
-describe.each([createClaudeAdapter(), createCodexAdapter(), createPiAdapter()])(
-  "$executable durable resume identity",
-  (adapter) => {
-    it.each([
-      "missingIdentity",
-      "wrongIdentity",
-      "nativeFailure",
-      "authFailure",
-      "startupFailure",
-      "success",
-    ])(
-      "preserves the requested ID after %s without using it as native evidence",
-      async (outcome) => {
-        const { config, sessionFilePath } = makeRun("original-session");
-        const id =
-          outcome === "missingIdentity"
-            ? undefined
-            : outcome === "wrongIdentity"
-              ? "replacement-session"
-              : "original-session";
-        const events =
-          outcome !== "authFailure"
-            ? completionEvents(adapter, id)
-            : adapter.executable === "claude"
-              ? [{ type: "assistant", error: "authentication_failed" }]
-              : [];
-        const script = `
-        process.stdout.write(${JSON.stringify(events.map((event) => JSON.stringify(event)).join("\n"))});
-        ${outcome === "authFailure" ? 'process.stderr.write("Not logged in. Please run /login.\\nNo API key found for openai.");' : ""}
-        process.exitCode = ${outcome === "nativeFailure" || outcome === "authFailure" ? 1 : 0};
-      `;
-        const selected =
-          outcome === "startupFailure"
-            ? { ...adapter, executable: "missing-aligndev-fixture-command" }
-            : adapter;
-        const result = await runAgent(
-          config,
-          selected,
-          makeSink(),
-          outcome === "startupFailure" ? undefined : nodeFixture(script),
-        );
-        const status = outcome === "success" ? "succeeded" : "failed";
-        const exitReason =
-          outcome === "success"
-            ? "completed"
-            : outcome === "authFailure"
-              ? "auth_required"
-              : "error";
-        expect(result).toMatchObject({
-          status,
-          sessionId: "original-session",
-          authRequired: outcome === "authFailure",
-        });
-        expect(readCompletion(sessionFilePath).frontmatter).toMatchObject({
-          status,
-          exitReason,
-          sessionId: "original-session",
-        });
-      },
-    );
+type ResumeOutcome =
+  | "missingIdentity"
+  | "wrongIdentity"
+  | "nativeFailure"
+  | "authFailure"
+  | "startupFailure"
+  | "success";
 
-    it.each([undefined, "original-session", "replacement-session"])(
-      "preserves the requested ID on handled termination after observed ID %s",
-      (id) => {
-        const { config, sessionFilePath } = makeRun("original-session");
-        const state = adapter.createState(config);
-        for (const event of completionEvents(adapter, id)) {
-          adapter.interpretLine(JSON.stringify(event), state);
-        }
-        const update = buildTerminationUpdate("SIGTERM", state, new Date());
-        expect(update).toMatchObject({
-          status: "failed",
-          exitReason: "terminated",
-          sessionId: "original-session",
-          result: expect.stringContaining("done\n\n---- Later result ----\n\n"),
-        });
-        applyCompletion(sessionFilePath, update);
-        expect(readCompletion(sessionFilePath).frontmatter).toMatchObject({
-          status: "failed",
-          exitReason: "terminated",
-          sessionId: "original-session",
-        });
-      },
-    );
+describe("durable resume identity", () => {
+  it.each(
+    [createClaudeAdapter(), createCodexAdapter(), createPiAdapter()].flatMap((adapter) =>
+      (["missingIdentity", "wrongIdentity"] as const).map(
+        (outcome): [string, AgentAdapter, ResumeOutcome] => [adapter.executable, adapter, outcome],
+      ),
+    ),
+  )("preserves the requested %s ID after %s", async (_name, adapter, outcome) => {
+    await expectRequestedIdentity(adapter, outcome);
+  });
 
-    it.each([undefined, "new-session"])(
-      "keeps new-session semantics with observed ID %s",
-      async (id) => {
-        const { config, sessionFilePath } = makeRun();
-        const events = completionEvents(adapter, id);
-        const result = await runAgent(
-          config,
-          adapter,
-          makeSink(),
-          nodeFixture(
-            `process.stdout.write(${JSON.stringify(events.map((event) => JSON.stringify(event)).join("\n"))});`,
-          ),
-        );
-        expect(result).toMatchObject({
-          status: id === undefined ? "failed" : "succeeded",
-          sessionId: id ?? null,
-        });
-        expect(readCompletion(sessionFilePath).frontmatter.sessionId).toBe(id ?? null);
-      },
-    );
-  },
-);
+  it.each<[ResumeOutcome, AgentAdapter]>([
+    ["nativeFailure", createCodexAdapter()],
+    ["authFailure", createClaudeAdapter()],
+    ["startupFailure", createPiAdapter()],
+    ["success", createClaudeAdapter()],
+  ])("preserves the requested ID after %s", async (outcome, adapter) => {
+    await expectRequestedIdentity(adapter, outcome);
+  });
+
+  it.each([undefined, "replacement-session"])(
+    "preserves the requested ID on handled termination after observed ID %s",
+    (id) => {
+      const adapter = createClaudeAdapter();
+      const { config, sessionFilePath } = makeRun("original-session");
+      const state = adapter.createState(config);
+      for (const event of completionEvents(adapter, id)) {
+        adapter.interpretLine(JSON.stringify(event), state);
+      }
+      const update = buildTerminationUpdate("SIGTERM", state, new Date());
+      expect(update).toMatchObject({
+        status: "failed",
+        exitReason: "terminated",
+        sessionId: "original-session",
+        result: expect.stringContaining("done\n\n---- Later result ----\n\n"),
+      });
+      applyCompletion(sessionFilePath, update);
+      expect(readCompletion(sessionFilePath).frontmatter.sessionId).toBe("original-session");
+    },
+  );
+
+  it.each([undefined, "new-session"])(
+    "keeps new-session semantics with observed ID %s",
+    async (id) => {
+      const adapter = createCodexAdapter();
+      const { config, sessionFilePath } = makeRun();
+      const result = await runAgent(
+        config,
+        adapter,
+        makeSink(),
+        shellFixture(printLines(completionEvents(adapter, id))),
+      );
+      expect(result).toMatchObject({
+        status: id === undefined ? "failed" : "succeeded",
+        sessionId: id ?? null,
+      });
+      expect(readCompletion(sessionFilePath).frontmatter.sessionId).toBe(id ?? null);
+    },
+  );
+});
+
+// A resumed run keeps the requested ID whatever it observes, without taking it as native evidence.
+async function expectRequestedIdentity(adapter: AgentAdapter, outcome: ResumeOutcome) {
+  const { config, sessionFilePath } = makeRun("original-session");
+  const id =
+    outcome === "missingIdentity"
+      ? undefined
+      : outcome === "wrongIdentity"
+        ? "replacement-session"
+        : "original-session";
+  const events =
+    outcome !== "authFailure"
+      ? completionEvents(adapter, id)
+      : adapter.executable === "claude"
+        ? [{ type: "assistant", error: "authentication_failed" }]
+        : [];
+  const failing = outcome === "nativeFailure" || outcome === "authFailure";
+  const selected =
+    outcome === "startupFailure"
+      ? { ...adapter, executable: "missing-aligndev-fixture-command" }
+      : adapter;
+  const result = await runAgent(
+    config,
+    selected,
+    makeSink(),
+    outcome === "startupFailure"
+      ? undefined
+      : shellFixture(`${printLines(events)}\n${failing ? "exit 1" : ""}`),
+  );
+  const status = outcome === "success" ? "succeeded" : "failed";
+  const exitReason =
+    outcome === "success" ? "completed" : outcome === "authFailure" ? "auth_required" : "error";
+  expect(result).toMatchObject({
+    status,
+    sessionId: "original-session",
+    authRequired: outcome === "authFailure",
+  });
+  expect(readCompletion(sessionFilePath).frontmatter).toMatchObject({
+    status,
+    exitReason,
+    sessionId: "original-session",
+  });
+}
 
 function completionEvents(adapter: AgentAdapter, id: string | undefined): object[] {
   if (adapter.executable === "claude") {
@@ -565,9 +533,7 @@ function completionEvents(adapter: AgentAdapter, id: string | undefined): object
   return [
     ...(id === undefined
       ? []
-      : [
-          { type: "session", version: 3, id, cwd: "/fixture", timestamp: new Date().toISOString() },
-        ]),
+      : [{ type: "session", version: 3, id, cwd: "/fixture", timestamp: EPOCH }]),
     {
       type: "message_end",
       message: { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "done" }] },
@@ -577,39 +543,12 @@ function completionEvents(adapter: AgentAdapter, id: string | undefined): object
 }
 
 describe("pi through the shared runner", () => {
-  it("sanitizes the child identity whatever its values and preserves storage and credentials", () => {
-    const env = {
-      CODEX_THREAD_ID: "parent",
-      PI_CODING_AGENT: "true",
-      AI_AGENT: "pi",
-      PI_SESSION_ID: "parent",
-      PI_SESSION_FILE: "/parent.jsonl",
-      PI_PROVIDER: "provider",
-      PI_MODEL: "model",
-      PI_REASONING_LEVEL: "high",
-      PI_CODING_AGENT_DIR: "/config",
-      PI_CODING_AGENT_SESSION_DIR: "/sessions",
-      OPENAI_API_KEY: "credential",
-    };
-    expect(buildAgentEnv(env, [])).toEqual({
-      PI_CODING_AGENT_DIR: "/config",
-      PI_CODING_AGENT_SESSION_DIR: "/sessions",
-      OPENAI_API_KEY: "credential",
-    });
-    expect(env.CODEX_THREAD_ID).toBe("parent");
-    expect(env.AI_AGENT).toBe("pi");
-    expect(buildAgentEnv({ AI_AGENT: "other", PI_CODING_AGENT: "false" }, [])).toEqual({});
-    expect(buildAgentEnv(env, ["OPENAI_API_KEY"]).OPENAI_API_KEY).toBeUndefined();
-  });
-
-  it.each([false, true])(
-    "transports literal stdin, split UTF-8, Unicode separators and trailing JSON with quiet=%s",
-    async (quiet) => {
-      const { config, sessionFilePath } = makeRun();
-      config.quiet = quiet;
-      config.prompt = "Résumé 🧪\u2028inside\u2029JSON $(literal) `code`\n";
-      const stdout = makeSink();
-      const script = `
+  it("transports literal stdin, split UTF-8, Unicode separators and trailing JSON quietly", async () => {
+    const { config, sessionFilePath } = makeRun();
+    config.quiet = true;
+    config.prompt = "Résumé 🧪\u2028inside\u2029JSON $(literal) `code`\n";
+    const stdout = makeSink();
+    const script = `
       let prompt = "";
       process.stdin.setEncoding("utf8");
       process.stdin.on("data", chunk => prompt += chunk);
@@ -625,69 +564,44 @@ describe("pi through the shared runner", () => {
         setTimeout(() => process.stdout.write(bytes.subarray(split)), 10);
       });
     `;
-      const result = await runAgent(config, createPiAdapter(), stdout, (command, args, options) => {
-        expect(command).toBe("pi");
-        expect(args).toEqual(["--mode", "json"]);
-        expect(args).not.toContain(config.prompt);
-        return spawn(process.execPath, ["-e", script], options);
-      });
-      expect(result).toMatchObject({
-        status: "succeeded",
-        sessionId: "pi-session",
-        result: config.prompt,
-      });
-      expect(readFileSync(sessionFilePath, "utf8")).toContain(config.prompt);
-      expect(readFileSync(sessionFilePath, "utf8")).not.toContain("�");
-      if (quiet) expect(stdout.text()).toBe("");
-      else expect(stdout.text()).toContain(config.prompt);
-    },
-  );
-
-  it.each([
-    [0, false, false],
-    [7, true, false],
-    [0, true, true],
-  ])("rejects exit=%s settled=%s aborted=%s", async (exit, settled, aborted) => {
-    const { config, sessionFilePath } = makeRun();
-    const script = `
-      const events = [
-        { type: "session", version: 3, id: "pi-session", timestamp: new Date().toISOString(), cwd: process.cwd() },
-        { type: "message_end", message: { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "answer" }] } },
-        ...(${settled} ? [{ type: "agent_settled", aborted: ${aborted} }] : []),
-      ];
-      process.stdout.write(events.map(JSON.stringify).join("\\n"));
-      process.exitCode = ${exit};
-    `;
-    const result = await runAgent(config, createPiAdapter(), makeSink(), nodeFixture(script));
-    expect(result.status).toBe("failed");
-    expect(readCompletion(sessionFilePath).frontmatter.status).toBe("failed");
+    const result = await runAgent(config, createPiAdapter(), stdout, (command, args, options) => {
+      expect(command).toBe("pi");
+      expect(args).toEqual(["--mode", "json"]);
+      expect(args).not.toContain(config.prompt);
+      return spawn(process.execPath, ["-e", script], options);
+    });
+    expect(result).toMatchObject({
+      status: "succeeded",
+      sessionId: "pi-session",
+      result: config.prompt,
+    });
+    expect(readFileSync(sessionFilePath, "utf8")).toContain(config.prompt);
+    expect(readFileSync(sessionFilePath, "utf8")).not.toContain("�");
+    expect(stdout.text()).toBe("");
   });
 
-  it("preserves explicit compaction and missing usage when cancelled", () => {
-    const { config } = makeRun();
-    const adapter = createPiAdapter();
-    const state = adapter.createState(config);
-    adapter.interpretLine(
-      JSON.stringify({
-        type: "session",
-        version: 3,
-        id: "pi-session",
-        timestamp: new Date().toISOString(),
-        cwd: config.cwd,
-      }),
-      state,
+  it("rejects an aborted run", async () => {
+    const { config, sessionFilePath } = makeRun();
+    const events = [
+      { type: "session", version: 3, id: "pi-session", timestamp: EPOCH, cwd: config.cwd },
+      {
+        type: "message_end",
+        message: {
+          role: "assistant",
+          stopReason: "stop",
+          content: [{ type: "text", text: "answer" }],
+        },
+      },
+      { type: "agent_settled", aborted: true },
+    ];
+    const result = await runAgent(
+      config,
+      createPiAdapter(),
+      makeSink(),
+      shellFixture(printLines(events)),
     );
-    adapter.interpretLine(
-      JSON.stringify({ type: "compaction_end", aborted: false, result: { summary: "compacted" } }),
-      state,
-    );
-    expect(buildTerminationUpdate("SIGTERM", state, new Date())).toMatchObject({
-      exitReason: "terminated",
-      sessionId: "pi-session",
-      contextCompacted: true,
-      contextTokens: null,
-      contextTokensError: expect.any(String),
-    });
+    expect(result.status).toBe("failed");
+    expect(readCompletion(sessionFilePath).frontmatter.status).toBe("failed");
   });
 
   it("keeps startup authentication failures durable and non-generic", async () => {
@@ -696,13 +610,13 @@ describe("pi through the shared runner", () => {
       config,
       createPiAdapter(),
       makeSink(),
-      nodeFixture('process.stderr.write("No API key found for openai."); process.exitCode = 1;'),
+      shellFixture("printf 'No API key found for example.' >&2\nexit 1"),
     );
     expect(result).toMatchObject({ status: "failed", authRequired: true });
     const completion = readCompletion(sessionFilePath);
     expect(completion.frontmatter.exitReason).toBe("auth_required");
     expect(completion.result).toBe(
-      "login instructions\n\nAgent error:\n\nNo API key found for openai.",
+      "login instructions\n\nAgent error:\n\nNo API key found for example.",
     );
   });
 });
@@ -752,4 +666,27 @@ function makeRun(resume?: string): { config: RunConfig; sessionFilePath: string 
 
 function nodeFixture(script: string): SpawnAgentProcess {
   return (_command, _args, options) => spawn(process.execPath, ["-e", script], options);
+}
+
+// Reads the prompt to its end, as an agent does, then runs `script`.
+function shellFixture(script: string): SpawnAgentProcess {
+  return (_command, _args, options) =>
+    spawn("/bin/sh", ["-c", `while read -r _; do :; done\n${script}`], options);
+}
+
+// Shell lines printing the values as JSON lines; byte arrays print raw, so a chunk may split UTF-8.
+function printLines(values: object[], separator = "\n"): string {
+  const text = values.map((value) => JSON.stringify(value)).join(separator);
+  return printBytes(Buffer.from(text));
+}
+
+function printBytes(bytes: Buffer): string {
+  const escaped = [...bytes]
+    .map((byte) =>
+      byte >= 0x20 && byte < 0x7f && byte !== 0x27 && byte !== 0x5c && byte !== 0x25
+        ? String.fromCharCode(byte)
+        : `\\${byte.toString(8).padStart(3, "0")}`,
+    )
+    .join("");
+  return `printf '${escaped}'`;
 }

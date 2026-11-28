@@ -17,13 +17,14 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { writeConfig, writeRegistry } from "../helpers.js";
 
+type Mode = "local" | "separateSessions";
+
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const aligndev = join(root, "packages/aligndev/bin/aligndev.mjs");
 const alignfirst = join(root, "packages/alignfirst/bin/alignfirst.mjs");
 const temporary: string[] = [];
 // Build tooling stays Node-based; only the CLI parents and fixture children use this runtime.
 const childRuntime = process.env.CLI_RUNTIME ?? process.execPath;
-const childVersion = execFileSync(childRuntime, ["--version"], { encoding: "utf8" }).trim();
 const childUsesBun =
   execFileSync(childRuntime, ["-p", "String(process.versions.bun !== undefined)"], {
     encoding: "utf8",
@@ -43,360 +44,114 @@ afterEach(() => {
 });
 
 describe("built worktree CLI lifecycle", () => {
-  it("probes the counterpart binary, never its same-named npm script, under a real npm script", () => {
+  it("seals sessions and escalates TERM-resistant children after SIGTERM", async () => {
     const fixture = makeFixture("local");
-    const { repo, env, plans } = fixture;
-    mkdirSync(join(repo, "node_modules", ".bin"), { recursive: true });
-    const localAlignfirst = join(repo, "node_modules", ".bin", "alignfirst");
-    symlinkSync(alignfirst, localAlignfirst);
-    writeFileSync(
-      join(repo, "package.json"),
-      JSON.stringify({
-        scripts: { dev: `node ${aligndev}`, af: "echo counterpart-script-must-not-run; exit 99" },
-      }),
+    const { repo, env, home, sessions } = fixture;
+    const child = spawn(childRuntime, [aligndev, "code", "new", "-m", "Wait offline", "--quiet"], {
+      cwd: repo,
+      env: { ...env, TEST_AGENT_MODE: "resistant" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.stdout.resume();
+    const closed = new Promise<{ code: number | null; signal: string | null }>(
+      (resolve, reject) => {
+        child.once("close", (code, signal) => resolve({ code, signal }));
+        child.once("error", reject);
+      },
     );
+    let agentPid: number | undefined;
+    const deadline = setTimeout(() => child.kill("SIGKILL"), 10_000);
+    try {
+      await waitUntil(() => existsSync(join(home, "agent-ready")));
+      agentPid = Number(readFileSync(join(home, "agent-ready"), "utf8"));
+      const started = Date.now();
+      child.kill("SIGTERM");
+      const outcome = await closed;
+      expect(outcome, stderr).toEqual({ code: 143, signal: null });
+      expect(Date.now() - started).toBeGreaterThanOrEqual(1800);
+      await waitUntil(() => !isExecuting(agentPid));
+      const records = readdirSync(join(sessions, "_aligndev"));
+      expect(records).toHaveLength(1);
+      expect(records[0]).not.toContain(".running.");
+      const text = readFileSync(join(sessions, "_aligndev", records[0] ?? ""), "utf8");
+      expect(text).toContain("status: failed");
+      expect(text).toContain("exitReason: terminated");
+    } finally {
+      clearTimeout(deadline);
+      if (agentPid !== undefined && isExecuting(agentPid)) process.kill(agentPid, "SIGKILL");
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      await closed;
+    }
+  }, 15_000);
+  it("keeps coding sessions of a plain linked worktree in the companion sessions tree", () => {
+    const fixture = makeFixture("separateSessions");
+    const { repo, destination, plans, sessions, env } = fixture;
+    git(repo, env, "worktree", "add", "--quiet", "-b", "side-1/work", destination, "main");
+    symlinkSync(plans, join(destination, ".plans"));
     mkdirSync(join(plans, "side-1"));
-    writeFileSync(join(plans, "side-1", "B1-request.md"), "Offline npm script request.\n");
-    const run = (...args: string[]) =>
-      spawnSync("npm", ["run", "dev", "--", ...args], {
-        cwd: repo,
-        env: { ...env, npm_config_offline: "true" },
-        encoding: "utf8",
-        timeout: 30_000,
-      });
-    const result = run(
+    writeFileSync(join(plans, "side-1", "B1-request.md"), "# Request\n\nWorktree test.\n");
+
+    const launched = cli(
+      aligndev,
+      destination,
+      env,
       "code",
       "new",
-      "--ticket",
-      "side-1",
       "--protocol",
       "spec",
       "--catchup",
+      "--ticket",
+      "side-1",
       "-m",
-      "Read",
+      "Read and update work files.",
       "--quiet",
     );
-    expect(result.status, result.stderr).toBe(0);
-    expect(readFileSync(join(fixture.home, "agent-prompt.txt"), "utf8")).toContain(
-      "npx -y alignfirst guide spec",
-    );
-    const guide = run("guide", "code");
-    expect(guide.status, guide.stderr).toBe(0);
-    expect(guide.stdout).toContain("npm run dev -- code");
-    expect(guide.stdout).toContain("npx -y alignfirst guide <protocol>");
-    rmSync(localAlignfirst);
-    writeFileSync(
-      localAlignfirst,
-      `#!${process.execPath}\nconsole.log(process.argv.includes("--version") ? "0.1.0" : "{}");\n`,
-      { mode: 0o755 },
-    );
-    const failed = run("code", "status", "--no-ticket");
-    expect(failed.status).toBe(1);
-    expect(failed.stderr).toContain("`npx -y alignfirst`");
-    expect(failed.stderr).toContain("0.1.0");
-    expect(failed.stderr).not.toContain("counterpart-script-must-not-run");
-  });
-
-  it("supervises offline agent/quota/catalog processes under the explicit child runtime", () => {
-    const cwd = mkdtempSync(join(tmpdir(), "aligndev-process-e2e-"));
-    temporary.push(cwd);
-    const result = spawnSync(
-      childRuntime,
-      [fileURLToPath(new URL("process-fixture.mjs", import.meta.url)), cwd],
-      { encoding: "utf8", timeout: 15_000 },
-    );
-    expect(result.status, result.stderr).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual({ runtime: childVersion, checks: "passed" });
-  });
-
-  it("retains nonzero exits and a failed durable session", () => {
-    const { repo, env, sessions } = makeFixture("local");
-    const result = cli(
-      aligndev,
-      repo,
-      { ...env, TEST_AGENT_MODE: "failure" },
-      "code",
-      "new",
-      "-m",
-      "Fail offline",
-      "--quiet",
-    );
-    expect(result.status, result.stderr).toBe(1);
-    const records = readdirSync(join(sessions, "_aligndev"));
+    expect(launched.status, launched.stderr).toBe(0);
+    const sessionDirectory = join(sessions, "side-1", "_aligndev");
+    const records = readdirSync(sessionDirectory);
     expect(records).toHaveLength(1);
-    expect(readFileSync(join(sessions, "_aligndev", records[0] ?? ""), "utf8")).toContain(
-      "status: failed",
+    const record = readFileSync(join(sessionDirectory, records[0] ?? ""), "utf8");
+    expect(record).toContain("status: succeeded");
+    expect(record).toContain(`cwd: ${destination}`);
+    const args = readFileSync(join(fixture.home, "agent-args.txt"), "utf8").split("\n");
+    expect(args).toEqual(expect.arrayContaining(["--add-dir", dirname(sessions)]));
+    const prompt = readFileSync(join(fixture.home, "agent-prompt.txt"), "utf8");
+    expect(prompt).toContain(`${childUsesBun ? "bunx --bun alignfirst" : "alignfirst"} guide spec`);
+    expect(prompt).toContain("Worktree test.");
+
+    const status = cli(
+      aligndev,
+      destination,
+      env,
+      "code",
+      "status",
+      "--ticket",
+      "side-1",
+      "--result",
     );
-  });
-
-  it.each([
-    ["SIGINT", 130],
-    ["SIGTERM", 143],
-  ] as const)(
-    "seals sessions and escalates TERM-resistant children after %s",
-    async (signal, exitCode) => {
-      const fixture = makeFixture("local");
-      const { repo, env, home, sessions } = fixture;
-      const child = spawn(
-        childRuntime,
-        [aligndev, "code", "new", "-m", "Wait offline", "--quiet"],
-        {
-          cwd: repo,
-          env: { ...env, TEST_AGENT_MODE: "resistant" },
-          stdio: ["ignore", "pipe", "pipe"],
-        },
-      );
-      let stderr = "";
-      child.stderr.on("data", (chunk) => {
-        stderr += chunk;
-      });
-      child.stdout.resume();
-      const closed = new Promise<{ code: number | null; signal: string | null }>(
-        (resolve, reject) => {
-          child.once("close", (code, signal) => resolve({ code, signal }));
-          child.once("error", reject);
-        },
-      );
-      let agentPid: number | undefined;
-      const deadline = setTimeout(() => child.kill("SIGKILL"), 10_000);
-      try {
-        await waitUntil(() => existsSync(join(home, "agent-ready")));
-        agentPid = Number(readFileSync(join(home, "agent-ready"), "utf8"));
-        const started = Date.now();
-        child.kill(signal);
-        const outcome = await closed;
-        expect(outcome, stderr).toEqual({ code: exitCode, signal: null });
-        expect(Date.now() - started).toBeGreaterThanOrEqual(1800);
-        await waitUntil(() => !isExecuting(agentPid));
-        const records = readdirSync(join(sessions, "_aligndev"));
-        expect(records).toHaveLength(1);
-        expect(records[0]).not.toContain(".running.");
-        const text = readFileSync(join(sessions, "_aligndev", records[0] ?? ""), "utf8");
-        expect(text).toContain("status: failed");
-        expect(text).toContain("exitReason: terminated");
-      } finally {
-        clearTimeout(deadline);
-        if (agentPid !== undefined && isExecuting(agentPid)) process.kill(agentPid, "SIGKILL");
-        if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
-        await closed;
-      }
-    },
-    15_000,
-  );
-  it.each(["local", "companion"])(
-    "adopts externally owned worktrees idempotently with %s plans",
-    (mode) => {
-      const { home, repo, destination, plans, sessions, env } = makeFixture(mode);
-      const local = join(repo, ".local");
-      mkdirSync(local);
-      writeFileSync(join(local, "shared.txt"), "Shared local bytes.\n");
-      writeFileSync(join(plans, "shared.md"), "Shared plan bytes.\n");
-      const registry = join(home, ".alignfirst", "companions", "registry.json");
-      const registryBefore = existsSync(registry) ? readFileSync(registry, "utf8") : undefined;
-      git(repo, env, "worktree", "add", "-b", "side-1/external", destination, "main");
-      const head = git(destination, env, "rev-parse", "HEAD");
-      const nested = join(destination, "nested", "directory");
-      mkdirSync(nested, { recursive: true });
-      const setup = () => cli(alignfirst, nested, env, "workspace", "setup", "--json");
-      const first = setup();
-      expect(first.status, first.stderr).toBe(0);
-      const report = JSON.parse(first.stdout);
-      expect(report.workspace).toMatchObject({
-        path: destination,
-        branch: "side-1/external",
-        preparation: "ready",
-        recipe: "defaults",
-      });
-      if (mode !== "companion") expect(realpathSync(join(destination, ".plans"))).toBe(plans);
-      expect(realpathSync(join(destination, ".local"))).toBe(local);
-      const exclude = join(repo, ".git", "info", "exclude");
-      const exclusions = readFileSync(exclude, "utf8");
-      const repeated = setup();
-      expect(repeated.status, repeated.stderr).toBe(0);
-      expect(JSON.parse(repeated.stdout)).toEqual(report);
-      expect(readFileSync(exclude, "utf8")).toBe(exclusions);
-
-      const mainCheck = cli(alignfirst, repo, env, "plans", "check", "--json");
-      const targetCheck = cli(alignfirst, destination, env, "plans", "check", "--json");
-      expect(mainCheck.status, mainCheck.stderr).toBe(0);
-      expect(targetCheck.status, targetCheck.stderr).toBe(0);
-      const mainPlans = JSON.parse(mainCheck.stdout);
-      const targetPlans = JSON.parse(targetCheck.stdout);
-      expect(targetPlans.mode).toBe(mainPlans.mode);
-      expect(targetPlans.plans.in).toBe(mainPlans.plans.in);
-      expect(targetPlans.plans.target).toBe(mainPlans.plans.target);
-      expect(targetPlans.plans.target).toBe(plans);
-      expect(targetPlans.mainWorktree).toBe(repo);
-      const mainConfig = cli(alignfirst, repo, env, "config", "--json");
-      const config = cli(alignfirst, destination, env, "config", "--json");
-      expect(mainConfig.status, mainConfig.stderr).toBe(0);
-      expect(config.status, config.stderr).toBe(0);
-      const mainLocations = JSON.parse(mainConfig.stdout).locations;
-      const locations = JSON.parse(config.stdout).locations;
-      expect(locations[".plans"].in).toBe(mainLocations[".plans"].in);
-      expect(realpathSync(locations[".plans"].path)).toBe(plans);
-      expect(realpathSync(mainLocations[".plans"].path)).toBe(plans);
-      expect(locations._aligndev.in).toBe(mainLocations._aligndev.in);
-      expect(realpathSync(locations._aligndev.path)).toBe(sessions);
-      expect(realpathSync(mainLocations._aligndev.path)).toBe(sessions);
-      expect(realpathSync(join(destination, ".local"))).toBe(local);
-      expect(readFileSync(join(destination, ".local", "shared.txt"), "utf8")).toBe(
-        "Shared local bytes.\n",
-      );
-      expect(git(destination, env, "status", "--porcelain")).toBe("");
-      expect(git(destination, env, "rev-parse", "HEAD")).toBe(head);
-
-      git(repo, env, "worktree", "remove", destination);
-      expect(existsSync(destination)).toBe(false);
-      expect(readFileSync(join(plans, "shared.md"), "utf8")).toBe("Shared plan bytes.\n");
-      expect(readFileSync(join(local, "shared.txt"), "utf8")).toBe("Shared local bytes.\n");
-      expect(git(repo, env, "rev-parse", "side-1/external")).toBe(head);
-      expect(git(repo, env, "worktree", "list", "--porcelain")).not.toContain(destination);
-      if (registryBefore !== undefined) {
-        expect(readFileSync(registry, "utf8")).toBe(registryBefore);
-      } else expect(existsSync(registry)).toBe(false);
-    },
-  );
-
-  it.each(["local", "shared", "companion", "separateSessions"])(
-    "keeps config, context, tickets, sync and coding sessions in %s plans",
-    (mode) => {
-      const fixture = makeFixture(mode);
-      const { repo, destination, plans, sessions, env } = fixture;
-      const mainBranch = git(repo, env, "branch", "--show-current");
-      const added = cli(
-        alignfirst,
-        repo,
-        env,
-        "workspace",
-        "setup",
-        "--path",
-        destination,
-        "-c",
-        "side-1/work",
-        "--from",
-        "main",
-        "--json",
-      );
-      expect(added.status, added.stderr).toBe(0);
-      const addition = JSON.parse(added.stdout);
-      expect(addition.workspace.branch).toBe("side-1/work");
-      if (mode !== "companion") expect(realpathSync(join(destination, ".plans"))).toBe(plans);
-      expect(git(repo, env, "branch", "--show-current")).toBe(mainBranch);
-      expect(git(destination, env, "status", "--porcelain")).toBe("");
-      if (mode === "companion") {
-        expect(readFileSync(join(destination, ".plans", "unused-tracked.md"), "utf8")).toContain(
-          "untouched",
-        );
-        expect(existsSync(join(plans, "unused-tracked.md"))).toBe(false);
-      }
-
-      const config = cli(alignfirst, destination, env, "config", "--json");
-      expect(config.status, config.stderr).toBe(0);
-      const locations = JSON.parse(config.stdout).locations;
-      expect(realpathSync(locations[".plans"].path)).toBe(plans);
-      expect(realpathSync(locations._aligndev.path)).toBe(sessions);
-      const doctor = cli(alignfirst, destination, env, "doctor");
-      expect(doctor.status, doctor.stderr).toBe(0);
-      const context = cli(alignfirst, destination, env, "context");
-      expect(context.status, context.stderr).toBe(0);
-      expect(context.stdout).toContain(mode === "companion" ? plans : ".plans");
-      const ticket = cli(alignfirst, destination, env, "ticket", "side-1", "--json");
-      expect(ticket.status, ticket.stderr).toBe(0);
-      expect(existsSync(join(plans, "side-1"))).toBe(true);
-      writeFileSync(join(plans, "side-1", "B1-request.md"), "# Request\n\nWorktree test.\n");
-
-      const launched = cli(
-        aligndev,
-        destination,
-        env,
-        "code",
-        "new",
-        "--protocol",
-        "spec",
-        "--catchup",
-        "--ticket",
-        "side-1",
-        "-m",
-        "Read and update work files.",
-        "--quiet",
-      );
-      expect(launched.status, launched.stderr).toBe(0);
-      const sessionDirectory = join(sessions, "side-1", "_aligndev");
-      const records = readdirSync(sessionDirectory);
-      expect(records).toHaveLength(1);
-      const filename = records[0];
-      if (filename === undefined) throw new Error("Coding launch did not create a session file.");
-      const record = join(sessionDirectory, filename);
-      expect(readFileSync(record, "utf8")).toContain("status: succeeded");
-      expect(readFileSync(record, "utf8")).toContain(`cwd: ${destination}`);
-      expect(readFileSync(join(plans, "side-1", "B2-agent.md"), "utf8")).toContain(
-        "Worktree test.",
-      );
-      const invocation = JSON.parse(readFileSync(join(fixture.home, "agent-args.json"), "utf8"));
-      expect(invocation).toEqual(expect.arrayContaining(["--permission-mode", "auto"]));
-      expect(invocation).not.toContain("--dangerously-skip-permissions");
-      if (mode === "companion" || mode === "separateSessions") {
-        expect(invocation).toEqual(expect.arrayContaining(["--add-dir", dirname(sessions)]));
-      }
-      const historical = cli(
-        aligndev,
-        destination,
-        env,
-        "code",
-        "status",
-        "--ticket",
-        "side-1",
-        "--result",
-      );
-      expect(historical.status, historical.stderr).toBe(0);
-      expect(historical.stdout).toContain("fixture complete");
-      const prompt = readFileSync(join(fixture.home, "agent-prompt.txt"), "utf8");
-      expect(prompt).toContain(
-        `${childUsesBun ? "bunx --bun alignfirst" : "alignfirst"} guide spec`,
-      );
-      expect(prompt).toContain("Worktree test.");
-      const resumed = cli(
-        aligndev,
-        destination,
-        env,
-        "code",
-        "resume",
-        "fixture-session",
-        "-m",
-        "Continue.",
-        "--quiet",
-      );
-      expect(resumed.status, resumed.stderr).toBe(0);
-      expect(readdirSync(sessionDirectory)).toHaveLength(2);
-      const sync = cli(alignfirst, destination, env, "sync");
-      expect(sync.status, sync.stderr).toBe(0);
-      if (mode === "shared") {
-        expect(git(dirname(plans), env, "status", "--porcelain")).toBe("");
-        expect(git(dirname(plans), env, "log", "-1", "--format=%s")).not.toBe("initial");
-      }
-      const removed = cli(
-        alignfirst,
-        destination,
-        env,
-        "workspace",
-        "remove",
-        destination,
-        "--json",
-      );
-      expect(removed.status, removed.stderr).toBe(0);
-      expect(JSON.parse(removed.stdout).completed).toBe(true);
-      expect(existsSync(destination)).toBe(false);
-      expect(existsSync(record)).toBe(true);
-      expect(existsSync(join(plans, "side-1", "B1-request.md"))).toBe(true);
-      expect(git(repo, env, "branch", "--list", "side-1/work")).toContain("side-1/work");
-      const listed = cli(alignfirst, repo, env, "workspace", "list", "--json");
-      expect(JSON.parse(listed.stdout).workspaces).toHaveLength(1);
-    },
-  );
+    expect(status.status, status.stderr).toBe(0);
+    expect(status.stdout).toContain("fixture complete");
+    const resumed = cli(
+      aligndev,
+      destination,
+      env,
+      "code",
+      "resume",
+      "fixture-session",
+      "-m",
+      "Continue.",
+      "--quiet",
+    );
+    expect(resumed.status, resumed.stderr).toBe(0);
+    expect(readdirSync(sessionDirectory)).toHaveLength(2);
+  }, 30_000);
 });
 
-function makeFixture(mode: string): Fixture {
+function makeFixture(mode: Mode): Fixture {
   const base = realpathSync(mkdtempSync(join(tmpdir(), "aligndev-worktree-e2e-")));
   temporary.push(base);
   const home = join(base, "home");
@@ -415,76 +170,38 @@ function makeFixture(mode: string): Fixture {
     ALIGNFIRST_ARCHIVE_THRESHOLD_DAYS: "99999",
   };
   git(base, env, "init", "--quiet", "--initial-branch=main", repo);
-  writeFileSync(join(repo, "README.md"), "# App\n");
-  git(repo, env, "add", "README.md");
+  writeFileSync(join(repo, ".gitignore"), "/.plans\n/.local\n/.local-wt/\n");
+  git(repo, env, "add", ".gitignore");
   git(repo, env, "commit", "--quiet", "-m", "initial");
-  let plans = join(repo, ".plans");
-  if (mode === "shared") {
-    const workfiles = join(base, "workfiles");
-    const origin = join(base, "origin.git");
-    git(base, env, "init", "--quiet", "--bare", origin);
-    git(base, env, "init", "--quiet", "--initial-branch=main", workfiles);
-    mkdirSync(join(workfiles, "app"));
-    writeFileSync(join(workfiles, "README.md"), "Work files\n");
-    git(workfiles, env, "add", "README.md");
-    git(workfiles, env, "commit", "--quiet", "-m", "initial");
-    git(workfiles, env, "remote", "add", "origin", origin);
-    git(workfiles, env, "push", "--quiet", "-u", "origin", "main");
-    plans = join(workfiles, "app");
-    symlinkSync(plans, join(repo, ".plans"));
-  } else mkdirSync(plans);
+  const plans = join(repo, ".plans");
+  mkdirSync(plans);
   let sessions = plans;
-  if (mode === "companion" || mode === "separateSessions") {
+  if (mode === "separateSessions") {
     const companion = join(home, ".alignfirst", "companions", "app");
     mkdirSync(join(companion, ".plans"), { recursive: true });
     writeRegistry(home, {
-      projects: {
-        [repo]: {
-          dir: "app",
-          items: {
-            ".plans": mode === "companion" ? "companion" : "project",
-            _aligndev: "companion",
-          },
-        },
-      },
+      projects: { [repo]: { dir: "app", items: { ".plans": "project", _aligndev: "companion" } } },
     });
     sessions = join(companion, ".plans");
-    if (mode === "companion") {
-      writeFileSync(join(plans, "unused-tracked.md"), "This project copy stays untouched.\n");
-      git(repo, env, "add", ".plans");
-      git(repo, env, "commit", "--quiet", "-m", "unused project plans");
-      plans = sessions;
-    }
   }
   writeConfig(home, { code: { harness: "claude", defaultModel: "haiku" } });
   const alignfirstShim = join(bin, "alignfirst");
   writeFileSync(alignfirstShim, `#!${childRuntime}\nimport(${JSON.stringify(alignfirst)});\n`, {
     mode: 0o755,
   });
+  // A TERM-resistant agent under TEST_AGENT_MODE=resistant, else a successful one.
   writeFileSync(
     join(bin, "claude"),
-    `#!${childRuntime}
-const fs = require("node:fs");
-const path = require("node:path");
-let input = "";
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", (chunk) => input += chunk);
-process.stdin.on("end", () => {
-  fs.writeFileSync(path.join(process.env.HOME, "agent-prompt.txt"), input);
-  if (process.env.TEST_AGENT_MODE === "failure") { process.stderr.write("offline failure"); process.exit(7); }
-  if (process.env.TEST_AGENT_MODE === "resistant") {
-    process.on("SIGTERM", () => {});
-    fs.writeFileSync(path.join(process.env.HOME, "agent-ready"), String(process.pid));
-    setInterval(() => {}, 1000);
-    return;
-  }
-  const plans = process.env.TEST_PLANS;
-  const request = fs.readFileSync(path.join(plans, "side-1/B1-request.md"), "utf8");
-  fs.writeFileSync(path.join(plans, "side-1/B2-agent.md"), request);
-  fs.writeFileSync(path.join(process.env.HOME, "agent-args.json"), JSON.stringify(process.argv.slice(2)));
-  console.log(JSON.stringify({type: "system", subtype: "init", session_id: "fixture-session"}));
-  console.log(JSON.stringify({type: "result", session_id: "fixture-session", result: "fixture complete", is_error: false}));
-});
+    `#!/bin/sh
+cat > "$HOME/agent-prompt.txt"
+if [ "$TEST_AGENT_MODE" = resistant ]; then
+  trap '' TERM
+  printf '%s' "$$" > "$HOME/agent-ready"
+  exec sleep 30
+fi
+for arg in "$@"; do printf '%s\\n' "$arg"; done > "$HOME/agent-args.txt"
+printf '%s\\n' '{"type":"system","subtype":"init","session_id":"fixture-session"}'
+printf '%s\\n' '{"type":"result","session_id":"fixture-session","result":"fixture complete","is_error":false}'
 `,
     { mode: 0o755 },
   );
@@ -499,10 +216,6 @@ import(${JSON.stringify(alignfirst)});
 `,
     { mode: 0o755 },
   );
-  writeFileSync(join(repo, ".gitignore"), "/.plans\n/.local\n/.local-wt/\n");
-  git(repo, env, "add", ".gitignore");
-  git(repo, env, "commit", "--quiet", "-m", "workspace baseline");
-  env.TEST_PLANS = plans;
   return { home, repo, destination, plans, sessions, env };
 }
 

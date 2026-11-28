@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -11,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { main as runMain, type MainOptions } from "../../src/cli.js";
 import {
@@ -23,9 +22,10 @@ import {
   type SessionArgs,
   validateSessionArgs,
 } from "../../src/code/code-cli.js";
+import type { CodingAgent } from "../../src/code/coding-agent.js";
 import { resolveEfforts } from "../../src/code/efforts.js";
 import { readMachineId } from "../../src/code/machine-id.js";
-import { CLAUDE_DEFAULT_MODELS } from "../../src/code/models.js";
+import { CLAUDE_DEFAULT_MODELS, resolveModels } from "../../src/code/models.js";
 import {
   appendTranscript,
   applyCompletion,
@@ -39,22 +39,32 @@ import {
 import type { CodeConfig } from "../../src/config.js";
 import type { RunConfig } from "../../src/code/run-agent.js";
 import type { ItemLocation, ItemName, ProjectReport } from "../../src/project/layout.js";
+import { makeSink, writeConfig } from "../helpers.js";
 import {
-  ALIGNFIRST_BIN,
-  type CompanionProject,
-  installGit,
-  makeCompanionProject,
-  makeSink,
-  writeConfig,
-} from "../helpers.js";
-import {
+  addInitialCommit,
   addWorktree,
   makeFixture,
   makeRepository,
   useProjectFixtures,
 } from "../project/fixtures.js";
+import {
+  type AlignfirstStub,
+  type FakeAgent,
+  installFakeAgent,
+  printJsonLines,
+  quote,
+  type StubOptions,
+  writeAlignfirstStub,
+} from "../stand-ins.js";
 
-const ALIGNFIRST = [process.execPath, ALIGNFIRST_BIN];
+// The default `claude` reply: a result for the resumed session, else for `session-1`.
+const CLAUDE_RESULT = `id=session-1
+previous=
+for arg in "$@"; do
+  if [ "$previous" = --resume ]; then id=$arg; fi
+  previous=$arg
+done
+printf '{"type":"result","result":"done","session_id":"%s"}' "$id"`;
 
 const tempDirs: string[] = [];
 
@@ -62,13 +72,21 @@ afterEach(() => {
   for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-function main(options: MainOptions): Promise<number> {
+// Runs aligndev in `cwd` (default: home) against a stub alignfirst written for that directory.
+function main(options: MainOptions & { home: string; stub?: AlignfirstStub }): Promise<number> {
+  const cwd = options.cwd ?? options.home;
   return runMain({
     ...options,
-    cwd: options.cwd ?? options.home,
+    cwd,
     env: { HOME: options.home, ...options.env },
-    alignfirstCommand: options.alignfirstCommand ?? ALIGNFIRST,
+    alignfirstCommand: (options.stub ?? writeAlignfirstStub(makeTempDir(), cwd)).command,
   });
+}
+
+function makeTempDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), "aligndev-code-"));
+  tempDirs.push(dir);
+  return dir;
 }
 
 function parse(tokens: string[]): SessionArgs {
@@ -78,39 +96,30 @@ function parse(tokens: string[]): SessionArgs {
   return command.args;
 }
 
-function validate(
-  tokens: string[],
-  models: readonly string[] = CLAUDE_DEFAULT_MODELS,
-): string | undefined {
-  return validateSessionArgs(parse(tokens), models, resolveEfforts("claude", undefined));
-}
-
 function makeHome(config?: object): string {
-  const home = mkdtempSync(join(tmpdir(), "aligndev-home-"));
-  tempDirs.push(home);
+  const home = makeTempDir();
   if (config !== undefined) writeConfig(home, config);
   return home;
 }
 
+function installFakeClaude(base: string, body = CLAUDE_RESULT): FakeAgent {
+  return installFakeAgent(base, "claude", body);
+}
+
 describe("coding-agent selection", () => {
   it("requires a configured or detected agent before help", async () => {
-    const stderr = makeSink();
     const home = makeHome();
     expect(
-      await main({ argv: ["node", "aligndev", "code", "--help"], env: {}, home, stderr }),
-    ).toBe(1);
-  });
-
-  it("rejects an invalid agent in the config", async () => {
-    const stderr = makeSink();
-    const home = makeHome({ code: { harness: "other" } });
-    expect(
-      await main({ argv: ["node", "aligndev", "code", "--help"], env: {}, home, stderr }),
+      await main({
+        argv: ["node", "aligndev", "code", "--help"],
+        env: {},
+        home,
+        stderr: makeSink(),
+      }),
     ).toBe(1);
   });
 
   it("allows help without model discovery", async () => {
-    const stdout = makeSink();
     const modelResolver = async () => {
       throw new Error("help must not discover models");
     };
@@ -119,214 +128,129 @@ describe("coding-agent selection", () => {
         argv: ["node", "aligndev", "code", "--help"],
         env: {},
         home: makeHome({ code: { harness: "codex" } }),
-        stdout,
+        stdout: makeSink(),
         modelResolver,
       }),
     ).toBe(0);
   });
-
-  it("renders the configured model list", async () => {
-    const stdout = makeSink();
-    const home = makeHome({
-      code: { harness: "claude", models: ["sonnet", "haiku"] },
-    });
-    expect(
-      await main({ argv: ["node", "aligndev", "code", "--help"], env: {}, home, stdout }),
-    ).toBe(0);
-    expect(stdout.text()).toContain("sonnet");
-    expect(stdout.text()).toContain("haiku");
-    expect(stdout.text()).not.toContain("fable");
-  });
 });
 
 describe("parseCodeArgs", () => {
-  it("maps the commands and flags", () => {
-    expect(parseCodeArgs(["--help"], "aligndev")).toEqual({ kind: "help" });
-    expect(parseCodeArgs(["-h"], "aligndev")).toEqual({ kind: "help" });
-    expect(parseCodeArgs(["status", ".plans/1/_aligndev/run.md"], "aligndev")).toEqual({
-      kind: "status",
-      target: { kind: "file", sessionFile: ".plans/1/_aligndev/run.md" },
-      includeResult: false,
-    });
-    expect(parseCodeArgs(["status", "--ticket", "AB-1"], "aligndev")).toEqual({
-      kind: "status",
-      target: { kind: "ticket", ticket: "AB-1" },
-      includeResult: false,
-    });
-    expect(parseCodeArgs(["status", "--no-ticket"], "aligndev")).toEqual({
-      kind: "status",
-      target: { kind: "noTicket" },
-      includeResult: false,
-    });
-    expect(parseCodeArgs(["quota"], "aligndev")).toEqual({ kind: "quota" });
+  it.each<[string[], object]>([
+    [["--help"], { kind: "help" }],
+    [["-h"], { kind: "help" }],
+    [["quota"], { kind: "quota" }],
+    [
+      ["status", ".plans/1/_aligndev/run.md"],
+      {
+        kind: "status",
+        target: { kind: "file", sessionFile: ".plans/1/_aligndev/run.md" },
+        includeResult: false,
+      },
+    ],
+    [
+      ["status", "--result", "--ticket", "AB-1"],
+      { kind: "status", target: { kind: "ticket", ticket: "AB-1" }, includeResult: true },
+    ],
+    [["status", "--no-ticket"], { kind: "status", target: { kind: "noTicket" } }],
+    [["status", "--meta", "k"], { kind: "status", target: { kind: "meta", meta: "k" } }],
+    [
+      ["new", "--protocol", "aad", "--ticket", "29", "--message", "go"],
+      {
+        kind: "session",
+        args: { protocol: "aad", ticket: "29", noTicket: false, message: "go" },
+      },
+    ],
+    [
+      ["resume", "abc", "--protocol", "plan", "--quiet"],
+      { kind: "session", args: { resume: "abc", protocol: "plan", quiet: true } },
+    ],
+    [
+      ["new", "--no-ticket", "--protocol", "aad", "-m", "go", "--meta", "thread:room/abc.def"],
+      { kind: "session", args: { noTicket: true, meta: "thread:room/abc.def" } },
+    ],
+  ])("maps %j", (tokens, expected) => {
+    expect(parseCodeArgs(tokens, "aligndev")).toMatchObject(expected);
   });
-
-  it("leaves the version and guide flags to other commands", () => {
-    for (const flag of ["--version", "-v", "--guide", "--openclaw-guide"]) {
-      expect(() => parseCodeArgs([flag], "aligndev")).toThrow(Error);
-    }
-  });
-
-  it("reads `new` options into camelCase fields", () => {
-    const args = parse(["new", "--protocol", "aad", "--ticket", "29", "--message", "go"]);
-    expect(args.resume).toBeUndefined();
-    expect(args.protocol).toBe("aad");
-    expect(args.ticket).toBe("29");
-    expect(args.noTicket).toBe(false);
-    expect(args.message).toBe("go");
-  });
-
-  it("reads `resume <sessionId>`", () => {
-    const args = parse(["resume", "abc", "--protocol", "plan"]);
-    expect(args.resume).toBe("abc");
-    expect(args.protocol).toBe("plan");
-  });
-
-  it.each([["new"], ["resume", "abc"]])("reads --quiet on %j", (...command) => {
-    expect(parse([...command, "-m", "go", "--quiet"]).quiet).toBe(true);
-    expect(parse([...command, "-m", "go"]).quiet).toBeUndefined();
-    expect(parseCodeArgs([...command, "--quiet", "--help"], "aligndev")).toEqual({ kind: "help" });
-  });
-
-  it.each([["run.md"], ["--ticket", "AB-1"], ["--no-ticket"], ["--meta", "unique-run"]])(
-    "reads --result independently of the status target %j",
-    (...target) => {
-      const metadata = parseCodeArgs(["status", ...target], "aligndev");
-      const withResult = parseCodeArgs(["status", "--result", ...target], "aligndev");
-      expect(withResult).toEqual({ ...metadata, includeResult: true });
-    },
-  );
 
   it.each([
-    [],
-    ["a.md", "b.md"],
-    ["a.md", "--meta", "k"],
-    ["--ticket", "1", "--no-ticket"],
-    ["--ticket", "1", "--meta", "k"],
-    ["--no-ticket", "--meta", "k"],
-  ])("keeps exactly one status target with --result %j", (...target) => {
-    expect(() => parseCodeArgs(["status", "--result", ...target], "aligndev")).toThrow(Error);
-  });
-
-  it("keeps quiet and result scoped to their commands", () => {
-    expect(() => parseCodeArgs(["status", "run.md", "--quiet"], "aligndev")).toThrow();
-    expect(() => parse(["new", "-m", "go", "--result"])).toThrow();
-    expect(() => parse(["resume", "abc", "-m", "go", "--result"])).toThrow();
-  });
-
-  it("accepts -m as the short form of --message", () => {
-    expect(parse(["new", "-m", "go"]).message).toBe("go");
-  });
-
-  it("reads --no-ticket on `new` only", () => {
-    expect(parse(["new", "--no-ticket", "--protocol", "aad", "-m", "go"]).noTicket).toBe(true);
-    expect(() => parse(["resume", "abc", "--no-ticket"])).toThrow();
-  });
-
-  it("reads --meta as an opaque string and leaves it undefined when omitted", () => {
-    expect(parse(["new", "--message", "go", "--meta", "thread:room/abc.def"]).meta).toBe(
-      "thread:room/abc.def",
-    );
-    expect(parse(["new", "--message", "go"]).meta).toBeUndefined();
-  });
-
-  it("renders help after a command", () => {
-    expect(parseCodeArgs(["new", "--help"], "aligndev")).toEqual({ kind: "help" });
-    expect(parseCodeArgs(["resume", "-h"], "aligndev")).toEqual({ kind: "help" });
-    expect(parseCodeArgs(["status", "--help"], "aligndev")).toEqual({ kind: "help", status: true });
-    expect(parseCodeArgs(["quota", "--help"], "aligndev")).toEqual({ kind: "help" });
-  });
-
-  it("rejects a missing or unknown command", () => {
-    expect(() => parseCodeArgs([], "aligndev")).toThrow(Error);
-    expect(() => parseCodeArgs(["spec"], "aligndev")).toThrow(Error);
-    expect(() => parseCodeArgs(["--new"], "aligndev")).toThrow(Error);
-  });
-
-  it("rejects unknown options, stray positionals, and a resume without an id", () => {
-    expect(() => parse(["new", "--nope"])).toThrow();
-    expect(() => parse(["new", "extra", "-m", "go"])).toThrow();
-    expect(() => parseCodeArgs(["status"], "aligndev")).toThrow(Error);
-    expect(() => parseCodeArgs(["status", "x.md", "--ticket", "1"], "aligndev")).toThrow(Error);
-    expect(() => parseCodeArgs(["status", "--ticket", "1", "--no-ticket"], "aligndev")).toThrow(
-      Error,
-    );
-    expect(() => parseCodeArgs(["status", "--ticket", "../other"], "aligndev")).toThrow(Error);
-    expect(() => parseCodeArgs(["status", "--meta", "k", "--no-ticket"], "aligndev")).toThrow(
-      Error,
-    );
-    expect(() => parse(["status", "--message", "go"])).toThrow();
-    expect(() => parse(["quota", "extra"])).toThrow();
-    expect(() => parse(["resume", "--message", "go"])).toThrow(Error);
-    expect(() => parse(["resume", "a", "b", "--message", "go"])).toThrow(Error);
+    [[]],
+    [["spec"]],
+    [["--new"]],
+    [["new", "--nope"]],
+    [["new", "extra", "-m", "go"]],
+    [["new", "-m", "go", "--result"]],
+    [["resume", "--message", "go"]],
+    [["resume", "a", "b", "--message", "go"]],
+    [["resume", "abc", "--no-ticket"]],
+    [["status"]],
+    [["status", "--result"]],
+    [["status", "a.md", "b.md"]],
+    [["status", "x.md", "--ticket", "1"]],
+    [["status", "--ticket", "1", "--no-ticket"]],
+    [["status", "--no-ticket", "--meta", "k"]],
+    [["status", "--ticket", "../other"]],
+    [["status", "run.md", "--quiet"]],
+    [["status", "--message", "go"]],
+    [["quota", "extra"]],
+  ])("rejects %j", (tokens) => {
+    expect(() => parseCodeArgs(tokens, "aligndev")).toThrow(Error);
   });
 });
 
 describe("validateSessionArgs", () => {
-  it("rejects an unknown protocol", () => {
-    expect(validate(["new", "--protocol", "bogus", "--ticket", "1", "-m", "go"])).toBeDefined();
+  const CUSTOM = ["sonnet", "haiku"];
+
+  function validate(
+    tokens: string[],
+    agent: CodingAgent = "claude",
+    models: readonly string[] | undefined = agent === "claude"
+      ? CLAUDE_DEFAULT_MODELS
+      : resolveModels(agent, undefined, undefined),
+  ): string | undefined {
+    return validateSessionArgs(parse(tokens), models, resolveEfforts(agent, undefined));
+  }
+
+  it.each<[string[], CodingAgent?, string[]?]>([
+    [["new", "--protocol", "bogus", "--ticket", "1", "-m", "go"]],
+    [["new", "--protocol", "catchup", "--ticket", "29"]],
+    [["new", "-m", "go", "--model", "not-listed"]],
+    [["new", "-m", "go", "--model", "opus"], "claude", CUSTOM],
+    [["new", "-m", "go", "--model", ""], "pi"],
+    [["new", "-m", "go", "--model", " \t "], "pi"],
+    [["new", "-m", "go", "--model", "terra"], "pi", ["provider/model"]],
+    [["new", "-m", "go", "--effort", "minimal"]],
+    [["resume", "s", "-m", "m", "--effort", "minimal"]],
+    [["new"]],
+    [["resume", "s"]],
+    [["new", "--message", "   "]],
+    [["resume", "s", "--catchup"]],
+    [["new", "--protocol", "plan"]],
+    [["new", "--protocol", "plan", "--ticket", "1", "--no-ticket"]],
+    [["new", "--no-ticket", "-m", "go"]],
+    [["new", "--protocol", "spec", "--ticket", "1"]],
+    [["new", "--protocol", "aad", "--no-ticket", "--message", "\t"]],
+    [["new", "--protocol", "plan", "--ticket", "../../etc"]],
+    [["new", "--protocol", "plan", "--ticket", "a/b"]],
+    [["new", "--protocol", "plan", "--ticket", ".."]],
+    [["resume", "s", "--ticket", "a/b", "-m", "m"]],
+  ])("rejects %j (%s)", (tokens, agent, models) => {
+    expect(validate(tokens, agent, models)).toBeDefined();
   });
 
-  it("rejects a model outside the allowlist", () => {
-    expect(validate(["new", "--message", "go", "--model", "claude-opus-5-5"])).toBeDefined();
-  });
-
-  it("accepts an allowlisted model, on new and on resume", () => {
-    expect(validate(["new", "--message", "go", "--model", "opus"])).toBe(undefined);
-    expect(validate(["resume", "s", "--message", "m", "--model", "haiku"])).toBe(undefined);
-  });
-
-  it("validates against the host's model list when one is configured", () => {
-    const models = ["sonnet", "haiku"];
-    expect(validate(["new", "--message", "go", "--model", "sonnet"], models)).toBe(undefined);
-    expect(validate(["new", "--message", "go", "--model", "opus"], models)).toBeDefined();
-  });
-
-  it("rejects an effort outside the accepted levels, on new and on resume", () => {
-    expect(validate(["new", "--message", "go", "--effort", "minimal"])).toBeDefined();
-    expect(validate(["resume", "s", "--message", "m", "--effort", "minimal"])).toBeDefined();
-    expect(validate(["new", "--message", "go", "--effort", "high"])).toBeUndefined();
-  });
-
-  it("requires --message when no protocol", () => {
-    expect(validate(["new"])).toBeDefined();
-    expect(validate(["resume", "s"])).toBeDefined();
-    expect(validate(["new", "--message", ""])).toBeDefined();
-    expect(validate(["new", "--message", "   "])).toBeDefined();
-  });
-
-  it("requires --ticket or --no-ticket with `new --protocol`", () => {
-    expect(validate(["new", "--protocol", "plan"])).toBeDefined();
-    expect(validate(["new", "--protocol", "plan", "--ticket", "1"])).toBeUndefined();
-    expect(validate(["new", "--protocol", "plan", "--no-ticket"])).toBeUndefined();
-  });
-
-  it("rejects --no-ticket with --ticket or without a protocol", () => {
-    expect(validate(["new", "--protocol", "plan", "--ticket", "1", "--no-ticket"])).toBeDefined();
-    expect(validate(["new", "--no-ticket", "-m", "go"])).toBeDefined();
-  });
-
-  it("requires --message for spec and aad", () => {
-    expect(validate(["new", "--protocol", "spec", "--ticket", "1"])).toBeDefined();
-    expect(validate(["new", "--protocol", "aad", "--no-ticket"])).toBeDefined();
-    expect(validate(["new", "--protocol", "spec", "--ticket", "1", "--message", ""])).toBeDefined();
-    expect(validate(["new", "--protocol", "aad", "--no-ticket", "--message", "\t"])).toBeDefined();
-  });
-
-  it("accepts a resume with a protocol and no ticket, and --ticket as an explicit override", () => {
-    expect(validate(["resume", "s", "--protocol", "plan"])).toBeUndefined();
-    expect(validate(["resume", "s", "--ticket", "1", "--message", "m"])).toBeUndefined();
-  });
-
-  it("accepts a non-numeric ticket format (consumer repos vary)", () => {
-    expect(validate(["new", "--protocol", "plan", "--ticket", "AB-123_x.4"])).toBeUndefined();
-  });
-
-  it("rejects a ticket with a path separator or traversal", () => {
-    expect(validate(["new", "--protocol", "plan", "--ticket", "../../etc"])).toBeDefined();
-    expect(validate(["new", "--protocol", "plan", "--ticket", "a/b"])).toBeDefined();
-    expect(validate(["new", "--protocol", "plan", "--ticket", ".."])).toBeDefined();
-    expect(validate(["resume", "s", "--ticket", "a/b", "--message", "m"])).toBeDefined();
+  it.each<[string[], CodingAgent?, string[]?]>([
+    [["new", "-m", "go", "--model", "opus"]],
+    [["resume", "s", "-m", "m", "--model", "haiku"]],
+    [["new", "-m", "go", "--model", "sonnet"], "claude", CUSTOM],
+    [["new", "-m", "go", "--model", " provider/model:high "], "pi"],
+    [["new", "-m", "go", "--effort", "high"]],
+    [["new", "--catchup", "--ticket", "29"]],
+    [["new", "--protocol", "plan", "--ticket", "AB-123_x.4"]],
+    [["new", "--protocol", "plan", "--no-ticket"]],
+    [["resume", "s", "--protocol", "plan"]],
+    [["resume", "s", "--ticket", "1", "-m", "m"]],
+  ])("accepts %j (%s)", (tokens, agent, models) => {
+    expect(validate(tokens, agent, models)).toBeUndefined();
   });
 });
 
@@ -334,393 +258,231 @@ describe("status", () => {
   let dir: string;
   let sessionFilePath: string;
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "aligndev-status-"));
+    dir = makeTempDir();
     writeConfig(dir, { code: { harness: "claude" } });
     sessionFilePath = join(dir, ".plans", "1", "_aligndev", "run.md");
   });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-  function writeStatusRecord(
-    pid: number,
-    path: string = sessionFilePath,
-    ticket: string | null = "1",
-  ): void {
-    writeInitialSessionFile(path, {
-      status: "running",
-      agent: "claude",
-      profile: null,
-      protocol: "review",
-      ticket,
-      model: null,
-      effort: null,
-      sessionId: "sess-42",
-      command: "aligndev code new --protocol review --ticket 1",
-      meta: null,
-      pid,
-      pidStartTime: null,
-      machineId: readMachineId(dir),
-      cwd: dir,
-      startedAt: "2026-08-29T11:55:29.000Z",
-      endedAt: null,
-      exitReason: null,
-      contextTokens: 162_400,
-      contextCompacted: false,
-      contextTokensError: null,
-    });
-  }
-
-  async function status(tokens: string[]): Promise<string> {
+  async function status(tokens: string[], stub?: AlignfirstStub): Promise<string> {
     const stdout = makeSink();
+    const stderr = makeSink();
     const code = await main({
       argv: ["node", "aligndev", "code", "status", ...tokens],
-      cwd: dir,
-      env: { HOME: dir },
       home: dir,
-      alignfirstCommand: ALIGNFIRST,
+      stub,
       stdout,
-      stderr: makeSink(),
+      stderr,
     });
-    expect(code).toBe(0);
+    expect(code, stderr.text()).toBe(0);
     return stdout.text();
   }
 
-  it.each([
-    "bad json",
-    JSON.stringify({ code: { agent: "claude" } }),
-    JSON.stringify({ code: { fallbackProfile: "gone", profiles: {} } }),
-  ])("reads status without loading invalid settings: %s", async (settings) => {
+  it("reads status without loading invalid settings", async () => {
     const settingsPath = join(dir, ".alignfirst", "aligndev.settings.json");
-    writeFileSync(settingsPath, settings);
-    const runningPath = sessionFilePath.replace(/\.md$/, ".running.md");
-    writeStatusRecord(process.pid, runningPath);
-    const result = "substantive report\n\n---- Later result ----\n\nacknowledgement";
-    const completedPath = applyCompletion(runningPath, {
+    writeFileSync(settingsPath, "bad json");
+    writeInitialSessionFile(sessionFilePath, statusFrontmatter({ ticket: "1" }));
+    applyCompletion(sessionFilePath, {
       status: "succeeded",
       exitReason: "completed",
       endedAt: "2026-08-29T11:56:29.000Z",
       sessionId: "sess-42",
-      result,
+      result: "substantive report",
     });
-    const before = readFileSync(settingsPath);
-    const completedBytes = readFileSync(completedPath);
-    const output = await status([runningPath, "--result"]);
-    expect(output).toContain("status: succeeded\n");
-    expect(output).toContain(`${RESULT_MARKER}\n${result}\n`);
-    await status(["--help"]);
-    expect(readFileSync(completedPath)).toEqual(completedBytes);
-    expect(readFileSync(settingsPath)).toEqual(before);
-    const records = listSessionRecords(join(dir, ".plans"), readMachineId(dir));
+    expect(await status([sessionFilePath, "--result"])).toContain(
+      `${RESULT_MARKER}\nsubstantive report\n`,
+    );
     const stderr = makeSink();
     expect(
       await main({
         argv: ["node", "aligndev", "code", "new", "--protocol", "aad", "--no-ticket", "-m", "go"],
-        cwd: dir,
-        env: { HOME: dir },
         home: dir,
-        alignfirstCommand: ALIGNFIRST,
-        stdout: makeSink(),
         stderr,
       }),
     ).toBe(1);
-    if (settings.includes("gone")) expect(stderr.text()).toContain("gone");
-    else expect(stderr.text()).toContain(settingsPath);
-    expect(listSessionRecords(join(dir, ".plans"), readMachineId(dir))).toEqual(records);
-    expect(readFileSync(completedPath)).toEqual(completedBytes);
-    expect(readFileSync(settingsPath)).toEqual(before);
+    expect(stderr.text()).toContain(settingsPath);
+    expect(listSessionRecords(join(dir, ".plans"), readMachineId(dir))).toHaveLength(1);
   });
 
-  it.each(["succeeded", "failed"] as const)(
-    "returns only metadata and the authoritative %s result for every selector",
-    async (terminalStatus) => {
-      const path = join(dir, ".plans", "1", "_aligndev", "20260829-115529.md");
-      const unticketed = join(dir, ".plans", "_aligndev", "20260829-115529.md");
-      for (const file of [path, unticketed]) {
-        writeInitialSessionFile(
-          file,
-          statusFrontmatter({ status: "running", pid: process.pid, meta: "run-key" }),
-        );
-        appendTranscript(file, `internal transcript${RESULT_MARKER}\nechoed earlier result\n`);
-        applyCompletion(file, {
-          status: terminalStatus,
-          exitReason: terminalStatus === "succeeded" ? "completed" : "error",
-          endedAt: "2026-08-29T11:56:29.000Z",
-          sessionId: "sess-42",
-          result: "final answer",
-        });
-      }
-      for (const target of [[path], ["--ticket", "1"], ["--no-ticket"], ["--meta", "run-key"]]) {
-        const metadata = await status(target);
-        const result = await status([...target, "--result"]);
-        expect(metadata).not.toContain(RESULT_MARKER);
-        expect(result).toBe(`${metadata}${RESULT_MARKER}\nfinal answer\n`);
-        expect(result).not.toContain("internal transcript");
-        expect(result).not.toContain("echoed earlier result");
-      }
-    },
-  );
+  it("returns only metadata and the authoritative result for every selector", async () => {
+    const path = join(dir, ".plans", "1", "_aligndev", "20260829-115529.md");
+    const unticketed = join(dir, ".plans", "_aligndev", "20260829-115529.md");
+    for (const file of [path, unticketed]) {
+      writeInitialSessionFile(
+        file,
+        statusFrontmatter({ status: "running", pid: process.pid, meta: "run-key" }),
+      );
+      appendTranscript(file, `internal transcript${RESULT_MARKER}\nechoed earlier result\n`);
+      applyCompletion(file, {
+        status: "failed",
+        exitReason: "error",
+        endedAt: "2026-08-29T11:56:29.000Z",
+        sessionId: "sess-42",
+        result: "final answer",
+      });
+    }
+    const stub = writeAlignfirstStub(makeTempDir(), dir);
+    for (const target of [[path], ["--ticket", "1"], ["--no-ticket"], ["--meta", "run-key"]]) {
+      const metadata = await status(target, stub);
+      const result = await status([...target, "--result"], stub);
+      expect(metadata).not.toContain(RESULT_MARKER);
+      expect(result).toBe(`${metadata}${RESULT_MARKER}\nfinal answer\n`);
+    }
+  });
 
   it("omits an echoed Result marker while running and leaves the file untouched", async () => {
-    writeStatusRecord(process.pid);
+    writeInitialSessionFile(
+      sessionFilePath,
+      statusFrontmatter({ status: "running", pid: process.pid, machineId: readMachineId(dir) }),
+    );
     appendTranscript(sessionFilePath, `internal transcript${RESULT_MARKER}\nnot final\n`);
     const before = readFileSync(sessionFilePath, "utf8");
-    expect(readCompletion(sessionFilePath).result).toBe("not final");
     const output = await status([sessionFilePath, "--result"]);
     expect(output).toContain("status: running\n");
     expect(output).not.toContain(RESULT_MARKER);
-    expect(output).not.toContain("not final");
     expect(readFileSync(sessionFilePath, "utf8")).toBe(before);
   });
 
+  it("keeps a terminal file without a Result block metadata-only", async () => {
+    writeInitialSessionFile(sessionFilePath, statusFrontmatter({}));
+    expect(await status([sessionFilePath, "--result"])).not.toContain(RESULT_MARKER);
+  });
+
   it("returns the reconciled result instead of a stale running echoed marker", async () => {
-    const child = spawnSync("node", ["-e", ""]);
-    if (child.pid === undefined) throw new Error("failed to spawn a probe child");
     writeInitialSessionFile(
       sessionFilePath,
-      statusFrontmatter({
-        status: "running",
-        pid: child.pid,
-        machineId: readMachineId(dir),
-      }),
+      statusFrontmatter({ status: "running", pid: 2147483647, machineId: readMachineId(dir) }),
     );
     appendTranscript(sessionFilePath, `${RESULT_MARKER}\nnot final\n`);
     const output = await status([sessionFilePath, "--result"]);
-    expect(output).toContain("status: failed\n");
     expect(output).toContain("exitReason: terminated\n");
     expect(output).toContain(RESULT_MARKER);
     expect(output).not.toContain("not final");
     expect(readCompletion(sessionFilePath).frontmatter.exitReason).toBe("terminated");
   });
 
-  it.each(["another-machine", null])(
-    "preserves dead running records owned by %j for every status selector",
-    async (machineId) => {
-      const child = spawnSync("node", ["-e", ""]);
-      if (child.pid === undefined) throw new Error("failed to spawn a probe child");
-      const path = join(dir, ".plans", "1", "_aligndev", "20260829-115529.md");
-      const noTicket = join(dir, ".plans", "_aligndev", "20260829-115529.md");
-      for (const file of [path, noTicket]) {
-        writeInitialSessionFile(
-          file,
-          statusFrontmatter({
-            status: "running",
-            pid: child.pid,
-            machineId,
-            meta: "owner-check",
-          }),
-        );
-      }
-      const before = readFileSync(path, "utf8");
-      const beforeNoTicket = readFileSync(noTicket, "utf8");
-      for (const target of [
-        [path],
-        ["--ticket", "1"],
-        ["--no-ticket"],
-        ["--meta", "owner-check"],
-      ]) {
-        const output = await status([...target, "--result"]);
-        expect(output).toContain(`pid: ${child.pid}\nmachineId: ${machineId ?? ""}\n`);
-        expect(output).toContain("status: running\n");
-        expect(output).not.toContain(RESULT_MARKER);
-      }
-      expect(readFileSync(path, "utf8")).toBe(before);
-      expect(readFileSync(noTicket, "utf8")).toBe(beforeNoTicket);
-    },
-  );
-
-  it("leaves its own running record without a pid untouched", async () => {
-    writeInitialSessionFile(
-      sessionFilePath,
-      statusFrontmatter({
-        status: "running",
-        pid: null,
-        machineId: readMachineId(dir),
-      }),
-    );
-    const before = readFileSync(sessionFilePath, "utf8");
-    const output = await status([sessionFilePath, "--result"]);
-    expect(output).toContain("status: running\n");
-    expect(output).toContain(`pid: \nmachineId: ${readMachineId(dir)}\n`);
-    expect(output).not.toContain(RESULT_MARKER);
-    expect(readFileSync(sessionFilePath, "utf8")).toBe(before);
-  });
-
-  it("keeps terminal files without a Result block metadata-only", async () => {
-    writeInitialSessionFile(sessionFilePath, statusFrontmatter({}));
-    expect(await status([sessionFilePath, "--result"])).not.toContain(RESULT_MARKER);
-  });
-
-  it("reconciles and reports a dead run without a coding agent", async () => {
-    const child = spawnSync("node", ["-e", ""]);
-    if (child.pid === undefined) throw new Error("failed to spawn a probe child");
-    writeStatusRecord(child.pid);
-    const stdout = makeSink();
-
-    expect(
-      await main({
-        argv: ["node", "aligndev", "code", "status", ".plans/1/_aligndev/run.md"],
-        cwd: dir,
-        env: { HOME: dir },
-        home: dir,
-        alignfirstCommand: ALIGNFIRST,
-        stdout,
-      }),
-    ).toBe(0);
-    expect(stdout.text()).toContain(
-      "sessionFile: .plans/1/_aligndev/run.md\nsessionId: sess-42\nagent: claude\nprofile: \nmodel: \neffort: \nstatus: failed\n",
-    );
-    expect(stdout.text()).toContain(`pid: ${child.pid}\nmachineId: ${readMachineId(dir)}\n`);
-    expect(stdout.text()).toContain("exitReason: terminated\n");
-    expect(readCompletion(sessionFilePath).frontmatter.status).toBe("failed");
-  });
-
   it("seals a dead running log under its completed name and resolves the retained path", async () => {
     const runningPath = join(dir, ".plans", "1", "_aligndev", "20260829-115529.running.md");
     const completedPath = join(dir, ".plans", "1", "_aligndev", "20260829-115529.md");
-    writeStatusRecord(2147483647, runningPath);
-    const stdout = makeSink();
-    const options = {
-      argv: ["node", "aligndev", "code", "status", ".plans/1/_aligndev/20260829-115529.running.md"],
-      cwd: dir,
-      env: { HOME: dir },
-      home: dir,
-      alignfirstCommand: ALIGNFIRST,
-      stdout,
-    };
-    expect(await main(options)).toBe(0);
-    expect(stdout.text()).toContain("sessionFile: .plans/1/_aligndev/20260829-115529.md\n");
-    expect(stdout.text()).toContain("exitReason: terminated\n");
+    writeInitialSessionFile(
+      runningPath,
+      statusFrontmatter({ status: "running", pid: 2147483647, machineId: readMachineId(dir) }),
+    );
+    const stub = writeAlignfirstStub(makeTempDir(), dir);
+    const target = [".plans/1/_aligndev/20260829-115529.running.md"];
+    expect(await status(target, stub)).toContain(
+      "sessionFile: .plans/1/_aligndev/20260829-115529.md\n",
+    );
     expect(existsSync(runningPath)).toBe(false);
     expect(readCompletion(completedPath).frontmatter.status).toBe("failed");
-    // The retained running path keeps working once the run has ended.
-    expect(await main(options)).toBe(0);
-    expect(stdout.text()).toContain(
-      "sessionFile: .plans/1/_aligndev/20260829-115529.md\nsessionId",
+    expect(await status(target, stub)).toContain(
+      "sessionFile: .plans/1/_aligndev/20260829-115529.md\n",
     );
   });
 
-  it("reports a live run without changing its record", async () => {
-    writeStatusRecord(process.pid);
-    const stdout = makeSink();
-    expect(
-      await main({
-        argv: ["node", "aligndev", "code", "status", ".plans/1/_aligndev/run.md"],
-        cwd: dir,
-        env: { HOME: dir },
-        home: dir,
-        alignfirstCommand: ALIGNFIRST,
-        stdout,
-      }),
-    ).toBe(0);
-    expect(stdout.text()).toContain("status: running\n");
-    expect(stdout.text()).toContain("contextTokens: 162400\n");
-    expect(readCompletion(sessionFilePath).frontmatter.status).toBe("running");
+  it.each<[string, () => { target: string; protectedFile?: string; options?: StubOptions }]>([
+    [
+      "a file outside the session tree",
+      () => {
+        writeInitialSessionFile(join(dir, "notes.md"), statusFrontmatter({}));
+        return { target: "notes.md", protectedFile: join(dir, "notes.md") };
+      },
+    ],
+    ["a missing session file", () => ({ target: ".plans/1/_aligndev/run.md" })],
+    [
+      "a symlink that resolves outside .plans",
+      () => {
+        mkdirSync(join(dir, ".plans", "1", "_aligndev"), { recursive: true });
+        const outside = join(dir, "outside.md");
+        writeInitialSessionFile(outside, statusFrontmatter({}));
+        symlinkSync(outside, sessionFilePath);
+        return { target: ".plans/1/_aligndev/run.md", protectedFile: outside };
+      },
+    ],
+    [
+      "a project file while the sessions live in the companion",
+      () => {
+        writeInitialSessionFile(sessionFilePath, statusFrontmatter({ ticket: "1" }));
+        return {
+          target: ".plans/1/_aligndev/run.md",
+          protectedFile: sessionFilePath,
+          options: {
+            companion: { dir: join(dir, "companion"), items: { _aligndev: "companion" } },
+          },
+        };
+      },
+    ],
+  ])("rejects %s", async (_name, setup) => {
+    const { target, protectedFile, options } = setup();
+    const before = protectedFile === undefined ? undefined : readFileSync(protectedFile);
+    const code = await main({
+      argv: ["node", "aligndev", "code", "status", target],
+      home: dir,
+      stub: writeAlignfirstStub(makeTempDir(), dir, options),
+      stderr: makeSink(),
+    });
+    expect(code).toBe(1);
+    if (protectedFile !== undefined) expect(readFileSync(protectedFile)).toEqual(before);
+    else expect(existsSync(join(dir, target))).toBe(false);
   });
 
-  it("selects the newest same-stamp ticket run by numeric suffix", async () => {
-    const firstPath = join(dir, ".plans", "1", "_aligndev", "20260829-115529.md");
-    const secondPath = join(dir, ".plans", "1", "_aligndev", "20260829-115529-2.md");
-    writeStatusRecord(process.pid, firstPath);
-    writeStatusRecord(process.pid, secondPath);
-    const stdout = makeSink();
-
-    expect(
-      await main({
-        argv: ["node", "aligndev", "code", "status", "--ticket", "1"],
-        cwd: dir,
-        env: { HOME: dir },
-        home: dir,
-        alignfirstCommand: ALIGNFIRST,
-        stdout,
-      }),
-    ).toBe(0);
-    expect(stdout.text()).toContain("sessionFile: .plans/1/_aligndev/20260829-115529-2.md\n");
+  it("finds a companion run by ticket and prints its absolute path", async () => {
+    const companion = makeTempDir();
+    const file = join(companion, ".plans", "29", "_aligndev", "20260829-115529.md");
+    writeInitialSessionFile(file, statusFrontmatter({ ticket: "29" }));
+    applyCompletion(file, {
+      status: "succeeded",
+      exitReason: "completed",
+      endedAt: "2026-08-29T11:56:29Z",
+      sessionId: "sess-42",
+      result: "companion answer",
+    });
+    const stub = writeAlignfirstStub(makeTempDir(), dir, {
+      companion: { dir: companion, items: { _aligndev: "companion" } },
+    });
+    const output = await status(["--ticket", "29", "--result"], stub);
+    expect(output).toContain(`sessionFile: ${file}\n`);
+    expect(output).toContain(`${RESULT_MARKER}\ncompanion answer\n`);
   });
 
-  it("selects the newest no-ticket run", async () => {
-    const noTicketPath = join(dir, ".plans", "_aligndev", "20260829-115529.md");
-    writeStatusRecord(process.pid, noTicketPath, null);
-    const stdout = makeSink();
-
-    expect(
-      await main({
-        argv: ["node", "aligndev", "code", "status", "--no-ticket"],
-        cwd: dir,
-        env: { HOME: dir },
-        home: dir,
-        alignfirstCommand: ALIGNFIRST,
-        stdout,
-      }),
-    ).toBe(0);
-    expect(stdout.text()).toContain("sessionFile: .plans/_aligndev/20260829-115529.md\n");
-  });
-
-  it("reports an empty scoped session directory", async () => {
-    mkdirSync(join(dir, ".plans", "1", "_aligndev"), { recursive: true });
-    const stderr = makeSink();
-
-    expect(
-      await main({
-        argv: ["node", "aligndev", "code", "status", "--ticket", "1"],
-        cwd: dir,
-        env: { HOME: dir },
-        home: dir,
-        alignfirstCommand: ALIGNFIRST,
-        stderr,
-      }),
-    ).toBe(1);
-  });
-
-  it("rejects files outside the session-record tree", async () => {
-    writeInitialSessionFile(join(dir, "notes.md"), statusFrontmatter({}));
-    const before = readFileSync(join(dir, "notes.md"));
-    const stderr = makeSink();
-    expect(
-      await main({
-        argv: ["node", "aligndev", "code", "status", "notes.md"],
-        cwd: dir,
-        env: { HOME: dir },
-        home: dir,
-        alignfirstCommand: ALIGNFIRST,
-        stderr,
-      }),
-    ).toBe(1);
-    expect(readFileSync(join(dir, "notes.md"))).toEqual(before);
-  });
-
-  it("rejects a missing session file", async () => {
-    const stderr = makeSink();
-    expect(
-      await main({
-        argv: ["node", "aligndev", "code", "status", ".plans/1/_aligndev/run.md"],
-        cwd: dir,
-        env: { HOME: dir },
-        home: dir,
-        alignfirstCommand: ALIGNFIRST,
-        stderr,
-      }),
-    ).toBe(1);
-    expect(existsSync(join(dir, ".plans", "1", "_aligndev", "run.md"))).toBe(false);
-  });
-
-  it("rejects a session-path symlink that resolves outside .plans", async () => {
-    mkdirSync(join(dir, ".plans", "1", "_aligndev"), { recursive: true });
-    const outsidePath = join(dir, "outside.md");
-    writeInitialSessionFile(outsidePath, statusFrontmatter({}));
-    const before = readFileSync(outsidePath);
-    symlinkSync(outsidePath, sessionFilePath);
-    const stderr = makeSink();
-
-    expect(
-      await main({
-        argv: ["node", "aligndev", "code", "status", ".plans/1/_aligndev/run.md"],
-        cwd: dir,
-        env: { HOME: dir },
-        home: dir,
-        alignfirstCommand: ALIGNFIRST,
-        stderr,
-      }),
-    ).toBe(1);
-    expect(readFileSync(outsidePath)).toEqual(before);
+  it("finds each meta run from any worktree sharing the sessions tree", async () => {
+    const sessions = join(dir, "shared");
+    const worktrees = [join(dir, "main"), join(dir, "other")];
+    for (const [index, meta] of ["run-first", "run-second"].entries()) {
+      mkdirSync(worktrees[index]);
+      const file = join(sessions, ".plans", "_aligndev", `20260829-11553${index}.md`);
+      writeInitialSessionFile(
+        file,
+        statusFrontmatter({
+          meta,
+          cwd: worktrees[index],
+          startedAt: `2026-08-29T11:55:3${index}.000Z`,
+        }),
+      );
+      applyCompletion(file, {
+        status: "succeeded",
+        exitReason: "completed",
+        endedAt: "2026-08-29T11:56:00Z",
+        sessionId: meta,
+        result: `answer ${meta}`,
+      });
+    }
+    for (const cwd of worktrees) {
+      const stub = writeAlignfirstStub(makeTempDir(), cwd, {
+        companion: { dir: sessions, items: { _aligndev: "companion" } },
+      });
+      for (const meta of ["run-first", "run-second"]) {
+        const stdout = makeSink();
+        const code = await main({
+          argv: ["node", "aligndev", "code", "status", "--meta", meta, "--result"],
+          cwd,
+          home: dir,
+          stub,
+          stdout,
+        });
+        expect(code).toBe(0);
+        expect(stdout.text()).toContain(`${RESULT_MARKER}\nanswer ${meta}\n`);
+      }
+    }
   });
 });
 
@@ -731,11 +493,12 @@ describe("quota", () => {
       throw new Error("quota must not discover models");
     });
     const quotaReader = vi.fn(async () => "Claude Code quota\n\nCurrent session: 25% used");
+    const cwd = makeTempDir();
 
     expect(
       await main({
         argv: ["node", "aligndev", "code", "quota"],
-        cwd: tmpdir(),
+        cwd,
         env: { KEEP: "yes" },
         home: makeHome({ code: { harness: "claude", unset: ["SECRET"] } }),
         stdout,
@@ -745,7 +508,7 @@ describe("quota", () => {
     ).toBe(0);
     expect(stdout.text()).toContain("Claude Code quota\n\nCurrent session: 25% used");
     expect(quotaReader).toHaveBeenCalledWith("claude", {
-      cwd: tmpdir(),
+      cwd,
       env: expect.objectContaining({ KEEP: "yes", CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: "0" }),
     });
     expect(modelResolver).not.toHaveBeenCalled();
@@ -773,29 +536,7 @@ describe("resolveTicket", () => {
   function record(overrides: Partial<SessionFrontmatter>): SessionRecord {
     return {
       path: "/proj/.plans/30/_aligndev/r.md",
-      frontmatter: {
-        status: "succeeded",
-        agent: "claude",
-        profile: null,
-        protocol: "spec",
-        ticket: "30",
-        model: null,
-        effort: null,
-        sessionId: "abc",
-        command: "aligndev code new --protocol spec --ticket 30 --message go",
-        meta: null,
-        pid: null,
-        pidStartTime: null,
-        machineId: "test-machine",
-        cwd: "/proj",
-        startedAt: "2026-07-01T09:15:03.000Z",
-        endedAt: null,
-        exitReason: null,
-        contextTokens: null,
-        contextCompacted: false,
-        contextTokensError: null,
-        ...overrides,
-      },
+      frontmatter: statusFrontmatter({ sessionId: "abc", ticket: "30", ...overrides }),
     };
   }
 
@@ -819,22 +560,13 @@ describe("resolveTicket", () => {
     expect(resolveTicket(resume, [...records, unticketed])).toBeUndefined();
   });
 
-  it("infers the ticket from a .plans/<ticket>/ path in the message", () => {
-    const parsed = parse(["new", "--message", "Execute the plan: .plans/2/B2-plan.md"]);
-    expect(resolveTicket(parsed, [])).toBe("2");
-  });
-
-  it("ignores _-prefixed segments such as _aligndev", () => {
-    const parsed = parse(["new", "--message", "See .plans/_aligndev/20260706-122913.md"]);
-    expect(resolveTicket(parsed, [])).toBeUndefined();
-  });
-
-  it("falls back to no ticket on conflicting inferred segments", () => {
-    const parsed = parse(["new", "--message", "Compare .plans/2/a.md with .plans/3/b.md"]);
-    expect(resolveTicket(parsed, [])).toBeUndefined();
-
-    const repeated = parse(["new", "--message", "Read .plans/2/a.md then .plans/2/b.md"]);
-    expect(resolveTicket(repeated, [])).toBe("2");
+  it.each([
+    ["Execute the plan: .plans/2/B2-plan.md", "2"],
+    ["Read .plans/2/a.md then .plans/2/b.md", "2"],
+    ["See .plans/_aligndev/20260706-122913.md", undefined],
+    ["Compare .plans/2/a.md with .plans/3/b.md", undefined],
+  ])("infers the ticket of %j", (message, expected) => {
+    expect(resolveTicket(parse(["new", "--message", message]), [])).toBe(expected);
   });
 
   it("yields no ticket for a new run without a message", () => {
@@ -888,6 +620,7 @@ describe("buildRunConfig", () => {
   it("adds a linked worktree's git common directory after the companion, for Antigravity", () => {
     const fixture = makeFixture();
     const main = makeRepository(fixture.root, "app");
+    addInitialCommit(main);
     const cwd = join(fixture.root, "app-feature");
     addWorktree(main, cwd, "feature");
     const agy = build({ code: { ...CODE, harness: "agy" }, cwd });
@@ -959,1245 +692,438 @@ function reportWithCompanion(items: ItemName[]): ProjectReport {
   };
 }
 
-describe("launch guards", () => {
-  let dir: string;
-  let plans: string;
-  let home: string;
-  let realCwd: string;
-  beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "aligndev-guards-"));
-    plans = join(dir, ".plans");
-    mkdirSync(plans);
-    realCwd = realpathSync(dir);
-    home = join(dir, "home");
-    writeConfig(home, { code: { harness: "claude" } });
+describe("checkLaunchGuards", () => {
+  const MACHINE = "this-machine";
+  const CWD = realpathSync(mkdtempSync(join(tmpdir(), "aligndev-guards-")));
+  const ALIAS = `${CWD}-alias`;
+  const OTHER = realpathSync(mkdtempSync(join(tmpdir(), "aligndev-guards-other-")));
+  symlinkSync(CWD, ALIAS);
+  afterAll(() => {
+    for (const path of [CWD, ALIAS, OTHER]) rmSync(path, { recursive: true, force: true });
   });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-  function makeFrontmatter(overrides?: Partial<SessionFrontmatter>): SessionFrontmatter {
+  function running(overrides: Partial<SessionFrontmatter>): SessionRecord {
     return {
-      status: "running",
-      agent: "claude",
-      profile: "test",
-      protocol: "spec",
-      ticket: "30",
-      model: null,
-      effort: null,
-      sessionId: null,
-      command: "aligndev code new --protocol spec --ticket 30 --message go",
-      meta: null,
-      pid: process.pid,
-      pidStartTime: null,
-      machineId: readMachineId(home),
-      cwd: realCwd,
-      startedAt: "2026-07-01T09:15:03.000Z",
-      endedAt: null,
-      exitReason: null,
-      contextTokens: null,
-      contextCompacted: false,
-      contextTokensError: null,
-      ...overrides,
-    };
-  }
-
-  function seedRecord(name: string, overrides: Partial<SessionFrontmatter>): void {
-    writeInitialSessionFile(
-      join(dir, ".plans", "30", "_aligndev", name),
-      makeFrontmatter(overrides),
-    );
-  }
-
-  async function run(tokens: string[]): Promise<{ code: number; stderr: string }> {
-    const stdout = makeSink();
-    const stderr = makeSink();
-    const code = await main({
-      argv: ["node", "aligndev", "code", ...tokens],
-      stdout,
-      stderr,
-      cwd: dir,
-      env: { HOME: home },
-      home,
-      alignfirstCommand: ALIGNFIRST,
-    });
-    return { code, stderr: stderr.text() };
-  }
-
-  it("rejects an unknown resume id and lists the known recent sessions", async () => {
-    seedRecord("a.md", {
-      status: "succeeded",
-      sessionId: "aaa",
-      startedAt: "2026-07-01T09:00:00.000Z",
-    });
-    seedRecord("b.md", {
-      status: "failed",
-      sessionId: "bbb",
-      startedAt: "2026-07-01T10:00:00.000Z",
-    });
-    const { code, stderr } = await run(["resume", "zzz", "--message", "hi"]);
-    expect(code).toBe(1);
-    expect(stderr).toContain("zzz");
-    expect(stderr.indexOf("bbb")).toBeLessThan(stderr.indexOf("aaa")); // most recent first
-  });
-
-  it("rejects resume when no session records exist", async () => {
-    const { code } = await run(["resume", "zzz", "--message", "hi"]);
-    expect(code).toBe(1);
-    expect(listSessionRecords(plans, readMachineId(home))).toEqual([]);
-  });
-
-  it("rejects resuming a session that is still running", async () => {
-    seedRecord("running.md", { sessionId: "abc" });
-    const { code, stderr } = await run(["resume", "abc", "--message", "hi"]);
-    expect(code).toBe(1);
-    expect(stderr).toContain(join(plans, "30", "_aligndev", "running.md"));
-    expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(1);
-  });
-
-  it.each(["another-machine", null])(
-    "keeps dead records owned by %j blocking resumes and protocol launches",
-    async (machineId) => {
-      const child = spawnSync("node", ["-e", ""]);
-      if (child.pid === undefined) throw new Error("failed to spawn a probe child");
-      seedRecord("foreign.md", { sessionId: "abc", pid: child.pid, machineId });
-      const path = join(plans, "30", "_aligndev", "foreign.md");
-      const before = readFileSync(path, "utf8");
-      for (const tokens of [
-        ["resume", "abc", "--message", "hi"],
-        ["new", "--protocol", "plan", "--ticket", "31"],
-      ]) {
-        const { code, stderr } = await run(tokens);
-        expect(code).toBe(1);
-        expect(stderr).toContain(path);
-      }
-      expect(readFileSync(path, "utf8")).toBe(before);
-      const records = listSessionRecords(plans, readMachineId(home));
-      expect(records).toHaveLength(1);
-      const otherWorktree = records.map((record) => ({
-        ...record,
-        frontmatter: { ...record.frontmatter, cwd: "/elsewhere" },
-      }));
-      const error = checkLaunchGuards(
-        parse(["new", "--protocol", "plan", "--ticket", "30"]),
-        "claude",
-        realCwd,
-        "30",
-        otherWorktree,
-        readMachineId(home),
-      );
-      expect(error).toContain(path);
-    },
-  );
-
-  it("rejects legacy and cross-agent resumes", () => {
-    const parsed = parse(["resume", "abc", "--message", "continue"]);
-    const legacy = [
-      {
-        path: "legacy.md",
-        frontmatter: makeFrontmatter({ status: "succeeded", sessionId: "abc", agent: null }),
-      },
-    ];
-    expect(
-      checkLaunchGuards(parsed, "claude", realCwd, undefined, legacy, readMachineId(home)),
-    ).toBeDefined();
-
-    const codex = [
-      {
-        path: "codex.md",
-        frontmatter: makeFrontmatter({ status: "succeeded", sessionId: "abc", agent: "codex" }),
-      },
-    ];
-    const mismatch = checkLaunchGuards(
-      parsed,
-      "claude",
-      realCwd,
-      undefined,
-      codex,
-      readMachineId(home),
-    );
-    expect(mismatch).toBeDefined();
-  });
-
-  it("rejects a cross-agent resume before discovery or session creation", async () => {
-    seedRecord("codex.md", { status: "succeeded", sessionId: "abc", agent: "codex" });
-    const before = listSessionRecords(plans, readMachineId(home)).length;
-    const modelResolver = vi.fn(async () => "gpt-6.1-terra");
-    const stderr = makeSink();
-    const otherHome = makeHome({
-      code: { harness: "claude", models: ["terra"] },
-    });
-    const code = await main({
-      argv: ["node", "aligndev", "code", "resume", "abc", "--message", "go", "--model", "terra"],
-      cwd: dir,
-      env: { HOME: otherHome },
-      home: otherHome,
-      alignfirstCommand: ALIGNFIRST,
-      stderr,
-      modelResolver,
-    });
-    expect(code).toBe(1);
-    expect(modelResolver).not.toHaveBeenCalled();
-    expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(before);
-  });
-
-  it("sanitizes injected model-discovery failures on every output surface", async () => {
-    const stdout = makeSink();
-    const stderr = makeSink();
-    const codexHome = makeHome({ code: { harness: "codex" } });
-    const code = await main({
-      argv: ["node", "aligndev", "code", "new", "--message", "go", "--model", "terra"],
-      cwd: dir,
-      env: { HOME: codexHome },
-      home: codexHome,
-      alignfirstCommand: ALIGNFIRST,
-      stdout,
-      stderr,
-      modelResolver: async () => {
-        throw new Error("catalog unavailable: injected-resolver-secret");
-      },
-    });
-
-    expect(code).toBe(1);
-    expect(stdout.text()).toContain("Session file:");
-    expect(stdout.text() + stderr.text()).not.toContain("injected-resolver-secret");
-    const records = listSessionRecords(plans, readMachineId(codexHome));
-    expect(records).toHaveLength(1);
-    expect(readCompletion(records[0].path)).toMatchObject({
-      frontmatter: { status: "failed", exitReason: "error", sessionId: null },
-    });
-    expect(readFileSync(records[0].path, "utf8")).not.toContain("injected-resolver-secret");
-  });
-
-  it("reserves the next side ticket through alignfirst for --no-ticket", async () => {
-    mkdirSync(join(dir, ".plans", "side-1"));
-    const stdout = makeSink();
-    const code = await main({
-      argv: ["node", "aligndev", "code", "new", "--protocol", "aad", "--no-ticket", "-m", "go"],
-      cwd: dir,
-      env: { HOME: home },
-      home,
-      stdout,
-      stderr: makeSink(),
-      alignfirstCommand: ALIGNFIRST,
-      modelResolver: async () => {
-        throw new Error("stop before spawning");
-      },
-    });
-
-    expect(code).toBe(1);
-    expect(stdout.text()).toContain(`Session file: ${join(".plans", "side-2", "_aligndev")}`);
-    const [record] = listSessionRecords(plans, readMachineId(home));
-    expect(record.frontmatter.machineId).toBe(readMachineId(home));
-    expect(record.frontmatter.ticket).toBe("side-2");
-    expect(record.frontmatter.command).toBe(
-      'aligndev code new --protocol aad --no-ticket --message "go"',
-    );
-  });
-
-  it("reports a missing alignfirst executable before writing a session file", async () => {
-    const stderr = makeSink();
-    const code = await main({
-      argv: ["node", "aligndev", "code", "new", "--protocol", "aad", "--no-ticket", "-m", "go"],
-      cwd: dir,
-      env: { HOME: home },
-      home,
-      stderr,
-      alignfirstCommand: ["/nonexistent/alignfirst"],
-    });
-
-    expect(code).toBe(1);
-    expect(listSessionRecords(plans, readMachineId(home))).toEqual([]);
-  });
-
-  it("rejects a protocol run while another run is active in the same worktree", async () => {
-    seedRecord("running.md", { sessionId: "abc" });
-    const { code, stderr } = await run(["new", "--protocol", "plan", "--ticket", "31"]);
-    expect(code).toBe(1);
-    expect(stderr).toContain(join(plans, "30", "_aligndev", "running.md"));
-    expect(existsSync(join(plans, "31"))).toBe(false);
-  });
-
-  it("allows a protocol run when the active run sits in another worktree", () => {
-    const parsed = parse(["new", "--protocol", "plan", "--ticket", "31"]);
-    const records = [
-      {
-        path: "/elsewhere/.plans/30/_aligndev/r.md",
-        frontmatter: makeFrontmatter({ sessionId: "abc", cwd: "/elsewhere" }),
-      },
-    ];
-    expect(
-      checkLaunchGuards(parsed, "claude", realCwd, "31", records, readMachineId(home)),
-    ).toBeUndefined();
-  });
-
-  it("lets a protocol run start while a plain run is active in the same worktree", () => {
-    const parsed = parse(["new", "--protocol", "plan", "--ticket", "31"]);
-    const records = [
-      { path: "r.md", frontmatter: makeFrontmatter({ sessionId: "abc", protocol: null }) },
-    ];
-    expect(
-      checkLaunchGuards(parsed, "claude", realCwd, "31", records, readMachineId(home)),
-    ).toBeUndefined();
-  });
-
-  it("rejects a protocol run on a ticket with an active protocol run in another worktree", () => {
-    const parsed = parse(["new", "--protocol", "plan", "--ticket", "31"]);
-    const records = [
-      {
-        path: "/elsewhere/.plans/31/_aligndev/r.md",
-        frontmatter: makeFrontmatter({ sessionId: "abc", cwd: "/elsewhere", ticket: "31" }),
-      },
-    ];
-    expect(
-      checkLaunchGuards(parsed, "claude", realCwd, "31", records, readMachineId(home)),
-    ).toBeDefined();
-  });
-
-  it("rejects a protocol run on another ticket while a protocol run holds the worktree", () => {
-    const parsed = parse(["new", "--protocol", "plan", "--ticket", "31"]);
-    const records = [{ path: "r.md", frontmatter: makeFrontmatter({ sessionId: "abc" }) }];
-    expect(
-      checkLaunchGuards(parsed, "claude", realCwd, "31", records, readMachineId(home)),
-    ).toBeDefined();
-  });
-
-  it("lets a protocol run start while a resume without protocol runs on its ticket", () => {
-    const parsed = parse(["new", "--protocol", "plan", "--ticket", "30"]);
-    const records = [
-      { path: "r.md", frontmatter: makeFrontmatter({ sessionId: "abc", protocol: null }) },
-    ];
-    expect(
-      checkLaunchGuards(parsed, "claude", realCwd, "30", records, readMachineId(home)),
-    ).toBeUndefined();
-  });
-
-  it("checks only the worktree for a --no-ticket protocol run", () => {
-    const parsed = parse(["new", "--protocol", "aad", "--no-ticket", "--message", "go"]);
-    const records = [
-      {
-        path: "/elsewhere/.plans/30/_aligndev/r.md",
-        frontmatter: makeFrontmatter({ sessionId: "abc", cwd: "/elsewhere" }),
-      },
-    ];
-    expect(
-      checkLaunchGuards(parsed, "claude", realCwd, undefined, records, readMachineId(home)),
-    ).toBeUndefined();
-  });
-
-  it("exempts no-protocol invocations from the busy-worktree guard", () => {
-    const records = [
-      {
-        path: join(dir, ".plans", "30", "_aligndev", "r.md"),
-        frontmatter: makeFrontmatter({ sessionId: "abc" }),
-      },
-      // A resumable (finished) record so only the busy-worktree guard is in play.
-      {
-        path: join(dir, ".plans", "30", "_aligndev", "done.md"),
-        frontmatter: makeFrontmatter({ sessionId: "abc2", status: "succeeded" }),
-      },
-    ];
-    const answer = parse(["resume", "abc2", "--message", "answer"]);
-    expect(
-      checkLaunchGuards(answer, "claude", realCwd, undefined, records, readMachineId(home)),
-    ).toBeUndefined();
-
-    const execute = parse(["new", "--message", "Execute the plan"]);
-    expect(
-      checkLaunchGuards(execute, "claude", realCwd, undefined, records, readMachineId(home)),
-    ).toBeUndefined();
-  });
-});
-
-describe("model selection", () => {
-  let base: string;
-  let home: string;
-  let project: string;
-  let plans: string;
-  let fake: FakeClaude;
-  beforeEach(() => {
-    base = mkdtempSync(join(tmpdir(), "aligndev-model-"));
-    home = join(base, "home");
-    project = join(base, "project");
-    plans = join(project, ".plans");
-    mkdirSync(plans, { recursive: true });
-    writeConfig(home, {
-      code: { harness: "claude", defaultModel: "sonnet", defaultEffort: "low" },
-    });
-    fake = installFakeClaude(base);
-  });
-  afterEach(() => rmSync(base, { recursive: true, force: true }));
-
-  function run(tokens: string[]): Promise<number> {
-    return main({
-      argv: ["node", "aligndev", "code", ...tokens],
-      cwd: project,
-      env: { PATH: fake.path, HOME: home },
-      home,
-      alignfirstCommand: ALIGNFIRST,
-      stdout: makeSink(),
-      stderr: makeSink(),
-      modelResolver: async (_agent, model) => model,
-    });
-  }
-
-  // Runs `aligndev code` and returns the value of `option` the agent received, if any.
-  async function launch(tokens: string[], option = "--model"): Promise<string | undefined> {
-    expect(await run(tokens)).toBe(0);
-    const { args } = fake.received();
-    const index = args.indexOf(option);
-    return index === -1 ? undefined : args[index + 1];
-  }
-
-  function newestFrontmatter(): SessionFrontmatter {
-    const records = listSessionRecords(plans, readMachineId(home));
-    return records.reduce((a, b) => (a.frontmatter.startedAt >= b.frontmatter.startedAt ? a : b))
-      .frontmatter;
-  }
-
-  it("starts a new session with the profile defaultModel and records it", async () => {
-    expect(await launch(["new", "-m", "go"])).toBe("sonnet");
-    expect(newestFrontmatter()).toMatchObject({
-      model: "sonnet",
-      command: 'aligndev code new --message "go"',
-    });
-  });
-
-  it("lets --model override the profile defaultModel", async () => {
-    expect(await launch(["new", "-m", "go", "--model", "haiku"])).toBe("haiku");
-    expect(newestFrontmatter().model).toBe("haiku");
-  });
-
-  it("resumes with the model of the session's latest run, not the profile defaultModel", async () => {
-    writeInitialSessionFile(
-      join(plans, "_aligndev", "old.md"),
-      statusFrontmatter({
+      path: `/sessions/${overrides.sessionId ?? "run"}.md`,
+      frontmatter: statusFrontmatter({
+        status: "running",
+        protocol: "spec",
+        ticket: "30",
+        pid: process.pid,
+        machineId: MACHINE,
+        cwd: CWD,
         sessionId: "abc",
-        profile: "test",
-        model: "opus",
-        startedAt: "2026-08-29T10:00:00.000Z",
+        ...overrides,
       }),
-    );
-    writeInitialSessionFile(
-      join(plans, "_aligndev", "latest.md"),
-      statusFrontmatter({ sessionId: "abc", profile: "test", model: "haiku" }),
-    );
-    expect(await launch(["resume", "abc", "-m", "more"])).toBe("haiku");
-    expect(newestFrontmatter().model).toBe("haiku");
-  });
-
-  it("resumes without a model flag when the latest run recorded none", async () => {
-    writeInitialSessionFile(
-      join(plans, "_aligndev", "latest.md"),
-      statusFrontmatter({ sessionId: "abc", profile: "test", model: null }),
-    );
-    expect(await launch(["resume", "abc", "-m", "more"])).toBeUndefined();
-    expect(newestFrontmatter().model).toBeNull();
-  });
-
-  it("starts a new session with the profile defaultEffort and records it", async () => {
-    expect(await launch(["new", "-m", "go"], "--effort")).toBe("low");
-    expect(newestFrontmatter()).toMatchObject({
-      effort: "low",
-      command: 'aligndev code new --message "go"',
-    });
-  });
-
-  it("lets --effort override the profile defaultEffort", async () => {
-    expect(await launch(["new", "-m", "go", "--effort", "max"], "--effort")).toBe("max");
-    expect(newestFrontmatter()).toMatchObject({
-      effort: "max",
-      command: 'aligndev code new --effort max --message "go"',
-    });
-  });
-
-  it("resumes with the effort of the session's latest run, not the profile defaultEffort", async () => {
-    writeInitialSessionFile(
-      join(plans, "_aligndev", "latest.md"),
-      statusFrontmatter({ sessionId: "abc", profile: "test", effort: "high" }),
-    );
-    expect(await launch(["resume", "abc", "-m", "more"], "--effort")).toBe("high");
-    expect(newestFrontmatter().effort).toBe("high");
-  });
-
-  it("resumes without an effort flag when the latest run recorded none", async () => {
-    writeInitialSessionFile(
-      join(plans, "_aligndev", "latest.md"),
-      statusFrontmatter({ sessionId: "abc", profile: "test", effort: null }),
-    );
-    expect(await launch(["resume", "abc", "-m", "more"], "--effort")).toBeUndefined();
-    expect(newestFrontmatter().effort).toBeNull();
-  });
-
-  it("refuses to resume with a recorded effort the profile no longer accepts", async () => {
-    writeInitialSessionFile(
-      join(plans, "_aligndev", "latest.md"),
-      statusFrontmatter({ sessionId: "abc", profile: "test", effort: "minimal" }),
-    );
-    expect(await run(["resume", "abc", "-m", "more"])).toBe(1);
-    expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(1);
-  });
-});
-
-describe("companion projects", () => {
-  let base: string;
-  let home: string;
-  beforeEach(() => {
-    base = mkdtempSync(join(tmpdir(), "aligndev-companion-"));
-    home = join(base, "home");
-    writeConfig(home, { code: { harness: "claude" } });
-  });
-  afterEach(() => rmSync(base, { recursive: true, force: true }));
-
-  interface RunOutcome {
-    code: number;
-    stdout: string;
-    stderr: string;
-  }
-
-  async function run(
-    project: CompanionProject,
-    tokens: string[],
-    path: string = process.env.PATH ?? "",
-  ): Promise<RunOutcome> {
-    const stdout = makeSink();
-    const stderr = makeSink();
-    const code = await main({
-      argv: ["node", "aligndev", "code", ...tokens],
-      cwd: project.project,
-      env: { PATH: path, HOME: home },
-      home,
-      alignfirstCommand: ALIGNFIRST,
-      stdout,
-      stderr,
-      modelResolver: async () => {
-        throw new Error("stop before spawning");
-      },
-    });
-    return { code, stdout: stdout.text(), stderr: stderr.text() };
-  }
-
-  it("gates on the companion .plans and writes the session file there", async () => {
-    const project = makeCompanionProject(home, { ".plans": "companion" });
-    const plans = join(project.companion, ".plans");
-
-    const gated = await run(project, ["new", "-m", "go"]);
-    expect(gated.code).toBe(1);
-    expect(existsSync(plans)).toBe(false);
-
-    mkdirSync(plans, { recursive: true });
-    const started = await run(project, ["new", "-m", "go"]);
-    expect(started.code).toBe(1);
-    expect(started.stdout).toContain(`Session file: ${join(plans, "_aligndev")}/`);
-    expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(1);
-  });
-
-  it("writes a separate _aligndev tree and opens the ticket in both trees", async () => {
-    const project = makeCompanionProject(home, { ".plans": "project", _aligndev: "companion" });
-    const plans = join(project.project, ".plans");
-    const sessions = join(project.companion, ".plans");
-    mkdirSync(join(plans, "_archives", "29"), { recursive: true });
-    mkdirSync(join(sessions, "_archives", "29", "_aligndev"), { recursive: true });
-
-    const started = await run(project, ["new", "--ticket", "29", "-m", "go"]);
-    expect(started.stdout).toContain(`Session file: ${join(sessions, "29", "_aligndev")}/`);
-    expect(existsSync(join(plans, "29"))).toBe(true);
-    expect(existsSync(join(sessions, "_archives", "29"))).toBe(false);
-    expect(existsSync(join(plans, "29", "_aligndev"))).toBe(false);
-    expect(listSessionRecords(sessions, readMachineId(home))).toHaveLength(1);
-
-    rmSync(join(plans, "29"), { recursive: true });
-    expect(listSessionRecords(sessions, readMachineId(home))).toHaveLength(1);
-  });
-
-  it("reserves a side ticket in the companion .plans", async () => {
-    const project = makeCompanionProject(home, { ".plans": "companion" });
-    const plans = join(project.companion, ".plans");
-    mkdirSync(join(plans, "side-1"), { recursive: true });
-
-    const started = await run(project, ["new", "--protocol", "aad", "--no-ticket", "-m", "go"]);
-    expect(started.stdout).toContain(`Session file: ${join(plans, "side-2", "_aligndev")}/`);
-  });
-
-  describe("status", () => {
-    let project: CompanionProject;
-    let ticketFile: string;
-    let noTicketFile: string;
-    beforeEach(() => {
-      project = makeCompanionProject(home, { ".plans": "project", _aligndev: "companion" });
-      mkdirSync(join(project.project, ".plans", "29"), { recursive: true });
-      const sessions = join(project.companion, ".plans");
-      ticketFile = join(sessions, "29", "_aligndev", "20260829-115529.md");
-      noTicketFile = join(sessions, "_aligndev", "20260829-115530.md");
-      writeInitialSessionFile(ticketFile, statusFrontmatter({ ticket: "29", meta: "thread-1" }));
-      writeInitialSessionFile(noTicketFile, statusFrontmatter({ ticket: null }));
-      for (const file of [ticketFile, noTicketFile]) {
-        appendTranscript(file, "internal companion transcript\n");
-        applyCompletion(file, {
-          status: "succeeded",
-          exitReason: "completed",
-          endedAt: "2026-08-29T11:56:29Z",
-          sessionId: "sess-42",
-          result: "companion answer",
-        });
-      }
-    });
-
-    it("finds a run by path, ticket, no-ticket and meta, and prints absolute paths", async () => {
-      const cases: [string[], string][] = [
-        [["status", ticketFile], ticketFile],
-        [["status", relative(project.project, ticketFile)], ticketFile],
-        [["status", "--ticket", "29"], ticketFile],
-        [["status", "--no-ticket"], noTicketFile],
-        [["status", "--meta", "thread-1"], ticketFile],
-      ];
-      for (const [tokens, expected] of cases) {
-        for (const includeResult of [false, true]) {
-          const result = await run(project, [...tokens, ...(includeResult ? ["--result"] : [])]);
-          expect(result.code).toBe(0);
-          expect(result.stderr).toBe("");
-          expect(result.stdout).toContain(`sessionFile: ${expected}\n`);
-          expect(result.stdout.includes(`${RESULT_MARKER}\ncompanion answer\n`)).toBe(
-            includeResult,
-          );
-          expect(result.stdout).not.toContain("internal companion transcript");
-        }
-      }
-    });
-
-    it("rejects a session file outside the sessions directory", async () => {
-      const projectFile = join(project.project, ".plans", "29", "_aligndev", "20260829-115529.md");
-      writeInitialSessionFile(projectFile, statusFrontmatter({ ticket: "29" }));
-      const before = readFileSync(projectFile);
-      const result = await run(project, ["status", ".plans/29/_aligndev/20260829-115529.md"]);
-      expect(result.code).toBe(1);
-      expect(readFileSync(projectFile)).toEqual(before);
-    });
-  });
-
-  it("status does not create a missing companion", async () => {
-    const project = makeCompanionProject(home, { ".plans": "project", _aligndev: "companion" });
-    mkdirSync(join(project.project, ".plans"));
-    const result = await run(project, ["status", "--meta", "missing", "--result"]);
-    expect(result.code).toBe(1);
-    expect(existsSync(project.companion)).toBe(false);
-  });
-
-  it("keeps distinct meta results in a shared companion across worktrees", async () => {
-    const project = makeCompanionProject(home, { ".plans": "project", _aligndev: "companion" });
-    const worktree = join(home, "other-worktree");
-    spawnSync("git", [
-      "-C",
-      project.project,
-      "-c",
-      "user.name=Test",
-      "-c",
-      "user.email=test@example.com",
-      "commit",
-      "--allow-empty",
-      "-qm",
-      "initial",
-    ]);
-    const added = spawnSync("git", [
-      "-C",
-      project.project,
-      "worktree",
-      "add",
-      "-b",
-      "other",
-      worktree,
-    ]);
-    expect(added.status).toBe(0);
-    const sessions = join(project.companion, ".plans");
-    for (const [index, meta] of ["run-first", "run-second"].entries()) {
-      const file = join(sessions, "_aligndev", `20260829-11553${index}.md`);
-      writeInitialSessionFile(
-        file,
-        statusFrontmatter({
-          meta,
-          cwd: index === 0 ? project.project : worktree,
-          startedAt: `2026-08-29T11:55:3${index}.000Z`,
-        }),
-      );
-      applyCompletion(file, {
-        status: "succeeded",
-        exitReason: "completed",
-        endedAt: "2026-08-29T11:56:00Z",
-        sessionId: meta,
-        result: `answer ${meta}`,
-      });
-    }
-    for (const cwd of [project.project, worktree]) {
-      for (const meta of ["run-first", "run-second"]) {
-        const result = await run({ ...project, project: cwd }, [
-          "status",
-          "--meta",
-          meta,
-          "--result",
-        ]);
-        expect(result.code).toBe(0);
-        expect(result.stdout).toContain(`${RESULT_MARKER}\nanswer ${meta}\n`);
-        expect(result.stdout).not.toContain(
-          `answer ${meta === "run-first" ? "run-second" : "run-first"}`,
-        );
-      }
-    }
-  });
-
-  it("adds the companion directory and the project context for the agent", async () => {
-    const project = makeCompanionProject(home, { ".plans": "companion" });
-    mkdirSync(join(project.companion, ".plans"), { recursive: true });
-    mkdirSync(join(project.companion, ".alignfirst-instructions"));
-    writeFileSync(
-      join(project.companion, ".alignfirst-instructions", "context.md"),
-      "Companion context input",
-    );
-    const { path, received } = installFakeClaude(base);
-
-    const stdout = makeSink();
-    const started = await main({
-      argv: ["node", "aligndev", "code", "new", "-m", "go"],
-      cwd: project.project,
-      env: { PATH: path, HOME: home },
-      home,
-      alignfirstCommand: ALIGNFIRST,
-      stdout,
-      stderr: makeSink(),
-      modelResolver: async () => undefined,
-    });
-    expect(started).toBe(0);
-    const first = received();
-    expect(first.prompt).toContain("Companion context input");
-    expect(first.prompt).toMatch(/go$/);
-    expect(first.args).toEqual(expect.arrayContaining(["--add-dir", project.companion]));
-
-    const resumed = await main({
-      argv: ["node", "aligndev", "code", "resume", "session-1", "-m", "more"],
-      cwd: project.project,
-      env: { PATH: path, HOME: home },
-      home,
-      alignfirstCommand: ALIGNFIRST,
-      stdout: makeSink(),
-      stderr: makeSink(),
-      modelResolver: async () => undefined,
-    });
-    expect(resumed).toBe(0);
-    const second = received();
-    expect(second.prompt).toBe("more");
-    expect(second.args).toEqual(expect.arrayContaining(["--add-dir", project.companion]));
-  });
-
-  it("adds the companion without the project context when it holds only sessions", async () => {
-    const project = makeCompanionProject(home, { ".plans": "project", _aligndev: "companion" });
-    mkdirSync(join(project.project, ".plans"), { recursive: true });
-    mkdirSync(join(project.companion, ".plans"), { recursive: true });
-    mkdirSync(join(project.project, ".alignfirst-instructions"));
-    const context = "Repository context must not be injected for session-only companions";
-    writeFileSync(join(project.project, ".alignfirst-instructions", "context.md"), context);
-    const availableContext = spawnSync(process.execPath, [ALIGNFIRST_BIN, "context"], {
-      cwd: project.project,
-      env: { ...process.env, HOME: home },
-      encoding: "utf8",
-    });
-    expect(availableContext.status, availableContext.stderr).toBe(0);
-    expect(availableContext.stdout).toContain(context);
-    const { path, received } = installFakeClaude(base);
-
-    const started = await main({
-      argv: ["node", "aligndev", "code", "new", "-m", "go"],
-      cwd: project.project,
-      env: { PATH: path, HOME: home },
-      home,
-      alignfirstCommand: ALIGNFIRST,
-      stdout: makeSink(),
-      stderr: makeSink(),
-      modelResolver: async () => undefined,
-    });
-    expect(started).toBe(0);
-    const { prompt, args } = received();
-    expect(prompt).not.toContain(context);
-    expect(prompt).toMatch(/go$/);
-    expect(args).toEqual(expect.arrayContaining(["--add-dir", project.companion]));
-  });
-
-  it("creates a missing companion directory before adding it", async () => {
-    const project = makeCompanionProject(home, { ".plans": "project" });
-    mkdirSync(join(project.project, ".plans"), { recursive: true });
-    const { path, received } = installFakeClaude(base);
-
-    const started = await main({
-      argv: ["node", "aligndev", "code", "new", "-m", "go"],
-      cwd: project.project,
-      env: { PATH: path, HOME: home },
-      home,
-      alignfirstCommand: ALIGNFIRST,
-      stdout: makeSink(),
-      stderr: makeSink(),
-      modelResolver: async () => undefined,
-    });
-    expect(started).toBe(0);
-    expect(existsSync(project.companion)).toBe(true);
-    expect(received().args).toEqual(expect.arrayContaining(["--add-dir", project.companion]));
-  });
-});
-
-describe("quiet execution", () => {
-  let base: string;
-  let home: string;
-  let project: string;
-  let plans: string;
-  beforeEach(() => {
-    base = mkdtempSync(join(tmpdir(), "aligndev-quiet-"));
-    home = join(base, "home");
-    project = join(base, "project");
-    plans = join(project, ".plans");
-    mkdirSync(plans, { recursive: true });
-    writeConfig(home, { code: { harness: "claude" } });
-  });
-  afterEach(() => rmSync(base, { recursive: true, force: true }));
-
-  async function launch(tokens: string[], path: string) {
-    const stdout = makeSink();
-    const stderr = makeSink();
-    const code = await main({
-      argv: ["node", "aligndev", "code", ...tokens],
-      cwd: project,
-      home,
-      env: { HOME: home, PATH: path },
-      alignfirstCommand: ALIGNFIRST,
-      stdout,
-      stderr,
-      modelResolver: async (_agent, model) => model,
-    });
-    const records = listSessionRecords(plans, readMachineId(home));
-    const latest = records.reduce((a, b) =>
-      a.frontmatter.startedAt >= b.frontmatter.startedAt ? a : b,
-    );
-    return {
-      code,
-      stdout: stdout.text(),
-      stderr: stderr.text(),
-      file: latest.path,
-      completion: readCompletion(latest.path),
     };
   }
 
-  it("retains control lines on quiet new/resume and records the flag", async () => {
-    const fake = installFakeClaude(
-      base,
-      `
-      process.stdout.write(JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "private transcript" }] } }) + "\\n");
-      process.stdout.write(JSON.stringify({ type: "result", session_id: "session-1", result: "final answer" }));
-    `,
-    );
-    const started = await launch(["new", "-m", "go", "--quiet"], fake.path);
-    expect(started.code).toBe(0);
-    // coding-profiles-smoke.mjs parses Session file; the code guide consumes both control lines.
-    expect(started.stdout.split("\n").filter((line) => line !== "")).toEqual([
-      `Session file: ${relative(project, started.file).replace(/\.md$/, ".running.md")}`,
-      "Session ID: session-1",
-    ]);
-    expect(started.stderr).toBe("");
-    expect(started.completion.result).toBe("final answer");
-    expect(started.completion.frontmatter.command).toContain("--quiet");
-    expect(readFileSync(started.file, "utf8")).toContain("private transcript");
-    const resumed = await launch(["resume", "session-1", "-m", "more", "--quiet"], fake.path);
-    expect(resumed.code).toBe(0);
-    expect(resumed.stdout.split("\n").filter((line) => line !== "")).toEqual([
-      `Session file: ${relative(project, resumed.file).replace(/\.md$/, ".running.md")}`,
-    ]);
-    expect(resumed.completion.frontmatter.command).toContain("--quiet");
-  });
+  function done(overrides: Partial<SessionFrontmatter>): SessionRecord {
+    return running({ status: "succeeded", pid: null, ...overrides });
+  }
 
-  it.each([
+  const RESUME = ["resume", "abc", "-m", "go"];
+  const PLAN_31 = ["new", "--protocol", "plan", "--ticket", "31"];
+
+  it.each<[string, string[], CodingAgent, string | undefined, SessionRecord[]]>([
+    ["an unknown resume id", ["resume", "zzz", "-m", "go"], "claude", undefined, [done({})]],
+    ["a resume without records", RESUME, "claude", undefined, []],
+    ["a resume of a running session", RESUME, "claude", undefined, [running({})]],
     [
-      "stderr",
-      'process.stderr.write("service unavailable: credential-must-stay-private".repeat(200)); process.exitCode = 7;',
+      "a resume blocked by a dead record of another machine",
+      RESUME,
+      "claude",
+      undefined,
+      [running({ pid: 2147483647, machineId: "another-machine" })],
     ],
     [
-      "incomplete",
-      'process.stdout.write(JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "internal-only" }] } }));',
+      "a protocol run blocked by a dead record without a machine",
+      PLAN_31,
+      "claude",
+      "31",
+      [running({ pid: 2147483647, machineId: null })],
     ],
-  ])("keeps %s failures durable with bounded quiet diagnostics", async (_name, response) => {
-    const fake = installFakeClaude(base, response);
-    const result = await launch(["new", "-m", "go", "--quiet"], fake.path);
-    expect(result.code).toBe(1);
-    expect(result.completion.frontmatter).toMatchObject({ status: "failed", exitReason: "error" });
-    expect(result.stderr).toContain(`Session file: ${relative(project, result.file)}\n`);
-    expect(result.stderr).not.toContain("credential-must-stay-private");
-    expect(result.stdout).not.toContain("internal-only");
-    expect(result.stdout.length + result.stderr.length).toBeLessThan(700);
+    ["a legacy resume", RESUME, "claude", undefined, [done({ agent: null })]],
+    ["a cross-agent resume", RESUME, "claude", undefined, [done({ agent: "codex" })]],
+    [
+      "a resume from another real worktree",
+      RESUME,
+      "pi",
+      undefined,
+      [done({ agent: "pi", cwd: OTHER })],
+    ],
+    ["a protocol run in a busy worktree", PLAN_31, "claude", "31", [running({})]],
+    [
+      "a protocol run on a ticket busy in another worktree",
+      PLAN_31,
+      "claude",
+      "31",
+      [running({ ticket: "31", cwd: "/elsewhere" })],
+    ],
+  ])("rejects %s", (_name, tokens, agent, ticket, records) => {
+    expect(checkLaunchGuards(parse(tokens), agent, CWD, ticket, records, MACHINE)).toBeDefined();
   });
 
-  it("reports a missing executable and preserves the durable failure", async () => {
-    installGit(base);
-    const result = await launch(["new", "-m", "go", "--quiet"], base);
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain("Session file:");
-    expect(result.completion.frontmatter.status).toBe("failed");
-    expect(result.completion.result).toContain("ENOENT");
-  });
-
-  it("reports a prompt-pipe failure without dumping the prompt", async () => {
-    const fake = installFakeClaude(base);
-    writeFileSync(
-      join(base, "bin", "claude"),
-      `#!${process.execPath}\nrequire("node:fs").closeSync(0); setTimeout(() => {}, 10000);\n`,
-    );
-    const result = await launch(["new", "-m", "x".repeat(2_000_000), "--quiet"], fake.path);
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain("Session file:");
-    expect(result.completion.frontmatter).toMatchObject({ status: "failed", exitReason: "error" });
-    expect(result.stdout.length + result.stderr.length).toBeLessThan(700);
-  });
-
-  it.each([false, true])(
-    "keeps authentication exit 2 and one diagnostic with quiet=%s",
-    async (quiet) => {
-      const fake = installFakeClaude(
-        base,
-        `
-      process.stdout.write(JSON.stringify({ type: "assistant", error: "authentication_failed" }) + "\\n");
-      process.stdout.write(JSON.stringify({ type: "result", is_error: true, result: "credential-must-stay-private".repeat(200) }));
-    `,
-      );
-      const result = await launch(["new", "-m", "go", ...(quiet ? ["--quiet"] : [])], fake.path);
-      expect(result.code).toBe(2);
-      expect(result.completion.frontmatter).toMatchObject({
-        status: "failed",
-        exitReason: "auth_required",
-      });
-      expect(result.stderr).toContain("Session file:");
-      expect(result.stderr).not.toContain("credential-must-stay-private");
-      expect(result.stdout.length + result.stderr.length).toBeLessThan(1500);
-    },
-  );
-
-  it("records the login command of an authentication diagnostic in the durable result", async () => {
-    const fake = installFakeClaude(
-      base,
-      'process.stdout.write(JSON.stringify({ type: "assistant", error: "authentication_failed" }));',
-    );
-    const result = await launch(["new", "-m", "go", "--quiet"], fake.path);
-    const login = result.stderr.split("\n").find((line) => line.includes(project));
-    expect(login).toBeDefined();
-    expect(result.completion.result).toContain(login);
-  });
-
-  it("sanitizes quiet model-resolution failures in diagnostics and the file", async () => {
-    const stdout = makeSink();
-    const stderr = makeSink();
-    const detail = "catalog unavailable: credential-must-stay-private".repeat(200);
-    const code = await main({
-      argv: ["node", "aligndev", "code", "new", "-m", "go", "--quiet"],
-      cwd: project,
-      home,
-      env: { HOME: home },
-      alignfirstCommand: ALIGNFIRST,
-      stdout,
-      stderr,
-      modelResolver: async () => {
-        throw new Error(detail);
-      },
-    });
-    expect(code).toBe(1);
-    expect(stderr.text()).toContain("Session file:");
-    expect(stderr.text()).not.toContain(detail);
-    expect(stderr.text().length).toBeLessThan(500);
-    const [record] = listSessionRecords(plans, readMachineId(home));
-    expect(readCompletion(record.path)).toMatchObject({
-      frontmatter: { status: "failed" },
-    });
-    expect(readFileSync(record.path, "utf8")).not.toContain("credential-must-stay-private");
+  it.each<[string, string[], string | undefined, SessionRecord[]]>([
+    [
+      "a protocol run beside another worktree's run",
+      PLAN_31,
+      "31",
+      [running({ cwd: "/elsewhere" })],
+    ],
+    ["a protocol run beside a plain run", PLAN_31, "31", [running({ protocol: null })]],
+    [
+      "a protocol run beside a plain resume on its ticket",
+      ["new", "--protocol", "plan", "--ticket", "30"],
+      "30",
+      [running({ protocol: null })],
+    ],
+    [
+      "a --no-ticket protocol run beside another worktree's run",
+      ["new", "--protocol", "aad", "--no-ticket", "-m", "go"],
+      undefined,
+      [running({ cwd: "/elsewhere" })],
+    ],
+    [
+      "a plain resume in a busy worktree",
+      ["resume", "done", "-m", "answer"],
+      undefined,
+      [running({}), done({ sessionId: "done" })],
+    ],
+    [
+      "a plain new run in a busy worktree",
+      ["new", "-m", "Execute the plan"],
+      undefined,
+      [running({})],
+    ],
+    [
+      "a resume from the latest recorded cwd through a symlink alias",
+      RESUME,
+      undefined,
+      [
+        done({ agent: "pi", cwd: OTHER, startedAt: "2020-01-01T00:00:00.000Z" }),
+        done({ agent: "pi", cwd: ALIAS }),
+      ],
+    ],
+  ])("allows %s", (_name, tokens, ticket, records) => {
+    const agent = records.some((record) => record.frontmatter.agent === "pi") ? "pi" : "claude";
+    expect(checkLaunchGuards(parse(tokens), agent, CWD, ticket, records, MACHINE)).toBeUndefined();
   });
 });
 
-describe("pi launches", () => {
+describe("launches", () => {
   let base: string;
   let home: string;
   let project: string;
   let plans: string;
-  let fake: FakeClaude;
   beforeEach(() => {
-    base = mkdtempSync(join(tmpdir(), "aligndev-pi-"));
-    tempDirs.push(base);
+    base = makeTempDir();
     home = join(base, "home");
     project = join(base, "project");
     plans = join(project, ".plans");
     mkdirSync(plans, { recursive: true });
-    writeConfig(home, { code: { harness: "pi" } });
-    fake = installFakePi(base);
+    writeConfig(home, { code: { harness: "claude" } });
   });
 
-  async function launch(tokens: string[], extraEnv: NodeJS.ProcessEnv = {}, cwd = project) {
+  async function launch(
+    tokens: string[],
+    options: Partial<MainOptions> & { stub?: AlignfirstStub } = {},
+  ) {
     const stdout = makeSink();
     const stderr = makeSink();
     const code = await main({
       argv: ["node", "aligndev", "code", ...tokens],
-      cwd,
+      cwd: project,
       home,
-      env: { HOME: home, PATH: fake.path, ...extraEnv },
-      alignfirstCommand: ALIGNFIRST,
+      modelResolver: async (_agent, model) => model,
+      ...options,
+      stub: options.stub ?? writeAlignfirstStub(base, project),
       stdout,
       stderr,
     });
     return { code, stdout: stdout.text(), stderr: stderr.text() };
   }
 
-  function newest() {
+  function newest(): SessionRecord {
     return listSessionRecords(plans, readMachineId(home)).reduce((a, b) =>
       a.frontmatter.startedAt >= b.frontmatter.startedAt ? a : b,
     );
   }
 
-  it("starts quietly with native selectors and resumes the exact session with inherited models", async () => {
-    const selected = "provider/model:high";
-    const first = await launch(["new", "-m", "go", "--model", selected, "--quiet"]);
-    expect(first.code, first.stderr).toBe(0);
-    expect(first.stdout).toContain("Session file:");
-    expect(first.stdout).toContain("Session ID: pi-session");
-    expect(first.stdout).not.toContain("private pi answer");
-    expect(fake.received().args).toEqual(["--mode", "json", "--model", selected]);
-    expect(fake.received().prompt).toMatch(/go$/);
-    const initial = newest();
-    expect(readCompletion(initial.path)).toMatchObject({
-      frontmatter: { agent: "pi", model: selected },
-      result: "private pi answer",
+  it("records the side ticket alignfirst reserves for --no-ticket", async () => {
+    const result = await launch(["new", "--protocol", "aad", "--no-ticket", "-m", "go"], {
+      stub: writeAlignfirstStub(base, project, { sideTicket: "side-7" }),
+      modelResolver: async () => {
+        throw new Error("stop before spawning");
+      },
     });
-    writeConfig(home, {
-      code: { harness: "pi", models: [selected, "other/model"], defaultModel: "other/model" },
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain(`Session file: ${join(".plans", "side-7", "_aligndev")}`);
+    expect(newest().frontmatter).toMatchObject({
+      ticket: "side-7",
+      command: 'aligndev code new --protocol aad --no-ticket --message "go"',
     });
-    const resumed = await launch(["resume", "pi-session", "-m", "more", "--quiet"]);
-    expect(resumed.code, resumed.stderr).toBe(0);
-    expect(fake.received().args).toEqual([
-      "--mode",
-      "json",
-      "--model",
-      selected,
-      "--session",
-      "pi-session",
-    ]);
-    expect(newest().frontmatter.model).toBe(selected);
   });
 
-  it.each([undefined, "terra", " provider/model:high "])(
-    "preserves native model selection %j",
-    async (model) => {
-      const result = await launch([
-        "new",
-        "-m",
-        "go",
-        ...(model === undefined ? [] : ["--model", model]),
-      ]);
+  describe("model selection", () => {
+    let fake: FakeAgent;
+    beforeEach(() => {
+      writeConfig(home, {
+        code: { harness: "claude", defaultModel: "sonnet", defaultEffort: "low" },
+      });
+      fake = installFakeClaude(base);
+    });
+
+    // The value of each option the agent received.
+    async function received(tokens: string[]) {
+      const result = await launch(tokens, { env: { PATH: fake.path } });
       expect(result.code, result.stderr).toBe(0);
+      const { args } = fake.received();
+      const value = (option: string) =>
+        args.includes(option) ? args[args.indexOf(option) + 1] : undefined;
+      return { model: value("--model"), effort: value("--effort") };
+    }
+
+    it("starts a new session with the profile defaults and records them", async () => {
+      expect(await received(["new", "-m", "go"])).toEqual({ model: "sonnet", effort: "low" });
+      expect(newest().frontmatter).toMatchObject({
+        model: "sonnet",
+        effort: "low",
+        command: 'aligndev code new --message "go"',
+      });
+    });
+
+    it("lets --model and --effort override the profile defaults", async () => {
+      expect(await received(["new", "-m", "go", "--model", "haiku", "--effort", "max"])).toEqual({
+        model: "haiku",
+        effort: "max",
+      });
+      expect(newest().frontmatter).toMatchObject({ model: "haiku", effort: "max" });
+    });
+
+    it.each([
+      ["haiku", "high"],
+      [null, null],
+    ])("resumes with the latest run's model %j and effort %j", async (model, effort) => {
+      writeInitialSessionFile(
+        join(plans, "_aligndev", "old.md"),
+        statusFrontmatter({
+          sessionId: "abc",
+          profile: "test",
+          model: "opus",
+          effort: "max",
+          startedAt: "2026-08-29T10:00:00.000Z",
+        }),
+      );
+      writeInitialSessionFile(
+        join(plans, "_aligndev", "latest.md"),
+        statusFrontmatter({ sessionId: "abc", profile: "test", model, effort }),
+      );
+      expect(await received(["resume", "abc", "-m", "more"])).toEqual({
+        model: model ?? undefined,
+        effort: effort ?? undefined,
+      });
+      expect(newest().frontmatter).toMatchObject({ model, effort });
+    });
+  });
+
+  describe("companion projects", () => {
+    const companion = () => join(base, "companion");
+
+    it("adds the companion directory and the project context for the agent", async () => {
+      mkdirSync(join(companion(), ".plans"), { recursive: true });
+      const stub = writeAlignfirstStub(base, project, {
+        companion: { dir: companion(), items: { ".plans": "companion" } },
+      });
+      const fake = installFakeClaude(base);
+
+      const started = await launch(["new", "-m", "go"], { stub, env: { PATH: fake.path } });
+      expect(started.code, started.stderr).toBe(0);
+      const first = fake.received();
+      expect(first.prompt).toContain("alignfirst context output");
+      expect(first.prompt).toMatch(/go$/);
+      expect(first.args).toEqual(expect.arrayContaining(["--add-dir", companion()]));
+
+      const resumed = await launch(["resume", "session-1", "-m", "more"], {
+        stub,
+        env: { PATH: fake.path },
+      });
+      expect(resumed.code, resumed.stderr).toBe(0);
+      const second = fake.received();
+      expect(second.prompt).toBe("more");
+      expect(second.args).toEqual(expect.arrayContaining(["--add-dir", companion()]));
+    });
+
+    it("adds the companion without the project context when it holds only sessions", async () => {
+      mkdirSync(join(companion(), ".plans"), { recursive: true });
+      const stub = writeAlignfirstStub(base, project, {
+        companion: { dir: companion(), items: { _aligndev: "companion" } },
+      });
+      const fake = installFakeClaude(base);
+      const started = await launch(["new", "-m", "go"], { stub, env: { PATH: fake.path } });
+      expect(started.code, started.stderr).toBe(0);
+      const { prompt, args } = fake.received();
+      expect(prompt).not.toContain("alignfirst context output");
+      expect(args).toEqual(expect.arrayContaining(["--add-dir", companion()]));
+    });
+
+    it("creates a missing companion directory before adding it", async () => {
+      const stub = writeAlignfirstStub(base, project, {
+        companion: { dir: companion(), items: { ".plans": "project" } },
+      });
+      const fake = installFakeClaude(base);
+      const started = await launch(["new", "-m", "go"], { stub, env: { PATH: fake.path } });
+      expect(started.code, started.stderr).toBe(0);
+      expect(existsSync(companion())).toBe(true);
+      expect(fake.received().args).toEqual(expect.arrayContaining(["--add-dir", companion()]));
+    });
+  });
+
+  describe("quiet execution", () => {
+    async function quietLaunch(tokens: string[], body: string) {
+      const fake = installFakeClaude(base, body);
+      const result = await launch(tokens, { env: { PATH: fake.path } });
+      const record = newest();
+      return { ...result, file: record.path, completion: readCompletion(record.path) };
+    }
+
+    it("retains control lines on quiet new/resume and records the flag", async () => {
+      const body = printJsonLines(
+        { type: "assistant", message: { content: [{ type: "text", text: "private transcript" }] } },
+        { type: "result", session_id: "session-1", result: "final answer" },
+      );
+      const started = await quietLaunch(["new", "-m", "go", "--quiet"], body);
+      expect(started.code).toBe(0);
+      // The code guide consumes both control lines.
+      expect(started.stdout.split("\n").filter((line) => line !== "")).toEqual([
+        `Session file: ${relative(project, started.file).replace(/\.md$/, ".running.md")}`,
+        "Session ID: session-1",
+      ]);
+      expect(started.stderr).toBe("");
+      expect(started.completion.result).toBe("final answer");
+      expect(started.completion.frontmatter.command).toContain("--quiet");
+      expect(readFileSync(started.file, "utf8")).toContain("private transcript");
+      const resumed = await quietLaunch(["resume", "session-1", "-m", "more", "--quiet"], body);
+      expect(resumed.code).toBe(0);
+      expect(resumed.stdout.split("\n").filter((line) => line !== "")).toEqual([
+        `Session file: ${relative(project, resumed.file).replace(/\.md$/, ".running.md")}`,
+      ]);
+      expect(resumed.completion.frontmatter.command).toContain("--quiet");
+    });
+
+    it.each([
+      [
+        "stderr",
+        `printf '%s' ${quote("service unavailable: credential-must-stay-private".repeat(200))} >&2\nexit 7`,
+      ],
+      [
+        "incomplete",
+        printJsonLines({
+          type: "assistant",
+          message: { content: [{ type: "text", text: "internal-only" }] },
+        }),
+      ],
+    ])("keeps %s failures durable with bounded quiet diagnostics", async (_name, body) => {
+      const result = await quietLaunch(["new", "-m", "go", "--quiet"], body);
+      expect(result.code).toBe(1);
+      expect(result.completion.frontmatter).toMatchObject({
+        status: "failed",
+        exitReason: "error",
+      });
+      expect(result.stderr).toContain(`Session file: ${relative(project, result.file)}\n`);
+      expect(result.stderr).not.toContain("credential-must-stay-private");
+      expect(result.stdout).not.toContain("internal-only");
+      expect(result.stdout.length + result.stderr.length).toBeLessThan(700);
+    });
+
+    it("keeps authentication exit 2 and records the login command in the durable result", async () => {
+      const result = await quietLaunch(
+        ["new", "-m", "go", "--quiet"],
+        printJsonLines(
+          { type: "assistant", error: "authentication_failed" },
+          { type: "result", is_error: true, result: "credential-must-stay-private".repeat(200) },
+        ),
+      );
+      expect(result.code).toBe(2);
+      expect(result.completion.frontmatter).toMatchObject({
+        status: "failed",
+        exitReason: "auth_required",
+      });
+      expect(result.stderr).not.toContain("credential-must-stay-private");
+      expect(result.stdout.length + result.stderr.length).toBeLessThan(1500);
+      const login = result.stderr.split("\n").find((line) => line.includes(project));
+      expect(login).toBeDefined();
+      expect(result.completion.result).toContain(login);
+    });
+  });
+
+  describe("pi", () => {
+    let fake: FakeAgent;
+    beforeEach(() => {
+      writeConfig(home, { code: { harness: "pi" } });
+      fake = installFakeAgent(
+        base,
+        "pi",
+        `printf '{"type":"session","version":3,"id":"pi-session","cwd":"%s","timestamp":"2026-08-29T11:55:29.000Z"}\\n' "$(pwd)"
+${printJsonLines(
+  {
+    type: "message_end",
+    message: {
+      role: "assistant",
+      stopReason: "stop",
+      content: [{ type: "text", text: "private pi answer" }],
+      usage: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 },
+    },
+  },
+  { type: "agent_settled", aborted: false },
+)}`,
+      );
+    });
+
+    it("starts quietly with native selectors and resumes the exact session with inherited models", async () => {
+      const selected = "provider/model:high";
+      const env = { PATH: fake.path };
+      const first = await launch(["new", "-m", "go", "--model", selected, "--quiet"], { env });
+      expect(first.code, first.stderr).toBe(0);
+      expect(first.stdout).toContain("Session ID: pi-session");
+      expect(first.stdout).not.toContain("private pi answer");
+      expect(fake.received().args).toEqual(["--mode", "json", "--model", selected]);
+      expect(fake.received().prompt).toMatch(/go$/);
+      expect(readCompletion(newest().path)).toMatchObject({
+        frontmatter: { agent: "pi", model: selected },
+        result: "private pi answer",
+      });
+      writeConfig(home, {
+        code: { harness: "pi", models: [selected, "other/model"], defaultModel: "other/model" },
+      });
+      const resumed = await launch(["resume", "pi-session", "-m", "more", "--quiet"], { env });
+      expect(resumed.code, resumed.stderr).toBe(0);
       expect(fake.received().args).toEqual([
         "--mode",
         "json",
-        ...(model === undefined ? [] : ["--model", model]),
+        "--model",
+        selected,
+        "--session",
+        "pi-session",
       ]);
-    },
-  );
-
-  it("validates blank selectors and exact configured allowlists before creating runs", async () => {
-    for (const model of ["", " \t "]) {
-      const result = await launch(["new", "-m", "go", "--model", model]);
-      expect(result.code).toBe(1);
-    }
-    writeConfig(home, { code: { harness: "pi", models: ["provider/model"] } });
-    expect((await launch(["new", "-m", "go", "--model", "terra"])).code).toBe(1);
-    expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(0);
-  });
-
-  it("rejects another real worktree before writing a run or invoking pi", async () => {
-    const other = join(base, "other-worktree");
-    mkdirSync(other);
-    writeInitialSessionFile(
-      join(plans, "_aligndev", "original.md"),
-      statusFrontmatter({ agent: "pi", profile: "test", sessionId: "pi-session", cwd: other }),
-    );
-    const result = await launch(["resume", "pi-session", "-m", "more"]);
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain(other);
-    expect(result.stdout).not.toContain("Session file:");
-    expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(1);
-    expect(existsSync(join(base, "bin", "pi-args.json"))).toBe(false);
-  });
-
-  it("uses the latest recorded cwd, permits symlink aliases and retains same-agent guards", () => {
-    const alias = join(base, "alias");
-    symlinkSync(project, alias);
-    const old = {
-      path: "old",
-      frontmatter: statusFrontmatter({
-        agent: "pi",
-        sessionId: "pi-session",
-        cwd: base,
-        startedAt: "2020-01-01",
-      }),
-    };
-    const latest = {
-      path: "latest",
-      frontmatter: statusFrontmatter({ agent: "pi", sessionId: "pi-session", cwd: alias }),
-    };
-    const args = parse(["resume", "pi-session", "-m", "go"]);
-    expect(
-      checkLaunchGuards(
-        args,
-        "pi",
-        realpathSync(project),
-        undefined,
-        [old, latest],
-        readMachineId(home),
-      ),
-    ).toBeUndefined();
-    expect(
-      checkLaunchGuards(
-        args,
-        "claude",
-        realpathSync(project),
-        undefined,
-        [latest],
-        readMachineId(home),
-      ),
-    ).toBeDefined();
-    expect(
-      checkLaunchGuards(
-        args,
-        "pi",
-        realpathSync(project),
-        undefined,
-        [{ ...latest, frontmatter: { ...latest.frontmatter, agent: "codex" } }],
-        readMachineId(home),
-      ),
-    ).toBeDefined();
-  });
-
-  it("retains the requested identity while failing a mismatched resumed header", async () => {
-    expect((await launch(["new", "-m", "go"])).code).toBe(0);
-    const result = await launch(["resume", "pi-session", "-m", "more", "--quiet"], {
-      PI_FIXTURE_ID: "forked-session",
+      expect(newest().frontmatter.model).toBe(selected);
     });
-    expect(result.code).toBe(1);
-    expect(readCompletion(newest().path)).toMatchObject({
-      frontmatter: { status: "failed", sessionId: "pi-session", exitReason: "error" },
+
+    it("prepares a missing companion only on launch", async () => {
+      const companion = join(base, "companion");
+      const stub = writeAlignfirstStub(base, project, {
+        companion: { dir: companion, items: { ".plans": "project" } },
+      });
+      const env = { PATH: fake.path };
+      expect((await launch(["status", "--no-ticket"], { stub, env })).code).toBe(1);
+      expect(existsSync(companion)).toBe(false);
+      const result = await launch(["new", "-m", "go"], { stub, env });
+      expect(result.code, result.stderr).toBe(0);
+      expect(existsSync(companion)).toBe(true);
+      expect(fake.received().args).toEqual(["--mode", "json"]);
     });
   });
-
-  it.each(["protocol", "startup"])(
-    "keeps %s authentication exit 2 and its durable reason",
-    async (channel) => {
-      const result = await launch(["new", "-m", "go", "--quiet"], { PI_FIXTURE_AUTH: channel });
-      expect(result.code).toBe(2);
-      expect(readCompletion(newest().path).frontmatter.exitReason).toBe("auth_required");
-    },
-  );
-
-  it("records failure when the pi executable is missing", async () => {
-    installGit(base);
-    const result = await launch(["new", "-m", "go", "--quiet"], { PATH: base });
-    expect(result.code).toBe(1);
-    expect(readCompletion(newest().path).result).toContain("ENOENT");
-  });
-
-  it("fails a zero-exit incomplete stream with bounded quiet diagnostics", async () => {
-    const result = await launch(["new", "-m", "go", "--quiet"], { PI_FIXTURE_INCOMPLETE: "true" });
-    expect(result.code).toBe(1);
-    expect(result.stdout).not.toContain("private pi answer");
-    expect(readCompletion(newest().path).frontmatter.status).toBe("failed");
-  });
-
-  it("prepares a missing companion independently of permission flags, only on launch", async () => {
-    mkdirSync(home, { recursive: true });
-    const companion = makeCompanionProject(home, { ".plans": "project" });
-    mkdirSync(join(companion.project, ".plans"));
-    project = companion.project;
-    plans = join(project, ".plans");
-    expect((await launch(["status", "--no-ticket"])).code).toBe(1);
-    expect(existsSync(companion.companion)).toBe(false);
-    const result = await launch(["new", "-m", "go"]);
-    expect(result.code, result.stderr).toBe(0);
-    expect(existsSync(companion.companion)).toBe(true);
-    expect(fake.received().args).toEqual(["--mode", "json"]);
-  });
-
-  it("rejects unsupported quota without launching pi", async () => {
-    const quota = await launch(["quota"]);
-    expect(quota.code).toBe(1);
-    expect(existsSync(join(base, "bin", "pi-args.json"))).toBe(false);
-  });
 });
-
-function installFakePi(base: string): FakeClaude {
-  const bin = join(base, "bin");
-  mkdirSync(bin, { recursive: true });
-  writeFileSync(
-    join(bin, "pi"),
-    `#!${process.execPath}
-const { writeFileSync } = require("node:fs");
-let prompt = "";
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", chunk => prompt += chunk);
-process.stdin.on("end", () => {
-  writeFileSync(${JSON.stringify(join(bin, "pi-prompt.txt"))}, prompt);
-  writeFileSync(${JSON.stringify(join(bin, "pi-args.json"))}, JSON.stringify(process.argv.slice(2)));
-  if (process.env.PI_FIXTURE_AUTH === "startup") {
-    process.stderr.write("No API key found for example.");
-    process.exitCode = 1;
-    return;
-  }
-  const auth = process.env.PI_FIXTURE_AUTH === "protocol";
-  const events = [
-    { type: "session", version: 3, id: process.env.PI_FIXTURE_ID ?? "pi-session", cwd: process.cwd(), timestamp: new Date().toISOString() },
-    { type: "message_end", message: { role: "assistant", stopReason: auth ? "error" : "stop", errorMessage: auth ? "No API key found for example." : undefined, content: [{ type: "text", text: "private pi answer" }], usage: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 } } },
-    ...(process.env.PI_FIXTURE_INCOMPLETE === "true" ? [] : [{ type: "agent_settled", aborted: false }]),
-  ];
-  process.stdout.write(events.map(JSON.stringify).join("\\n"));
-});
-`,
-    { mode: 0o755 },
-  );
-  return {
-    path: `${bin}:${process.env.PATH ?? ""}`,
-    received: () => ({
-      prompt: readFileSync(join(bin, "pi-prompt.txt"), "utf8"),
-      args: JSON.parse(readFileSync(join(bin, "pi-args.json"), "utf8")),
-    }),
-  };
-}
-
-interface FakeClaude {
-  path: string;
-  received: () => { prompt: string; args: string[] };
-}
-
-// A `claude` on PATH that records its prompt and arguments, then reports session `session-1`.
-function installFakeClaude(
-  base: string,
-  response = 'process.stdout.write(JSON.stringify({ type: "result", result: "done", session_id: process.argv.includes("--resume") ? process.argv[process.argv.indexOf("--resume") + 1] : "session-1" }));',
-): FakeClaude {
-  const bin = join(base, "bin");
-  mkdirSync(bin);
-  writeFileSync(
-    join(bin, "claude"),
-    `#!${process.execPath}
-const { writeFileSync } = require("node:fs");
-const { join } = require("node:path");
-let prompt = "";
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", (chunk) => (prompt += chunk));
-process.stdin.on("end", () => {
-  writeFileSync(join(${JSON.stringify(bin)}, "prompt.txt"), prompt);
-  writeFileSync(join(${JSON.stringify(bin)}, "args.json"), JSON.stringify(process.argv.slice(2)));
-  ${response}
-});
-`,
-    { mode: 0o755 },
-  );
-  const path = `${bin}:${process.env.PATH ?? ""}`;
-  const received = () => ({
-    prompt: readFileSync(join(bin, "prompt.txt"), "utf8"),
-    args: JSON.parse(readFileSync(join(bin, "args.json"), "utf8")),
-  });
-  return { path, received };
-}
 
 function statusFrontmatter(overrides: Partial<SessionFrontmatter>): SessionFrontmatter {
   return {

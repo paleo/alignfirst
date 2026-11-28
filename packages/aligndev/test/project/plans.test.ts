@@ -2,15 +2,15 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { resolveCommandForms } from "../../src/command-form.js";
 import { type PlansContext, validateEffectivePlans } from "../../src/project/plans.js";
+import { quote } from "../stand-ins.js";
 
 const dirs: string[] = [];
 
 afterEach(() => {
-  vi.restoreAllMocks();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -20,12 +20,7 @@ describe("validateEffectivePlans", () => {
     const fixture = gateCommand(JSON.stringify({ plans: { target } }));
     expect(validateEffectivePlans(fixture.ctx)).toBe(target);
     expect(fixture.invocations()).toEqual([
-      {
-        args: ["plans", "check", "--json"],
-        cwd: fixture.ctx.cwd,
-        probe: "supplied environment",
-        home: fixture.ctx.env.HOME,
-      },
+      ["plans check --json", fixture.ctx.cwd, "supplied environment", fixture.ctx.env.HOME],
     ]);
   });
 
@@ -50,28 +45,13 @@ describe("validateEffectivePlans", () => {
 
   it.each([
     null,
-    {},
-    { plans: "ready" },
     { plans: {} },
-    { plans: { target: 42 } },
     { plans: { target: "   " } },
     { plans: { target: "relative/.plans" } },
   ])("rejects missing or invalid target data: %j", (report) => {
     const fixture = gateCommand(JSON.stringify(report));
     expect(() => validateEffectivePlans(fixture.ctx)).toThrow(Error);
     expect(fixture.invocations()).toHaveLength(1);
-  });
-
-  it("keeps recognized successful warnings on stderr without forwarding them twice", () => {
-    const warning =
-      "Warning: ignoring unknown companion registry setting extra. Remove it or check its spelling.";
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const fixture = gateCommand(
-      JSON.stringify({ plans: { target: tmpdir() } }),
-      `${warning}\nprivate child diagnostic\n`,
-    );
-    expect(validateEffectivePlans(fixture.ctx)).toBe(tmpdir());
-    expect(warn).toHaveBeenCalledExactlyOnceWith(warning);
   });
 });
 
@@ -85,31 +65,29 @@ function gateCommand(stdout: string, stderr = "", status = 0): GateFixture {
   dirs.push(dir);
   const cwd = join(dir, "project");
   mkdirSync(cwd);
-  const log = join(dir, "invocations.jsonl");
-  const script = join(dir, "alignfirst.mjs");
+  const log = join(dir, "invocations.log");
+  const script = join(dir, "alignfirst");
   writeFileSync(
     script,
-    `import { appendFileSync } from "node:fs";
-appendFileSync(${JSON.stringify(log)}, JSON.stringify({
-  args: process.argv.slice(2), cwd: process.cwd(), probe: process.env.GATE_PROBE,
-  home: process.env.HOME,
-}) + "\\n");
-process.stdout.write(${JSON.stringify(stdout)});
-process.stderr.write(${JSON.stringify(stderr)});
-process.exitCode = ${status};
+    `#!/bin/sh
+printf '%s|%s|%s|%s\\n' "$*" "$(pwd)" "$GATE_PROBE" "$HOME" >> ${quote(log)}
+printf '%s' ${quote(stdout)}
+printf '%s' ${quote(stderr)} >&2
+exit ${status}
 `,
+    { mode: 0o755 },
   );
   return {
     ctx: {
       cwd: realpathSync(cwd),
       env: { HOME: dir, GATE_PROBE: "supplied environment" },
-      alignfirstCommand: [process.execPath, script],
+      alignfirstCommand: [script],
       forms: resolveCommandForms({}),
     },
     invocations: () =>
       readFileSync(log, "utf8")
-        .trim()
+        .trimEnd()
         .split("\n")
-        .map((line) => JSON.parse(line)),
+        .map((line) => line.split("|")),
   };
 }

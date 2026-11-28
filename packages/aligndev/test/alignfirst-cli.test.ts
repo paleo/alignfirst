@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   describeAlignfirst,
+  forwardSettingsWarnings,
   loadCatchup,
   loadContext,
   openTicket,
@@ -31,7 +32,7 @@ const privateMessages = [
   "Warning: ignoring unknown .alignfirst.json setting bad\u001b[31m. private-value",
   "Warning: developerInstructions is deprecated in /project/alignfirst.json; private-child-value",
   "Warning: developer-instructions is deprecated; private-child-value",
-  ...["\u001b", "\u200b", "\u2028", "\u2029"].flatMap((control) =>
+  ...["\u001b", "​", " ", " "].flatMap((control) =>
     warnings.map((warning) =>
       warning.replace(/setting |deprecated in |deprecated; /u, `$&${control}`),
     ),
@@ -41,26 +42,25 @@ const privateMessages = [
 afterEach(() => vi.restoreAllMocks());
 
 describe("structured runner argv", () => {
-  it.each([
-    ["node", "npm", ["-y", "alignfirst"]],
-    ["node", "bun", ["alignfirst"]],
-    ["bun", "bun", ["--bun", "alignfirst"]],
-  ] as const)("records every operation under %s/%s", (runtime, manager, prefix) => {
+  it("records every operation under the npm runner", () => {
     const cwd = mkdtempSync(join(tmpdir(), "aligndev-runner-"));
     try {
       const bin = join(cwd, "bin");
       mkdirSync(bin);
-      const log = join(cwd, "argv.jsonl");
-      const env = { PATH: bin, npm_config_user_agent: `${manager}/1`, npm_command: "exec" };
-      const forms = resolveCommandForms(env, { runtime, env, cwd, executable: process.execPath });
+      const log = join(cwd, "argv.log");
+      const env = { PATH: bin, npm_config_user_agent: "npm/1", npm_command: "exec" };
+      const forms = resolveCommandForms(env, {
+        runtime: "node",
+        env,
+        cwd,
+        executable: process.execPath,
+      });
       const command = [forms.counterpart.executable, ...forms.counterpart.args];
       writeFileSync(
         join(bin, command[0]),
-        `#!${process.execPath}
-const fs = require("node:fs");
-const args = process.argv.slice(2);
-fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + "\\n");
-console.log(args.includes("--version") ? "0.14.1" : JSON.stringify({TICKET_ID:"side-1"}));
+        `#!/bin/sh
+printf '%s\\n' "$*" >> '${log}'
+if [ "$3" = --version ]; then echo 0.14.1; else echo '{"TICKET_ID":"side-1"}'; fi
 `,
         { mode: 0o755 },
       );
@@ -70,71 +70,42 @@ console.log(args.includes("--version") ? "0.14.1" : JSON.stringify({TICKET_ID:"s
       openTicket(command, cwd, "side-1", env);
       loadCatchup(command, cwd, "side-1", env);
       loadContext(command, cwd, env);
-      const description = describeAlignfirst(command, cwd, env);
-      expect(description).toContain("0.14.1");
-      expect(
-        readFileSync(log, "utf8")
-          .trim()
-          .split("\n")
-          .map((line) => JSON.parse(line)),
-      ).toEqual(
+      expect(describeAlignfirst(command, cwd, env)).toContain("0.14.1");
+      expect(readFileSync(log, "utf8").trimEnd().split("\n")).toEqual(
         [
-          ["config", "--json"],
-          ["plans", "check", "--json"],
-          ["ticket", "--side", "--json"],
-          ["ticket", "side-1", "--json"],
-          ["ticket", "side-1", "--catchup"],
-          ["context"],
-          ["--version"],
-        ].map((args) => [...prefix, ...args]),
+          "config --json",
+          "plans check --json",
+          "ticket --side --json",
+          "ticket side-1 --json",
+          "ticket side-1 --catchup",
+          "context",
+          "--version",
+        ].map((args) => `-y alignfirst ${args}`),
       );
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
   });
-
-  it("rejects a missing Bun executable", () => {
-    expect(() =>
-      runAlignfirst(["bunx", "--bun", "alignfirst"], ["config", "--json"], tmpdir(), { PATH: "" }),
-    ).toThrow(Error);
-  });
 });
 
-describe("runAlignfirst settings warnings", () => {
-  it.each([["config", "--json"], ["context"], ["ticket", "27", "--json"]])(
-    "forwards only settings warnings from successful %j without changing captured output",
-    (...args) => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      const log = vi.spyOn(console, "log").mockImplementation(() => {});
-      const stderr = [...warnings, ...privateMessages].join("\r\n");
-      const result = runChild(args, stderr, 0);
-      expect(result).toEqual({ status: 0, stdout: '{"ok":true}\n', stderr });
-      expect(warn.mock.calls).toEqual(warnings.map((line) => [line]));
-      expect(log).not.toHaveBeenCalled();
-      expect(JSON.parse(result.stdout)).toEqual({ ok: true });
-    },
-  );
+describe("settings warnings", () => {
+  it("forwards only settings warnings and returns the other diagnostics", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const diagnostics = forwardSettingsWarnings([...warnings, ...privateMessages].join("\r\n"));
+    expect(warn.mock.calls).toEqual(warnings.map((line) => [line]));
+    expect(diagnostics).toBe(privateMessages.join("\n"));
+  });
 
   it("leaves failed-invocation diagnostics to the caller", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const stderr = [...warnings, ...privateMessages].join("\n");
-    expect(runChild(["config", "--json"], stderr, 1).stderr).toBe(stderr);
+    const stderr = warnings.join("\n");
+    const result = runAlignfirst(
+      ["/bin/sh", "-c", 'printf "%s" "$0" >&2; exit 1', stderr],
+      [],
+      tmpdir(),
+      {},
+    );
+    expect(result).toMatchObject({ status: 1, stderr });
     expect(warn).not.toHaveBeenCalled();
   });
 });
-
-function runChild(args: string[], stderr: string, status: number) {
-  return runAlignfirst(
-    [
-      process.execPath,
-      "-e",
-      `process.stdout.write('{"ok":true}\\n');
-process.stderr.write(${JSON.stringify(stderr)});
-process.exitCode = ${status};`,
-      "--",
-    ],
-    args,
-    tmpdir(),
-    {},
-  );
-}

@@ -39,7 +39,7 @@ export function useProjectFixtures(): void {
   beforeAll(() => {
     gitConfigDir = mkdtempSync(join(tmpdir(), "aligndev-git-"));
     gitConfigPath = join(gitConfigDir, "gitconfig");
-    writeFileSync(gitConfigPath, "");
+    writeFileSync(gitConfigPath, "[user]\n\tname = Test\n\temail = test@example.com\n");
     originalGitConfig = process.env.GIT_CONFIG_GLOBAL;
     process.env.GIT_CONFIG_GLOBAL = gitConfigPath;
   });
@@ -103,16 +103,16 @@ export async function runAligndev(
   return { code, stdout: stdout.text(), stderr: stderr.text() };
 }
 
+// An empty repository; `git worktree add` needs `addInitialCommit` first.
 export function makeRepository(parent: string, name: string, config?: object): string {
   const repository = join(parent, name);
   execGit(parent, "init", "--quiet", "--initial-branch=main", repository);
-  execGit(repository, "config", "user.name", "Test");
-  execGit(repository, "config", "user.email", "test@example.com");
-  writeFileSync(join(repository, "README.md"), `${name}\n`);
-  execGit(repository, "add", "README.md");
-  execGit(repository, "commit", "--quiet", "-m", "initial");
   if (config !== undefined) writeProjectConfig(repository, config);
   return realpathSync(repository);
+}
+
+export function addInitialCommit(repository: string): void {
+  execGit(repository, "commit", "--quiet", "--allow-empty", "-m", "initial");
 }
 
 // Inventory fixtures supply the range separately from convention settings.

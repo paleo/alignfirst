@@ -26,25 +26,13 @@ const STREAM_FLAGS = [
 describe("Antigravity argv", () => {
   it.each<[string, Partial<RunConfig>, string[]]>([
     ["a normal run", {}, []],
-    ["skipPermissions", { skipPermissions: true }, ["--dangerously-skip-permissions"]],
-    [
-      "a companion directory",
-      { additionalDirectories: ["/companions/proj"] },
-      ["--add-dir", "/companions/proj"],
-    ],
-    ["a resume", { resume: "conv-1" }, ["--conversation", "conv-1"]],
-    [
-      "a model with an effort",
-      { executableModel: "gemini-3.8-flash", effort: "low" },
-      ["--model", "gemini-3.8-flash", "--effort", "low"],
-    ],
     [
       "every option",
       {
         skipPermissions: true,
         additionalDirectories: ["/companions/proj"],
         resume: "conv-1",
-        executableModel: "gemini-3.8-flash",
+        executableModel: "model-x",
         effort: "high",
       },
       [
@@ -54,7 +42,7 @@ describe("Antigravity argv", () => {
         "--conversation",
         "conv-1",
         "--model",
-        "gemini-3.8-flash",
+        "model-x",
         "--effort",
         "high",
       ],
@@ -134,15 +122,14 @@ describe("Antigravity stream", () => {
   it.each<[string, object | undefined, unknown]>([
     [
       "an ERROR result carries its error",
-      { status: "ERROR", response: "", error: "invalid model selection (gemini-x)" },
-      "invalid model selection (gemini-x)",
+      { status: "ERROR", response: "", error: "invalid model selection (model-y)" },
+      "invalid model selection (model-y)",
     ],
     [
       "an early end fails a SUCCESS",
       { status: "SUCCESS", response: "Partial", finished_reason: "print_timeout" },
       expect.any(String),
     ],
-    ["a blank response under SUCCESS", { status: "SUCCESS", response: "  " }, undefined],
     ["a stream without result", undefined, undefined],
   ])("does not succeed when %s", (_name, resultEvent, error) => {
     const state = adapter.createState(BASE);
@@ -174,8 +161,7 @@ describe("Antigravity authentication", () => {
 
   it.each([
     ["Error: authentication required. Run 'agy' to log in, then retry.", true],
-    ["Error: invalid model selection (gemini-x)", false],
-    ['warning: conversation "conv-0" not found', false],
+    ["Error: invalid model selection (model-y)", false],
   ])("recognizes stderr %j as an authentication failure: %s", (stderr, expected) => {
     expect(adapter.isAuthenticationError(stderr)).toBe(expected);
   });

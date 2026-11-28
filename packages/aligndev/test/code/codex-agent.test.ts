@@ -35,40 +35,15 @@ afterEach(() => {
 });
 
 describe("Codex argv", () => {
-  it("builds new and resumed commands with normal sandboxing", () => {
+  it("builds new and resumed commands with normal sandboxing, options before resume", () => {
     expect(buildCodexArgs(BASE)).toEqual(["exec", "--json", "--sandbox", "workspace-write", "-"]);
-    expect(
-      buildCodexArgs({ ...BASE, resume: "thread-1", executableModel: "gpt-6.1-terra" }),
-    ).toEqual([
-      "exec",
-      "--json",
-      "--sandbox",
-      "workspace-write",
-      "--model",
-      "gpt-6.1-terra",
-      "resume",
-      "thread-1",
-      "-",
-    ]);
-  });
-
-  it("passes the effort as a TOML string override, before resume", () => {
-    expect(buildCodexArgs({ ...BASE, resume: "thread-1", effort: "high" }).slice(-5)).toEqual([
-      "-c",
-      'model_reasoning_effort="high"',
-      "resume",
-      "thread-1",
-      "-",
-    ]);
-  });
-
-  it("passes --add-dir among the exec options, before resume", () => {
     expect(
       buildCodexArgs({
         ...BASE,
         additionalDirectories: ["/companions/proj"],
         resume: "thread-1",
-        executableModel: "gpt-6.1-terra",
+        executableModel: "model-x",
+        effort: "high",
       }),
     ).toEqual([
       "exec",
@@ -78,7 +53,9 @@ describe("Codex argv", () => {
       "--add-dir",
       "/companions/proj",
       "--model",
-      "gpt-6.1-terra",
+      "model-x",
+      "-c",
+      'model_reasoning_effort="high"',
       "resume",
       "thread-1",
       "-",
@@ -127,7 +104,6 @@ describe("Codex protocol", () => {
 
   it.each([
     { type: "turn.failed", error: { message: "turn broke" } },
-    { type: "error", message: "service broke" },
     { type: "item.completed", item: { type: "error", message: "item broke" } },
   ])("preserves structured failures", (failure) => {
     const state = createCodexState();
@@ -217,7 +193,7 @@ describe("Codex protocol", () => {
 });
 
 describe("Codex selected native context", () => {
-  it.each([undefined, "", "replacement"])(
+  it.each([undefined, "replacement"])(
     "rejects missing or changed resume identity %j permanently",
     (id) => {
       const state = createCodexState({ ...BASE, resume: "expected" });

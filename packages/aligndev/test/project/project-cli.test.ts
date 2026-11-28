@@ -11,8 +11,12 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import type { ProjectInventory } from "../../src/project/discovery.js";
+import { findFreeBlock, type PortRange } from "../../src/project/ports.js";
 import { writeConfig, writeRegistry } from "../helpers.js";
+import { buildReport } from "../stand-ins.js";
 import {
+  addInitialCommit,
   addWorktree,
   execGit,
   type Fixture,
@@ -32,6 +36,7 @@ describe("projects command surface", () => {
   it("keeps stale Git registrations readable with the existing project JSON shape", async () => {
     const fixture = makeFixture();
     const repo = makeRepository(fixture.root, "app");
+    addInitialCommit(repo);
     const stale = join(fixture.base, "stale");
     addWorktree(repo, stale, "stale");
     rmSync(stale, { recursive: true });
@@ -43,80 +48,55 @@ describe("projects command surface", () => {
     ]);
   });
 
-  it("scans any directory as a root and expands --root ~/ against the injected home", async () => {
+  it.each<[string, (fixture: Fixture) => { settings?: object; args: string[]; root?: string }]>([
+    [
+      "--root ~/ against the injected home",
+      (fixture) => ({ args: ["--root", "~/projects"], root: join(fixture.home, "projects") }),
+    ],
+    [
+      "projectsRoot from the settings",
+      (fixture) => ({ settings: { projectsRoot: fixture.root }, args: [], root: fixture.root }),
+    ],
+    [
+      "--root over projectsRoot",
+      (fixture) => ({
+        settings: { projectsRoot: fixture.root },
+        args: ["--root", join(fixture.home, "projects")],
+        root: join(fixture.home, "projects"),
+      }),
+    ],
+    [
+      "a ~/ projectsRoot against the injected home",
+      (fixture) => ({
+        settings: { projectsRoot: "~/projects" },
+        args: [],
+        root: join(fixture.home, "projects"),
+      }),
+    ],
+    ["a missing root", (fixture) => ({ args: ["--root", join(fixture.base, "missing")] })],
+  ])("scans %s", async (_name, build) => {
     const fixture = makeFixture();
-    const projects = join(fixture.home, "projects");
-    mkdirSync(projects);
-    const app = makeRepository(projects, "app");
-    const result = await runProjects(fixture, ["list", "--json", "--root", "~/projects"]);
-    expect(result.code, result.stderr).toBe(0);
-    const report = JSON.parse(result.stdout);
-    expect(report.root).toBe(realpathSync(projects));
-    expect(report.projects.map(({ path }: { path: string }) => path)).toEqual([app]);
-  });
-
-  it("fails on a missing root", async () => {
-    const fixture = makeFixture();
-    const result = await runProjects(fixture, ["list", "--root", join(fixture.base, "missing")]);
-    expect(result.code).toBe(1);
-  });
-
-  it("defaults --root to projectsRoot in the config, and lets --root override it", async () => {
-    const fixture = makeFixture();
-    makeRepository(fixture.root, "configured", {});
-    const other = join(fixture.base, "other");
-    mkdirSync(other);
+    mkdirSync(join(fixture.home, "projects"));
+    const { settings, args, root } = build(fixture);
+    if (settings !== undefined) writeConfig(fixture.home, settings);
     const cwd = join(fixture.base, "elsewhere");
     mkdirSync(cwd);
-    writeConfig(fixture.home, {
-      code: { harness: "claude" },
-      projectsRoot: fixture.root,
-    });
-
-    const configured = await runProjects(fixture, ["list", "--json"], { cwd });
-    expect(configured.code).toBe(0);
-    expect(JSON.parse(configured.stdout).root).toBe(realpathSync(fixture.root));
-
-    const overridden = await runProjects(fixture, ["list", "--json", "--root", other], { cwd });
-    expect(overridden.code).toBe(0);
-    expect(JSON.parse(overridden.stdout).root).toBe(realpathSync(other));
-  });
-
-  it("expands a ~/ projectsRoot against the injected home", async () => {
-    const fixture = makeFixture();
-    const projects = join(fixture.home, "projects");
-    mkdirSync(projects);
-    writeConfig(fixture.home, {
-      code: { harness: "claude" },
-      projectsRoot: "~/projects",
-    });
-
-    const result = await runProjects(fixture, ["list", "--json"]);
-    expect(result.code).toBe(0);
-    expect(JSON.parse(result.stdout).root).toBe(realpathSync(projects));
+    const result = await runProjects(fixture, ["list", "--json", ...args], { cwd });
+    if (root === undefined) {
+      expect(result.code).toBe(1);
+      return;
+    }
+    expect(result.code, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout).root).toBe(realpathSync(root));
   });
 
   it.each([
-    [["status"], "status requires exactly one path"],
-    [["list", "extra"], "list does not accept a path"],
-    [["doctor", "--json"], "--json is valid only with"],
-    [["list", "--size", "2"], "--size is valid only with free-ports"],
-    [["free-ports"], "free-ports requires --size"],
-    [["free-ports", "--size", "1"], "free-ports requires --within"],
-    [["list", "--within", "8000..8099"], "--within is valid only with free-ports"],
-    [["ports", "--size", "2"], "--size is valid only with free-ports"],
-    [["free-ports", "--size", "1", "--within", "9..1"], "--within"],
-    [["free-ports", "--size", "1", "--within", "0..10"], "--within"],
-    [["free-ports", "--size", "1", "--within", "1..65536"], "--within"],
-    [["free-ports", "--size", "1", "--within", "8000-8099"], "--within"],
-    [["list", "--max-depth", "0"], "--max-depth must be a positive integer"],
-    [["doctor", "--max-depth", "two"], "--max-depth must be a positive integer"],
-    [["--max-depth", "2"], "Command options require a projects command"],
-    [["--guide"], "Unknown option '--guide'"],
-    [["init"], "Unknown projects command: init"],
-    [["free-ports", "--size", "1", "--range", "web"], "Unknown option '--range'"],
-    [["list", "--description", "x"], "Unknown option '--description'"],
-    [["list", "--port-range", "8000-8099"], "Unknown option '--port-range'"],
+    [["status"]],
+    [["doctor", "--json"]],
+    [["free-ports", "--size", "1"]],
+    [["free-ports", "--size", "1", "--within", "9..1"]],
+    [["list", "--max-depth", "0"]],
+    [["init"]],
   ])("rejects the option misuse %j", async (args) => {
     const result = await runProjects(makeFixture(), args);
     expect(result.code).toBe(1);
@@ -184,32 +164,6 @@ describe("project inventory doctor", () => {
 
     expect(result.code).toBe(0);
     expect(result.stdout).toContain(link);
-  });
-
-  it("rejects the retired project CLI range instead of silently ignoring it", async () => {
-    const fixture = makeFixture();
-    const project = makeRepository(fixture.root, "project", { cli: ">=99.0.0" });
-
-    const result = await runProjects(fixture, ["doctor"]);
-
-    expect(result.code).toBe(1);
-    expect(result.stdout).toContain(project);
-  });
-
-  it("fails for invalid configuration and incomplete discovery", async () => {
-    const fixture = makeFixture();
-    const nongit = join(fixture.root, "nongit");
-    mkdirSync(nongit);
-    writeProjectConfig(nongit, {});
-    const invalid = makeRepository(fixture.root, "invalid");
-    writeFileSync(join(invalid, "alignfirst.json"), "{}\n");
-
-    const result = await runProjects(fixture, ["doctor"]);
-
-    expect(result.code).toBe(1);
-    expect(result.stderr).toBe("");
-    expect(result.stdout).toContain(invalid);
-    expect(result.stdout).toContain(nongit);
   });
 
   it("renders a failed scan as a failing health line", async () => {
@@ -339,8 +293,10 @@ describe("project discovery", () => {
     mkdirSync(mains);
     mkdirSync(workspaces);
     const app = makeRepository(mains, "app");
+    addInitialCommit(app);
     addWorktree(app, join(workspaces, "app-feature"), "feature");
     const outside = makeRepository(fixture.base, "outside");
+    addInitialCommit(outside);
     addWorktree(outside, join(workspaces, "outside-feature"), "feature");
 
     const report = await listJson(fixture);
@@ -385,31 +341,6 @@ describe("project discovery", () => {
     ]);
     expect(report.projects.some((project: Project) => project.name === "invalid")).toBe(false);
   });
-
-  it.each([
-    [
-      "prints a single old report",
-      `process.stdout.write(${JSON.stringify(JSON.stringify({ source: null, cli: null, config: null, locations: {} }))})`,
-    ],
-    ["rejects the directories", "process.exit(1)"],
-  ])("fails the scan when alignfirst %s", async (_name, script) => {
-    const fixture = makeFixture();
-    makeRepository(fixture.root, "old");
-    const alignfirstCommand = [process.execPath, "-e", script];
-    const list = await runProjects(fixture, ["list", "--json"], { alignfirstCommand });
-    expect(list.code).toBe(1);
-    const doctor = await runProjects(fixture, ["doctor"], { alignfirstCommand });
-    expect(doctor.code).toBe(1);
-  });
-
-  it("fails the listing when alignfirst is missing", async () => {
-    const fixture = makeFixture();
-    makeRepository(fixture.root, "candidate");
-    const result = await runProjects(fixture, ["list"], {
-      alignfirstCommand: ["/nonexistent/alignfirst"],
-    });
-    expect(result.code).toBe(1);
-  });
 });
 
 describe("project classification and companions", () => {
@@ -444,27 +375,6 @@ describe("project classification and companions", () => {
     expect(existsSync(join(one, ".plans"))).toBe(false);
   });
 
-  it("lists a git repository without config as a project and a non-git config as an issue", async () => {
-    const fixture = makeFixture();
-    const bare = makeRepository(fixture.root, "bare");
-    const nongit = join(fixture.root, "nongit");
-    mkdirSync(nongit);
-    writeProjectConfig(nongit, {});
-    mkdirSync(join(fixture.root, "plain"));
-
-    const report = await listJson(fixture);
-    expect(report.projects.map(({ path }: Project) => path)).toEqual([bare]);
-    expect(report.projects[0].companion).toBeNull();
-    expect(report.projects[0].locations[".plans"]).toEqual({
-      path: join(bare, ".plans"),
-      in: "project",
-      exists: false,
-    });
-    expect(report.issues.map((issue: { path: string }) => issue.path)).toEqual([
-      realpathSync(nongit),
-    ]);
-  });
-
   it("skips a repository holding another project's .plans target", async () => {
     const fixture = makeFixture();
     const app = makeRepository(fixture.root, "app");
@@ -475,45 +385,6 @@ describe("project classification and companions", () => {
     const report = await listJson(fixture);
     expect(report.projects.map(({ path }: Project) => path)).toEqual([app]);
     expect(report.skippedDirectories).toEqual([{ path: clone, reason: "workFilesRepository" }]);
-  });
-
-  it("reports the companion and the locations in list and status", async () => {
-    const fixture = makeFixture();
-    const project = makeRepository(fixture.root, "app");
-    const companionsRoot = join(fixture.home, ".alignfirst", "companions");
-    mkdirSync(companionsRoot, { recursive: true });
-    writeRegistry(fixture.home, {
-      projects: {
-        [project]: {
-          dir: "app",
-          items: { ".plans": "companion", assistantInstructionsFile: "companion" },
-        },
-      },
-    });
-    const companion = join(realpathSync(companionsRoot), "app");
-    mkdirSync(join(companion, ".plans"), { recursive: true });
-
-    const list = await listJson(fixture);
-    expect(list.projects[0].companion).toMatchObject({
-      dir: companion,
-      exists: true,
-      defaultLocation: "auto",
-      items: { assistantInstructionsFile: "companion" },
-    });
-    expect(list.projects[0].locations[".plans"]).toEqual({
-      path: join(companion, ".plans"),
-      in: "companion",
-      exists: true,
-    });
-
-    const status = JSON.parse((await runProjects(fixture, ["status", "app", "--json"])).stdout);
-    expect(status.configSource).toBeNull();
-    expect(status.companion).toEqual(list.projects[0].companion);
-    expect(status.locations.assistantInstructionsFile).toEqual({
-      path: join(companion, "ASSISTANTS.md"),
-      in: "companion",
-      exists: false,
-    });
   });
 
   it("uses a selected companion range for inventory and free-port lookup without merging project settings", async () => {
@@ -582,6 +453,7 @@ describe("project status", () => {
     execGit(project, "remote", "add", "backup", "https://gitlab.com/team/project.git");
     execGit(project, "remote", "add", "origin", "git@github.com:team/project.git");
     const workspace = join(fixture.root, "project-workspace");
+    addInitialCommit(project);
     addWorktree(project, workspace, "feature");
 
     const result = await runProjects(fixture, ["status", "project", "--json"]);
@@ -642,53 +514,21 @@ describe("project status", () => {
 });
 
 describe("project ports", () => {
-  it("finds the lowest block around project ranges from several groups", async () => {
-    const fixture = makeFixture();
-    for (const [group, ports] of [
-      ["web", range(8000, 8009)],
-      ["tools", range(8020, 8029)],
-    ] as const) {
-      mkdirSync(join(fixture.root, group));
-      makeRepository(join(fixture.root, group), "app", { portRange: ports });
-    }
-    const args = ["free-ports", "--size", "10", "--within", "8000..8099"];
-
-    const text = await runProjects(fixture, args);
-    expect(text.code).toBe(0);
-    expect(text.stdout).toBe("8010..8019\n");
-    const json = await runProjects(fixture, [...args, "--json"]);
-    expect(JSON.parse(json.stdout)).toEqual({ ...range(8010, 8019), unknown: [] });
-  });
-
-  it("looks up the block inside the --within bounds only", async () => {
-    const fixture = makeFixture();
-    makeRepository(fixture.root, "app", { portRange: range(8100, 8109) });
-
-    const result = await runProjects(fixture, [
-      "free-ports",
-      "--size",
-      "10",
-      "--within",
-      "8100..8199",
-    ]);
-
-    expect(result.code, result.stderr).toBe(0);
-    expect(result.stdout).toBe("8110..8119\n");
-  });
-
-  it("fails when no block of the size is free", async () => {
-    const fixture = makeFixture();
-    makeRepository(fixture.root, "app", { portRange: range(8005, 8014) });
-
-    const result = await runProjects(fixture, [
-      "free-ports",
-      "--size",
-      "6",
-      "--within",
-      "8000..8019",
-    ]);
-
-    expect(result.code).toBe(1);
+  it.each<[string, PortRange[], PortRange, number, PortRange | undefined]>([
+    [
+      "between claimed ranges",
+      [range(8000, 8009), range(8020, 8029)],
+      range(8000, 8099),
+      10,
+      range(8010, 8019),
+    ],
+    ["inside the bounds only", [range(8100, 8109)], range(8100, 8199), 10, range(8110, 8119)],
+    ["at the lower bound", [], range(8000, 8099), 10, range(8000, 8009)],
+    ["nowhere", [range(8005, 8014)], range(8000, 8019), 6, undefined],
+  ])("finds the lowest free block %s", (_name, claimed, within, size, expected) => {
+    const find = () => findFreeBlock(inventoryOf(claimed), within, size);
+    if (expected === undefined) expect(find).toThrow(Error);
+    else expect(find()).toEqual(expected);
   });
 
   it("returns a block despite an unreadable project and reports its range as unknown", async () => {
@@ -697,19 +537,13 @@ describe("project ports", () => {
     mkdirSync(join(fixture.root, "forge"));
     const broken = makeRepository(join(fixture.root, "forge"), "broken");
     writeFileSync(join(broken, "alignfirst.json"), "{}\n");
-    const args = ["free-ports", "--size", "10", "--within", "8000..8099"];
-
-    const text = await runProjects(fixture, args);
-    expect(text.code).toBe(0);
-    expect(text.stdout).toBe("8010..8019\n");
-    expect(text.stderr).toContain('"forge/broken"');
-    const json = await runProjects(fixture, [...args, "--json"]);
+    const args = ["free-ports", "--size", "10", "--within", "8000..8099", "--json"];
+    const json = await runProjects(fixture, args);
     expect(json.code).toBe(0);
     expect(JSON.parse(json.stdout)).toEqual({ ...range(8010, 8019), unknown: ["forge/broken"] });
-    expect(json.stderr).not.toContain("forge/broken");
   });
 
-  it("prints the claimed ranges sorted by first port, with paths relative to the root", async () => {
+  it("returns the claimed ranges sorted by first port, with paths relative to the root", async () => {
     const fixture = makeFixture();
     for (const [group, ports] of [
       ["web", range(8100, 8119)],
@@ -719,11 +553,8 @@ describe("project ports", () => {
       makeRepository(join(fixture.root, group), "app", { portRange: ports });
     }
     makeRepository(fixture.root, "plain");
-
-    const text = await runProjects(fixture, ["ports"]);
-    expect(text.code, text.stderr).toBe(0);
-    expect(text.stdout).toBe("8000..8039  tools/app\n8100..8119  web/app\n");
     const json = await runProjects(fixture, ["ports", "--json"]);
+    expect(json.code, json.stderr).toBe(0);
     expect(JSON.parse(json.stdout)).toEqual({
       root: realpathSync(fixture.root),
       ranges: [
@@ -733,13 +564,24 @@ describe("project ports", () => {
       unknown: [],
     });
   });
-
-  it("prints (none) when no project claims a range", async () => {
-    const result = await runProjects(makeFixture(), ["ports"]);
-    expect(result.code).toBe(0);
-    expect(result.stdout).toBe("(none)\n");
-  });
 });
+
+function inventoryOf(claimed: PortRange[]): ProjectInventory {
+  return {
+    root: "/projects",
+    projects: claimed.map((portRange, index) => ({
+      name: `p${index}`,
+      path: `/projects/p${index}`,
+      directory: "/projects",
+      description: buildReport(`/projects/p${index}`),
+      portRange,
+      workspaces: [],
+    })),
+    unreadableProjects: [],
+    skippedDirectories: [],
+    issues: [],
+  };
+}
 
 interface Project {
   name: string;

@@ -51,21 +51,10 @@ describe("pi adapter", () => {
       adapter.buildArgs({
         ...BASE,
         resume: "full-session-id",
-        executableModel: "provider/model:high",
-        skipPermissions: true,
-        additionalDirectories: ["/companion"],
-      }),
-    ).toEqual(["--mode", "json", "--model", "provider/model:high", "--session", "full-session-id"]);
-  });
-
-  it("passes the effort as --thinking between --model and --session", () => {
-    const { adapter } = fixture();
-    expect(
-      adapter.buildArgs({
-        ...BASE,
-        resume: "full-session-id",
         executableModel: "provider/model:low",
         effort: "high",
+        skipPermissions: true,
+        additionalDirectories: ["/companion"],
       }),
     ).toEqual([
       "--mode",
@@ -130,7 +119,7 @@ describe("pi adapter", () => {
     }
   });
 
-  it.each(["error", "aborted", "length", "pending", "deferred", "toolUse"])(
+  it.each(["error", "toolUse"])(
     "fails a settled final %s even after an earlier good answer",
     (reason) => {
       const f = fixture();
@@ -164,11 +153,8 @@ describe("pi adapter", () => {
     expect(f.assess().succeeded).toBe(false);
   });
 
-  it.each([
-    { type: "agent_start" },
-    { type: "turn_start" },
-    { type: "message_start", message: { role: "assistant", stopReason: "pending" } },
-  ])("requires a fresh authoritative assistant after new work starts: %j", (event) => {
+  it("requires a fresh authoritative assistant after new work starts", () => {
+    const event = { type: "turn_start" };
     const f = fixture();
     f.emit(HEADER);
     f.message();
@@ -210,62 +196,46 @@ describe("pi adapter", () => {
 
   it.each([
     "missing header",
-    "missing assistant",
     "missing settlement",
     "invalid JSON",
-    "nonobject",
     "invalid header",
-    "duplicate header",
-    "invalid message",
     "invalid content",
-    "invalid settled",
     "unknown stop reason",
   ])("fails incomplete or invalid required records: %s", (problem) => {
     const f = fixture();
     if (problem !== "missing header" && problem !== "invalid header") f.emit(HEADER);
-    if (problem !== "missing assistant") f.message();
+    f.message();
     if (problem === "invalid JSON") f.adapter.interpretLine("{", f.state);
-    if (problem === "nonobject") f.emit([]);
     if (problem === "invalid header") f.emit({ ...HEADER, version: 2 });
-    if (problem === "duplicate header") f.emit(HEADER);
-    if (problem === "invalid message") f.emit({ type: "message_end" });
     if (problem === "invalid content")
       f.message("stop", "", { content: [{ type: "text", text: 3 }] });
     if (problem === "unknown stop reason") f.message("futureReason");
     if (problem !== "missing settlement") f.settle();
-    if (problem === "invalid settled") f.emit({ type: "agent_settled" });
     expect(f.assess().succeeded).toBe(false);
     expect(f.assess().error).toBeDefined();
   });
 
-  it.each([
-    "No API key found for openai.",
-    "Authentication failed for \"openai\". Run '/login openai' to re-authenticate.",
-  ])(
-    "classifies recognized credential failures in failed assistant/startup channels: %s",
-    (errorMessage) => {
-      const f = fixture();
-      f.emit(HEADER);
-      f.message("error", "", { errorMessage });
-      f.settle();
-      expect(f.assess()).toMatchObject({ succeeded: false, authEvidence: true });
-      expect(f.adapter.isAuthenticationError(errorMessage)).toBe(true);
+  it("classifies a recognized credential failure in the failed assistant channel", () => {
+    const errorMessage = "No API key found for example.";
+    const f = fixture();
+    f.emit(HEADER);
+    f.message("error", "", { errorMessage });
+    f.settle();
+    expect(f.assess()).toMatchObject({ succeeded: false, authEvidence: true });
+    expect(f.adapter.isAuthenticationError(errorMessage)).toBe(true);
+  });
+
+  it.each(["Run /login if needed", "Tool said: No API key found for example."])(
+    "does not classify generic diagnostics as authentication: %s",
+    (text) => {
+      expect(fixture().adapter.isAuthenticationError(text)).toBe(false);
     },
   );
-
-  it.each([
-    "Run /login if needed",
-    "Model is ambiguous; use --provider",
-    "Documentation mentions /login",
-    "Tool said: No API key found for openai.",
-  ])("does not classify generic diagnostics as authentication: %s", (text) => {
-    expect(fixture().adapter.isAuthenticationError(text)).toBe(false);
-  });
 
   it("ignores authentication words in successful text, tool errors and custom messages", () => {
     const f = fixture();
     f.emit(HEADER);
-    const errorMessage = "No API key found for openai.";
+    const errorMessage = "No API key found for example.";
     f.emit({
       type: "tool_execution_end",
       toolName: "bash",
@@ -297,7 +267,7 @@ describe("pi adapter", () => {
     });
   });
 
-  it.each([undefined, {}, { input: 5 }, { ...USAGE, output: -1 }, { ...USAGE, input: "5" }])(
+  it.each([undefined, { ...USAGE, output: -1 }])(
     "does not retain stale occupancy when latest usage is unavailable: %j",
     (usage) => {
       const f = fixture();

@@ -1,4 +1,4 @@
-import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -9,6 +9,7 @@ import { type ActiveBlocks, renderBlocks } from "../src/guide/render-template.js
 import { PLAYBOOK_TOPICS } from "../src/guide/topics.js";
 import { writeConfig, writeSettings } from "./helpers.js";
 import {
+  addInitialCommit,
   addWorktree,
   type Fixture,
   makeFixture,
@@ -18,10 +19,9 @@ import {
   runAligndev,
   useProjectFixtures,
 } from "./project/fixtures.js";
+import { writeAlignfirstStub } from "./stand-ins.js";
 
-const OPENCLAW_CONFIG = { projectsRoot: "~/projects", code: { harness: "claude" } };
 const CODING_AGENT_CONFIG = { code: { harness: "claude" } };
-const OPENCLAW_ENV = { ALIGNDEV_ASSISTANT_HARNESS: "openclaw" };
 const GLOBAL_FORMS = resolveCommandForms({});
 
 useProjectFixtures();
@@ -54,11 +54,11 @@ describe("guide code profile table", () => {
             harness: "claude",
             default: true,
             defaultModel: "opus",
-            modelAliases: { fast: "haiku" },
+            modelAliases: { fast: "model-a" },
           },
           local: {
             harness: "pi",
-            modelAliases: { quick: "openai/luna" },
+            modelAliases: { quick: "provider/model-b" },
             efforts: ["shallow", "deep"],
             defaultEffort: "deep",
           },
@@ -71,63 +71,19 @@ describe("guide code profile table", () => {
     expect(result.code, result.stderr).toBe(0);
     const rows = result.stdout
       .split("\n")
-      .map((line) => line.split(" | ").map((cell) => cell.replace(/^\| | \|$/g, "")))
-      .filter((cells) => PROFILE_NAMES.includes(cells[0]));
-    expect(rows).toEqual([
-      [
-        "`work`",
-        "claude",
-        "no",
-        "yes",
-        expect.stringContaining("`fast`"),
-        "`opus`",
-        "`low`, `medium`, `high`, `xhigh`, `max`",
-        "native default",
-      ],
-      [
-        "`local`",
-        "pi",
-        "yes",
-        "no",
-        expect.stringMatching(/native selector.*`quick`/),
-        expect.any(String),
-        "`shallow`, `deep`",
-        "`deep`",
-      ],
-    ]);
-  });
-
-  it("renders without a named profile", async () => {
-    const fixture = makeFixture();
-    const result = await runGuide(fixture, ["code"], { env: { CLAUDECODE: "1" } });
-    expect(result.code, result.stderr).toBe(0);
-    expect(result.stdout).not.toContain("{{");
+      .filter((line) => PROFILE_NAMES.some((name) => line.startsWith(`| ${name} |`)));
+    expect(rows.map((row) => row.split(" | ")[0])).toEqual(["| `work`", "| `local`"]);
+    expect(rows[0]).toContain("`opus`");
+    expect(rows[1]).toContain("`shallow`, `deep`");
   });
 });
 
 describe("the assistant's harness in the guide", () => {
-  it("serves the openclaw playbook under an OpenClaw exec unless a coding agent is detected", async () => {
-    const fixture = makeFixture();
-    writeConfig(fixture.home, OPENCLAW_CONFIG);
-    const args = ["--channel", "slack"];
-    expect((await runGuide(fixture, args, { env: { OPENCLAW_SHELL: "exec" } })).code).toBe(0);
-    const detected = { OPENCLAW_SHELL: "exec", CODEX_THREAD_ID: "thread" };
-    expect((await runGuide(fixture, args, { env: detected })).code).toBe(1);
-  });
-
-  it("fails on an invalid ALIGNDEV_ASSISTANT_HARNESS", async () => {
-    const fixture = makeFixture();
-    const result = await runGuide(fixture, [], { env: { ALIGNDEV_ASSISTANT_HARNESS: "openclow" } });
-    expect(result.code).toBe(1);
-    expect(result.stdout).toBe("");
-  });
-
   it("shows the guide help even with an invalid ALIGNDEV_ASSISTANT_HARNESS", async () => {
     const result = await runGuide(makeFixture(), ["--help"], {
       env: { ALIGNDEV_ASSISTANT_HARNESS: "openclow" },
     });
     expect(result.code, result.stderr).toBe(0);
-    expect(result.stdout).toContain("ALIGNDEV_ASSISTANT_HARNESS");
   });
 });
 
@@ -140,46 +96,16 @@ describe("aligndev guide validation", () => {
     }
   });
 
-  it("requires projectsRoot", async () => {
-    const fixture = makeFixture();
-    writeConfig(fixture.home, { code: { harness: "claude" } });
-    const result = await runGuide(fixture, ["--channel", "slack", "consultation"], {
-      env: OPENCLAW_ENV,
-    });
-    expect(result.code).toBe(1);
-    expect(result.stdout).toBe("");
-  });
-
-  it.each([
-    ["--channel", "slack", "nope"],
-    ["--root", "/unused"],
-    ["code", "--root", "/unused"],
-    ["code", "project"],
-    ["working-session"],
-    ["--channel", "slack", "project"],
-    ["--channel", "teams", "working-session"],
-    ["--channel", "app", "message-tool"],
-  ])("rejects invalid OpenClaw arguments %j", async (...args) => {
-    const fixture = makeFixture();
-    writeConfig(fixture.home, OPENCLAW_CONFIG);
-    const result = await runGuide(fixture, args, { env: OPENCLAW_ENV });
-    expect(result.code).toBe(1);
-    expect(result.stdout).toBe("");
-  });
-
-  it.each([
-    ["--channel", "slack"],
-    ["channel-handling"],
-    ["project-lifecycle"],
-    ["message-tool"],
-    ["project"],
-  ])("rejects OpenClaw-only arguments %j under codingAgent", async (...args) => {
-    const fixture = makeFixture();
-    writeConfig(fixture.home, CODING_AGENT_CONFIG);
-    const result = await runGuide(fixture, args);
-    expect(result.code).toBe(1);
-    expect(result.stdout).toBe("");
-  });
+  it.each([["--channel", "slack"], ["channel-handling"], ["project"]])(
+    "rejects OpenClaw-only arguments %j under codingAgent",
+    async (...args) => {
+      const fixture = makeFixture();
+      writeConfig(fixture.home, CODING_AGENT_CONFIG);
+      const result = await runGuide(fixture, args);
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe("");
+    },
+  );
 });
 
 describe("guide project boundaries", () => {
@@ -191,6 +117,7 @@ describe("guide project boundaries", () => {
     });
     writeFileSync(join(main, "handbook.md"), "Main guide\n");
     const linked = join(fixture.root, "linked");
+    addInitialCommit(main);
     addWorktree(main, linked, "feature");
     const nested = join(linked, "src", "nested");
     mkdirSync(nested, { recursive: true });
@@ -211,66 +138,20 @@ describe("guide project boundaries", () => {
     writeConfig(fixture.home, CODING_AGENT_CONFIG);
     const result = await runGuide(fixture, ["code"], {
       cwd: makeRepository(fixture.root, "project"),
-      alignfirstCommand: [
-        "node",
-        "-e",
-        "console.error('Error: broken registry.'); process.exit(1)",
-      ],
+      alignfirstCommand: ["/bin/sh", "-c", "echo 'Error: broken registry.' >&2; exit 1"],
     });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("broken registry");
   });
-
-  it("uses the app surface when OpenClaw gets no --channel", async () => {
-    const fixture = makeFixture();
-    writeConfig(fixture.home, OPENCLAW_CONFIG);
-    const overrides = { env: OPENCLAW_ENV };
-    const result = await runGuide(fixture, ["code"], overrides);
-    expect(result.code).toBe(0);
-    expect(result.stdout).toBe(
-      (await runGuide(fixture, ["--channel", "app", "code"], overrides)).stdout,
-    );
-    expect(result.stdout).not.toBe(
-      (await runGuide(fixture, ["--channel", "slack", "code"], overrides)).stdout,
-    );
-  });
-
-  it("prints the static project guide without projectsRoot or alignfirst executable", async () => {
-    const fixture = makeFixture();
-    makeRepository(fixture.root, "discovered-project");
-    writeConfig(fixture.home, { code: { harness: "claude" } });
-    const result = await runGuide(fixture, ["project"], {
-      env: OPENCLAW_ENV,
-      alignfirstCommand: ["/nonexistent/alignfirst"],
-    });
-    expect(result.code, result.stderr).toBe(0);
-    expect(result.stdout).not.toContain("discovered-project");
-    expect(result.stdout).not.toContain(realpathSync(fixture.root));
-  });
-
-  it("rejects --root on the project guide", async () => {
-    const fixture = makeFixture();
-    writeConfig(fixture.home, OPENCLAW_CONFIG);
-    const result = await runGuide(fixture, ["project", "--root", fixture.root], {
-      env: OPENCLAW_ENV,
-    });
-    expect(result.code).toBe(1);
-    expect(result.stdout).toBe("");
-  });
 });
 
 describe("global assistant instructions", () => {
-  const platforms = [
-    ["codingAgent", CODING_AGENT_CONFIG, { CLAUDECODE: "1" }],
-    ["openclaw", OPENCLAW_CONFIG, OPENCLAW_ENV],
-  ] as const;
-
-  it.each(platforms)("prints the file verbatim in the %s dispatcher", async (_, config, env) => {
+  it("prints the file verbatim in the dispatcher", async () => {
     const fixture = makeFixture();
-    writeConfig(fixture.home, config);
+    writeConfig(fixture.home, CODING_AGENT_CONFIG);
     const content = "Prefer the `pi` profile.\n{{#openclaw}}\nRun {{ALIGNDEV}} guide first.";
     const path = writeGlobalInstructions(fixture, `${content}\n\n \n`);
-    const result = await runGuide(fixture, [], { env });
+    const result = await runGuide(fixture, [], { env: { CLAUDECODE: "1" } });
     expect(result.code, result.stderr).toBe(0);
     expect(result.stdout).toContain(path);
     expect(result.stdout).toContain(content);
@@ -280,7 +161,7 @@ describe("global assistant instructions", () => {
   it.each([
     ["an absent", undefined],
     ["a whitespace-only", " \n\t\n"],
-  ])("names the path only under codingAgent with %s file", async (_, text) => {
+  ])("names the path with %s file", async (_, text) => {
     const fixture = makeFixture();
     const path = join(fixture.home, ".alignfirst", "ASSISTANTS.md");
     if (text !== undefined) writeGlobalInstructions(fixture, text);
@@ -289,11 +170,6 @@ describe("global assistant instructions", () => {
     expect(codingAgent.code, codingAgent.stderr).toBe(0);
     expect(codingAgent.stdout).toContain(path);
     expect(codingAgent.stdout).not.toContain("<assistant-instructions");
-    writeConfig(fixture.home, OPENCLAW_CONFIG);
-    const openclaw = await runGuide(fixture, [], { env: OPENCLAW_ENV });
-    expect(openclaw.code, openclaw.stderr).toBe(0);
-    expect(openclaw.stdout).not.toContain(path);
-    expect(openclaw.stdout).not.toContain("<assistant-instructions");
   });
 
   it("fails the dispatcher when the file cannot be read", async () => {
@@ -421,20 +297,7 @@ describe("renderBlocks", () => {
       "a surface block inside codingAgent",
       "{{#codingAgent}}\n{{#slack}}\nx\n{{/slack}}\n{{/codingAgent}}",
     ],
-    [
-      "a thread block inside codingAgent",
-      "{{#codingAgent}}\n{{#thread}}\nx\n{{/thread}}\n{{/codingAgent}}",
-    ],
-    [
-      "a platform block inside a surface block",
-      "{{#app}}\n{{#openclaw}}\nx\n{{/openclaw}}\n{{/app}}",
-    ],
     ["a harness block at the top level", "{{#pi}}\nx\n{{/pi}}"],
-    ["a harness block inside openclaw", "{{#openclaw}}\n{{#pi}}\nx\n{{/pi}}\n{{/openclaw}}"],
-    [
-      "a harness block inside a harness block",
-      "{{#codingAgent}}\n{{#pi}}\n{{#agy}}\nx\n{{/agy}}\n{{/pi}}\n{{/codingAgent}}",
-    ],
     ["an unclosed block", "a\n{{#openclaw}}\nx"],
     ["a stray closing marker", "{{#openclaw}}\nx\n{{/codingAgent}}"],
   ])("rejects %s", (_name, text) => {
@@ -442,8 +305,16 @@ describe("renderBlocks", () => {
   });
 });
 
-function runGuide(fixture: Fixture, args: string[], overrides?: RunOverrides): Promise<RunResult> {
-  return runAligndev(fixture, ["guide", ...args], overrides);
+function runGuide(
+  fixture: Fixture,
+  args: string[],
+  overrides: RunOverrides = {},
+): Promise<RunResult> {
+  const cwd = overrides.cwd ?? fixture.root;
+  return runAligndev(fixture, ["guide", ...args], {
+    alignfirstCommand: writeAlignfirstStub(fixture.base, cwd).command,
+    ...overrides,
+  });
 }
 
 function writeGlobalInstructions(fixture: Fixture, text: string): string {

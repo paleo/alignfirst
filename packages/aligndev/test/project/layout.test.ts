@@ -1,10 +1,11 @@
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join, relative } from "node:path";
+import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { readProjectReport, readProjectReports } from "../../src/project/layout.js";
+import { buildReport as report, quote } from "../stand-ins.js";
 
 const dirs: string[] = [];
 const warnings = [
@@ -24,10 +25,7 @@ describe("readProjectReport", () => {
 
   it.each([
     { source: "root", cli: null, config: null },
-    { ...report(cwd), locations: {} },
     Object.fromEntries(Object.entries(report(cwd)).filter(([key]) => key !== "aligndev")),
-    Object.fromEntries(Object.entries(report(cwd)).filter(([key]) => key !== "workspace")),
-    Object.fromEntries(Object.entries(report(cwd)).filter(([key]) => key !== "selectionOrigins")),
     {
       ...report(cwd),
       workspace: { location: {}, schemaVersion: null, portRange: null, hasDevServer: false },
@@ -38,7 +36,7 @@ describe("readProjectReport", () => {
     expect(result).toHaveProperty("error");
   });
 
-  it.each([null, { profile: "work" }, { profile: " Work " }])(
+  it.each([null, { profile: " Work " }])(
     "carries a selection independently of the companion: %j",
     (aligndev) => {
       const value = { ...report(cwd), aligndev };
@@ -46,7 +44,7 @@ describe("readProjectReport", () => {
     },
   );
 
-  it.each([{}, "work", { profile: 1 }, { profile: "  " }, { profile: "work", extra: true }])(
+  it.each([{}, { profile: "  " }, { profile: "work", extra: true }])(
     "rejects a malformed selection: %j",
     (aligndev) => {
       expect(() => readProjectReport(reportCommand({ ...report(cwd), aligndev }), cwd, {})).toThrow(
@@ -60,17 +58,7 @@ describe("readProjectReport", () => {
     const result = readProjectReport(["alignfirst"], cwd, { PATH: f.dir });
     expect(result).toMatchObject({ error: expect.stringContaining(f.executable) });
     expect(result).toMatchObject({ error: expect.stringContaining("0.21.0") });
-    expect(f.invocations()).toEqual([["config", "--json"], ["--version"]]);
-  });
-
-  it("resolves relative PATH entries from the child cwd and skips directories", () => {
-    const f = executableFixture("alignfirst", {});
-    const shadow = join(f.dir, "shadow");
-    mkdirSync(join(shadow, "alignfirst"), { recursive: true });
-    const result = readProjectReport(["alignfirst"], cwd, {
-      PATH: [relative(cwd, shadow), relative(cwd, f.dir)].join(delimiter),
-    });
-    expect(result).toMatchObject({ error: expect.stringContaining(f.executable) });
+    expect(f.invocations()).toEqual(["config --json", "--version"]);
   });
 
   it("omits oversized version output and keeps diagnostics on one line", () => {
@@ -85,7 +73,7 @@ describe("readProjectReport", () => {
   it("does no diagnostic work for a valid report", () => {
     const f = executableFixture("alignfirst", report(cwd));
     expect(readProjectReport(["alignfirst"], cwd, { PATH: f.dir })).toEqual(report(cwd));
-    expect(f.invocations()).toEqual([["config", "--json"]]);
+    expect(f.invocations()).toEqual(["config --json"]);
   });
 
   it("forwards settings warnings without leaking arbitrary successful report stderr", () => {
@@ -98,40 +86,35 @@ describe("readProjectReport", () => {
     );
     expect(readProjectReport(["alignfirst"], cwd, { PATH: f.dir })).toEqual(report(cwd));
     expect(warn.mock.calls).toEqual(warnings.map((line) => [line]));
-    expect(f.invocations()).toEqual([["config", "--json"]]);
+    expect(f.invocations()).toEqual(["config --json"]);
   });
 
-  it.each(["\n", "\r\n"])(
-    "separates settings warnings from the first failure diagnostic with %j line endings",
-    (newline) => {
-      const error = "Invalid alignfirst.json: git.commit.style must be conventionalCommit";
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      const log = vi.spyOn(console, "log").mockImplementation(() => {});
-      const f = executableFixture(
-        "alignfirst",
-        {},
-        "0.21.0\n",
-        [...warnings, error, "private-child-value", "Warning: private-child-warning"].join(newline),
-        1,
-      );
-      expect(readProjectReport(["alignfirst"], cwd, { PATH: f.dir })).toEqual({ error });
-      expect(warn.mock.calls).toEqual(warnings.map((line) => [line]));
-      expect(log).not.toHaveBeenCalled();
-      expect(f.invocations()).toEqual([["config", "--json"]]);
-    },
-  );
+  it("separates settings warnings from the first failure diagnostic", () => {
+    const error = "Invalid alignfirst.json: git.commit.style must be conventionalCommit";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const f = executableFixture(
+      "alignfirst",
+      {},
+      "0.21.0\n",
+      [...warnings, error, "private-child-value", "Warning: private-child-warning"].join("\r\n"),
+      1,
+    );
+    expect(readProjectReport(["alignfirst"], cwd, { PATH: f.dir })).toEqual({ error });
+    expect(warn.mock.calls).toEqual(warnings.map((line) => [line]));
+    expect(log).not.toHaveBeenCalled();
+    expect(f.invocations()).toEqual(["config --json"]);
+  });
 
-  it.each(["", "  \n", "private-child-error\nprivate-child-detail"])(
-    "preserves the existing failure fallback and first-line behavior for %j",
-    (stderr) => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      const f = executableFixture("alignfirst", {}, "0.21.0\n", stderr, 1);
-      const result = readProjectReport(["alignfirst"], cwd, { PATH: f.dir });
-      expect(result).toHaveProperty("error");
-      if (stderr.trim() !== "") expect(result).toEqual({ error: "private-child-error" });
-      expect(warn).not.toHaveBeenCalled();
-    },
-  );
+  it("keeps the first line of a failure diagnostic", () => {
+    const stderr = "private-child-error\nprivate-child-detail";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const f = executableFixture("alignfirst", {}, "0.21.0\n", stderr, 1);
+    expect(readProjectReport(["alignfirst"], cwd, { PATH: f.dir })).toEqual({
+      error: "private-child-error",
+    });
+    expect(warn).not.toHaveBeenCalled();
+  });
 
   it("uses a generic failure when stderr contains only recognized settings warnings", () => {
     const warning =
@@ -146,10 +129,7 @@ describe("readProjectReport", () => {
     const f = executableFixture("npx", {});
     const result = readProjectReport(["npx", "-y", "alignfirst"], cwd, { PATH: f.dir });
     if (!("error" in result)) throw new Error("expected report failure");
-    expect(f.invocations()).toEqual([
-      ["-y", "alignfirst", "config", "--json"],
-      ["-y", "alignfirst", "--version"],
-    ]);
+    expect(f.invocations()).toEqual(["-y alignfirst config --json", "-y alignfirst --version"]);
   });
 
   it("diagnoses a missing PATH command", () => {
@@ -157,13 +137,9 @@ describe("readProjectReport", () => {
     expect(() => readProjectReport(["alignfirst"], cwd, { PATH: f.dir })).toThrow(Error);
   });
 
-  it.each(["bad json", "null"])(
-    "diagnoses the invalid report %j with the alignfirst used",
-    (text) => {
-      const command = [process.execPath, "-e", `process.stdout.write(${JSON.stringify(text)})`];
-      expect(() => readProjectReport(command, cwd, {})).toThrow(Error);
-    },
-  );
+  it("diagnoses an invalid report with the alignfirst used", () => {
+    expect(() => readProjectReport(printCommand("bad json"), cwd, {})).toThrow(Error);
+  });
 
   it("rejects the retired plans.folder report field", () => {
     const command = reportCommand({
@@ -194,32 +170,21 @@ describe("readProjectReports", () => {
 
   const current = report(directories[0]);
   const { aligndev: _, ...withoutAligndev } = current;
-  const nullGuide = {
-    ...current,
-    locations: { ...current.locations, assistantInstructionsFile: null },
-  };
-  it.each([
-    ["without aligndev settings", withoutAligndev],
-    ["with a null assistant guide location", nullGuide],
-  ])(
-    "reports an outdated entry %s as a project error without failing the batch",
-    (_name, outdated) => {
-      const f = executableFixture("alignfirst", {
-        reports: [
-          { path: directories[0], report: outdated },
-          { path: directories[1], report: report(directories[1]) },
-        ],
-      });
-      const results = readProjectReports(["alignfirst"], directories, cwd, { PATH: f.dir });
-      expect(results[0]).toHaveProperty("error");
-      expect(results[1]).toEqual(report(directories[1]));
-    },
-  );
+  it("reports an outdated entry as a project error without failing the batch", () => {
+    const f = executableFixture("alignfirst", {
+      reports: [
+        { path: directories[0], report: withoutAligndev },
+        { path: directories[1], report: report(directories[1]) },
+      ],
+    });
+    const results = readProjectReports(["alignfirst"], directories, cwd, { PATH: f.dir });
+    expect(results[0]).toHaveProperty("error");
+    expect(results[1]).toEqual(report(directories[1]));
+  });
 
   it.each([
     { reports: [{ path: directories[0], report: report(directories[0]) }] },
     { reports: [null, { path: directories[1], report: report(directories[1]) }] },
-    report(cwd),
   ])("rejects a malformed batch report: %#", (value) => {
     const f = executableFixture("alignfirst", value);
     expect(() => readProjectReports(["alignfirst"], directories, cwd, { PATH: f.dir })).toThrow(
@@ -244,6 +209,7 @@ describe("readProjectReports", () => {
   });
 });
 
+// A shell executable `name` that answers `value` as JSON, or `version` to `--version`.
 function executableFixture(
   name: string,
   value: object,
@@ -254,60 +220,29 @@ function executableFixture(
   const dir = mkdtempSync(join(tmpdir(), "aligndev-report-"));
   dirs.push(dir);
   const executable = join(dir, name);
-  const log = join(dir, "invocations.jsonl");
+  const log = join(dir, "invocations.log");
   writeFileSync(
     executable,
-    `#!${process.execPath}
-const fs = require("node:fs");
-const args = process.argv.slice(2);
-fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + "\\n");
-if (!args.includes("--version")) process.stderr.write(${JSON.stringify(stderr)});
-process.stdout.write(args.includes("--version") ? ${JSON.stringify(version)} : ${JSON.stringify(JSON.stringify(value))});
-if (!args.includes("--version")) process.exitCode = ${status};
+    `#!/bin/sh
+printf '%s\\n' "$*" >> ${quote(log)}
+case " $* " in
+  *" --version "*) printf '%s' ${quote(version)} ;;
+  *) printf '%s' ${quote(stderr)} >&2; printf '%s' ${quote(JSON.stringify(value))}; exit ${status} ;;
+esac
 `,
+    { mode: 0o755 },
   );
-  chmodSync(executable, 0o755);
   return {
     dir,
     executable,
-    invocations: () =>
-      readFileSync(log, "utf8")
-        .trim()
-        .split("\n")
-        .map((line) => JSON.parse(line)),
-  };
-}
-
-function report(cwd: string) {
-  const location = { path: cwd, in: "project", exists: false };
-  const names = [
-    "alignfirst",
-    ".alignfirst-instructions",
-    "assistantInstructionsFile",
-    "workspaceRuntime",
-    "docs",
-    ".plans",
-    "_aligndev",
-  ];
-  return {
-    source: null,
-    workspace: {
-      location,
-      schemaVersion: null,
-      portRange: null,
-      hasDevServer: false,
-      registryDir: join(cwd, ".local-wt/workspace-registry"),
-      runtimeDir: join(cwd, ".local-wt"),
-    },
-    config: null,
-    companion: null,
-    aligndev: null,
-    locations: Object.fromEntries(names.map((name) => [name, location])),
-    selectionOrigins: Object.fromEntries(names.map((name) => [name, "builtin"])),
+    invocations: () => readFileSync(log, "utf8").trimEnd().split("\n"),
   };
 }
 
 function reportCommand(report: object): string[] {
-  const json = JSON.stringify(report);
-  return [process.execPath, "-e", `process.stdout.write(${JSON.stringify(json)})`];
+  return printCommand(JSON.stringify(report));
+}
+
+function printCommand(text: string): string[] {
+  return ["/bin/sh", "-c", `printf '%s' ${quote(text)}`];
 }

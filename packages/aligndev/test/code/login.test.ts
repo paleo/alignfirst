@@ -125,7 +125,14 @@ describe("login instructions", () => {
   function runLoginCommand(instructions: string, administratorEnv: NodeJS.ProcessEnv): Observed {
     const result = spawnLoginCommand(instructions, administratorEnv);
     if (result.status !== 0) throw new Error(`${instructions}\n${result.stderr}`);
-    return JSON.parse(result.stdout);
+    const [executable, cwd, directory, token, ...args] = result.stdout.split("\0").slice(0, -1);
+    return {
+      executable,
+      args,
+      cwd,
+      ...(directory === "-" ? {} : { directory: directory.slice(1) }),
+      ...(token === "-" ? {} : { token: token.slice(1) }),
+    };
   }
 
   // The administrator's shell has no locale: the command must not depend on one.
@@ -142,12 +149,18 @@ describe("login instructions", () => {
     });
   }
 
+  // Prints NUL-terminated fields: its name, cwd, native directory and token ("-" when unset, else
+  // prefixed), then its arguments.
   function installFakeAgent(agent: string): void {
     writeFileSync(
       join(bin, agent),
-      `#!${process.execPath}
-const directory = [process.env.CLAUDE_CONFIG_DIR, process.env.CODEX_HOME, process.env.PI_CODING_AGENT_DIR].find((value) => value !== undefined);
-process.stdout.write(JSON.stringify({ executable: ${JSON.stringify(agent)}, args: process.argv.slice(2), cwd: process.cwd(), directory, token: process.env.TOKEN }));
+      `#!/bin/sh
+if [ -n "\${CLAUDE_CONFIG_DIR+x}" ]; then directory="d$CLAUDE_CONFIG_DIR"
+elif [ -n "\${CODEX_HOME+x}" ]; then directory="d$CODEX_HOME"
+elif [ -n "\${PI_CODING_AGENT_DIR+x}" ]; then directory="d$PI_CODING_AGENT_DIR"
+else directory=-; fi
+if [ -n "\${TOKEN+x}" ]; then token="t$TOKEN"; else token=-; fi
+printf '%s\\0' ${agent} "$(pwd)" "$directory" "$token" "$@"
 `,
       { mode: 0o755 },
     );

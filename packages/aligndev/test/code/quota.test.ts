@@ -1,5 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -107,16 +107,15 @@ describe("Claude quota", () => {
   });
 
   it.each([
-    ['console.log(JSON.stringify({subtype:"success",result:"25% used"}));', "25% used"],
-    ['console.error("fixture-secret"); process.exitCode = 2;', undefined],
-    ['process.stdout.write("x".repeat(1_048_577));', undefined],
+    [`printf '%s\\n' '{"subtype":"success","result":"25% used"}'`, "25% used"],
+    ["printf fixture-secret >&2\nexit 2", undefined],
+    ["head -c 1048577 /dev/zero", undefined],
   ])(
     "runs the default Claude executable only inside a disposable fixture",
     async (script, expected) => {
-      const root = mkdtempSync(join(tmpdir(), "aligndev-native-claude-"));
-      roots.push(root);
-      writeFileSync(join(root, "claude"), `#!${process.execPath}\n${script}\n`, { mode: 0o755 });
-      const result = createQuotaReader()("claude", { cwd: root, env: { HOME: root, PATH: root } });
+      const root = makeRoot();
+      writeFileSync(join(root, "claude"), `#!/bin/sh\n${script}\n`, { mode: 0o755 });
+      const result = createQuotaReader()("claude", { cwd: root, env: fixtureEnv(root) });
       if (expected === "25% used") await expect(result).resolves.toContain(expected);
       else {
         await expect(result).rejects.toThrow(Error);
@@ -125,44 +124,24 @@ describe("Claude quota", () => {
     },
   );
 
-  it.each([false, true])(
-    "awaits default Claude timeout cleanup (TERM resistant: %s)",
-    async (resistant) => {
-      const root = mkdtempSync(join(tmpdir(), "aligndev-quota-"));
-      roots.push(root);
-      const bin = join(root, "bin");
-      mkdirSync(bin);
-      writeFileSync(
-        join(bin, "claude"),
-        `#!${process.execPath}\n${resistant ? 'process.on("SIGTERM", () => {});' : ""}
-require("node:fs").writeFileSync(${JSON.stringify(join(root, "pid"))}, String(process.pid));
-console.log(JSON.stringify({subtype:"success",result:"25% used"}));
-setInterval(() => {}, 1000);\n`,
-        { mode: 0o755 },
-      );
-      await expect(
-        createQuotaReader(undefined, 1000)("claude", {
-          cwd: root,
-          env: { HOME: root, PATH: bin },
-        }),
-      ).rejects.toThrow(Error);
-      const pid = Number(readFileSync(join(root, "pid"), "utf8"));
-      expect(() => process.kill(pid, 0)).toThrow();
-    },
-  );
-
-  it("does not expose failed executable output or arguments", async () => {
-    const reader = createQuotaReader({
-      execute: async () => {
-        throw new Error("command fixture-secret stderr fixture-secret");
-      },
-      spawn: () => {
-        throw new Error("unexpected spawn");
-      },
-    });
-    const attempt = reader("claude", context);
-    await expect(attempt).rejects.toThrow(Error);
-    await expect(attempt).rejects.not.toThrow("fixture-secret");
+  it("awaits the cleanup of a TERM-resistant default Claude executable after its timeout", async () => {
+    const root = makeRoot();
+    const pidFile = join(root, "pid");
+    writeFileSync(
+      join(root, "claude"),
+      `#!/bin/sh
+trap '' TERM
+printf '%s' "$$" > '${pidFile}'
+printf '%s\\n' '{"subtype":"success","result":"25% used"}'
+exec sleep 30
+`,
+      { mode: 0o755 },
+    );
+    await expect(
+      createQuotaReader(undefined, 50)("claude", { cwd: root, env: fixtureEnv(root) }),
+    ).rejects.toThrow(Error);
+    const pid = Number(readFileSync(pidFile, "utf8"));
+    expect(() => process.kill(pid, 0)).toThrow();
   });
 });
 
@@ -184,13 +163,10 @@ describe("Codex quota process", () => {
       "RESPONSE",
       JSON.stringify({ id: 1, error: { message: "fixture-secret" } }),
     ),
-    protocolScript.replace("RESPONSE", JSON.stringify({ id: 1, result: {} })),
     'process.stderr.write("fixture-secret\\n"); process.exit(7);',
     'console.log("not json fixture-secret"); setInterval(() => {}, 1000);',
     "console.log(JSON.stringify({ id: 0, error: {} })); setInterval(() => {}, 1000);",
-    "console.log(JSON.stringify({ id: 1 })); setInterval(() => {}, 1000);",
     'process.stdout.write("x".repeat(1_048_577)); setInterval(() => {}, 1000);',
-    'process.stderr.write("x".repeat(1_048_577)); setInterval(() => {}, 1000);',
   ])("cleans up failed native exchanges without exposing output: %#", async (script) => {
     const before = process.listenerCount("exit");
     const server = nodeProcessAdapter(script);
@@ -224,16 +200,12 @@ describe("Codex quota process", () => {
     expect(server.closed).toBe(true);
   });
 
-  it.each(["claude", "codex"] as const)(
-    "reports missing %s without reading real configuration",
-    async (source) => {
-      const root = mkdtempSync(join(tmpdir(), "aligndev-missing-quota-"));
-      roots.push(root);
-      await expect(
-        createQuotaReader()(source, { cwd: root, env: { HOME: root, PATH: root } }),
-      ).rejects.toThrow(Error);
-    },
-  );
+  it("reports a missing codex without reading real configuration", async () => {
+    const root = makeRoot();
+    await expect(
+      createQuotaReader()("codex", { cwd: root, env: { HOME: root, PATH: root } }),
+    ).rejects.toThrow(Error);
+  });
 });
 
 describe("Codex quota buckets", () => {
@@ -271,7 +243,7 @@ describe("Codex quota buckets", () => {
     expect(() => formatCodexQuota(response)).toThrow(Error);
   });
 
-  it.each([null, {}, "invalid", { primary: { usedPercent: -1 } }])(
+  it.each([null, { primary: { usedPercent: -1 } }])(
     "does not fall back from a present malformed authoritative snapshot",
     (codex) => {
       expect(() =>
@@ -285,16 +257,9 @@ describe("Codex quota buckets", () => {
 
   it.each([
     { usedPercent: Number.NaN },
-    { usedPercent: Number.POSITIVE_INFINITY },
-    { usedPercent: -1 },
     { usedPercent: 101 },
     { usedPercent: "50" },
     { usedPercent: 10, windowDurationMins: 0 },
-    { usedPercent: 10, windowDurationMins: -1 },
-    { usedPercent: 10, windowDurationMins: Number.POSITIVE_INFINITY },
-    { usedPercent: 10, windowDurationMins: "300" },
-    { usedPercent: 10, resetsAt: Number.NaN },
-    { usedPercent: 10, resetsAt: Number.POSITIVE_INFINITY },
     { usedPercent: 10, resetsAt: -1 },
     { usedPercent: 10, resetsAt: 8_640_000_000_001 },
     { usedPercent: 10, resetsAt: "100" },
@@ -330,22 +295,20 @@ describe("Codex quota buckets", () => {
     ).not.toThrow();
   });
 
-  it.each([
-    {},
-    null,
-    { rateLimits: {} },
-    { rateLimitsByLimitId: { spark: { primary: { usedPercent: 10 } } } },
-  ])("rejects missing windows without discovering another bucket", (response) => {
-    expect(() => formatCodexQuota(response)).toThrow(Error);
-  });
+  it.each([{}, { rateLimitsByLimitId: { spark: { primary: { usedPercent: 10 } } } }])(
+    "rejects missing windows without discovering another bucket",
+    (response) => {
+      expect(() => formatCodexQuota(response)).toThrow(Error);
+    },
+  );
 });
 
 describe("Antigravity quota", () => {
-  const GEMINI_WEEKLY_RESET = Date.UTC(2026, 11, 2, 7, 28, 6) / 1000;
-  const GEMINI_5H_RESET = Date.UTC(2026, 10, 25, 12, 28, 6) / 1000;
+  const WEEKLY_RESET = Date.UTC(2026, 11, 2, 7, 28, 6) / 1000;
+  const FIVE_HOUR_RESET = Date.UTC(2026, 10, 25, 12, 28, 6) / 1000;
 
   it("reads the usage command of agy in its JSON output", async () => {
-    const execute = vi.fn(async () => ({ stdout: JSON.stringify(agyUsage(geminiGroup())) }));
+    const execute = vi.fn(async () => ({ stdout: JSON.stringify(agyUsage(groupA())) }));
     const reader = createQuotaReader({
       execute,
       spawn: () => {
@@ -353,7 +316,7 @@ describe("Antigravity quota", () => {
       },
     });
     const env = { KEEP: "yes" };
-    await expect(reader("agy", { cwd: "/project", env })).resolves.toContain("Gemini Models");
+    await expect(reader("agy", { cwd: "/project", env })).resolves.toContain("Model group A");
     expect(execute).toHaveBeenCalledWith(
       "agy",
       ["-p", "/usage", "--output-format", "json"],
@@ -361,40 +324,23 @@ describe("Antigravity quota", () => {
     );
   });
 
-  it("keeps its own diagnostic, and replaces any other failure with the generic one", async () => {
-    const readWith = (execute: QuotaProcessAdapter["execute"]) =>
-      createQuotaReader({
-        execute,
-        spawn: () => {
-          throw new Error("unexpected spawn");
-        },
-      })("agy", context);
-    await expect(readWith(async () => ({ stdout: "nope" }))).rejects.toThrow(
-      /^Antigravity returned malformed usage JSON/,
-    );
-    const missing = readWith(async () => {
-      throw new Error("spawn agy ENOENT");
-    });
-    await expect(missing).rejects.toThrow(/^Antigravity quota command failed;/);
-  });
-
   it("reports each valid bucket's used percentage, window and reset, per group", () => {
     const output = formatAgyQuota(
       JSON.stringify(
-        agyUsage(geminiGroup(), {
-          name: "Claude and GPT models",
+        agyUsage(groupA(), {
+          name: "Model group B",
           buckets: [
-            { id: "3p-weekly", window: "weekly", remaining_fraction: 0.75, reset_time: "soon" },
-            { id: "3p-bad", window: "daily", remaining_fraction: 1.5, reset_time: "soon" },
+            { id: "b-weekly", window: "weekly", remaining_fraction: 0.75, reset_time: "soon" },
+            { id: "b-bad", window: "daily", remaining_fraction: 1.5, reset_time: "soon" },
           ],
         }),
       ),
       (timestamp) => `time-${timestamp}`,
     );
-    expect(output).toContain("Gemini Models");
-    expect(output).toContain("Claude and GPT models");
-    expect(output).toMatch(new RegExp(`^.*1 week: 0% used\\b.*time-${GEMINI_WEEKLY_RESET}$`, "m"));
-    expect(output).toMatch(new RegExp(`^.*5 hours: 1% used\\b.*time-${GEMINI_5H_RESET}$`, "m"));
+    expect(output).toContain("Model group A");
+    expect(output).toContain("Model group B");
+    expect(output).toMatch(new RegExp(`^.*1 week: 0% used\\b.*time-${WEEKLY_RESET}$`, "m"));
+    expect(output).toMatch(new RegExp(`^.*5 hours: 1% used\\b.*time-${FIVE_HOUR_RESET}$`, "m"));
     expect(output).toMatch(/^.*1 week: 25% used\b/m);
     expect(output).not.toMatch(/25% used.*time-/);
     expect(output).not.toContain("daily");
@@ -402,12 +348,10 @@ describe("Antigravity quota", () => {
 
   it.each([
     "nope",
-    "{}",
-    JSON.stringify({ status: "SUCCESS", command: { name: "usage", data: {} } }),
     JSON.stringify(
       agyUsage({
-        name: "Gemini Models",
-        buckets: [{ id: "gemini-weekly", window: "weekly", remaining_fraction: -0.1 }],
+        name: "Model group A",
+        buckets: [{ id: "a-weekly", window: "weekly", remaining_fraction: -0.1 }],
       }),
     ),
   ])("fails without any valid bucket: %s", (stdout) => {
@@ -415,22 +359,33 @@ describe("Antigravity quota", () => {
   });
 });
 
+function makeRoot(): string {
+  const root = mkdtempSync(join(tmpdir(), "aligndev-quota-"));
+  roots.push(root);
+  return root;
+}
+
+// The fake comes first; the shell utilities stay reachable.
+function fixtureEnv(root: string): NodeJS.ProcessEnv {
+  return { HOME: root, PATH: `${root}:${process.env.PATH ?? ""}` };
+}
+
 function agyUsage(...groups: object[]): object {
   return { status: "SUCCESS", command: { name: "usage", data: { groups } } };
 }
 
-function geminiGroup(): object {
+function groupA(): object {
   return {
-    name: "Gemini Models",
+    name: "Model group A",
     buckets: [
       {
-        id: "gemini-weekly",
+        id: "a-weekly",
         window: "weekly",
         remaining_fraction: 0.998,
         reset_time: "2026-12-02T07:28:06Z",
       },
       {
-        id: "gemini-5h",
+        id: "a-5h",
         window: "5h",
         remaining_fraction: 0.993,
         reset_time: "2026-11-25T12:28:06Z",

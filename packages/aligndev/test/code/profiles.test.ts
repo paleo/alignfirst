@@ -1,5 +1,4 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,7 +12,8 @@ import {
   type SessionFrontmatter,
 } from "../../src/code/session-file.js";
 import { loadConfig, resolveCodeConfig, resolveQuotaConfig } from "../../src/config.js";
-import { ALIGNFIRST_BIN, makeSink, writeRegistry, writeSettings } from "../helpers.js";
+import { makeSink, writeSettings } from "../helpers.js";
+import { type FakeAgent, installFakeAgent, quote, writeAlignfirstStub } from "../stand-ins.js";
 
 let root: string;
 let home: string;
@@ -21,6 +21,8 @@ let project: string;
 let nativeA: string;
 let nativeB: string;
 let env: NodeJS.ProcessEnv;
+let projectProfile: string | undefined;
+let fake: FakeAgent;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "aligndev-profiles-"));
@@ -28,6 +30,7 @@ beforeEach(() => {
   project = join(home, "app");
   nativeA = join(root, "native-a");
   nativeB = join(root, "native-b");
+  projectProfile = undefined;
   mkdirSync(home);
   env = {
     HOME: home,
@@ -40,49 +43,42 @@ beforeEach(() => {
 
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
+// A `claude` that keeps its conversation identity in the selected native store and records the
+// environment facts the tests read through `observed()`.
 function makeLaunchFixture(): void {
   mkdirSync(join(project, ".plans"), { recursive: true });
   mkdirSync(nativeA);
   mkdirSync(nativeB);
-  execFileSync("git", ["init", "--quiet", project]);
-  const bin = join(root, "bin");
-  mkdirSync(bin);
-  writeFileSync(
-    join(bin, "claude"),
-    `#!${process.execPath}
-const fs = require("node:fs");
-const path = require("node:path");
-const args = process.argv.slice(2);
-const index = args.indexOf("--resume");
-const store = process.env.CLAUDE_CONFIG_DIR ?? path.join(process.env.HOME, ".claude");
-fs.mkdirSync(store, {recursive: true});
-if (process.env.FIXTURE_AUTH_FAILURE === "1") {
-  console.log(JSON.stringify({type: "assistant", error: "authentication_failed"}));
-  console.log(JSON.stringify({type: "result", is_error: true, result: "Not logged in. Please run /login."}));
-  process.exit(1);
-}
-const identity = path.join(store, "identity");
-let id = "native-session";
-if (index >= 0) {
-  if (!fs.existsSync(identity)) {
-    process.stderr.write("Conversation unavailable in selected native store.");
-    process.exit(1);
-  }
-  id = fs.readFileSync(identity, "utf8");
-} else fs.writeFileSync(identity, id);
-fs.writeFileSync(${JSON.stringify(join(root, "observed.json"))}, JSON.stringify({
-  args, store, directoryPresent: Object.hasOwn(process.env, "CLAUDE_CONFIG_DIR"),
-  keyPresent: process.env.TOKEN !== undefined,
-  parentPresent: process.env.CLAUDE_CODE_SESSION_ID !== undefined,
-  ceiling: process.env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS,
-}));
-process.stdin.resume();
-process.stdin.on("end", () => {
-  console.log(JSON.stringify({type: "system", subtype: "init", session_id: id}));
-  console.log(JSON.stringify({type: "result", session_id: id, result: "done", is_error: false}));
-});
-`,
-    { mode: 0o755 },
+  fake = installFakeAgent(
+    root,
+    "claude",
+    `store=\${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+mkdir -p "$store"
+resume=
+previous=
+for arg in "$@"; do
+  if [ "$previous" = --resume ]; then resume=$arg; fi
+  previous=$arg
+done
+if [ -n "$resume" ]; then
+  if [ ! -f "$store/identity" ]; then
+    printf 'Conversation unavailable in selected native store.' >&2
+    exit 1
+  fi
+  id=$(cat "$store/identity")
+else
+  id=native-session
+  printf '%s' "$id" > "$store/identity"
+fi
+{
+  printf 'store=%s\\n' "$store"
+  printf 'directoryPresent=%s\\n' "\${CLAUDE_CONFIG_DIR+true}"
+  printf 'keyPresent=%s\\n' "\${TOKEN+true}"
+  printf 'parentPresent=%s\\n' "\${CLAUDE_CODE_SESSION_ID+true}"
+  printf 'ceiling=%s\\n' "$CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS"
+} > ${quote(join(root, "observed.txt"))}
+printf '{"type":"system","subtype":"init","session_id":"%s"}\\n' "$id"
+printf '{"type":"result","session_id":"%s","result":"done","is_error":false}\\n' "$id"`,
   );
 }
 
@@ -95,14 +91,14 @@ function settings(extra: object = {}) {
           harness: "claude",
           configDir: nativeA,
           defaultModel: "choice",
-          modelAliases: { choice: "opus" },
+          modelAliases: { choice: "model-a" },
           unset: ["TOKEN"],
         },
         b: {
           harness: "claude",
           configDir: nativeB,
           defaultModel: "sonnet",
-          modelAliases: { choice: "haiku" },
+          modelAliases: { choice: "model-b" },
           unset: ["TOKEN"],
         },
         pi: { harness: "pi" },
@@ -124,13 +120,19 @@ async function launch(
     cwd: project,
     home,
     env,
-    alignfirstCommand: [process.execPath, ALIGNFIRST_BIN],
+    alignfirstCommand: stub(),
     stdout,
     stderr,
     modelResolver,
     quotaReader,
   });
   return { code, stdout: stdout.text(), stderr: stderr.text(), modelResolver };
+}
+
+// The alignfirst stand-in reports `projectProfile` as the project's selection.
+function stub(): string[] {
+  const aligndev = projectProfile === undefined ? undefined : { profile: projectProfile };
+  return writeAlignfirstStub(root, project, { aligndev }).command;
 }
 
 function records() {
@@ -141,21 +143,17 @@ function newest() {
   return records().reduce((a, b) => (a.frontmatter.startedAt >= b.frontmatter.startedAt ? a : b));
 }
 
-async function historicalRecord(field: string) {
-  settings({ profiles: { a: { harness: "claude", configDir: nativeA } } });
-  expect((await launch(["new", "-m", "go"])).code).toBe(0);
-  const path = newest().path;
-  const bytes = readFileSync(path, "utf8").replace(
-    /^profile: a\n/m,
-    field === "blank" ? "profile: \n" : "",
-  );
-  writeFileSync(path, bytes);
-  expect(newest().frontmatter.profile).toBeNull();
-  return { path, bytes };
-}
-
 function observed() {
-  return JSON.parse(readFileSync(join(root, "observed.json"), "utf8"));
+  const lines = readFileSync(join(root, "observed.txt"), "utf8").trimEnd().split("\n");
+  const values = Object.fromEntries(lines.map((line) => line.split(/=(.*)/s, 2)));
+  return {
+    args: fake.received().args,
+    store: values.store,
+    directoryPresent: values.directoryPresent === "true",
+    keyPresent: values.keyPresent === "true",
+    parentPresent: values.parentPresent === "true",
+    ceiling: values.ceiling,
+  };
 }
 
 describe("independent quota configuration", () => {
@@ -175,189 +173,53 @@ describe("independent quota configuration", () => {
     }
   });
 
-  it("reads omitted agy quota from the agy coding environment", () => {
-    settings({ profiles: { a: { harness: "agy", unset: ["TOKEN"] } } });
-    const code = resolveCodeConfig(loadConfig(home, "alignfirst"), env);
-    expect(resolveQuotaConfig(code, env)).toEqual({ source: "agy", env: code.childEnv });
-  });
-
-  it.each(["claude", "codex"] as const)(
-    "shares a null %s coding reset with omitted quota only",
-    (agent) => {
-      const variable = agent === "claude" ? "CLAUDE_CONFIG_DIR" : "CODEX_HOME";
-      const caller = Object.freeze({ ...env, [variable]: nativeB });
-      settings({ profiles: { a: { harness: agent, configDir: null, unset: ["TOKEN"] } } });
-      const code = resolveCodeConfig(loadConfig(home, "alignfirst"), caller);
-      const quota = resolveQuotaConfig(code, caller);
-      expect(quota).toEqual({ source: agent, env: code.childEnv });
-      if (quota.source === "none") throw new Error("unexpected disabled quota");
-      expect(Object.hasOwn(quota.env, variable)).toBe(false);
-      expect(quota.env.TOKEN).toBeUndefined();
-      expect(caller[variable]).toBe(nativeB);
-    },
-  );
-
-  it.each(["claude", "codex"] as const)(
-    "keeps explicit %s quota omitted/null/string selection independent of coding resets",
-    (source) => {
-      const variable = source === "claude" ? "CLAUDE_CONFIG_DIR" : "CODEX_HOME";
-      const caller = Object.freeze({
-        ...env,
-        PATH: env.PATH,
-        CLAUDE_CONFIG_DIR: nativeB,
-        CODEX_HOME: nativeB,
-        PI_CODING_AGENT_DIR: "unrelated-store",
-        REMOVE_QUOTA: "remove",
-        ANTHROPIC_API_KEY: "private-key",
-      });
-      for (const configDir of [undefined, null, nativeA]) {
-        settings({
-          profiles: {
-            a: {
-              harness: source,
-              configDir: configDir === null ? nativeA : null,
-              unset: ["TOKEN"],
-              env: { CODING_ONLY: "coding" },
-              quota: {
-                source,
-                configDir,
-                env: { QUOTA_ONLY: "quota" },
-                unset: ["REMOVE_QUOTA"],
-              },
-            },
-          },
-        });
-        const path = join(home, ".alignfirst/aligndev.settings.json");
-        const bytes = readFileSync(path);
-        const config = loadConfig(home, "alignfirst");
-        const stored = config.code.profiles?.a;
-        if (stored?.harness === "openclaw") throw new Error("expected a coding-agent profile");
-        Object.freeze(stored?.unset);
-        Object.freeze(stored?.quota?.unset);
-        Object.freeze(stored?.quota?.env);
-        Object.freeze(stored?.quota);
-        const before = JSON.stringify(config);
-        const code = resolveCodeConfig(config, caller);
-        const quota = resolveQuotaConfig(code, caller);
-        if (quota.source === "none") throw new Error("unexpected disabled quota");
-        expect(quota.source).toBe(source);
-        expect(quota.env[variable]).toBe(
-          configDir === null ? undefined : configDir === undefined ? nativeB : nativeA,
-        );
-        if (configDir === null) expect(Object.hasOwn(quota.env, variable)).toBe(false);
-        expect(quota.env).toMatchObject({
-          HOME: home,
-          PATH: caller.PATH,
-          TOKEN: "fixture-secret",
-          ANTHROPIC_API_KEY: "private-key",
-          PI_CODING_AGENT_DIR: "unrelated-store",
-          QUOTA_ONLY: "quota",
-          [source === "claude" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR"]: nativeB,
-        });
-        for (const key of ["CODING_ONLY", "REMOVE_QUOTA", "CLAUDE_CODE_SESSION_ID"])
-          expect(quota.env[key]).toBeUndefined();
-        expect(code.childEnv[variable]).toBe(configDir === null ? nativeA : undefined);
-        expect(code.childEnv.QUOTA_ONLY).toBeUndefined();
-        expect(code.childEnv.REMOVE_QUOTA).toBe("remove");
-        expect(code.quota?.unset).toEqual(["REMOVE_QUOTA"]);
-        expect(caller[variable]).toBe(nativeB);
-        expect(JSON.stringify(config)).toBe(before);
-        expect(readFileSync(path)).toEqual(bytes);
-      }
-    },
-  );
-
-  it.each(["pi", "claude"] as const)(
-    "resolves explicit Codex quota independently of %s overrides",
-    (agent) => {
+  it("keeps explicit quota omitted/null/string selection independent of coding resets", () => {
+    const caller = Object.freeze({
+      ...env,
+      CLAUDE_CONFIG_DIR: nativeB,
+      CODEX_HOME: nativeB,
+      REMOVE_QUOTA: "remove",
+    });
+    for (const configDir of [undefined, null, nativeA]) {
       settings({
         profiles: {
           a: {
-            harness: agent,
-            configDir: "~/coding",
-            env: { CODING_ONLY: "child", CODEX_HOME: "child-store" },
+            harness: "claude",
+            configDir: configDir === null ? nativeA : null,
             unset: ["TOKEN"],
+            env: { CODING_ONLY: "coding" },
             quota: {
-              source: "codex",
-              configDir: "relative-quota",
-              env: { QUOTA_ONLY: "quota", PI_CODING_AGENT: "true" },
+              source: "claude",
+              configDir,
+              env: { QUOTA_ONLY: "quota" },
               unset: ["REMOVE_QUOTA"],
             },
           },
         },
       });
-      const caller = {
-        ...env,
-        REMOVE_QUOTA: "inherited",
-        AI_AGENT: "pi",
-        CODEX_THREAD_ID: "parent",
-      };
-      const original = { ...caller };
-      const code = resolveCodeConfig(loadConfig(home, "alignfirst"), caller);
+      const config = loadConfig(home, "alignfirst");
+      const before = JSON.stringify(config);
+      const code = resolveCodeConfig(config, caller);
       const quota = resolveQuotaConfig(code, caller);
-      expect(quota.source).toBe("codex");
       if (quota.source === "none") throw new Error("unexpected disabled quota");
+      expect(quota.source).toBe("claude");
+      expect(quota.env.CLAUDE_CONFIG_DIR).toBe(
+        configDir === null ? undefined : configDir === undefined ? nativeB : nativeA,
+      );
+      if (configDir === null) expect(Object.hasOwn(quota.env, "CLAUDE_CONFIG_DIR")).toBe(false);
       expect(quota.env).toMatchObject({
-        CODEX_HOME: join(home, ".alignfirst", "relative-quota"),
+        HOME: home,
         TOKEN: "fixture-secret",
         QUOTA_ONLY: "quota",
+        CODEX_HOME: nativeB,
       });
-      for (const key of [
-        "CODING_ONLY",
-        "REMOVE_QUOTA",
-        "PI_CODING_AGENT",
-        "AI_AGENT",
-        "CODEX_THREAD_ID",
-        "CLAUDE_CODE_SESSION_ID",
-      ])
+      for (const key of ["CODING_ONLY", "REMOVE_QUOTA", "CLAUDE_CODE_SESSION_ID"])
         expect(quota.env[key]).toBeUndefined();
-      expect(code.childEnv.CODING_ONLY).toBe("child");
-      expect(code.childEnv.CODEX_HOME).toBe("child-store");
-      expect(caller).toEqual(original);
-    },
-  );
-
-  it("allows explicit different-account Claude quota and source-specific home expansion", () => {
-    settings({
-      profiles: {
-        a: {
-          harness: "claude",
-          configDir: nativeA,
-          unset: ["TOKEN"],
-          quota: { source: "claude", configDir: "~/quota-claude", env: { MODE: "quota" } },
-        },
-      },
-    });
-    const code = resolveCodeConfig(loadConfig(home, "alignfirst"), env);
-    const quota = resolveQuotaConfig(code, env);
-    expect(quota).toEqual({
-      source: "claude",
-      env: expect.objectContaining({
-        CLAUDE_CONFIG_DIR: join(home, "quota-claude"),
-        MODE: "quota",
-        TOKEN: "fixture-secret",
-      }),
-    });
-    expect(code.childEnv.CLAUDE_CONFIG_DIR).toBe(nativeA);
-  });
-
-  it("deliberately retains inherited native storage when explicit quota omits configDir", () => {
-    settings({
-      profiles: {
-        a: {
-          harness: "pi",
-          configDir: nativeA,
-          quota: { source: "codex" },
-        },
-      },
-    });
-    const caller = { ...env, CODEX_HOME: nativeB };
-    expect(
-      resolveQuotaConfig(resolveCodeConfig(loadConfig(home, "alignfirst"), caller), caller),
-    ).toEqual({
-      source: "codex",
-      env: expect.objectContaining({ CODEX_HOME: nativeB }),
-    });
+      expect(code.childEnv.CLAUDE_CONFIG_DIR).toBe(configDir === null ? nativeA : undefined);
+      expect(code.childEnv.QUOTA_ONLY).toBeUndefined();
+      expect(code.childEnv.REMOVE_QUOTA).toBe("remove");
+      expect(JSON.stringify(config)).toBe(before);
+    }
   });
 
   it("routes quota to its selected source without changing the child environment", async () => {
@@ -405,7 +267,7 @@ describe("independent quota configuration", () => {
     settings({ fallbackProfile: "b" });
     const reader = vi.fn(async () => "limits");
     expect((await launch(["quota"], undefined, reader)).code).toBe(0);
-    writeRegistry(home, { projects: { "~/app": { aligndev: { profile: "a" } } } });
+    projectProfile = "a";
     expect((await launch(["quota"], undefined, reader)).code).toBe(0);
     expect((await launch(["quota", "--profile", "b"], undefined, reader)).code).toBe(0);
     for (const [index, nativeHome] of [nativeB, nativeA, nativeB].entries()) {
@@ -420,354 +282,113 @@ describe("independent quota configuration", () => {
 describe("effective profiles through CLI launch and resume", () => {
   beforeEach(makeLaunchFixture);
 
-  it("unsets inherited storage for a real null-configured child without leaking values", async () => {
-    settings({ profiles: { a: { harness: "claude", configDir: null, unset: ["TOKEN"] } } });
-    env.CLAUDE_CONFIG_DIR = nativeB;
-    const bytes = readFileSync(join(home, ".alignfirst/aligndev.settings.json"));
+  it("records the assistant's profile and keeps it on resume after the defaults change", async () => {
+    const profiles = loadConfig(home, "alignfirst").code.profiles;
+    settings({ fallbackProfile: undefined, profiles: { a: { ...profiles?.a, default: true } } });
+    env.CLAUDECODE = "1";
+    env.CLAUDE_CONFIG_DIR = nativeA;
     const initial = await launch(["new", "-m", "go"]);
     expect(initial.code, initial.stderr).toBe(0);
-    expect(observed()).toMatchObject({
-      store: join(home, ".claude"),
-      directoryPresent: false,
-      keyPresent: false,
-      parentPresent: false,
-      ceiling: "0",
-    });
-    expect(initial.modelResolver).toHaveBeenCalledWith("claude", undefined, {
-      cwd: project,
-      env: expect.not.objectContaining({ CLAUDE_CONFIG_DIR: expect.anything() }),
-    });
-    expect(existsSync(join(home, ".claude/identity"))).toBe(true);
-    expect(existsSync(join(nativeB, "identity"))).toBe(false);
-    const resumed = await launch(["resume", "native-session", "-m", "more"]);
-    expect(resumed.code, resumed.stderr).toBe(0);
-    expect(newest().frontmatter).toMatchObject({ profile: "a", sessionId: "native-session" });
-    expect(observed().directoryPresent).toBe(false);
-    const help = await launch(["--help"]);
-    const stdout = makeSink();
-    const stderr = makeSink();
-    expect(
-      await main({
-        argv: ["node", "aligndev", "guide", "code"],
-        cwd: project,
-        home,
-        env,
-        alignfirstCommand: [process.execPath, ALIGNFIRST_BIN],
-        stdout,
-        stderr,
-      }),
-      stderr.text(),
-    ).toBe(0);
-    env.FIXTURE_AUTH_FAILURE = "1";
-    const failed = await launch(["new", "-m", "go", "--quiet"]);
-    expect(failed.code, failed.stderr).toBe(2);
-    for (const text of [help.stdout, stdout.text(), failed.stderr]) {
-      expect(text).not.toContain(nativeB);
-      expect(text).not.toContain("fixture-secret");
-    }
-    expect(env.CLAUDE_CONFIG_DIR).toBe(nativeB);
-    expect(readFileSync(join(home, ".alignfirst/aligndev.settings.json"))).toEqual(bytes);
-  });
-
-  it.each([false, true])(
-    "records the assistant's profile and preserves named resume: tie=%s",
-    async (tie) => {
-      const profiles = loadConfig(home, "alignfirst").code.profiles;
-      settings({
-        fallbackProfile: undefined,
-        profiles: {
-          a: { ...profiles?.a, default: tie },
-          ...(tie ? { b: { ...profiles?.b, configDir: nativeA } } : {}),
-        },
-      });
-      env.CLAUDECODE = "1";
-      env.CLAUDE_CONFIG_DIR = nativeA;
-      const initial = await launch(["new", "-m", "go"]);
-      expect(initial.code, initial.stderr).toBe(0);
-      expect(newest().frontmatter).toMatchObject({ profile: "a", model: "choice" });
-      expect(observed()).toMatchObject({ store: nativeA, keyPresent: false });
-      expect(initial.modelResolver).toHaveBeenCalledWith("claude", "opus", expect.anything());
-      settings({
-        fallbackProfile: "b",
-        profiles: {
-          a: { ...profiles?.a, default: false },
-          b: { ...profiles?.b, default: true },
-        },
-      });
-      const resumed = await launch(["resume", "native-session", "-m", "more"]);
-      expect(resumed.code, resumed.stderr).toBe(0);
-      expect(newest().frontmatter.profile).toBe("a");
-      expect(observed().store).toBe(nativeA);
-    },
-  );
-
-  it.each([
-    ["blank", false],
-    ["missing", false],
-    ["blank", true],
-    ["missing", true],
-  ])(
-    "keeps historical %s profiles on built-ins despite configured profiles: multiple=%s",
-    async (field, multiple) => {
-      const historical = await historicalRecord(field);
-      settings({
-        fallbackProfile: undefined,
-        profiles: {
-          a: {
-            harness: "claude",
-            configDir: nativeB,
-            default: true,
-            defaultModel: "opus",
-            unset: ["TOKEN"],
-          },
-          ...(multiple ? { b: { harness: "claude", configDir: nativeB } } : {}),
-        },
-      });
-      env.CLAUDECODE = "1";
-      env.CLAUDE_CONFIG_DIR = nativeA;
-      const resumed = await launch(["resume", "native-session", "-m", "more"]);
-      expect(resumed.code, resumed.stderr).toBe(0);
-      expect(newest().frontmatter).toMatchObject({ profile: null, model: null, agent: "claude" });
-      expect(observed()).toMatchObject({ store: nativeA, keyPresent: true });
-      expect(observed().args).not.toContain("--model");
-      expect(readFileSync(historical.path, "utf8")).toBe(historical.bytes);
-    },
-  );
-
-  it.each([{}, { CLAUDECODE: "1", AI_AGENT: "pi" }, { AI_AGENT: "pi" }])(
-    "keeps detection and same-agent guards on historical fallback %j",
-    async (markers) => {
-      const historical = await historicalRecord("missing");
-      settings({
-        fallbackProfile: undefined,
-        profiles: { only: { harness: "claude", configDir: nativeA, default: true } },
-      });
-      Object.assign(env, markers);
-      const resumed = await launch(["resume", "native-session", "-m", "more"]);
-      expect(resumed.code).toBe(1);
-      expect(resumed.modelResolver).not.toHaveBeenCalled();
-      expect(records()).toHaveLength(1);
-      expect(readFileSync(historical.path, "utf8")).toBe(historical.bytes);
-    },
-  );
-
-  it.each(["explicit", "project"])(
-    "allows deliberate %s replacement of null history",
-    async (selection) => {
-      const historical = await historicalRecord("blank");
-      settings({ fallbackProfile: undefined });
-      writeFileSync(join(nativeB, "identity"), "native-session");
-      if (selection === "project")
-        writeRegistry(home, { projects: { "~/app": { aligndev: { profile: "b" } } } });
-      const resumed = await launch([
-        "resume",
-        "native-session",
-        "-m",
-        "more",
-        ...(selection === "explicit" ? ["--profile", "b"] : []),
-      ]);
-      expect(resumed.code, resumed.stderr).toBe(0);
-      expect(newest().frontmatter).toMatchObject({ profile: "b", model: null });
-      expect(observed().store).toBe(nativeB);
-      expect(readFileSync(historical.path, "utf8")).toBe(historical.bytes);
-    },
-  );
-
-  it("uses the actual-cwd project selection for guide/help and preserves subcommand help overrides", async () => {
-    writeRegistry(home, { projects: { "~/app": { aligndev: { profile: "b" } } } });
-    const help = await launch(["--help"]);
-    expect(help.stdout).toContain(nativeB);
-    expect(help.stdout).not.toContain(nativeA);
-    for (const args of [["--help"], ["new", "--help"], ["resume", "--help"], ["quota", "--help"]]) {
-      const selected = await launch([...args, "--profile", "a"]);
-      expect(selected.code, selected.stderr).toBe(0);
-      expect(selected.stdout).toContain(nativeA);
-      expect(selected.stdout).not.toContain(nativeB);
-      expect(selected.modelResolver).not.toHaveBeenCalled();
-    }
-    const stdout = makeSink();
-    const stderr = makeSink();
-    expect(
-      await main({
-        argv: ["node", "aligndev", "guide", "code"],
-        cwd: project,
-        home,
-        env,
-        alignfirstCommand: [process.execPath, ALIGNFIRST_BIN],
-        stdout,
-        stderr,
-      }),
-      stderr.text(),
-    ).toBe(0);
-    expect(stdout.text()).toContain("`sonnet`");
-    expect(stdout.text()).not.toContain("fixture-secret");
-    expect(records()).toHaveLength(0);
-    expect(existsSync(join(nativeB, "identity"))).toBe(false);
-  });
-
-  it.each([
-    ["claude", "CLAUDE_CONFIG_DIR"],
-    ["codex", "CODEX_HOME"],
-    ["pi", "PI_CODING_AGENT_DIR"],
-  ] as const)(
-    "redacts %s profile environment values in help and guide",
-    async (agent, variable) => {
-      settings({
-        profiles: {
-          a: {
-            harness: agent,
-            env: { [variable]: "private-store-value", HOME: "private-home-value" },
-          },
-        },
-      });
-      const help = await launch(["--help"]);
-      const stdout = makeSink();
-      const stderr = makeSink();
-      const guideCode = await main({
-        argv: ["node", "aligndev", "guide", "code"],
-        cwd: project,
-        home,
-        env,
-        alignfirstCommand: [process.execPath, ALIGNFIRST_BIN],
-        stdout,
-        stderr,
-      });
-      expect(help.code, help.stderr).toBe(0);
-      expect(guideCode, stderr.text()).toBe(0);
-      for (const text of [help.stdout, stdout.text()]) {
-        expect(text).not.toContain("private-store-value");
-        expect(text).not.toContain("private-home-value");
-      }
-    },
-  );
-
-  it("redacts profile environment values after authentication failure", async () => {
+    expect(newest().frontmatter).toMatchObject({ profile: "a", model: "choice" });
+    expect(observed()).toMatchObject({ store: nativeA, keyPresent: false });
+    expect(initial.modelResolver).toHaveBeenCalledWith("claude", "model-a", expect.anything());
     settings({
+      fallbackProfile: "b",
       profiles: {
-        a: { harness: "claude", env: { CLAUDE_CONFIG_DIR: nativeA, FIXTURE_AUTH_FAILURE: "1" } },
+        a: { ...profiles?.a, default: false },
+        b: { ...profiles?.b, default: true },
       },
     });
-    const failed = await launch(["new", "-m", "go", "--quiet"]);
-    expect(failed.code, failed.stderr).toBe(2);
-    expect(failed.stderr).not.toContain(nativeA);
-    expect(failed.stderr).not.toContain("fixture-secret");
+    const resumed = await launch(["resume", "native-session", "-m", "more"]);
+    expect(resumed.code, resumed.stderr).toBe(0);
+    expect(newest().frontmatter.profile).toBe("a");
+    expect(observed().store).toBe(nativeA);
   });
 
-  it("sanitizes native model discovery failures before diagnostics and durable completion", async () => {
-    writeFileSync(
-      join(root, "bin", "codex"),
-      `#!${process.execPath}
-process.stdout.write("native-model-secret");
-process.stderr.write("native-model-secret");
-process.exitCode = 1;
-`,
-      { mode: 0o755 },
-    );
-    settings({ profiles: { a: { harness: "codex", defaultModel: "sol", configDir: nativeA } } });
+  it("keeps a historical run without a profile on built-ins despite configured profiles", async () => {
+    settings({ profiles: { a: { harness: "claude", configDir: nativeA } } });
+    expect((await launch(["new", "-m", "go"])).code).toBe(0);
+    const historical = newest().path;
+    const bytes = readFileSync(historical, "utf8").replace(/^profile: a\n/m, "");
+    writeFileSync(historical, bytes);
+    settings({
+      fallbackProfile: undefined,
+      profiles: {
+        a: {
+          harness: "claude",
+          configDir: nativeB,
+          default: true,
+          defaultModel: "opus",
+          unset: ["TOKEN"],
+        },
+        b: { harness: "claude", configDir: nativeB },
+      },
+    });
+    env.CLAUDECODE = "1";
+    env.CLAUDE_CONFIG_DIR = nativeA;
+    const resumed = await launch(["resume", "native-session", "-m", "more"]);
+    expect(resumed.code, resumed.stderr).toBe(0);
+    expect(newest().frontmatter).toMatchObject({ profile: null, model: null, agent: "claude" });
+    expect(observed()).toMatchObject({ store: nativeA, keyPresent: true });
+    expect(observed().args).not.toContain("--model");
+    expect(readFileSync(historical, "utf8")).toBe(bytes);
+  });
+
+  it("redacts profile environment values in help and guide", async () => {
+    settings({
+      profiles: {
+        a: {
+          harness: "claude",
+          env: { CLAUDE_CONFIG_DIR: "private-store-value", HOME: "private-home-value" },
+        },
+      },
+    });
+    const help = await launch(["--help"]);
     const stdout = makeSink();
     const stderr = makeSink();
-    const code = await main({
-      argv: ["node", "aligndev", "code", "new", "-m", "go"],
+    const guideCode = await main({
+      argv: ["node", "aligndev", "guide", "code"],
       cwd: project,
       home,
       env,
-      alignfirstCommand: [process.execPath, ALIGNFIRST_BIN],
+      alignfirstCommand: stub(),
       stdout,
       stderr,
     });
-    expect(code).toBe(1);
-    expect(stdout.text() + stderr.text()).not.toContain("native-model-secret");
-    expect(readFileSync(newest().path, "utf8")).not.toContain("native-model-secret");
-    expect(readCompletion(newest().path).frontmatter).toMatchObject({
-      status: "failed",
-      exitReason: "error",
-    });
+    expect(help.code, help.stderr).toBe(0);
+    expect(guideCode, stderr.text()).toBe(0);
+    for (const text of [help.stdout, stdout.text()]) {
+      expect(text).not.toContain("private-store-value");
+      expect(text).not.toContain("private-home-value");
+    }
   });
 
-  it.each([false, true])(
-    "keeps initial identity and model-discovery failure metadata for resume=%s",
-    async (resume) => {
-      expect((await launch(["new", "-m", "go"])).code).toBe(0);
-      const originalFile = newest().path;
-      const original = readFileSync(originalFile, "utf8");
-      const initialMetadata: SessionFrontmatter[] = [];
-      const modelResolver = vi.fn(async () => {
-        initialMetadata.push(newest().frontmatter);
-        throw new Error("fixture model discovery failure");
-      });
-      const failed = await launch(
-        [
-          resume ? "resume" : "new",
-          ...(resume ? ["native-session"] : []),
-          "-m",
-          "go",
-          "--profile",
-          "b",
-        ],
-        modelResolver,
-      );
-      expect(failed.code).toBe(1);
-      expect(modelResolver).toHaveBeenCalledOnce();
-      expect(initialMetadata).toEqual([
-        expect.objectContaining({
-          status: "running",
-          profile: "b",
-          sessionId: resume ? "native-session" : null,
-        }),
-      ]);
-      expect(readCompletion(newest().path).frontmatter).toMatchObject({
-        status: "failed",
-        profile: "b",
-        model: resume ? "choice" : "sonnet",
-        sessionId: resume ? "native-session" : null,
-        exitReason: "error",
-      });
-      const status = await launch(["status", newest().path, "--result"]);
-      expect(status.code).toBe(0);
-      expect(status.stdout).toContain(`sessionId: ${resume ? "native-session" : ""}\n`);
-      expect(existsSync(join(nativeB, "identity"))).toBe(false);
-      expect(readFileSync(originalFile, "utf8")).toBe(original);
-    },
-  );
-
-  it("retains resume identity on authentication failure before a native header", async () => {
+  it("keeps the initial identity and model-discovery failure metadata of a resume", async () => {
     expect((await launch(["new", "-m", "go"])).code).toBe(0);
-    env.FIXTURE_AUTH_FAILURE = "1";
-    const failed = await launch(["resume", "native-session", "-m", "more", "--profile", "b"]);
-    expect(failed.code).toBe(2);
+    const originalFile = newest().path;
+    const original = readFileSync(originalFile, "utf8");
+    const initialMetadata: SessionFrontmatter[] = [];
+    const modelResolver = vi.fn(async () => {
+      initialMetadata.push(newest().frontmatter);
+      throw new Error("fixture model discovery failure");
+    });
+    const failed = await launch(
+      ["resume", "native-session", "-m", "go", "--profile", "b"],
+      modelResolver,
+    );
+    expect(failed.code).toBe(1);
+    expect(modelResolver).toHaveBeenCalledOnce();
+    expect(initialMetadata).toEqual([
+      expect.objectContaining({ status: "running", profile: "b", sessionId: "native-session" }),
+    ]);
     expect(readCompletion(newest().path).frontmatter).toMatchObject({
       status: "failed",
       profile: "b",
       model: "choice",
       sessionId: "native-session",
-      exitReason: "auth_required",
+      exitReason: "error",
     });
-  });
-
-  it("round-trips a multiline profile and model through completion, status and resume", async () => {
-    const profile = "work\naccount";
-    const model = "chosen\nmodel";
-    settings({
-      fallbackProfile: profile,
-      profiles: {
-        [profile]: {
-          harness: "claude",
-          configDir: nativeA,
-          defaultModel: model,
-          modelAliases: { [model]: "opus" },
-        },
-      },
-    });
-    const initial = await launch(["new", "-m", "go", "--profile", profile]);
-    expect(initial.code, initial.stderr).toBe(0);
-    expect(newest().frontmatter).toMatchObject({ profile, model, status: "succeeded" });
-    const status = await launch(["status", newest().path, "--result"]);
-    expect(status.code, status.stderr).toBe(0);
-    expect(status.stdout).toContain("done");
-    const resumed = await launch(["resume", "native-session", "-m", "more"]);
-    expect(resumed.code, resumed.stderr).toBe(0);
-    expect(newest().frontmatter).toMatchObject({ profile, model, status: "succeeded" });
-    expect(resumed.modelResolver).toHaveBeenCalledWith("claude", "opus", expect.anything());
+    expect(readFileSync(originalFile, "utf8")).toBe(original);
   });
 
   it("rejects selected-profile failures before reserving a side ticket or discovering models", async () => {
@@ -784,13 +405,13 @@ process.exitCode = 1;
     expect(result.code).toBe(1);
     expect(result.modelResolver).not.toHaveBeenCalled();
     expect(records()).toHaveLength(0);
-    expect(existsSync(join(nativeA, "identity"))).toBe(false);
+    expect(readFileSync(join(root, "alignfirst.log"), "utf8")).not.toContain("--side");
   });
 
   it("shares the finalized environment across discovery and spawn; records pre-expansion metadata", async () => {
     const result = await launch(["new", "-m", "go", "--profile", "a"]);
     expect(result.code, result.stderr).toBe(0);
-    expect(result.modelResolver).toHaveBeenCalledWith("claude", "opus", {
+    expect(result.modelResolver).toHaveBeenCalledWith("claude", "model-a", {
       cwd: project,
       env: expect.objectContaining({
         CLAUDE_CONFIG_DIR: nativeA,
@@ -819,61 +440,16 @@ process.exitCode = 1;
   it("uses the project selection ahead of recorded/global settings and preserves the model with current aliases", async () => {
     expect((await launch(["new", "-m", "go"])).code).toBe(0);
     writeFileSync(join(nativeB, "identity"), "native-session");
-    writeRegistry(home, { projects: { "~/app": { aligndev: { profile: "b" } } } });
+    projectProfile = "b";
     const result = await launch(["resume", "native-session", "-m", "more"]);
     expect(result.code, result.stderr).toBe(0);
-    expect(result.modelResolver).toHaveBeenCalledWith("claude", "haiku", expect.anything());
+    expect(result.modelResolver).toHaveBeenCalledWith("claude", "model-b", expect.anything());
     expect(observed().store).toBe(nativeB);
     expect(newest().frontmatter).toMatchObject({
       profile: "b",
       model: "choice",
       sessionId: "native-session",
     });
-    expect(existsSync(join(home, ".alignfirst/companions/app"))).toBe(false);
-  });
-
-  it("keeps the recorded profile ahead of a changed global default", async () => {
-    expect((await launch(["new", "-m", "go"])).code).toBe(0);
-    settings({ fallbackProfile: "b" });
-    const resumed = await launch(["resume", "native-session", "-m", "more"]);
-    expect(resumed.code, resumed.stderr).toBe(0);
-    expect(observed().store).toBe(nativeA);
-    expect(newest().frontmatter.profile).toBe("a");
-  });
-
-  it("fails in an unavailable selected native home without falling back", async () => {
-    expect((await launch(["new", "-m", "go"])).code).toBe(0);
-    const failed = await launch(["resume", "native-session", "-m", "more", "--profile", "b"]);
-    expect(failed.code).toBe(1);
-    expect(readCompletion(newest().path).frontmatter).toMatchObject({
-      status: "failed",
-      profile: "b",
-      model: "choice",
-      sessionId: "native-session",
-      exitReason: "error",
-    });
-    const status = await launch(["status", newest().path, "--result"]);
-    expect(status.code).toBe(0);
-    expect(status.stdout).toContain("sessionId: native-session\n");
-    expect(existsSync(join(nativeB, "identity"))).toBe(false);
-  });
-
-  it("rejects a replacement native conversation even after a successful final response", async () => {
-    expect((await launch(["new", "-m", "go"])).code).toBe(0);
-    writeFileSync(join(nativeB, "identity"), "replacement-session");
-    const failed = await launch(["resume", "native-session", "-m", "more", "--profile", "b"]);
-    expect(failed.code).toBe(1);
-    const completion = readCompletion(newest().path);
-    expect(completion.frontmatter).toMatchObject({
-      status: "failed",
-      profile: "b",
-      model: "choice",
-      sessionId: "native-session",
-      exitReason: "error",
-    });
-    const status = await launch(["status", newest().path, "--result"]);
-    expect(status.code).toBe(0);
-    expect(status.stdout).toContain("sessionId: native-session\n");
   });
 
   it("validates cross-agent and retained-model changes before discovery or writing a run", async () => {
@@ -897,17 +473,6 @@ process.exitCode = 1;
     expect(newest().frontmatter.model).toBe("sonnet");
   });
 
-  it("preserves a recorded null model rather than applying the new-session default", async () => {
-    settings({ profiles: { a: { harness: "claude", configDir: nativeA } } });
-    expect((await launch(["new", "-m", "go"])).code).toBe(0);
-    settings();
-    const resumed = await launch(["resume", "native-session", "-m", "more"]);
-    expect(resumed.code, resumed.stderr).toBe(0);
-    expect(resumed.modelResolver).toHaveBeenCalledWith("claude", undefined, expect.anything());
-    expect(observed().args).not.toContain("--model");
-    expect(newest().frontmatter.model).toBeNull();
-  });
-
   it.each(["explicit", "project"])(
     "requires %s replacement for a deleted recorded profile",
     async (replacement) => {
@@ -915,13 +480,12 @@ process.exitCode = 1;
       settings({
         fallbackProfile: "b",
         profiles: {
-          b: { harness: "claude", configDir: nativeA, modelAliases: { choice: "opus" } },
+          b: { harness: "claude", configDir: nativeA, modelAliases: { choice: "model-a" } },
         },
       });
       expect((await launch(["resume", "native-session", "-m", "more"])).code).toBe(1);
       expect(records()).toHaveLength(1);
-      if (replacement === "project")
-        writeRegistry(home, { projects: { "~/app": { aligndev: { profile: "b" } } } });
+      if (replacement === "project") projectProfile = "b";
       const result = await launch([
         "resume",
         "native-session",

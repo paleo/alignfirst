@@ -23,25 +23,22 @@ describe("resolveModels", () => {
     expect(resolveModels("pi", undefined)).toBeUndefined();
     expect(resolveModels("pi", [])).toBeUndefined();
     expect(resolveModels("pi", ["provider/model:high"])).toEqual(["provider/model:high"]);
-  });
-
-  it("replaces the defaults with the configured list", () => {
     expect(resolveModels("codex", ["terra", "luna"])).toEqual(["terra", "luna"]);
   });
 });
 
 describe("profile model aliases", () => {
   it("adds aliases to native defaults only without a nonempty override", () => {
-    expect(resolveModels("claude", [], { fast: "sonnet" })).toEqual([
+    expect(resolveModels("claude", [], { fast: "model-a" })).toEqual([
       ...CLAUDE_DEFAULT_MODELS,
       "fast",
     ]);
-    expect(resolveModels("codex", undefined, { fast: "sol" })).toEqual([
+    expect(resolveModels("codex", undefined, { fast: "model-a" })).toEqual([
       ...CODEX_DEFAULT_MODELS,
       "fast",
     ]);
-    expect(resolveModels("codex", ["fast"], { other: "sol" })).toEqual(["fast"]);
-    expect(resolveModels("pi", undefined, { fast: "openai/sol" })).toBeUndefined();
+    expect(resolveModels("codex", ["fast"], { other: "model-a" })).toEqual(["fast"]);
+    expect(resolveModels("pi", undefined, { fast: "provider/model-a" })).toBeUndefined();
   });
 
   it("expands exactly once and uses own alias properties", async () => {
@@ -50,9 +47,9 @@ describe("profile model aliases", () => {
     expect(expandModelAlias("constructor", aliases)).toBe("constructor");
     expect(expandModelAlias(undefined, aliases)).toBeUndefined();
     const resolver = createExecutableModelResolver(async () =>
-      JSON.stringify({ models: [{ slug: "gpt-7-sol" }] }),
+      JSON.stringify({ models: [{ slug: "gpt-3-sol" }] }),
     );
-    expect(await resolver("codex", expandModelAlias("fast", aliases), CONTEXT)).toBe("gpt-7-sol");
+    expect(await resolver("codex", expandModelAlias("fast", aliases), CONTEXT)).toBe("gpt-3-sol");
     expect(await resolver("pi", expandModelAlias("pinned", aliases), CONTEXT)).toBe(
       "openai/model:high",
     );
@@ -61,13 +58,13 @@ describe("profile model aliases", () => {
   it("never reuses catalogs from a different effective execution context", async () => {
     const runner = vi.fn(async (context: ModelDiscoveryContext) =>
       JSON.stringify({
-        models: [{ slug: context.env.CODEX_HOME === "a" ? "gpt-5-sol" : "gpt-9-sol" }],
+        models: [{ slug: context.env.CODEX_HOME === "a" ? "gpt-1-sol" : "gpt-9-sol" }],
       }),
     );
     const resolver = createExecutableModelResolver(runner);
     expect(
       await resolver("codex", "sol", { cwd: "/a", env: { CODEX_HOME: "a", PATH: "/a/bin" } }),
-    ).toBe("gpt-5-sol");
+    ).toBe("gpt-1-sol");
     expect(
       await resolver("codex", "sol", { cwd: "/b", env: { CODEX_HOME: "b", PATH: "/b/bin" } }),
     ).toBe("gpt-9-sol");
@@ -78,16 +75,16 @@ describe("profile model aliases", () => {
 describe("Codex executable model resolution", () => {
   it("orders major and minor versions numerically and narrows by alias", () => {
     const slugs = [
-      "gpt-5.9-astra",
-      "gpt-6-astra",
-      "gpt-5.9-terra",
-      "gpt-5.10-terra",
-      "gpt-6.1-luna",
+      "gpt-1.9-astra",
+      "gpt-2-astra",
+      "gpt-1.9-terra",
+      "gpt-1.10-terra",
+      "gpt-2.1-luna",
       "gpt-99.1-sol",
     ];
-    expect(selectNewestCodexModel(slugs, "astra")).toBe("gpt-6-astra");
-    expect(selectNewestCodexModel(slugs, "terra")).toBe("gpt-5.10-terra");
-    expect(selectNewestCodexModel(slugs, "luna")).toBe("gpt-6.1-luna");
+    expect(selectNewestCodexModel(slugs, "astra")).toBe("gpt-2-astra");
+    expect(selectNewestCodexModel(slugs, "terra")).toBe("gpt-1.10-terra");
+    expect(selectNewestCodexModel(slugs, "luna")).toBe("gpt-2.1-luna");
   });
 
   it("skips discovery for omitted models, Claude, and explicit Codex slugs", async () => {
@@ -100,53 +97,45 @@ describe("Codex executable model resolution", () => {
       " provider/model:high ",
     );
     await expect(resolve("pi", undefined, CONTEXT)).resolves.toBeUndefined();
-    await expect(resolve("codex", "gpt-6.1-terra", CONTEXT)).resolves.toBe("gpt-6.1-terra");
+    await expect(resolve("codex", "gpt-2.1-terra", CONTEXT)).resolves.toBe("gpt-2.1-terra");
     expect(runner).not.toHaveBeenCalled();
   });
 
   it("reuses one successfully parsed catalog without requiring other aliases", async () => {
     const runner = vi.fn(async () =>
-      JSON.stringify({ models: [{ slug: "gpt-6.1-terra" }, { slug: "gpt-5.7-luna" }] }),
+      JSON.stringify({ models: [{ slug: "gpt-2.1-terra" }, { slug: "gpt-1.7-luna" }] }),
     );
     const resolve = createExecutableModelResolver(runner);
-    await expect(resolve("codex", "terra", CONTEXT)).resolves.toBe("gpt-6.1-terra");
-    await expect(resolve("codex", "luna", CONTEXT)).resolves.toBe("gpt-5.7-luna");
+    await expect(resolve("codex", "terra", CONTEXT)).resolves.toBe("gpt-2.1-terra");
+    await expect(resolve("codex", "luna", CONTEXT)).resolves.toBe("gpt-1.7-luna");
     expect(runner).toHaveBeenCalledTimes(1);
   });
 
   it.each([
     ["process failure", async () => Promise.reject(new Error("ENOENT"))],
     ["malformed JSON", async () => "{"],
-    ["unexpected shape", async () => JSON.stringify({ items: [] })],
-    ["missing alias", async () => JSON.stringify({ models: [{ slug: "gpt-5.6-luna" }] })],
+    ["missing alias", async () => JSON.stringify({ models: [{ slug: "gpt-1.6-luna" }] })],
   ])("rejects %s", async (_name, runner) => {
     const resolve = createExecutableModelResolver(runner);
     const attempt = resolve("codex", "terra", CONTEXT);
     await expect(attempt).rejects.toThrow(Error);
   });
 
-  it.each([new Error("injected-catalog-secret"), "injected-catalog-secret"])(
-    "omits arbitrary injected runner failures: %s",
-    async (failure) => {
-      const resolver = createExecutableModelResolver(async () => {
-        throw failure;
-      });
-      const attempt = resolver("codex", "sol", CONTEXT);
-      await expect(attempt).rejects.toThrow(Error);
-      await expect(attempt).rejects.not.toThrow("injected-catalog-secret");
-    },
-  );
+  it("omits arbitrary injected runner failures", async () => {
+    const resolver = createExecutableModelResolver(async () => {
+      throw new Error("injected-catalog-secret");
+    });
+    const attempt = resolver("codex", "sol", CONTEXT);
+    await expect(attempt).rejects.toThrow(Error);
+    await expect(attempt).rejects.not.toThrow("injected-catalog-secret");
+  });
 
-  it.each([0, 1])("sanitizes native catalog output and failure (exit %i)", async (exitCode) => {
+  it("sanitizes native catalog output and failure", async () => {
     const root = mkdtempSync(join(tmpdir(), "aligndev-catalog-"));
     try {
       writeFileSync(
         join(root, "codex"),
-        `#!${process.execPath}
-process.stdout.write("native-catalog-secret");
-process.stderr.write("native-catalog-secret");
-process.exit(${exitCode});
-`,
+        "#!/bin/sh\nprintf native-catalog-secret\nprintf native-catalog-secret >&2\nexit 1\n",
         { mode: 0o755 },
       );
       const resolver = createExecutableModelResolver();

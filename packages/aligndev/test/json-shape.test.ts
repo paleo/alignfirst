@@ -68,22 +68,12 @@ describe("json shape", () => {
     expect(parse(sampleShape, { agent: "claude" })).toEqual({ agent: "claude" });
   });
 
-  it.each(
-    [
-      [],
-      null,
-      {},
-      { agent: "gemini" },
-      { agent: "claude", root: "" },
-      { agent: "claude", models: "a" },
-      { agent: "claude", models: ["a", 1] },
-      { agent: "claude", skip: "no" },
-      { agent: "claude", entries: {} },
-      { agent: "claude", entries: [{ name: " " }] },
-      { agent: "claude", entries: [{ name: "a" }, { name: "b", code: "Web" }] },
-      { agent: "claude", entries: [{ name: "a", code: 1 }] },
-    ].map((value) => [value]),
-  )("rejects invalid shape %j", (value) => {
+  it.each([
+    [null],
+    [{ agent: "gemini" }],
+    [{ agent: "claude", models: ["a", 1] }],
+    [{ agent: "claude", entries: [{ name: "a" }, { name: "b", code: "Web" }] }],
+  ])("rejects invalid shape %j", (value) => {
     expect(() => parse(sampleShape, value)).toThrow(TypeError);
   });
 

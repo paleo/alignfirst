@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { readLinkedGitCommonDir } from "../../src/code/linked-worktree.js";
 import {
+  addInitialCommit,
   addWorktree,
   makeFixture,
   makeRepository,
@@ -15,6 +16,7 @@ describe("readLinkedGitCommonDir", () => {
   it("returns the main checkout's git directory from a linked worktree", () => {
     const fixture = makeFixture();
     const main = makeRepository(fixture.root, "app");
+    addInitialCommit(main);
     const linked = join(fixture.root, "app-feature");
     addWorktree(main, linked, "feature");
     expect(readLinkedGitCommonDir({ cwd: linked, env: process.env })).toBe(join(main, ".git"));

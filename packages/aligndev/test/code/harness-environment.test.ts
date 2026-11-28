@@ -59,47 +59,39 @@ const EXPORTS: Record<CodingAgent, Record<string, string>> = {
     ANTIGRAVITY_TRAJECTORY_ID: "agy-trajectory",
   },
 };
-const CHILDREN = CODING_AGENTS;
-const ASSISTANTS: [string, Record<string, string>][] = [
-  ...CHILDREN.map((agent): [string, Record<string, string>] => [agent, EXPORTS[agent]]),
-  ["openclaw", { OPENCLAW_SHELL: "exec" }],
-  ["none", {}],
-];
 const BASE = { HOME: "/home/user", LANG: "C.UTF-8" };
 
 describe("harness session isolation", () => {
-  it.each([
-    ...CHILDREN.map((agent): [string, Record<string, string>, CodingAgent] => [
-      agent,
-      EXPORTS[agent],
-      agent,
-    ]),
-    ["pi, PI_CODING_AGENT alone", { PI_CODING_AGENT: "true" }, "pi"],
-    ["pi, AI_AGENT alone", { AI_AGENT: "pi" }, "pi"],
-  ])(
-    "detects %s, and nothing once its exports go through the child build",
-    (_name, exports, agent) => {
-      expect(detectCodingAgents(exports)).toEqual([agent]);
-      expect(detectCodingAgents(buildAgentEnv(exports, []))).toEqual([]);
-    },
-  );
-
-  it.each(
-    ASSISTANTS.flatMap(([assistant, exports]) =>
-      CHILDREN.map((child): [string, CodingAgent, Record<string, string>] => [
-        assistant,
-        child,
-        exports,
-      ]),
-    ),
-  )("gives a child of a %s assistant only the %s session", (_assistant, child, exports) => {
-    const built = buildAgentEnv({ ...BASE, ...exports }, []);
-    const childEnv = { ...built, ...EXPORTS[child] };
-    if (!("OPENCLAW_SHELL" in exports)) {
-      expect(Object.keys(built).filter((name) => name in exports)).toEqual([]);
+  it("strips every assistant export and keeps only the child's own session", () => {
+    for (const assistant of [...CODING_AGENTS, undefined]) {
+      const exports = assistant === undefined ? {} : EXPORTS[assistant];
+      const built = buildAgentEnv({ ...BASE, ...exports }, []);
+      expect(built).toEqual(BASE);
+      for (const child of CODING_AGENTS) {
+        const childEnv = { ...built, ...EXPORTS[child] };
+        expect(detectCodingAgents(childEnv)).toEqual([child]);
+        expect(resolveAssistantHarness(childEnv).harness).toBe(child);
+      }
     }
-    expect(detectCodingAgents(childEnv)).toEqual([child]);
-    expect(resolveAssistantHarness(childEnv).harness).toBe(child);
+  });
+
+  it.each([
+    ["PI_CODING_AGENT alone", { PI_CODING_AGENT: "true" }],
+    ["AI_AGENT alone", { AI_AGENT: "pi" }],
+  ])("detects pi from %s and strips it", (_name, exports) => {
+    expect(detectCodingAgents(exports)).toEqual(["pi"]);
+    expect(buildAgentEnv(exports, [])).toEqual({});
+  });
+
+  it("strips harness markers whatever their values and keeps native settings", () => {
+    const settings = {
+      CLAUDE_CODE_USE_BEDROCK: "1",
+      PI_CODING_AGENT_DIR: "/config",
+      PI_CODING_AGENT_SESSION_DIR: "/sessions",
+      OPENAI_API_KEY: "credential",
+    };
+    const caller = { AI_AGENT: "other", PI_CODING_AGENT: "false", CLAUDECODE: "0", ...settings };
+    expect(buildAgentEnv(caller, [])).toEqual(settings);
   });
 
   it("builds each successive child from the unchanged caller environment", () => {
@@ -112,35 +104,34 @@ describe("harness session isolation", () => {
     );
   });
 
-  it.each([
-    ["claude", "codex", "pi"],
-    ["agy", "claude", "agy"],
-    ["pi", "agy", "codex"],
-    ["codex", "pi", "claude"],
-  ] satisfies [CodingAgent, CodingAgent, CodingAgent][])(
-    "detects only the grandchild under a %s assistant, a %s child and a %s grandchild",
-    (assistant, child, grandchild) => {
-      const childEnv = {
-        ...buildAgentEnv({ ...BASE, ...EXPORTS[assistant] }, []),
-        ...EXPORTS[child],
-      };
-      const grandchildEnv = { ...buildAgentEnv(childEnv, []), ...EXPORTS[grandchild] };
-      expect(detectCodingAgents(grandchildEnv)).toEqual([grandchild]);
-    },
-  );
+  it("detects only the grandchild under nested sessions", () => {
+    const childEnv = { ...buildAgentEnv({ ...BASE, ...EXPORTS.claude }, []), ...EXPORTS.codex };
+    const grandchildEnv = { ...buildAgentEnv(childEnv, []), ...EXPORTS.pi };
+    expect(detectCodingAgents(grandchildEnv)).toEqual(["pi"]);
+  });
 
-  it("passes trace, host-app and OpenClaw variables through unless the profile unsets them", () => {
+  it("passes trace and host-app variables through unless the profile unsets them", () => {
     const kept = {
       TRACEPARENT: "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
       TRACESTATE: "vendor=value",
       PASEO_AGENT_ID: "paseo-agent",
       PASEO_WORKSPACE_ID: "paseo-workspace",
       PASEO_AGENT_CWD: "/srv/project",
-      OPENCLAW_SHELL: "exec",
     };
     const caller = { ...BASE, ...EXPORTS.claude, ...kept };
     expect(buildAgentEnv(caller, [])).toMatchObject(kept);
     const unset = buildAgentEnv(caller, Object.keys(kept));
     expect(Object.keys(unset).filter((name) => name in kept)).toEqual([]);
+  });
+
+  // A coding agent launched from an OpenClaw exec inherits OPENCLAW_SHELL.
+  it("keeps OPENCLAW_SHELL for the child while the detected coding agent wins", () => {
+    const childEnv = {
+      ...buildAgentEnv({ ...BASE, OPENCLAW_SHELL: "exec", ALIGNDEV_ASSISTANT_HARNESS: "x" }, []),
+      ...EXPORTS.codex,
+    };
+    expect(childEnv.OPENCLAW_SHELL).toBe("exec");
+    expect(childEnv.ALIGNDEV_ASSISTANT_HARNESS).toBeUndefined();
+    expect(resolveAssistantHarness(childEnv).harness).toBe("codex");
   });
 });

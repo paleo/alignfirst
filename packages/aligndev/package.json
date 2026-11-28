@@ -44,7 +44,8 @@
     "clear": "rimraf dist/*",
     "lint": "biome check",
     "test": "vitest run",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:openclaw": "vitest run --config vitest.openclaw.config.ts"
   },
   "dependencies": {
     "@alignfirst/docmap": "~0.13.0",

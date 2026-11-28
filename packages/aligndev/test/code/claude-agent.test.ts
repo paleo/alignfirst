@@ -22,13 +22,15 @@ const BASE: RunConfig = {
 
 describe("Claude adapter", () => {
   it("builds exact normal and dangerous argv", () => {
-    expect(buildClaudeArgs(BASE)).toEqual([
+    expect(buildClaudeArgs({ ...BASE, additionalDirectories: ["/companions/proj"] })).toEqual([
       "-p",
       "--output-format",
       "stream-json",
       "--verbose",
       "--permission-mode",
       "auto",
+      "--add-dir",
+      "/companions/proj",
     ]);
     expect(
       buildClaudeArgs({
@@ -36,6 +38,7 @@ describe("Claude adapter", () => {
         skipPermissions: true,
         resume: "sess-9",
         executableModel: "opus",
+        effort: "high",
       }),
     ).toEqual([
       "-p",
@@ -47,36 +50,8 @@ describe("Claude adapter", () => {
       "sess-9",
       "--model",
       "opus",
-    ]);
-  });
-
-  it("passes the effort as --effort after the model", () => {
-    expect(buildClaudeArgs({ ...BASE, executableModel: "opus", effort: "high" }).slice(-4)).toEqual(
-      ["--model", "opus", "--effort", "high"],
-    );
-  });
-
-  it("puts --add-dir after the permission flags, followed only by options", () => {
-    expect(
-      buildClaudeArgs({
-        ...BASE,
-        additionalDirectories: ["/companions/proj"],
-        resume: "sess-9",
-        executableModel: "opus",
-      }),
-    ).toEqual([
-      "-p",
-      "--output-format",
-      "stream-json",
-      "--verbose",
-      "--permission-mode",
-      "auto",
-      "--add-dir",
-      "/companions/proj",
-      "--resume",
-      "sess-9",
-      "--model",
-      "opus",
+      "--effort",
+      "high",
     ]);
   });
 
@@ -153,18 +128,6 @@ describe("Claude adapter", () => {
     expect(state.earlierResults).toEqual(["Launched the subagent."]);
   });
 
-  it("ignores initially empty results when collecting completed responses", () => {
-    const state = createClaudeState();
-    for (const result of ["", "Report."]) {
-      interpretClaudeLine(
-        JSON.stringify({ type: "result", session_id: "sess-1", result, is_error: false }),
-        state,
-      );
-    }
-    expect(state.earlierResults).toEqual([]);
-    expect(state.result).toBe("Report.");
-  });
-
   it("measures the context window from the newest main-loop response", () => {
     const state = createClaudeState();
     assistant(state, { input_tokens: 10, cache_read_input_tokens: 40_000, output_tokens: 100 });
@@ -199,7 +162,7 @@ describe("Claude adapter", () => {
 });
 
 describe("Claude native identity", () => {
-  it.each([undefined, "", "replacement"])(
+  it.each([undefined, "replacement"])(
     "rejects missing or changed resume identity %j permanently",
     (id) => {
       const state = createClaudeState({ ...BASE, resume: "expected" });

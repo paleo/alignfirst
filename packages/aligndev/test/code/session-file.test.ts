@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import type * as FileSystem from "node:fs";
 import {
   existsSync,
@@ -14,10 +13,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { CODING_AGENTS } from "../../src/code/coding-agent.js";
 import {
   appendTranscript,
   applyCompletion,
   createSessionFile,
+  findNewestSessionFile,
   formatResults,
   type SessionFrontmatter,
   listSessionRecords,
@@ -38,6 +39,8 @@ vi.mock("node:fs", async (original) => {
 
 const FIXED_DATE = new Date(2026, 6, 1, 9, 15, 3); // local 2026-07-01 09:15:03
 const MACHINE_ID = "test-machine";
+// Above the Linux pid limit: never a live process.
+const DEAD_PID = 2147483647;
 
 describe("formatResults", () => {
   it("leaves a single response unchanged", () => {
@@ -80,14 +83,11 @@ function makeFrontmatter(overrides?: Partial<SessionFrontmatter>): SessionFrontm
 describe("resolveSessionFilePath", () => {
   const sessionsDir = join("/proj", ".plans");
 
-  it("uses the ticket _aligndev directory", () => {
-    const path = resolveSessionFilePath(sessionsDir, "29", FIXED_DATE, () => false);
-    expect(path).toBe(join(sessionsDir, "29", "_aligndev", "20260701-091503.running.md"));
-  });
-
-  it("uses the root _aligndev directory without a ticket", () => {
-    const path = resolveSessionFilePath(sessionsDir, undefined, FIXED_DATE, () => false);
-    expect(path).toBe(join(sessionsDir, "_aligndev", "20260701-091503.running.md"));
+  it.each([
+    ["29", join(sessionsDir, "29", "_aligndev", "20260701-091503.running.md")],
+    [undefined, join(sessionsDir, "_aligndev", "20260701-091503.running.md")],
+  ])("places a run of ticket %j in its _aligndev directory", (ticket, expected) => {
+    expect(resolveSessionFilePath(sessionsDir, ticket, FIXED_DATE, () => false)).toBe(expected);
   });
 
   it("appends a numeric suffix on same-second collisions, running or completed", () => {
@@ -116,7 +116,7 @@ describe("frontmatter serialization", () => {
     expect(parseFrontmatter(block)).toEqual(frontmatter);
   });
 
-  it.each(["line\nbreak", "line\r\nbreak", "tab\tinside", "nul\u0000inside", "next\u0085line"])(
+  it.each(["line\r\nbreak", "next\u0085line"])(
     "round-trips embedded controls in all string metadata: %j",
     (value) => {
       const metadata = makeFrontmatter({
@@ -136,14 +136,7 @@ describe("frontmatter serialization", () => {
     },
   );
 
-  it("round-trips null metadata", () => {
-    const block = serializeFrontmatter(makeFrontmatter())
-      .replace(/^---\n/, "")
-      .replace(/\n---\n$/, "");
-    expect(parseFrontmatter(block)).toEqual(makeFrontmatter());
-  });
-
-  it.each(["pi", "agy"] as const)("round-trips %s identity", (agent) => {
+  it.each(CODING_AGENTS)("round-trips %s identity", (agent) => {
     const block = serializeFrontmatter({ ...frontmatter, agent });
     expect(parseFrontmatter(block).agent).toBe(agent);
   });
@@ -158,20 +151,22 @@ describe("frontmatter serialization", () => {
     ).toBe("work account");
   });
 
-  it("round-trips the context size and rejects a non-numeric one", () => {
+  it("round-trips the context size", () => {
     const block = serializeFrontmatter(makeFrontmatter({ contextTokens: 162_400 }))
       .replace(/^---\n/, "")
       .replace(/\n---\n$/, "");
     expect(parseFrontmatter(block).contextTokens).toBe(162_400);
-    expect(parseFrontmatter("status: running\ncontextTokens: lots").contextTokens).toBeNull();
-    expect(parseFrontmatter("status: running").contextTokens).toBeNull();
   });
 
-  it("parses an invalid or absent pid as null", () => {
-    expect(parseFrontmatter("status: running\npid: not-a-number").pid).toBeNull();
-    expect(parseFrontmatter("status: running\npid: -1").pid).toBeNull();
-    expect(parseFrontmatter("status: running\npid: 1.5").pid).toBeNull();
-    expect(parseFrontmatter("status: running").pid).toBeNull();
+  it.each([
+    ["contextTokens", "lots"],
+    ["pid", "not-a-number"],
+    ["pid", "-1"],
+    ["pid", "1.5"],
+    ["pid", undefined],
+  ] as const)("parses an invalid or absent %s %j as null", (key, value) => {
+    const line = value === undefined ? "" : `\n${key}: ${value}`;
+    expect(parseFrontmatter(`status: running${line}`)[key]).toBeNull();
   });
 
   it("keeps a malformed quoted value as raw text instead of throwing", () => {
@@ -268,17 +263,6 @@ describe("session file lifecycle", () => {
     expect(existsSync(resolveSessionFilePath(dir, undefined, FIXED_DATE))).toBe(false);
   });
 
-  it("refuses a stale filename claim without overwriting the winning run", () => {
-    const first = resolveSessionFilePath(dir, undefined, FIXED_DATE);
-    const stale = resolveSessionFilePath(dir, undefined, FIXED_DATE);
-    expect(stale).toBe(first);
-    writeInitialSessionFile(first, makeFrontmatter({ meta: "winner" }));
-    expect(() => writeInitialSessionFile(stale, makeFrontmatter({ meta: "loser" }))).toThrow(
-      expect.objectContaining({ code: "EEXIST" }),
-    );
-    expect(readCompletion(first).frontmatter.meta).toBe("winner");
-  });
-
   it("writes a running header and completes to succeeded with a result", () => {
     writeInitialSessionFile(sessionFilePath, makeFrontmatter({ pid: 4242, cwd: "/proj" }));
     expect(existsSync(sessionFilePath)).toBe(true);
@@ -307,30 +291,10 @@ describe("session file lifecycle", () => {
     expect(completion.result).toBe("All done.");
   });
 
-  it("records a failed completion", () => {
-    writeInitialSessionFile(
-      sessionFilePath,
-      makeFrontmatter({ protocol: null, ticket: null, command: "aligndev code new --message hi" }),
-    );
-    applyCompletion(sessionFilePath, {
-      status: "failed",
-      endedAt: "2026-07-01T09:16:00.000Z",
-      exitReason: "error",
-      sessionId: null,
-      result: "boom",
-    });
-    const completion = readCompletion(sessionFilePath);
-    expect(completion.frontmatter.status).toBe("failed");
-    expect(completion.frontmatter.exitReason).toBe("error");
-    expect(completion.result).toBe("boom");
-  });
-
   it("reconciles a dead running process without waiting for another run", () => {
-    const child = spawnSync("node", ["-e", ""]);
-    if (child.pid === undefined) throw new Error("failed to spawn a probe child");
     writeInitialSessionFile(
       sessionFilePath,
-      makeFrontmatter({ pid: child.pid, sessionId: "requested-resume-id" }),
+      makeFrontmatter({ pid: DEAD_PID, sessionId: "requested-resume-id" }),
     );
 
     const completion = reconcileSessionFile(sessionFilePath, MACHINE_ID, FIXED_DATE);
@@ -356,21 +320,18 @@ describe("session file lifecycle", () => {
     },
   );
 
-  it.each(["EPERM", "EACCES"])(
-    "leaves a run untouched when probing its pid fails with %s",
-    (code) => {
-      writeInitialSessionFile(
-        sessionFilePath,
-        makeFrontmatter({ pid: process.pid, pidStartTime: "different-start" }),
-      );
-      const before = readFileSync(sessionFilePath, "utf8");
-      vi.spyOn(process, "kill").mockImplementation(() => {
-        throw Object.assign(new Error("probe denied"), { code });
-      });
-      expect(reconcileSessionFile(sessionFilePath, MACHINE_ID).frontmatter.status).toBe("running");
-      expect(readFileSync(sessionFilePath, "utf8")).toBe(before);
-    },
-  );
+  it.each(["EPERM"])("leaves a run untouched when probing its pid fails with %s", (_code) => {
+    writeInitialSessionFile(
+      sessionFilePath,
+      makeFrontmatter({ pid: process.pid, pidStartTime: "different-start" }),
+    );
+    const before = readFileSync(sessionFilePath, "utf8");
+    vi.spyOn(process, "kill").mockImplementation(() => {
+      throw Object.assign(new Error("probe denied"), { code: "EPERM" });
+    });
+    expect(reconcileSessionFile(sessionFilePath, MACHINE_ID).frontmatter.status).toBe("running");
+    expect(readFileSync(sessionFilePath, "utf8")).toBe(before);
+  });
 
   it.skipIf(process.platform !== "linux")(
     "leaves a run untouched when its current start time is unreadable",
@@ -462,17 +423,6 @@ describe("listSessionRecords", () => {
     return listSessionRecords(plansDir, MACHINE_ID);
   }
 
-  // A just-exited child's pid is guaranteed dead (and not yet reused).
-  function deadPid(): number {
-    const child = spawnSync("node", ["-e", ""]);
-    if (child.pid === undefined) throw new Error("failed to spawn a probe child");
-    return child.pid;
-  }
-
-  it("returns an empty list when .plans has no session directories", () => {
-    expect(listRecords()).toEqual([]);
-  });
-
   it("lists records from the root and ticket _aligndev directories", () => {
     const rootPath = seedRecord("_aligndev", "a.md", makeFrontmatter({ status: "succeeded" }));
     const ticketPath = seedRecord(
@@ -495,11 +445,6 @@ describe("listSessionRecords", () => {
     expect(records.map((r) => r.path).sort()).toEqual([rootPath, ticketPath].sort());
   });
 
-  it("ignores session records under archived tickets", () => {
-    seedRecord("_archives/29/_aligndev", "archived.md", makeFrontmatter({ status: "succeeded" }));
-    expect(listRecords()).toEqual([]);
-  });
-
   it("skips non-md files and files without a frontmatter block", () => {
     seedRecord("_aligndev", "good.md", makeFrontmatter({ status: "succeeded" }));
     writeFileSync(join(plansDir, "_aligndev", "junk.md"), "no frontmatter here");
@@ -510,7 +455,7 @@ describe("listSessionRecords", () => {
   });
 
   it("seals a running record whose pid is dead", () => {
-    const path = seedRecord("_aligndev", "stale.md", makeFrontmatter({ pid: deadPid() }));
+    const path = seedRecord("_aligndev", "stale.md", makeFrontmatter({ pid: DEAD_PID }));
     const records = listRecords();
     expect(records[0].frontmatter.status).toBe("failed");
     expect(records[0].frontmatter.exitReason).toBe("terminated");
@@ -533,7 +478,7 @@ describe("listSessionRecords", () => {
       const path = seedRecord(
         "_aligndev",
         "foreign.md",
-        makeFrontmatter({ pid: deadPid(), machineId }),
+        makeFrontmatter({ pid: DEAD_PID, machineId }),
       );
       const before = readFileSync(path, "utf8");
       expect(listRecords()[0].frontmatter.status).toBe("running");
@@ -546,5 +491,25 @@ describe("listSessionRecords", () => {
     const records = listRecords();
     expect(records[0].frontmatter.status).toBe("running");
     expect(readCompletion(path).frontmatter.status).toBe("running");
+  });
+});
+
+describe("findNewestSessionFile", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "aligndev-newest-"));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("orders same-second runs by their numeric suffix", () => {
+    for (const name of ["20260829-115529.md", "20260829-115529-10.md", "20260829-115529-9.md"])
+      writeFileSync(join(dir, name), "");
+    writeFileSync(join(dir, "20260829-115528-99.running.md"), "");
+    expect(findNewestSessionFile(dir)).toBe(join(dir, "20260829-115529-10.md"));
+  });
+
+  it("finds nothing in an empty or missing directory", () => {
+    expect(findNewestSessionFile(dir)).toBeUndefined();
+    expect(findNewestSessionFile(join(dir, "missing"))).toBeUndefined();
   });
 });

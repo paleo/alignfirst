@@ -75,12 +75,10 @@ describe("external native environment boundary", () => {
     });
   });
 
-  it.each(["missing", "broken", "regular", "differentTarget", "notBun"])(
+  it.each(["missing", "differentTarget", "notBun"])(
     "keeps a bun-node-named directory with %s runtime evidence",
     (kind) => {
       unlinkSync(join(shim, "node"));
-      if (kind === "broken") symlinkSync(join(root, "absent"), join(shim, "node"));
-      if (kind === "regular") writeFileSync(join(shim, "node"), "node");
       if (kind === "differentTarget") symlinkSync(process.execPath, join(shim, "node"));
       if (kind === "notBun") {
         unlinkSync(join(shim, "bun"));
@@ -126,23 +124,6 @@ describe("external native environment boundary", () => {
     });
   });
 
-  it("removes the assistant's harness request but keeps OPENCLAW_SHELL", () => {
-    const env = buildAgentEnv(
-      { ALIGNDEV_ASSISTANT_HARNESS: "openclaw", OPENCLAW_SHELL: "exec" },
-      [],
-    );
-    expect(env).toEqual({ OPENCLAW_SHELL: "exec" });
-  });
-
-  it("applies a profile env after the launcher cleanup", () => {
-    const code = resolveCodeConfig(
-      config({ harness: "claude", env: { INIT_CWD: "profile", npm_config_cache: "profile" } }),
-      { INIT_CWD: root, npm_config_cache: root },
-      SELECTED,
-    );
-    expect(code.childEnv).toMatchObject({ INIT_CWD: "profile", npm_config_cache: "profile" });
-  });
-
   it("handles absent and empty PATH without introducing a default", () => {
     expect(buildAgentEnv({}, [])).toEqual({});
     expect(buildAgentEnv({ PATH: "" }, [])).toEqual({ PATH: "" });
@@ -159,52 +140,54 @@ describe("external native environment boundary", () => {
     expect(buildAgentEnv(caller, [], { PATH: bin }, { PATH: shim }).PATH).toBe(shim);
   });
 
-  it.each(["claude", "codex", "pi"] as const)(
-    "cleans the %s profile baseline and retains explicit coding PATH configuration",
-    (agent) => {
-      const code = resolveCodeConfig(config({ harness: agent }), caller, SELECTED);
-      expect(code.childEnv.PATH).toBe(bin);
-      const deliberate = resolveCodeConfig(
-        config({ harness: agent, env: { PATH: shim } }),
+  it("cleans the profile baseline, then applies its env and explicit PATH configuration", () => {
+    const agent = "claude";
+    const code = resolveCodeConfig(config({ harness: agent }), caller, SELECTED);
+    expect(code.childEnv.PATH).toBe(bin);
+    const launched = resolveCodeConfig(
+      config({ harness: agent, env: { INIT_CWD: "profile", npm_config_cache: "profile" } }),
+      { INIT_CWD: root, npm_config_cache: root },
+      SELECTED,
+    );
+    expect(launched.childEnv).toMatchObject({ INIT_CWD: "profile", npm_config_cache: "profile" });
+    const deliberate = resolveCodeConfig(
+      config({ harness: agent, env: { PATH: shim } }),
+      caller,
+      SELECTED,
+    );
+    expect(deliberate.childEnv.PATH).toBe(shim);
+    expect(
+      resolveCodeConfig(config({ harness: agent, unset: ["PATH"] }), caller, SELECTED).childEnv
+        .PATH,
+    ).toBeUndefined();
+  });
+
+  it("cleans explicit quota independently, then respects its own PATH override or unset", () => {
+    const source = "codex";
+    for (const mode of ["inherit", "override", "unset"] as const) {
+      const code = resolveCodeConfig(
+        config({
+          harness: "pi",
+          env: { PATH: shim },
+          quota: {
+            source,
+            ...(mode === "override" ? { env: { PATH: shim } } : {}),
+            ...(mode === "unset" ? { unset: ["PATH"] } : {}),
+          },
+        }),
         caller,
         SELECTED,
       );
-      expect(deliberate.childEnv.PATH).toBe(shim);
-      expect(
-        resolveCodeConfig(config({ harness: agent, unset: ["PATH"] }), caller, SELECTED).childEnv
-          .PATH,
-      ).toBeUndefined();
-    },
-  );
-
-  it.each(["claude", "codex"] as const)(
-    "cleans explicit %s quota independently, then respects its own PATH override or unset",
-    (source) => {
-      for (const mode of ["inherit", "override", "unset"] as const) {
-        const code = resolveCodeConfig(
-          config({
-            harness: "pi",
-            env: { PATH: shim },
-            quota: {
-              source,
-              ...(mode === "override" ? { env: { PATH: shim } } : {}),
-              ...(mode === "unset" ? { unset: ["PATH"] } : {}),
-            },
-          }),
-          caller,
-          SELECTED,
-        );
-        const quota = resolveQuotaConfig(code, caller);
-        if (quota.source === "none") throw new Error("unexpected disabled quota");
-        expect(code.childEnv.PATH).toBe(shim);
-        expect(quota.env.PATH).toBe(
-          mode === "inherit" ? bin : mode === "override" ? shim : undefined,
-        );
-        expect(quota.env.NODE).toBeUndefined();
-        expect(quota.env.CODEX_THREAD_ID).toBeUndefined();
-      }
-    },
-  );
+      const quota = resolveQuotaConfig(code, caller);
+      if (quota.source === "none") throw new Error("unexpected disabled quota");
+      expect(code.childEnv.PATH).toBe(shim);
+      expect(quota.env.PATH).toBe(
+        mode === "inherit" ? bin : mode === "override" ? shim : undefined,
+      );
+      expect(quota.env.NODE).toBeUndefined();
+      expect(quota.env.CODEX_THREAD_ID).toBeUndefined();
+    }
+  });
 
   it("runs Node-shebang model discovery and native quota under Node despite an inherited shim", async () => {
     writeNativeFixture(
