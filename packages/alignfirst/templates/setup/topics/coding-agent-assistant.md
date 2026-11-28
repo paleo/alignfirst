@@ -64,7 +64,7 @@ A Pi profile accepts only the models it declares. Without a declaration, it runs
 
 To add a native name to a `codex` or `agy` profile, target it from `modelAliases` or list it in `models`. Antigravity's catalog depends on the account: `agy models` lists it. A profile that mixes families or adds names declares `models`, biggest model first: a nonempty list replaces the accepted names.
 
-Check a declaration with `aligndev code models --refresh --profile <name>`: it looks the model list up and shows the model each name selects. New sessions use the profile's `defaultModel`, else the native default.
+Check a declaration with `aligndev code models --refresh --profile <name>`: it looks the model list up, shows the model each name selects, and fails when a pattern has no single match. It shows a fixed selector as written: the first launch checks it. For a project that holds `.pi`, run the check from the project directory: Pi's extensions there can add models. New sessions use the profile's `defaultModel`, else the native default.
 
 A nonempty profile `efforts` replaces the harness's built-in effort levels and bounds what `--effort` accepts. New sessions use the profile's `defaultEffort`, which must be one of the accepted levels, else the native default. A resume keeps its recorded effort. Under Pi, an effort overrides a thinking suffix of the model selector.
 

@@ -230,16 +230,16 @@ async function resolveRemembered(
   const cliVersion = await readVersion(agent, context);
   const configDir = nativeDirectory(agent, context.env);
   const stored = await readModelList(memory, agent, context);
-  const sameDirectory = stored?.configDir === configDir ? stored : undefined;
-  if (sameDirectory !== undefined && isFresh(sameDirectory, cliVersion, configDir, now())) {
-    const model = newestModel(catalogModels(agent, sameDirectory.models), pattern);
-    if (model !== undefined) return model;
-  }
+  // The model of the stored list of the same directory, fresh or not.
+  const remembered =
+    stored?.configDir === configDir ? selectIn(agent, stored.models, pattern) : undefined;
+  const fresh = stored !== undefined && isFresh(stored, cliVersion, configDir, now());
+  if (remembered !== undefined && fresh) return remembered;
   let models: readonly string[];
   try {
     models = await loadCatalog(catalogs, agent, context);
   } catch (error) {
-    if (sameDirectory !== undefined) return resolveIn(agent, sameDirectory.models, pattern);
+    if (remembered !== undefined) return remembered;
     throw toResolutionError(agent, pattern, error);
   }
   await writeModelList(memory, agent, context, { cliVersion, configDir, models });
@@ -260,12 +260,15 @@ export function createModelLists(
       const entry = entries[agent];
       const models = readCatalog(entry, agent, await entry.run(context));
       const configDir = nativeDirectory(agent, context.env);
-      await writeModelList(memory, agent, context, { cliVersion, configDir, models });
-      const stored = await readModelList(memory, agent, context);
+      const stored = await writeModelList(memory, agent, context, {
+        cliVersion,
+        configDir,
+        models,
+      });
       if (stored === undefined) throw new Error("The model list could not be stored.");
       return stored;
     },
-    select: (agent, list, pattern) => newestModel(catalogModels(agent, list.models), pattern),
+    select: (agent, list, pattern) => selectIn(agent, list.models, pattern),
   };
 }
 
@@ -368,9 +371,17 @@ function toResolutionError(agent: CatalogAgent, pattern: string, error: unknown)
 }
 
 function resolveIn(agent: CatalogAgent, models: readonly string[], pattern: string): string {
-  const model = newestModel(catalogModels(agent, models), pattern);
+  const model = selectIn(agent, models, pattern);
   if (model === undefined) throw new Error(modelPatternError(agent, pattern));
   return model;
+}
+
+function selectIn(
+  agent: CatalogAgent,
+  models: readonly string[],
+  pattern: string,
+): string | undefined {
+  return newestModel(catalogModels(agent, models), pattern);
 }
 
 function catalogModels(agent: CatalogAgent, models: readonly string[]): readonly CatalogModel[] {

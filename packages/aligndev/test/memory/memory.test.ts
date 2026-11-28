@@ -1,10 +1,10 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createMemory, entryName, type Memory, memoryPath } from "../../src/memory/memory.js";
-import { openSqlite } from "../../src/memory/sqlite.js";
 
 const ENTRY = "harness:codex:models";
 
@@ -29,9 +29,9 @@ function open(home: string): Memory {
 }
 
 async function setUpdatedAt(home: string, entry: string, updatedAt: string): Promise<void> {
-  const database = await openSqlite(memoryPath(home));
+  const database = new DatabaseSync(memoryPath(home));
   try {
-    database.run("UPDATE store SET updated_at = ? WHERE entry = ?", updatedAt, entry);
+    database.prepare("UPDATE store SET updated_at = ? WHERE entry = ?").run(updatedAt, entry);
   } finally {
     database.close();
   }
@@ -93,7 +93,7 @@ describe("memory", () => {
   it("leaves a file of a newer schema untouched and unavailable", async () => {
     const home = makeHome();
     mkdirSync(dirname(memoryPath(home)));
-    const database = await openSqlite(memoryPath(home));
+    const database = new DatabaseSync(memoryPath(home));
     database.exec("PRAGMA user_version = 99");
     database.close();
     const bytes = readFileSync(memoryPath(home));

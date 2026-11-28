@@ -1,4 +1,7 @@
-import { entryName, GLOBAL_REALM, type Memory } from "../memory/memory.js";
+import { realpathSync, statSync } from "node:fs";
+import { join } from "node:path";
+
+import { entryName, GLOBAL_REALM, type Memory, type MemoryRow } from "../memory/memory.js";
 import type { CodingAgent } from "./coding-agent.js";
 import { CONFIG_DIRECTORY_VARIABLES } from "./harness-environment.js";
 
@@ -16,9 +19,10 @@ export interface StoredModelList extends ModelListRecord {
   updatedAt: Date;
 }
 
-// Whose model list it is: the agent's environment, and the selected profile, absent for the
-// built-in defaults.
+// Whose model list it is: the agent's working directory and environment, and the selected profile,
+// absent for the built-in defaults.
 export interface ModelListOwner {
+  cwd: string;
   env: NodeJS.ProcessEnv;
   profile?: string;
 }
@@ -28,31 +32,50 @@ export async function readModelList(
   harness: CodingAgent,
   owner: ModelListOwner,
 ): Promise<StoredModelList | undefined> {
-  const row = await memory.read(GLOBAL_REALM, modelListEntry(harness, owner));
-  if (row === undefined || !isModelListRecord(row.payload)) return;
-  const { cliVersion, configDir, models } = row.payload;
-  return { cliVersion, configDir, models, updatedAt: row.updatedAt };
+  return toStoredModelList(await memory.read(GLOBAL_REALM, modelListEntry(harness, owner)));
 }
 
-export function writeModelList(
+// The list as written; undefined when the memory is unavailable.
+export async function writeModelList(
   memory: Memory,
   harness: CodingAgent,
   owner: ModelListOwner,
   record: ModelListRecord,
-): Promise<void> {
+): Promise<StoredModelList | undefined> {
   const { cliVersion, configDir, models } = record;
-  return memory.write(GLOBAL_REALM, modelListEntry(harness, owner), {
+  const row = await memory.write(GLOBAL_REALM, modelListEntry(harness, owner), {
     cliVersion,
     configDir,
     models,
   });
+  return toStoredModelList(row);
 }
 
-// `harness:{harness}:profile:{profile}:models`, without the profile pair for the built-in defaults.
+// `harness:{harness}:profile:{profile}:cwd:{directory}:models`. The built-in defaults have no
+// profile pair, and only a Pi project directory has a cwd pair.
 function modelListEntry(harness: CodingAgent, owner: ModelListOwner): string {
   const profile: [string, string][] =
     owner.profile === undefined ? [] : [["profile", owner.profile]];
-  return entryName([["harness", harness], ...profile], "models");
+  const directory = harness === "pi" ? piProjectDirectory(owner.cwd) : undefined;
+  const cwd: [string, string][] = directory === undefined ? [] : [["cwd", directory]];
+  return entryName([["harness", harness], ...profile, ...cwd], "models");
+}
+
+// Pi loads the project extensions, which can add models, from `<cwd>/.pi` only. The real path of a
+// working directory that holds it; undefined otherwise.
+function piProjectDirectory(cwd: string): string | undefined {
+  try {
+    if (statSync(join(cwd, ".pi"), { throwIfNoEntry: false })?.isDirectory() !== true) return;
+    return realpathSync(cwd);
+  } catch {
+    return;
+  }
+}
+
+function toStoredModelList(row: MemoryRow | undefined): StoredModelList | undefined {
+  if (row === undefined || !isModelListRecord(row.payload)) return;
+  const { cliVersion, configDir, models } = row.payload;
+  return { cliVersion, configDir, models, updatedAt: row.updatedAt };
 }
 
 function isModelListRecord(payload: unknown): payload is ModelListRecord {

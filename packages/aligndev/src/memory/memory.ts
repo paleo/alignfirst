@@ -29,7 +29,8 @@ export interface Memory {
   // Why the memory is unavailable for this invocation, when it is.
   unavailability(): Promise<string | undefined>;
   read(realm: string, entry: string): Promise<MemoryRow | undefined>;
-  write(realm: string, entry: string, payload: unknown): Promise<void>;
+  // The row as written; undefined when the memory is unavailable.
+  write(realm: string, entry: string, payload: unknown): Promise<MemoryRow | undefined>;
   close(): void;
 }
 
@@ -89,7 +90,7 @@ export function createMemory(home: string): Memory {
       return use((opened) => readRow(opened, realm, entry));
     },
     async write(realm, entry, payload) {
-      await use((opened) => writeRow(opened, realm, entry, JSON.stringify(payload)));
+      return use((opened) => writeRow(opened, realm, entry, JSON.stringify(payload)));
     },
     close,
   };
@@ -151,11 +152,12 @@ function readVersion(database: SqliteDatabase): number {
   return version;
 }
 
-function inTransaction(database: SqliteDatabase, body: () => void): void {
+function inTransaction<T>(database: SqliteDatabase, body: () => T): T {
   database.exec("BEGIN IMMEDIATE");
   try {
-    body();
+    const result = body();
     database.exec("COMMIT");
+    return result;
   } catch (error) {
     try {
       database.exec("ROLLBACK");
@@ -166,13 +168,40 @@ function inTransaction(database: SqliteDatabase, body: () => void): void {
   }
 }
 
-// A row whose payload or time cannot be read is absent.
 function readRow(database: SqliteDatabase, realm: string, entry: string): MemoryRow | undefined {
-  const row = database.get(
-    "SELECT payload, updated_at FROM store WHERE realm = ? AND entry = ?",
-    realm,
-    entry,
+  return toMemoryRow(
+    database.get(
+      "SELECT payload, updated_at FROM store WHERE realm = ? AND entry = ?",
+      realm,
+      entry,
+    ),
   );
+}
+
+// The row comes back from the upsert, so a concurrent writer cannot replace it before it is read.
+function writeRow(
+  database: SqliteDatabase,
+  realm: string,
+  entry: string,
+  payload: string,
+): MemoryRow | undefined {
+  return inTransaction(database, () =>
+    toMemoryRow(
+      database.get(
+        "INSERT INTO store (realm, entry, payload) VALUES (?, ?, ?) " +
+          "ON CONFLICT (realm, entry) DO UPDATE SET " +
+          "payload = excluded.payload, updated_at = CURRENT_TIMESTAMP " +
+          "RETURNING payload, updated_at",
+        realm,
+        entry,
+        payload,
+      ),
+    ),
+  );
+}
+
+// A row whose payload or time cannot be read is absent.
+function toMemoryRow(row: Record<string, unknown> | undefined): MemoryRow | undefined {
   if (row === undefined) return;
   const { payload, updated_at: updatedAt } = row;
   if (typeof payload !== "string" || typeof updatedAt !== "string") return;
@@ -184,17 +213,4 @@ function readRow(database: SqliteDatabase, realm: string, entry: string): Memory
   } catch {
     return;
   }
-}
-
-function writeRow(database: SqliteDatabase, realm: string, entry: string, payload: string): void {
-  inTransaction(database, () =>
-    database.run(
-      "INSERT INTO store (realm, entry, payload) VALUES (?, ?, ?) " +
-        "ON CONFLICT (realm, entry) DO UPDATE SET " +
-        "payload = excluded.payload, updated_at = CURRENT_TIMESTAMP",
-      realm,
-      entry,
-      payload,
-    ),
-  );
 }

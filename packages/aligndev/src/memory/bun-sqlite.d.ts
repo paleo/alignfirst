@@ -11,6 +11,5 @@ declare module "bun:sqlite" {
   export interface Statement {
     // null when no row matches.
     get(...params: string[]): Record<string, unknown> | null;
-    run(...params: string[]): unknown;
   }
 }

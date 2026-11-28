@@ -112,7 +112,7 @@ interface SessionTree {
 }
 
 export type CodeCommand =
-  | { kind: "help"; profile?: string; status?: boolean }
+  | { kind: "help"; profile?: string; subcommand?: "status" | "models" }
   | { kind: "status"; target: StatusTarget; includeResult: boolean }
   | { kind: "quota"; profile?: string }
   | { kind: "models"; profile?: string; refresh: boolean }
@@ -148,10 +148,8 @@ export async function runCode(
   try {
     const command = parseCodeArgs(tokens, ctx.forms.aligndev);
     if (command.kind === "status") return showStatus(ctx, command.target, command.includeResult);
-    if (command.kind === "help" && command.status === true) {
-      ctx.stdout.write(
-        `${ctx.forms.aligndev} code status (<session-file> | --ticket <id> | --no-ticket | --meta <key>) [--result]\nRead durable metadata without reading settings.\n`,
-      );
+    if (command.kind === "help" && command.subcommand !== undefined) {
+      ctx.stdout.write(renderSubcommandHelp(command.subcommand, ctx.forms.aligndev));
       return 0;
     }
     const config = loadSettings();
@@ -192,6 +190,18 @@ export async function runCode(
     ctx.stderr.write(`${errorMessage(error)}\n`);
     return 1;
   }
+}
+
+function renderSubcommandHelp(subcommand: "status" | "models", aligndev: string): string {
+  if (subcommand === "status") {
+    return `${aligndev} code status (<session-file> | --ticket <id> | --no-ticket | --meta <key>) [--result]\nRead durable metadata without reading settings.\n`;
+  }
+  return `${aligndev} code models [--profile <name>] [--refresh]
+Show the accepted model names of each enabled coding profile, or of --profile, and the model each
+name selects in the remembered model list. The project's profile selection does not apply.
+--refresh looks the lists up again first, and exits with 1 when a pattern has no single match. A
+fixed selector is shown as written: the first launch checks it.
+`;
 }
 
 function showStatus(ctx: CodeContext, target: StatusTarget, includeResult: boolean): number {
@@ -396,7 +406,7 @@ function parseStatusCommand(tokens: string[]): CodeCommand {
     strict: true,
     allowPositionals: true,
   });
-  if (values.help) return { kind: "help", status: true };
+  if (values.help) return { kind: "help", subcommand: "status" };
   const targetCount =
     positionals.length +
     Number(values.ticket !== undefined) +
@@ -486,8 +496,8 @@ function parseModelsCommand(tokens: string[]): CodeCommand {
     },
     strict: true,
   });
+  if (values.help) return { kind: "help", subcommand: "models" };
   const profile = values.profile === undefined ? {} : { profile: values.profile };
-  if (values.help) return { kind: "help", ...profile };
   return { kind: "models", ...profile, refresh: values.refresh };
 }
 
@@ -1039,7 +1049,8 @@ Commands:
   quota                 Show native account limits via the profile's quota source.
   models                Show the accepted model names of each enabled profile, or of --profile,
                         and the model each name selects in the remembered model list. --refresh
-                        looks the lists up again first.
+                        looks the lists up again first, and fails when a pattern has no single
+                        match. A fixed selector is checked by the first launch.
 
 Options (status):
   --ticket <id>         Newest run of that ticket.

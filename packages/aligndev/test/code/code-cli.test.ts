@@ -10,7 +10,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { main as runMain, type MainOptions } from "../../src/cli.js";
@@ -34,7 +35,7 @@ import {
   type ModelCatalogRunner,
   PiStartupDialogError,
 } from "../../src/code/models.js";
-import { createMemory, type Memory } from "../../src/memory/memory.js";
+import { createMemory, type Memory, memoryPath } from "../../src/memory/memory.js";
 import {
   appendTranscript,
   applyCompletion,
@@ -109,6 +110,13 @@ describe("coding-agent selection", () => {
     expect(
       await main({ argv: ["node", "aligndev", "code", "--help"], env: {}, home, stderr }),
     ).toBe(1);
+  });
+
+  it("prints the help of the models command without an agent or a project", async () => {
+    const home = makeHome();
+    expect(
+      await main({ argv: ["node", "aligndev", "code", "models", "--help"], env: {}, home }),
+    ).toBe(0);
   });
 
   it("rejects an invalid agent in the config", async () => {
@@ -250,7 +258,10 @@ describe("parseCodeArgs", () => {
   it("renders help after a command", () => {
     expect(parseCodeArgs(["new", "--help"], "aligndev")).toEqual({ kind: "help" });
     expect(parseCodeArgs(["resume", "-h"], "aligndev")).toEqual({ kind: "help" });
-    expect(parseCodeArgs(["status", "--help"], "aligndev")).toEqual({ kind: "help", status: true });
+    expect(parseCodeArgs(["status", "--help"], "aligndev")).toEqual({
+      kind: "help",
+      subcommand: "status",
+    });
     expect(parseCodeArgs(["quota", "--help"], "aligndev")).toEqual({ kind: "help" });
   });
 
@@ -809,7 +820,7 @@ describe("models", () => {
     await writeModelList(
       memory,
       harness,
-      { env: {}, profile },
+      { cwd: home, env: {}, profile },
       { cliVersion: "1.0.0", configDir: null, models },
     );
   }
@@ -864,23 +875,40 @@ describe("models", () => {
     const result = await runModels(["--refresh"], catalogs(["gpt-7-sol"], 1));
     expect(result.code).toBe(1);
     expect(result.stdout + result.stderr).not.toContain("native-agy-secret");
-    expect((await readModelList(memory, "codex", { env: {}, profile: "work" }))?.models).toEqual([
-      "gpt-7-sol",
-    ]);
-    expect((await readModelList(memory, "agy", { env: {}, profile: "gemini" }))?.models).toEqual([
-      "gemini-3-neon-high",
-    ]);
+    expect(
+      (await readModelList(memory, "codex", { cwd: home, env: {}, profile: "work" }))?.models,
+    ).toEqual(["gpt-7-sol"]);
+    expect(
+      (await readModelList(memory, "agy", { cwd: home, env: {}, profile: "gemini" }))?.models,
+    ).toEqual(["gemini-3-neon-high"]);
   });
 
   it("shows the old and the new model of a name that a refresh changed", async () => {
     await seed("codex", "work", ["gpt-6.2-sol", "gpt-6.2-luna"]);
     const result = await runModels(
       ["--refresh", "--profile", "work"],
-      catalogs(["gpt-7-sol", "gpt-6.2-luna"]),
+      catalogs(["gpt-6.2-astra", "gpt-7-sol", "gpt-6.2-terra", "gpt-6.2-luna"]),
     );
-    expect(result.code).toBe(0);
+    expect(result.code, result.stderr).toBe(0);
     expect(result.stdout).toMatch(/sol: gpt-6\.2-sol → gpt-7-sol\b/);
     expect(result.stdout).toMatch(/luna: gpt-6\.2-luna \(/);
+  });
+
+  it("fails a refresh that leaves a pattern without a single match, and stores the list", async () => {
+    const result = await runModels(["--refresh", "--profile", "work"], catalogs(["gpt-7-sol"]));
+    expect(result.code).toBe(1);
+    expect(
+      (await readModelList(memory, "codex", { cwd: home, env: {}, profile: "work" }))?.models,
+    ).toEqual(["gpt-7-sol"]);
+  });
+
+  it("reports a memory that fails at the first read as unavailable", async () => {
+    mkdirSync(dirname(memoryPath(home)), { recursive: true });
+    const database = new DatabaseSync(memoryPath(home));
+    database.exec("PRAGMA user_version = 1");
+    database.close();
+    const result = await runModels([], catalogs([]));
+    expect(result.stdout).toContain("no such table: store");
   });
 
   it("refuses to refresh without an available memory", async () => {

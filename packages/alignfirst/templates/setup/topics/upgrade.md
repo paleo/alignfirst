@@ -36,7 +36,7 @@ When `skills-lock.json` is present, inspect it through the current skills CLI. I
 - Retired workspace files or registries: follow `{{CMD}} setup guide upgrade-workspaces`.
 - AlignDev settings with `platform`, `code.profile`, `portRange` or a profile `agent`, or a `.alignfirst-projects.json` marker: apply "Convert AlignDev Harness Settings" below.
 - AlignDev settings with a `pi` profile: apply "Declare AlignDev Pi Models" below.
-- AlignDev settings with an `agy` profile: apply "Declare AlignDev Antigravity Models" below.
+- AlignDev settings with an `agy` profile, or scripts and instructions that pass a native Antigravity model name to `aligndev code`: apply "Declare AlignDev Antigravity Models" below.
 - CLI-backed skills: keep the current skills. Set `plans.autoArchive: true` in the selected `alignfirst.json` or `alignfirst.jsonc`; the user can remove it after the upgrade to opt out. If `plans-share` artifacts remain, apply the cleanup, command sweep and check of `{{CMD}} setup guide upgrade-v3`.
 - `assistantInstructionsFile` or `developerInstructions` in the selected `alignfirst.json` or `.jsonc`: apply "Rename the Assistant Guide" below.
 - No detected installation: follow `{{CMD}} setup guide protocols`.
@@ -222,7 +222,7 @@ For each `pi` profile of `aligndev.settings.json`, collect its `defaultModel` an
 
 A `modelAliases` entry that pins a full id only to avoid a wrong variant can become a family or a `{latest}` target: neither matches a variant with a further suffix.
 
-Then run `aligndev code models --refresh --profile <name>` for each enabled `pi` profile: it shows the model each name selects.
+Then run `aligndev code models --refresh --profile <name>` for each enabled `pi` profile: it shows the model each name selects, and fails when a pattern has no single match. It shows a full id listed in `models` as written: the first launch checks it.
 
 A session keeps the model name it recorded. After a `defaultModel` changes from a full id to an alias, resume such a session with `--model <alias>`. A session recorded without a profile resumes on Pi's built-in profile, which declares nothing. When it recorded a model, resume it with `--profile <name>`, naming a `pi` profile that accepts that model. To choose another model, keep `--profile` and add `--model <name>`.
 
@@ -259,9 +259,13 @@ An `agy` profile now accepts a closed list of model names, like the other harnes
 For each `agy` profile of `aligndev.settings.json`, collect its `defaultModel` and the `--model` values that scripts and instructions pass. A built-in alias stays valid. Declare each native name:
 
 1. To follow the newest version, use the built-in alias of its model, or a `modelAliases` entry with `{latest}` in place of the version.
-2. To keep the name, add a `modelAliases` entry that targets it and use the entry's name, or list the name in `models`. A nonempty `models` replaces the accepted names, so it lists every name the profile accepts.
+2. To keep the name, add a `modelAliases` entry that targets it and use the entry's name, or list the name in `models`.
 
-Then run `aligndev code models --refresh --profile <name>` for each enabled `agy` profile: it shows the model each name selects.
+A nonempty `models` replaces the accepted names, so it lists every name the profile accepts, a replacement alias included.
+
+Then run `aligndev code models --refresh --profile <name>` for each enabled `agy` profile: it shows the model each name selects, and fails when a pattern has no single match.
+
+Without an `agy` profile, an Antigravity assistant delegates to the built-in profile, which accepts only the built-in aliases. Replace each native name that scripts and instructions pass with the built-in alias of its model. To keep a native name, create an `agy` profile that declares it.
 
 A session keeps the model name it recorded. When the profile no longer accepts that name, resume the session with `--model <name>`.
 

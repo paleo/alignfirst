@@ -1,10 +1,14 @@
 // The only module that knows the two SQLite runtimes: `node:sqlite` under Node, `bun:sqlite` under
 // Bun.
+import type { DatabaseSync } from "node:sqlite";
+
+// One import per process, so that concurrent opens share one warning filter.
+let nodeSqlite: Promise<typeof DatabaseSync> | undefined;
+
 export interface SqliteDatabase {
   exec(sql: string): void;
   // undefined when no row matches.
   get(sql: string, ...params: string[]): Record<string, unknown> | undefined;
-  run(sql: string, ...params: string[]): void;
   close(): void;
 }
 
@@ -12,8 +16,20 @@ export function openSqlite(path: string): Promise<SqliteDatabase> {
   return process.versions.bun === undefined ? openNodeSqlite(path) : openBunSqlite(path);
 }
 
-// Node 22 warns that SQLite is experimental at the first use. Every other warning still prints.
 async function openNodeSqlite(path: string): Promise<SqliteDatabase> {
+  nodeSqlite ??= importNodeSqlite();
+  const Database = await nodeSqlite;
+  const database = new Database(path);
+  return {
+    exec: (sql) => database.exec(sql),
+    get: (sql, ...params) => database.prepare(sql).get(...params),
+    close: () => database.close(),
+  };
+}
+
+// Node 22 warns that SQLite is experimental when the module loads. Every other warning still
+// prints.
+async function importNodeSqlite(): Promise<typeof DatabaseSync> {
   const emitWarning = process.emitWarning;
   process.emitWarning = (warning: string | Error, ...rest: unknown[]): void => {
     if (isSqliteWarning(warning, rest[0])) return;
@@ -21,16 +37,7 @@ async function openNodeSqlite(path: string): Promise<SqliteDatabase> {
   };
   try {
     // A dynamic import: `node:sqlite` is absent under Bun, and its import emits the warning.
-    const { DatabaseSync } = await import("node:sqlite");
-    const database = new DatabaseSync(path);
-    return {
-      exec: (sql) => database.exec(sql),
-      get: (sql, ...params) => database.prepare(sql).get(...params),
-      run: (sql, ...params) => {
-        database.prepare(sql).run(...params);
-      },
-      close: () => database.close(),
-    };
+    return (await import("node:sqlite")).DatabaseSync;
   } finally {
     process.emitWarning = emitWarning;
   }
@@ -48,9 +55,6 @@ async function openBunSqlite(path: string): Promise<SqliteDatabase> {
   return {
     exec: (sql) => database.exec(sql),
     get: (sql, ...params) => database.prepare(sql).get(...params) ?? undefined,
-    run: (sql, ...params) => {
-      database.prepare(sql).run(...params);
-    },
     close: () => database.close(),
   };
 }

@@ -1,6 +1,7 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { readModelList, writeModelList } from "../../src/code/model-lists.js";
@@ -17,7 +18,6 @@ import {
   resolveModels,
 } from "../../src/code/models.js";
 import { createMemory, type Memory, memoryPath } from "../../src/memory/memory.js";
-import { openSqlite } from "../../src/memory/sqlite.js";
 
 const CONTEXT = { cwd: "/project", env: { PATH: "/bin" } };
 const CODEX_PATTERN = "gpt-{latest}-sol";
@@ -306,8 +306,8 @@ describe("remembered model lists", () => {
   }
 
   async function setAllUpdatedAt(updatedAt: string): Promise<void> {
-    const database = await openSqlite(memoryPath(home));
-    database.run("UPDATE store SET updated_at = ?", updatedAt);
+    const database = new DatabaseSync(memoryPath(home));
+    database.prepare("UPDATE store SET updated_at = ?").run(updatedAt);
     database.close();
   }
 
@@ -374,6 +374,37 @@ describe("remembered model lists", () => {
       }
     },
   );
+
+  it("reports a catalog sign-in when the stored list of the directory holds no match", async () => {
+    await seed("pi", ["openai/gpt-6-terra"]);
+    const resolve = resolver({ pi: async () => completed(piResponse([])) }, { now: NEXT_DAY });
+    await expect(resolve("pi", PI_PATTERN, CONTEXT)).rejects.toBeInstanceOf(
+      ModelSignInRequiredError,
+    );
+  });
+
+  it("keeps a Pi list per project directory that holds .pi, and one for the others", async () => {
+    const [projectA, projectB, plainA, plainB] = ["a", "b", "c", "d"].map((name) => {
+      const directory = join(home, name);
+      mkdirSync(directory);
+      return directory;
+    });
+    for (const project of [projectA, projectB]) mkdirSync(join(project, ".pi"));
+    const listed = (cwd: string) => ({ ...CONTEXT, cwd, profile: "pi-work" });
+    const resolveWith = async (cwd: string, id: string) =>
+      resolver({ pi: async () => completed(piResponse([["openai", id]])) })(
+        "pi",
+        PI_PATTERN,
+        listed(cwd),
+      );
+    expect(await resolveWith(projectA, "gpt-6-sol")).toBe("openai/gpt-6-sol");
+    expect(await resolveWith(projectB, "gpt-7-sol")).toBe("openai/gpt-7-sol");
+    expect(await resolveWith(plainA, "gpt-8-sol")).toBe("openai/gpt-8-sol");
+    expect(await resolveWith(plainB, "gpt-9-sol")).toBe("openai/gpt-8-sol");
+    expect((await readModelList(memory, "pi", listed(projectA)))?.models).toEqual([
+      "openai/gpt-6-sol",
+    ]);
+  });
 
   it("looks a fresh list without a match up again once", async () => {
     await seed("codex", ["gpt-6-terra"]);

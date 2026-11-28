@@ -66,13 +66,8 @@ export async function showModels(
     describeProfileModels(code, ctx.cwd),
   );
   const unavailability = await ctx.modelLists.unavailability();
-  if (unavailability !== undefined) {
-    const reports = profiles.map((profile) => renderProfile(ctx.modelLists, profile, {}));
-    ctx.stdout.write(
-      `The AlignDev memory is unavailable: ${unavailability}\n\n${reports.join("\n")}`,
-    );
-    return options.refresh ? 1 : 0;
-  }
+  if (unavailability !== undefined)
+    return reportUnavailable(ctx, profiles, unavailability, options);
   let exitCode = 0;
   const reports: string[] = [];
   for (const profile of profiles) {
@@ -80,8 +75,22 @@ export async function showModels(
     if (failed) exitCode = 1;
     reports.push(renderProfile(ctx.modelLists, profile, lists));
   }
+  // A failed read or write makes the memory unavailable, and its lists read as absent.
+  const lost = await ctx.modelLists.unavailability();
+  if (lost !== undefined) return reportUnavailable(ctx, profiles, lost, options);
   ctx.stdout.write(reports.join("\n"));
   return exitCode;
+}
+
+function reportUnavailable(
+  ctx: ModelsContext,
+  profiles: readonly ProfileModels[],
+  reason: string,
+  options: ModelsOptions,
+): number {
+  const reports = profiles.map((profile) => renderProfile(ctx.modelLists, profile, {}));
+  ctx.stdout.write(`The AlignDev memory is unavailable: ${reason}\n\n${reports.join("\n")}`);
+  return options.refresh ? 1 : 0;
 }
 
 // Every enabled coding-agent profile, else the effective built-in profile.
@@ -121,13 +130,22 @@ async function loadLists(
   if (catalogAgent === undefined) return { lists: {}, failed: false };
   const stored = await ctx.modelLists.read(catalogAgent, context);
   if (!refresh) return { lists: { current: stored }, failed: false };
+  let current: StoredModelList;
   try {
-    const current = await ctx.modelLists.refresh(catalogAgent, context);
-    return { lists: { current, previous: stored }, failed: false };
+    current = await ctx.modelLists.refresh(catalogAgent, context);
   } catch (error) {
-    ctx.stderr.write(`aligndev code models: ${await refreshFailure(ctx, profile, error)}\n`);
+    reportFailure(ctx, await refreshFailure(ctx, profile, error));
     return { lists: { current: stored }, failed: true };
   }
+  const unresolved = unresolvedPatterns(ctx.modelLists, profile, catalogAgent, current);
+  for (const selector of unresolved) {
+    reportFailure(ctx, describeModelFailure(profile.code, ctx.cwd, selector, undefined).message);
+  }
+  return { lists: { current, previous: stored }, failed: unresolved.length > 0 };
+}
+
+function reportFailure(ctx: ModelsContext, message: string): void {
+  ctx.stderr.write(`aligndev code models: ${message}\n`);
 }
 
 // The text a launch with the profile's first pattern would print.
@@ -140,6 +158,19 @@ async function refreshFailure(
   if (unavailability !== undefined) return `The AlignDev memory is unavailable: ${unavailability}`;
   const pattern = profile.names.find(({ isPattern }) => isPattern)?.selector;
   return describeModelFailure(profile.code, ctx.cwd, pattern, error).message;
+}
+
+// The distinct patterns of the profile without a single match in the list.
+function unresolvedPatterns(
+  lists: ModelLists,
+  profile: ProfileModels,
+  catalogAgent: CatalogAgent,
+  list: StoredModelList,
+): string[] {
+  const patterns = profile.names.filter(({ isPattern }) => isPattern).map((n) => n.selector);
+  return [...new Set(patterns)].filter(
+    (pattern) => lists.select(catalogAgent, list, pattern) === undefined,
+  );
 }
 
 function renderProfile(lists: ModelLists, profile: ProfileModels, shown: ShownLists): string {
