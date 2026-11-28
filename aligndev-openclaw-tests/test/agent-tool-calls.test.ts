@@ -6,6 +6,12 @@ import {
   readsAssistantInstructions,
 } from "../scenarios/_lib/agent-tool-calls.ts";
 
+const AGENTS = [
+  { agent: "claude", launch: "claude -p prompt" },
+  { agent: "codex", launch: "codex exec prompt" },
+  { agent: "pi", launch: "pi --mode json" },
+];
+
 test("instruction observation follows the command and selected worktree, not a filename read", () => {
   const call = { toolName: "exec", toolUseId: "instructions" };
   for (const input of [
@@ -23,155 +29,143 @@ test("instruction observation follows the command and selected worktree, not a f
   }
 });
 
-for (const agent of ["claude", "codex", "pi"]) {
-  for (const command of [
-    `${agent} --mode json`,
-    `/usr/local/bin/${agent} prompt`,
-    `'${agent}' --mode json`,
-    `"/usr/local/bin/${agent}" prompt`,
-    `cd /fixture && ${agent} prompt`,
-    `env HOME=/fixture ${agent} prompt`,
-    `npx -y ${agent} prompt`,
-    `command ${agent} prompt`,
-    `HOME=/fixture exec ${agent} prompt`,
-    `(aligndev code status; ${agent} prompt)`,
-    `aligndev guide code && ${agent} prompt`,
-    `env HOME='/fixture; path' command ${agent} prompt`,
-    `echo ignored # comment; not a launch\n${agent} --mode json`,
-    `${agent}\\\n --mode json`,
-  ]) {
-    test(`detects direct native-agent bypass: ${command}`, () => {
-      assert.equal(
-        invokesCodingAgentDirectly({
-          toolName: "exec",
-          toolUseId: "test",
-          input: { command },
-        }),
-        true,
-      );
-    });
+test("detects direct native-agent bypasses", () => {
+  for (const { agent } of AGENTS) {
+    for (const command of [
+      `${agent} --mode json`,
+      `/usr/local/bin/${agent} prompt`,
+      `'${agent}' --mode json`,
+      `"/usr/local/bin/${agent}" prompt`,
+      `cd /fixture && ${agent} prompt`,
+      `env HOME=/fixture ${agent} prompt`,
+      `npx -y ${agent} prompt`,
+      `command ${agent} prompt`,
+      `HOME=/fixture exec ${agent} prompt`,
+      `(aligndev code status; ${agent} prompt)`,
+      `aligndev guide code && ${agent} prompt`,
+      `env HOME='/fixture; path' command ${agent} prompt`,
+      `echo ignored # comment; not a launch\n${agent} --mode json`,
+      `${agent}\\\n --mode json`,
+    ]) {
+      assert.equal(invokesCodingAgentDirectly(exec(command)), true, command);
+    }
   }
-}
+});
 
-for (const agent of ["claude", "codex", "pi"]) {
-  for (const separator of [";", "\n", "&", "&&", "|", "||", "("]) {
-    for (const quote of ["'", '"']) {
-      const delegation =
-        "aligndev code new --protocol review --ticket ABC-1 --message " +
-        `${quote}Review APIs${separator} ${agent} --mode json is relevant${quote}`;
-      test(`distinguishes quoted syntax from chained launches: ${JSON.stringify(delegation)}`, () => {
-        const call = { toolName: "exec", toolUseId: "test", input: { command: delegation } };
-        assert.equal(invokesAligndevCode(call), true);
-        assert.equal(invokesCodingAgentDirectly(call), false);
-
+test("distinguishes quoted syntax from chained launches", () => {
+  for (const { agent } of AGENTS) {
+    for (const separator of [";", "\n", "&", "&&", "|", "||", "("]) {
+      for (const quote of ["'", '"']) {
+        const delegation =
+          "aligndev code new --protocol review --ticket ABC-1 --message " +
+          `${quote}Review APIs${separator} ${agent} --mode json is relevant${quote}`;
+        assert.equal(invokesAligndevCode(exec(delegation)), true, delegation);
+        assert.equal(invokesCodingAgentDirectly(exec(delegation)), false, delegation);
         for (const boundary of [";", "\n", "&", "&&", "|", "||"]) {
           const command = `${delegation}${boundary}${agent} --mode json`;
-          assert.equal(
-            invokesCodingAgentDirectly({ ...call, input: { command } }),
-            true,
-            `detects real launch: ${JSON.stringify(command)}`,
-          );
+          assert.equal(invokesCodingAgentDirectly(exec(command)), true, command);
         }
-      });
+      }
     }
   }
+});
 
-  for (const command of [
-    `aligndev code new --message "Review \\"APIs; ${agent} --mode json\\""`,
-    `aligndev code new --message 'Review APIs'\\''; ${agent} --mode json'`,
-    `aligndev code new --message Review\\;\\ ${agent}\\ --mode\\ json`,
-    `printf '%s' 'Review APIs; ${agent} --mode json'`,
-    `printf '%s' "Review APIs\\n; ${agent} --mode json"`,
-    `echo done # example; ${agent} --mode json`,
-    `printf '%s' example\\\n${agent}`,
-  ]) {
-    test(`ignores escaped syntax and non-command words: ${JSON.stringify(command)}`, () => {
-      const call = { toolName: "exec", toolUseId: "test", input: { command } };
-      assert.equal(invokesCodingAgentDirectly(call), false);
-    });
-  }
-}
-
-for (const [agent, args] of [
-  ["pi", "--mode json"],
-  ["codex", "exec prompt"],
-  ["claude", "-p prompt"],
-]) {
-  const launch = `${agent} ${args}`;
-  for (const substitution of [`$(${launch})`, `\`${launch}\``]) {
+test("ignores escaped syntax and non-command words", () => {
+  for (const { agent } of AGENTS) {
     for (const command of [
-      `echo ${substitution}`,
-      `echo "${substitution}"`,
-      `aligndev code new --message "Review ${substitution}"`,
-      `echo "$(printf '%s' "${substitution}")"`,
+      `aligndev code new --message "Review \\"APIs; ${agent} --mode json\\""`,
+      `aligndev code new --message 'Review APIs'\\''; ${agent} --mode json'`,
+      `aligndev code new --message Review\\;\\ ${agent}\\ --mode\\ json`,
+      `printf '%s' 'Review APIs; ${agent} --mode json'`,
+      `printf '%s' "Review APIs\\n; ${agent} --mode json"`,
+      `echo done # example; ${agent} --mode json`,
+      `printf '%s' example\\\n${agent}`,
     ]) {
-      test(`detects executable command substitutions: ${JSON.stringify(command)}`, () => {
-        const call = { toolName: "exec", toolUseId: "test", input: { command } };
-        assert.equal(invokesCodingAgentDirectly(call), true);
-      });
+      assert.equal(invokesCodingAgentDirectly(exec(command)), false, command);
     }
-
-    const command = `echo '${substitution}'`;
-    test(`ignores single-quoted substitutions: ${JSON.stringify(command)}`, () => {
-      const call = { toolName: "exec", toolUseId: "test", input: { command } };
-      assert.equal(invokesCodingAgentDirectly(call), false);
-    });
   }
+});
 
+test("detects executable command substitutions", () => {
+  for (const { launch } of AGENTS) {
+    for (const substitution of [`$(${launch})`, `\`${launch}\``]) {
+      for (const command of [
+        `echo ${substitution}`,
+        `echo "${substitution}"`,
+        `aligndev code new --message "Review ${substitution}"`,
+        `echo "$(printf '%s' "${substitution}")"`,
+      ]) {
+        assert.equal(invokesCodingAgentDirectly(exec(command)), true, command);
+      }
+    }
+  }
+});
+
+test("ignores single-quoted substitutions", () => {
+  for (const { launch } of AGENTS) {
+    for (const command of [`echo '$(${launch})'`, `echo '\`${launch}\`'`]) {
+      assert.equal(invokesCodingAgentDirectly(exec(command)), false, command);
+    }
+  }
+});
+
+test("tracks quotes and nesting inside substitutions", () => {
+  for (const { launch } of AGENTS) {
+    for (const command of [
+      `echo "$(printf '%s' ')'; ${launch})"`,
+      `echo "$(printf '%s' "a ) character"; ${launch})"`,
+      `echo "$( (echo ignored); ${launch})"`,
+      `echo "\`printf '%s' ')'; ${launch}\`"`,
+    ]) {
+      assert.equal(invokesCodingAgentDirectly(exec(command)), true, command);
+    }
+  }
+});
+
+test("ignores literal syntax in substitutions", () => {
+  for (const { agent, launch } of AGENTS) {
+    for (const command of [
+      `echo "\\$(${launch})"`,
+      `echo \\$\\(${launch}\\)`,
+      `echo "\\\`${launch}\\\`"`,
+      `echo \\\`${launch}\\\``,
+      `echo "$(printf '%s' '; ${launch}')"`,
+      `echo "$(printf '%s' "; ${launch}")"`,
+      `echo "\`printf '%s' '; ${launch}'\`"`,
+      `echo "$(printf '%s' '$(${launch})')"`,
+      `echo "$(printf '%s' \\; ${agent})"`,
+    ]) {
+      assert.equal(invokesCodingAgentDirectly(exec(command)), false, command);
+    }
+  }
+});
+
+test("accepts wrapper delegation without native bypass", () => {
   for (const command of [
-    `echo "$(printf '%s' ')'; ${launch})"`,
-    `echo "$(printf '%s' "a ) character"; ${launch})"`,
-    `echo "$( (echo ignored); ${launch})"`,
-    `echo "\`printf '%s' ')'; ${launch}\`"`,
+    "aligndev code new --message 'Inspect the files'",
+    "(aligndev code resume session-id; openclaw system event --mode now)",
+    "npx -y aligndev code new --model vendor/alpha",
+    "aligndev code new --profile pi --message 'Compare claude codex pi behavior'",
+    "aligndev code new --message 'Inspect pi configuration'",
   ]) {
-    test(`tracks quotes and nesting inside substitutions: ${JSON.stringify(command)}`, () => {
-      const call = { toolName: "exec", toolUseId: "test", input: { command } };
-      assert.equal(invokesCodingAgentDirectly(call), true);
-    });
+    assert.equal(invokesAligndevCode(exec(command)), true, command);
+    assert.equal(invokesCodingAgentDirectly(exec(command)), false, command);
   }
+});
 
+test("ignores non-launch commands", () => {
   for (const command of [
-    `echo "\\$(${launch})"`,
-    `echo \\$\\(${launch}\\)`,
-    `echo "\\\`${launch}\\\`"`,
-    `echo \\\`${launch}\\\``,
-    `echo "$(printf '%s' '; ${launch}')"`,
-    `echo "$(printf '%s' "; ${launch}")"`,
-    `echo "\`printf '%s' '; ${launch}'\`"`,
-    `echo "$(printf '%s' '$(${launch})')"`,
-    `echo "$(printf '%s' \\; ${agent})"`,
+    "aligndev guide code",
+    "aligndev code status",
+    "pipeline --help",
+    "printenv PI_MODEL",
   ]) {
-    test(`ignores literal syntax in substitutions: ${JSON.stringify(command)}`, () => {
-      const call = { toolName: "exec", toolUseId: "test", input: { command } };
-      assert.equal(invokesCodingAgentDirectly(call), false);
-    });
+    assert.equal(invokesAligndevCode(exec(command)), false, command);
+    assert.equal(invokesCodingAgentDirectly(exec(command)), false, command);
+    assert.equal(invokesCodingAgentDirectly({ ...exec(command), toolName: "read" }), false);
   }
-}
+});
 
-for (const command of [
-  "aligndev code new --message 'Inspect the files'",
-  "(aligndev code resume session-id; openclaw system event --mode now)",
-  "npx -y aligndev code new --model openai/gpt-6.1-terra",
-  "aligndev code new --profile pi --message 'Compare claude codex pi behavior'",
-  "aligndev code new --message 'Inspect pi configuration'",
-]) {
-  test(`accepts wrapper delegation without native bypass: ${command}`, () => {
-    const call = { toolName: "exec", toolUseId: "test", input: { command } };
-    assert.equal(invokesAligndevCode(call), true);
-    assert.equal(invokesCodingAgentDirectly(call), false);
-  });
-}
-
-for (const command of [
-  "aligndev guide code",
-  "aligndev code status",
-  "pipeline --help",
-  "printenv PI_MODEL",
-]) {
-  test(`ignores non-launch commands: ${command}`, () => {
-    const call = { toolName: "exec", toolUseId: "test", input: { command } };
-    assert.equal(invokesAligndevCode(call), false);
-    assert.equal(invokesCodingAgentDirectly(call), false);
-    assert.equal(invokesCodingAgentDirectly({ ...call, toolName: "read" }), false);
-  });
+function exec(command: string) {
+  return { toolName: "exec", toolUseId: "test", input: { command } };
 }

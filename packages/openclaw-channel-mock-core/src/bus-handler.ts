@@ -65,11 +65,6 @@ export async function handleQaBusRequest(params: {
   const method = params.req.method ?? "GET";
   const url = new URL(params.req.url ?? "/", "http://127.0.0.1");
 
-  if (method === "GET" && url.pathname === "/health") {
-    writeJson(params.res, 200, { ok: true });
-    return true;
-  }
-
   if (method === "GET" && url.pathname === "/v1/state") {
     writeJson(params.res, 200, params.state.getSnapshot());
     return true;

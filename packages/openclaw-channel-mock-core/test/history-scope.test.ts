@@ -4,51 +4,58 @@ import { createChannelMockAccountHelpers } from "../src/accounts.js";
 import { buildInboundEnvelopeTarget, resolveInboundSessionKey } from "../src/inbound.js";
 
 describe("resolveHistoryScope", () => {
-  it("parses a composite thread target passed as threadId (envelope chat_id shape)", () => {
-    const scope = resolveHistoryScope({ threadId: "thread:conv-1/conv-1-thread-abc", limit: 50 });
-    expect(scope).toEqual({ conversationId: "conv-1", threadId: "conv-1-thread-abc" });
-  });
-
-  it("keeps a bare threadId as the thread filter", () => {
-    expect(resolveHistoryScope({ threadId: "conv-1-thread-abc" })).toEqual({
-      threadId: "conv-1-thread-abc",
-    });
-  });
-
-  it("takes the thread id carried by a thread-shaped destination", () => {
-    expect(resolveHistoryScope({ to: "thread:conv-1/conv-1-thread-abc" })).toEqual({
-      conversationId: "conv-1",
-      threadId: "conv-1-thread-abc",
-    });
-  });
-
-  it("combines a channel destination with a bare threadId", () => {
-    expect(resolveHistoryScope({ channelId: "conv-1", threadId: "conv-1-thread-abc" })).toEqual({
-      conversationId: "conv-1",
-      threadId: "conv-1-thread-abc",
-    });
-  });
-
-  it("treats a channel-prefixed threadId as a conversation scope", () => {
-    expect(resolveHistoryScope({ threadId: "channel:conv-1-thread-abc" })).toEqual({
-      conversationId: "conv-1-thread-abc",
-    });
-  });
-
-  it("falls back to the current channel when no scope params are given", () => {
-    expect(resolveHistoryScope({ limit: 20 }, "thread:conv-1/conv-1-thread-abc")).toEqual({
-      conversationId: "conv-1",
-      threadId: "conv-1-thread-abc",
-    });
-    expect(resolveHistoryScope({}, "conv-1")).toEqual({ conversationId: "conv-1" });
-  });
-
-  it("ignores the current channel when params already scope the read", () => {
-    expect(resolveHistoryScope({ threadId: "t-1" }, "channel:other")).toEqual({ threadId: "t-1" });
-  });
-
-  it("resolves to an empty scope when nothing is given", () => {
-    expect(resolveHistoryScope({})).toEqual({});
+  it.each<{
+    name: string;
+    params: Record<string, unknown>;
+    current?: string;
+    expected: { conversationId?: string; threadId?: string };
+  }>([
+    {
+      name: "parses a composite thread target passed as threadId",
+      params: { threadId: "thread:conv-1/conv-1-thread-abc", limit: 50 },
+      expected: { conversationId: "conv-1", threadId: "conv-1-thread-abc" },
+    },
+    {
+      name: "keeps a bare threadId as the thread filter",
+      params: { threadId: "conv-1-thread-abc" },
+      expected: { threadId: "conv-1-thread-abc" },
+    },
+    {
+      name: "takes the thread id carried by a thread-shaped destination",
+      params: { to: "thread:conv-1/conv-1-thread-abc" },
+      expected: { conversationId: "conv-1", threadId: "conv-1-thread-abc" },
+    },
+    {
+      name: "combines a channel destination with a bare threadId",
+      params: { channelId: "conv-1", threadId: "conv-1-thread-abc" },
+      expected: { conversationId: "conv-1", threadId: "conv-1-thread-abc" },
+    },
+    {
+      name: "treats a channel-prefixed threadId as a conversation scope",
+      params: { threadId: "channel:conv-1-thread-abc" },
+      expected: { conversationId: "conv-1-thread-abc" },
+    },
+    {
+      name: "falls back to the current thread when no scope params are given",
+      params: { limit: 20 },
+      current: "thread:conv-1/conv-1-thread-abc",
+      expected: { conversationId: "conv-1", threadId: "conv-1-thread-abc" },
+    },
+    {
+      name: "falls back to the current channel when no scope params are given",
+      params: {},
+      current: "conv-1",
+      expected: { conversationId: "conv-1" },
+    },
+    {
+      name: "ignores the current channel when params already scope the read",
+      params: { threadId: "t-1" },
+      current: "channel:other",
+      expected: { threadId: "t-1" },
+    },
+    { name: "resolves to an empty scope when nothing is given", params: {}, expected: {} },
+  ])("$name", ({ params, current, expected }) => {
+    expect(resolveHistoryScope(params, current)).toEqual(expected);
   });
 });
 
@@ -101,25 +108,17 @@ describe("Slack session routing", () => {
 });
 
 describe("inbound envelope targets", () => {
-  it("addresses a Discord thread as its native channel", () => {
+  it.each([
+    { surface: "discord", expected: "channel:thread-channel" },
+    { surface: "slack", expected: "thread:parent-channel/thread-channel" },
+  ] as const)("addresses a $surface thread as $expected", ({ surface, expected }) => {
     expect(
       buildInboundEnvelopeTarget({
-        surface: "discord",
+        surface,
         chatType: "channel",
         conversationId: "parent-channel",
         threadId: "thread-channel",
       }),
-    ).toBe("channel:thread-channel");
-  });
-
-  it("keeps Slack's channel and thread target", () => {
-    expect(
-      buildInboundEnvelopeTarget({
-        surface: "slack",
-        chatType: "channel",
-        conversationId: "channel-1",
-        threadId: "thread-1",
-      }),
-    ).toBe("thread:channel-1/thread-1");
+    ).toBe(expected);
   });
 });

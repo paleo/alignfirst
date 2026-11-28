@@ -12,12 +12,11 @@ describe("extractTaggedBlock", () => {
     expect(extractTaggedBlock(raw, "result-json")).toBe('{\n  "a": 1\n}');
   });
 
-  it("throws when the opening tag is missing", () => {
-    expect(() => extractTaggedBlock("nothing here", "result-json")).toThrow();
-  });
-
-  it("throws when the closing tag is missing", () => {
-    expect(() => extractTaggedBlock("<result-json>oops", "result-json")).toThrow();
+  it.each([
+    { name: "opening", raw: "nothing here" },
+    { name: "closing", raw: "<result-json>oops" },
+  ])("throws when the $name tag is missing", ({ raw }) => {
+    expect(() => extractTaggedBlock(raw, "result-json")).toThrow();
   });
 
   it("returns only the first occurrence when the tag appears twice", () => {

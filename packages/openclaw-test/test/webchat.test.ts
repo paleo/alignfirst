@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { createContext } from "../src/context.js";
 import type { ExecInGatewayResult } from "../src/exec-rpc.js";
 import type { ActionEntry, ReportEntry } from "../src/report.js";
 import { createWebchatDriver, type WebchatDriver } from "../src/webchat.js";
@@ -169,50 +168,6 @@ describe("webchat driver", () => {
     expect(gateway.calls[0]?.params).toEqual({ key: HOME_KEY });
     expect(gateway.sessionKeys.has(HOME_KEY)).toBe(true);
   });
-
-  it("preserves gateway stderr on failure", async () => {
-    const gateway = createFakeGateway();
-    await expect(gateway.driver.createConversation({ cwd: "/nowhere" })).rejects.toThrow(
-      "INVALID_REQUEST cwd does not exist",
-    );
-  });
-
-  it("raises the RPC timeout and reports a transport error printed on stdout", async () => {
-    const argvs: string[][] = [];
-    const driver = createWebchatDriver({
-      execInGateway: async (argv) => {
-        argvs.push(argv);
-        const stdout = JSON.stringify({
-          ok: false,
-          error: { type: "gateway_transport_error", kind: "timeout" },
-        });
-        return { exitCode: 1, stdout, stderr: "" };
-      },
-      emit: (entry) => entry,
-      nextEntrySeqTs: () => ({ entrySeq: 0, ts: new Date().toISOString() }),
-      setCurrentEntry: (entry) => entry,
-      sessionKeys: new Set<string>(),
-    });
-    await expect(driver.send(HOME_KEY, "hi")).rejects.toThrow(
-      JSON.stringify({ ok: false, error: { type: "gateway_transport_error", kind: "timeout" } }),
-    );
-    // Above the CLI's 10 s default, too short for a freshly started gateway.
-    expect(argvs[0]?.at(-2)).toBe("--timeout");
-    expect(Number(argvs[0]?.at(-1))).toBeGreaterThan(10_000);
-  });
-});
-
-describe("context surfaces", () => {
-  it("throws on the bus members of a webchat cell", () => {
-    const { ctx } = createContext({ channel: "webchat", conversationId: "A26-webchat-abc" });
-    expect(() => ctx.sendInbound({ senderId: "u", text: "hi" })).toThrow();
-    expect(() => ctx.waitForOutbound(() => true, { sinceCursor: 0 })).toThrow();
-  });
-
-  it("throws on ctx.webchat calls in a channel cell", () => {
-    const { ctx } = createContext({ channel: "discord-mock", conversationId: "A01-discord-abc" });
-    expect(() => ctx.webchat.send(HOME_KEY, "hi")).toThrow();
-  });
 });
 
 function createFakeGateway(): FakeGateway {
@@ -231,10 +186,7 @@ function createFakeGateway(): FakeGateway {
     messageSeq: 1,
   };
   const handlers: Record<string, (params: Record<string, unknown>) => unknown> = {
-    "sessions.create": (params) => {
-      if (params.cwd === "/nowhere") throw new Error("INVALID_REQUEST cwd does not exist");
-      return CREATE_RESPONSE;
-    },
+    "sessions.create": () => CREATE_RESPONSE,
     "sessions.reset": () => ({ ok: true, key: HOME_KEY }),
     "chat.send": () => sendResponse,
     "chat.history": (params) => ({

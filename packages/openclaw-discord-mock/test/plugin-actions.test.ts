@@ -74,18 +74,45 @@ describe("discord-mock handleAction (post-normalization shape)", () => {
     fixture = await startBus();
   });
 
-  it("send with `to` posts to the channel", async () => {
-    await runHandler(fixture, "send", { to: "sample-project", text: "hello" });
-    const snap = fixture.bus.state.getSnapshot();
-    expect(snap.messages.length).toBe(1);
-    expect(snap.messages[0].text).toBe("hello");
-    expect(snap.messages[0].conversation.id).toBe("sample-project");
-  });
-
-  it("send with thread target posts to the thread", async () => {
-    await runHandler(fixture, "send", { to: "thread:sample-project/T1", text: "in thread" });
-    const snap = fixture.bus.state.getSnapshot();
-    expect(snap.messages[0].threadId).toBe("T1");
+  it.each<{
+    target: string;
+    to(threadId: string): string;
+    conversationId: string;
+    threadId(threadId: string): string | undefined;
+  }>([
+    {
+      target: "a channel",
+      to: () => "sample-project",
+      conversationId: "sample-project",
+      threadId: () => undefined,
+    },
+    {
+      target: "a thread target",
+      to: () => "thread:sample-project/T1",
+      conversationId: "sample-project",
+      threadId: () => "T1",
+    },
+    {
+      target: "a native thread channel",
+      to: (threadId) => `channel:${threadId}`,
+      conversationId: "Sample-Project",
+      threadId: (threadId) => threadId,
+    },
+  ])("send to $target posts there without renaming the thread", async (row) => {
+    const thread = fixture.bus.state.createThread({
+      accountId: "default",
+      conversationId: "Sample-Project",
+      title: "Original topic",
+    });
+    await runHandler(fixture, "send", { to: row.to(thread.id), text: "hello" });
+    const snapshot = fixture.bus.state.getSnapshot();
+    expect(snapshot.messages).toHaveLength(1);
+    expect(snapshot.messages[0]).toMatchObject({
+      text: "hello",
+      conversation: { id: row.conversationId },
+    });
+    expect(snapshot.messages[0].threadId).toBe(row.threadId(thread.id));
+    expect(snapshot.threads).toMatchObject([{ id: thread.id, title: "Original topic" }]);
   });
 
   it("thread-create with text creates the thread and delivers its body", async () => {
@@ -120,18 +147,12 @@ describe("discord-mock handleAction (post-normalization shape)", () => {
     expect(snap.messages.length).toBe(0);
   });
 
-  it("send to a native thread channel preserves its parent and renames only on request", async () => {
+  it("send to a native thread channel renames it on request", async () => {
     const thread = fixture.bus.state.createThread({
       accountId: "default",
       conversationId: "Sample-Project",
       title: "Original topic",
     });
-    await runHandler(fixture, "send", { to: `channel:${thread.id}`, text: "wake" });
-    const plain = fixture.bus.state.getSnapshot();
-    expect(plain.messages).toMatchObject([
-      { text: "wake", conversation: { id: "Sample-Project" }, threadId: thread.id },
-    ]);
-    expect(plain.threads[0]).toMatchObject({ id: thread.id, title: "Original topic" });
     const result = (await runHandler(fixture, "send", {
       to: `channel:${thread.id}`,
       text: "work started",
@@ -141,71 +162,36 @@ describe("discord-mock handleAction (post-normalization shape)", () => {
       threadRename: { ok: true, channelId: thread.id, name: "Updated topic" },
     });
     const snapshot = fixture.bus.state.getSnapshot();
-    expect(snapshot.messages).toHaveLength(2);
-    expect(snapshot.messages[1]).toMatchObject({
-      conversation: { id: "Sample-Project" },
-      threadId: thread.id,
-      text: "work started",
-    });
-    expect(snapshot.threads).toHaveLength(1);
-    expect(snapshot.threads[0]).toMatchObject({ id: thread.id, title: "Updated topic" });
+    expect(snapshot.messages).toMatchObject([
+      { conversation: { id: "Sample-Project" }, threadId: thread.id, text: "work started" },
+    ]);
+    expect(snapshot.threads).toMatchObject([{ id: thread.id, title: "Updated topic" }]);
   });
 
-  it("thread-reply posts to the thread", async () => {
-    const thread = fixture.bus.state.createThread({
-      accountId: "default",
-      conversationId: "sample-project",
-      title: "T",
-    });
-    await runHandler(fixture, "thread-reply", {
-      to: "sample-project",
-      threadId: thread.id,
-      text: "reply body",
-    });
-    const snap = fixture.bus.state.getSnapshot();
-    const reply = snap.messages.find((m) => m.threadId === thread.id);
-    expect(reply).toBeTruthy();
-    expect(reply?.text).toBe("reply body");
-  });
-
-  it("thread-reply with only threadId posts to the thread, like Discord", async () => {
-    const thread = fixture.bus.state.createThread({
-      accountId: "default",
-      conversationId: "sample-project",
-      title: "T",
-    });
-    const result = (await runHandler(fixture, "thread-reply", {
-      threadId: thread.id,
-      text: "reply body",
-    })) as { details: unknown };
-    const reply = fixture.bus.state.getSnapshot().messages.find((m) => m.threadId === thread.id);
-    expect(reply?.conversation.id).toBe("sample-project");
-    expect(reply?.text).toBe("reply body");
-    expect(result.details).toEqual({
-      ok: true,
-      result: { messageId: reply?.id, channelId: thread.id },
-    });
-  });
-
-  it("thread-reply ignores threadName and preserves the existing title", async () => {
+  it("thread-reply with only threadId posts to the thread and ignores threadName", async () => {
     const thread = fixture.bus.state.createThread({
       accountId: "default",
       conversationId: "sample-project",
       title: "Original topic",
     });
-    await runHandler(fixture, "thread-reply", {
+    const result = (await runHandler(fixture, "thread-reply", {
       threadId: thread.id,
       text: "reply body",
       threadName: "Ignored topic",
-    });
+    })) as { details: unknown };
     const snapshot = fixture.bus.state.getSnapshot();
     expect(snapshot.messages).toHaveLength(1);
-    expect(snapshot.messages[0]).toMatchObject({
+    const reply = snapshot.messages[0];
+    expect(reply).toMatchObject({
       conversation: { id: "sample-project" },
       threadId: thread.id,
       text: "reply body",
     });
-    expect(snapshot.threads[0]).toMatchObject({ id: thread.id, title: "Original topic" });
+    expect(result.details).toEqual({
+      ok: true,
+      result: { messageId: reply.id, channelId: thread.id },
+    });
+    expect(snapshot.threads).toMatchObject([{ id: thread.id, title: "Original topic" }]);
   });
 
   it("thread-reply to an unknown thread posts nothing", async () => {

@@ -117,7 +117,7 @@ export async function envCommand(
   process.exit(exitCode);
 }
 
-export function buildConsumerImageArgs(composeArgs: string[]): string[] {
+function buildConsumerImageArgs(composeArgs: string[]): string[] {
   return [...composeArgs, "build", "bus"];
 }
 

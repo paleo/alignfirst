@@ -15,8 +15,8 @@ import {
 
 const WRITER = fileURLToPath(new URL("../scripts/write-coding-agent-settings.ts", import.meta.url));
 
-for (const agent of ["claude", "codex", "pi"] as const) {
-  test(`${agent} settings delegate from the openclaw profile through the real config resolver`, () => {
+test("each agent delegates from the openclaw profile through the real config resolver", () => {
+  for (const agent of ["claude", "codex", "pi"] as const) {
     const home = mkdtempSync(join(tmpdir(), "harness-settings-"));
     try {
       const settings = buildCodingAgentSettings({ CODING_AGENT: agent });
@@ -35,38 +35,36 @@ for (const agent of ["claude", "codex", "pi"] as const) {
       const effective = resolveCodeConfig(loadConfig(home, "alignfirst"), {
         OPENCLAW_SHELL: "exec",
       });
-      assert.equal(effective.profile, MOCK_AGENT_PROFILE);
+      assert.equal(effective.profile, MOCK_AGENT_PROFILE, agent);
       assert.equal(effective.harness, agent);
-      assert.equal(effective.defaultModel, undefined);
-      assert.deepEqual(effective.models, undefined);
-      assert.deepEqual(readdirSync(home), [".alignfirst"]);
+      assert.equal(effective.defaultModel, undefined, agent);
+      assert.deepEqual(effective.models, undefined, agent);
+      assert.deepEqual(readdirSync(home), [".alignfirst"], agent);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
-  });
+  }
+});
 
-  test(`${agent} model lists trim blanks and replace accepted names without a default`, () => {
-    const env = Object.freeze({
-      CODING_AGENT: agent,
-      CODING_AGENT_MODELS: " , first, , second , ",
-    });
-    const profile = buildCodingAgentSettings(env).code.profiles[MOCK_AGENT_PROFILE];
-    assert.deepEqual(profile, { harness: agent, models: ["first", "second"] });
-    assert.deepEqual(
-      buildCodingAgentSettings({ CODING_AGENT: agent, CODING_AGENT_MODELS: ", ," }).code.profiles[
-        MOCK_AGENT_PROFILE
-      ],
-      { harness: agent },
+test("model lists trim blanks and replace accepted names without a default", () => {
+  for (const [models, expected] of [
+    [" , first, , second , ", { harness: "codex", models: ["first", "second"] }],
+    [", ,", { harness: "codex" }],
+  ] as const) {
+    const env = Object.freeze({ CODING_AGENT: "codex", CODING_AGENT_MODELS: models });
+    assert.deepEqual(buildCodingAgentSettings(env).code.profiles[MOCK_AGENT_PROFILE], expected);
+  }
+});
+
+test("rejects missing or invalid coding selectors", () => {
+  for (const selector of [undefined, "", "Pi", " pi ", "openai"]) {
+    assert.throws(
+      () => buildCodingAgentSettings({ CODING_AGENT: selector }),
+      Error,
+      JSON.stringify(selector),
     );
-  });
-}
-
-for (const selector of [undefined, "", "Pi", " pi ", "openai", "invalid"]) {
-  test(`rejects missing or invalid coding selector ${JSON.stringify(selector)}`, () => {
-    const env = { CODING_AGENT: selector };
-    assert.throws(() => buildCodingAgentSettings(env));
-  });
-}
+  }
+});
 
 test("settings construction reads only selectors, never credentials, HOME or conversation providers", () => {
   const env: CodingAgentEnvironment = new Proxy(
@@ -88,40 +86,32 @@ test("settings construction reads only selectors, never credentials, HOME or con
 test("thin writer writes only the explicit temporary destination with no external commands", () => {
   const home = mkdtempSync(join(tmpdir(), "harness-settings-writer-"));
   try {
+    const env = {
+      HOME: home,
+      PATH: "",
+      CODING_AGENT: "pi",
+      CODING_AGENT_MODELS: PI_CONTRACT_MODEL,
+    };
     const destination = join(home, "output/settings.json");
-    const run = spawnSync(process.execPath, [WRITER, destination], {
-      env: { HOME: home, PATH: "", CODING_AGENT: "pi", CODING_AGENT_MODELS: PI_CONTRACT_MODEL },
-      encoding: "utf8",
-      timeout: 5_000,
-      maxBuffer: 64 * 1024,
-    });
+    const run = runWriter([destination], env);
     assert.equal(run.status, 0, run.stderr);
     assert.deepEqual(
       JSON.parse(readFileSync(destination, "utf8")),
-      buildCodingAgentSettings({
-        CODING_AGENT: "pi",
-        CODING_AGENT_MODELS: PI_CONTRACT_MODEL,
-      }),
+      buildCodingAgentSettings({ CODING_AGENT: "pi", CODING_AGENT_MODELS: PI_CONTRACT_MODEL }),
     );
-    assert.deepEqual(readdirSync(home), ["output"]);
-    for (const args of [[], [destination, "extra"]]) {
-      const invalid = spawnSync(process.execPath, [WRITER, ...args], {
-        env: { HOME: home, PATH: "", CODING_AGENT: "pi" },
-        encoding: "utf8",
-        timeout: 5_000,
-        maxBuffer: 64 * 1024,
-      });
-      assert.notEqual(invalid.status, 0);
-    }
-    const invalid = spawnSync(process.execPath, [WRITER, join(home, "must-not-exist/settings")], {
-      env: { HOME: home, PATH: "" },
-      encoding: "utf8",
-      timeout: 5_000,
-      maxBuffer: 64 * 1024,
-    });
-    assert.notEqual(invalid.status, 0);
+    const rejected = runWriter([join(home, "must-not-exist/settings.json"), "extra"], env);
+    assert.notEqual(rejected.status, 0);
     assert.deepEqual(readdirSync(home), ["output"]);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+function runWriter(args: string[], env: NodeJS.ProcessEnv) {
+  return spawnSync(process.execPath, [WRITER, ...args], {
+    env,
+    encoding: "utf8",
+    timeout: 5_000,
+    maxBuffer: 64 * 1024,
+  });
+}

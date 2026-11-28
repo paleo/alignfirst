@@ -40,22 +40,13 @@ describe("resolveSelectedModels", () => {
     ]);
   });
 
-  it("throws on an unknown id (single or in a list)", () => {
-    expect(() => resolve("nope")).toThrow();
-    expect(() => resolve("claude-sonnet-5,nope")).toThrow();
-  });
-
-  it("throws when selection is omitted and no default is set", () => {
-    expect(() => resolve(undefined)).toThrow();
-  });
-
-  it("throws on an empty id list", () => {
-    expect(() => resolve(" , ")).toThrow();
-  });
-
-  it("throws when the catalog env is empty", () => {
-    expect(() =>
-      resolveSelectedModels({ selection: "all", modelsEnv: "", defaultEnv: undefined }),
-    ).toThrow();
+  it.each<{ name: string; selection: string | undefined; modelsEnv?: string }>([
+    { name: "an unknown id", selection: "nope" },
+    { name: "an unknown id in a list", selection: "claude-sonnet-5,nope" },
+    { name: "an omitted selection without default", selection: undefined },
+    { name: "an empty id list", selection: " , " },
+    { name: "an empty catalog", selection: "all", modelsEnv: "" },
+  ])("throws on $name", ({ selection, modelsEnv = MODELS }) => {
+    expect(() => resolveSelectedModels({ selection, modelsEnv, defaultEnv: undefined })).toThrow();
   });
 });

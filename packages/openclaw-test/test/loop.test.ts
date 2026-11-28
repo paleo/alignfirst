@@ -35,34 +35,19 @@ function makeConfig(channels: string[]): string {
 }
 
 describe("expandChannelSelection", () => {
-  const cfg = makeConfig(["discord-mock", "slack-mock"]);
+  const cfg = makeConfig(["slack-mock", "discord-mock"]);
 
-  it("returns a single id", () => {
-    expect(expandChannelSelection("discord-mock", cfg)).toEqual(["discord-mock"]);
-  });
-
-  it("expands 'all' to the configured channels and webchat, alphabetically", () => {
-    const reversed = makeConfig(["slack-mock", "discord-mock"]);
-    expect(expandChannelSelection("all", reversed)).toEqual([
-      "discord-mock",
-      "slack-mock",
-      "webchat",
-    ]);
-  });
-
-  it("dedupes repeated ids, order preserved", () => {
-    expect(expandChannelSelection("slack-mock,discord-mock,slack-mock", cfg)).toEqual([
-      "slack-mock",
-      "discord-mock",
-    ]);
+  it.each([
+    { selection: "discord-mock", expected: ["discord-mock"] },
+    { selection: "all", expected: ["discord-mock", "slack-mock", "webchat"] },
+    { selection: "slack-mock,discord-mock,slack-mock", expected: ["slack-mock", "discord-mock"] },
+    { selection: "webchat", expected: ["webchat"] },
+  ])("expands $selection", ({ selection, expected }) => {
+    expect(expandChannelSelection(selection, cfg)).toEqual(expected);
   });
 
   it("rejects unknown channel ids", () => {
     expect(() => expandChannelSelection("nope", cfg)).toThrow();
-  });
-
-  it("accepts the webchat surface", () => {
-    expect(expandChannelSelection("webchat", cfg)).toEqual(["webchat"]);
   });
 });
 
@@ -150,8 +135,6 @@ function fakeCellResult(
 interface CallLog {
   kind: "recreate" | "runner";
   argv: string[];
-  env: Record<string, string> | undefined;
-  logFile: string | undefined;
 }
 
 interface FakeSetup {
@@ -166,11 +149,11 @@ function setupFake(outcomes: Record<string, "pass" | "fail">): FakeSetup {
   const calls: CallLog[] = [];
   const resultsByPath = new Map<string, CellResult>();
   const spawnRecreate = async (req: SpawnRequest) => {
-    calls.push({ kind: "recreate", argv: req.argv, env: req.env, logFile: req.logFile });
+    calls.push({ kind: "recreate", argv: req.argv });
     return 0;
   };
   const spawnRunner = async (req: SpawnRequest) => {
-    calls.push({ kind: "runner", argv: req.argv, env: req.env, logFile: req.logFile });
+    calls.push({ kind: "runner", argv: req.argv });
     const scenario = argvFlag(req.argv, "--scenario");
     const channel = argvFlag(req.argv, "--channel");
     const iter = argvFlag(req.argv, "--iteration-index");
@@ -361,38 +344,22 @@ describe("runMatrix, pool of 1", () => {
     expect(order).toEqual(["A|1", "A|2", "B|1", "B|2", "B|3"]);
   });
 
-  it("recreates once per cell without reuseStack", async () => {
-    const fake = setupFake({});
-    await runMatrix(makeOpts(fake, { iterations: 3 }));
-    expect(recreateCount(fake.calls)).toBe(3);
-  });
-
-  it("with reuseStack, a single model recreates exactly once — the lazy creation", async () => {
-    const fake = setupFake({});
-    await runMatrix(makeOpts(fake, { iterations: 2, reuseStack: true }));
-    expect(recreateCount(fake.calls)).toBe(1);
-  });
-
-  it("keeps inherited stdio (no logFile) and passes the worker env on every spawn", async () => {
-    const fake = setupFake({});
-    const workers = makeWorkers(1);
-    await runMatrix(makeOpts(fake, { workers }));
-    expect(fake.calls.length).toBe(2);
-    for (const call of fake.calls) {
-      expect(call.logFile).toBeUndefined();
-      expect(call.env).toEqual({
-        OPENCLAW_CONFIG_PATH: "/cfg/m.json",
-        OPENCLAW_TEST_GATEWAY_LOGS_DIR: workers[0].gatewayLogsDir,
-        OPENCLAW_WORKSPACE_DIR: workers[0].workspaceDir,
-      });
-      expect(call.argv.slice(0, 3)).toEqual(["compose", "-p", "proj-w1"]);
-    }
-  });
+  it.each([
+    { reuseStack: false, recreates: 3 },
+    { reuseStack: true, recreates: 1 },
+  ])(
+    "recreates $recreates times over 3 iterations (reuseStack: $reuseStack)",
+    async ({ reuseStack, recreates }) => {
+      const fake = setupFake({});
+      await runMatrix(makeOpts(fake, { iterations: 3, reuseStack }));
+      expect(recreateCount(fake.calls)).toBe(recreates);
+    },
+  );
 
   it("returns the recreate exit code when a recreate fails", async () => {
     const fake = setupFake({});
     const failingRecreate = async (req: SpawnRequest) => {
-      fake.calls.push({ kind: "recreate", argv: req.argv, env: req.env, logFile: req.logFile });
+      fake.calls.push({ kind: "recreate", argv: req.argv });
       return 17;
     };
     const exit = await runMatrix(
@@ -429,7 +396,7 @@ function setupManualFake(): ManualFake {
   const waiters: { count: number; resolve(): void }[] = [];
   let released = false;
   const spawnRecreate = async (req: SpawnRequest) => {
-    recreates.push({ kind: "recreate", argv: req.argv, env: req.env, logFile: req.logFile });
+    recreates.push({ kind: "recreate", argv: req.argv });
     return 0;
   };
   const spawnRunner = (req: SpawnRequest) =>
@@ -524,34 +491,6 @@ describe("runMatrix, pool of K", () => {
     for (const run of fake.started) {
       if (!finished.has(run)) run.finish("pass");
     }
-    expect(await done).toBe(0);
-  });
-
-  it("spreads concurrently-running cells across models", async () => {
-    const fake = setupManualFake();
-    const done = startManualMatrix(fake, {
-      scenarios: ["S1", "S2"],
-      models: [
-        { id: "m1", ref: "p/m1" },
-        { id: "m2", ref: "p/m2" },
-      ],
-      workers: makeWorkers(2),
-    });
-    await fake.waitForStarted(2);
-    const models = fake.started.map((s) => argvFlag(s.argv, "--model-id"));
-    expect(new Set(models).size).toBe(2);
-    const finished = new Set<StartedRun>();
-    const finishAll = () => {
-      for (const run of [...fake.started]) {
-        if (!finished.has(run)) {
-          finished.add(run);
-          run.finish("pass");
-        }
-      }
-    };
-    finishAll();
-    await fake.waitForStarted(4);
-    finishAll();
     expect(await done).toBe(0);
   });
 

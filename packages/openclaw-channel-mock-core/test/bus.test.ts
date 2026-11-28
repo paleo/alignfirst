@@ -158,14 +158,6 @@ describe("bus HTTP round-trip", () => {
     ).rejects.toThrow();
   });
 
-  it("GET /health and /v1/state work", async () => {
-    const healthResp = await fetch(`${fixture.baseUrl}/health`);
-    expect(healthResp.status).toBe(200);
-    const stateResp = await fetch(`${fixture.baseUrl}/v1/state`);
-    const state = (await stateResp.json()) as { cursor: number };
-    expect(typeof state.cursor).toBe("number");
-  });
-
   it("injects a one-shot native delivery failure", async () => {
     await post(fixture.baseUrl, "/v1/test/fail-next", {
       operation: "outbound-message",

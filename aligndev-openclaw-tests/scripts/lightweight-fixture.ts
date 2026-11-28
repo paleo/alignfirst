@@ -82,25 +82,6 @@ function normalizeRequest(value: string): string {
     .trim();
 }
 
-export function selectCompanionPlans(home: string, repo: string): string {
-  const registry = join(home, ".alignfirst/companions/registry.json");
-  const value = JSON.parse(readFileSync(registry, "utf8"));
-  const key = Object.keys(value.projects).find(
-    (key) => (key.startsWith("~/") ? join(home, key.slice(2)) : key) === repo,
-  );
-  if (key === undefined) throw new Error(`No companion registered for ${repo}`);
-  const entry = value.projects[key];
-  entry.items = { ...entry.items, ".plans": "companion" };
-  writeFileSync(registry, `${JSON.stringify(value, null, 2)}\n`);
-  const dir = entry.dir.startsWith("~/")
-    ? join(home, entry.dir.slice(2))
-    : entry.dir.startsWith("/")
-      ? entry.dir
-      : join(home, ".alignfirst/companions", entry.dir);
-  mkdirSync(join(dir, ".plans"), { recursive: true });
-  return join(dir, ".plans");
-}
-
 function git(repo: string, ...args: string[]): string {
   return execFileSync("git", ["-C", repo, ...args], {
     encoding: "utf8",

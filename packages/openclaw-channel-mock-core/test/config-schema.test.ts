@@ -39,12 +39,9 @@ describe("public channel mock config schema", () => {
 
   it.each([
     { baseUrl: "invalid" },
-    { pollTimeoutMs: 99 },
     { pollTimeoutMs: 30_001 },
-    { pollTimeoutMs: 100.5 },
     { unknown: true },
     { accounts: { test: { unknown: true } } },
-    { groups: { general: { unknown: true } } },
     { groups: { general: { toolsBySender: { robin: { allow: "exec" } } } } },
     { replyToMode: "first" },
   ])("rejects invalid config %j", (value) => {

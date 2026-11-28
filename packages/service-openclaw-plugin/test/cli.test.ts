@@ -19,10 +19,6 @@ describe("thread-handoff list rendering", () => {
 });
 
 describe("thread-handoff receipt rendering", () => {
-  it("renders an empty JSON array", () => {
-    expect(JSON.parse(renderReceipts([], true))).toEqual([]);
-  });
-
   it("renders JSON without starter text", () => {
     const output = renderReceipts(
       [

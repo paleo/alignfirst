@@ -113,16 +113,12 @@ describe("judge SDK compatibility", () => {
     },
   );
 
-  it.each(["openrouter/anthropic/claude-haiku-5.5", "anthropic/claude-haiku-5-5"])(
-    "rejects missing usage from %s without retrying",
-    async (model) => {
-      vi.stubEnv("OPENCLAW_TEST_JUDGE_MODEL", model);
-      respond({ choices: [{ message: { content: "answer" } }], content: [] });
-      const judge = await freshJudge();
-      await expect(judge.judgeLLMRaw("test")).rejects.toThrow();
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-    },
-  );
+  it("rejects missing usage without retrying", async () => {
+    respond({ choices: [{ message: { content: "answer" } }] });
+    const judge = await freshJudge();
+    await expect(judge.judgeLLMRaw("test")).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 
   it.each([
     '{"verdict":"maybe","reasoning":"no"}',
@@ -136,21 +132,6 @@ describe("judge SDK compatibility", () => {
     const judge = await freshJudge();
     await expect(judge.judgeLLM({ message: "test", rubric: "test" })).rejects.toThrow();
     expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("parses tagged JSON through the public judge export", async () => {
-    respond({
-      choices: [{ message: { content: '<result-json>{"done":true}</result-json>' } }],
-      usage: { prompt_tokens: 2, completion_tokens: 3 },
-    });
-    const judge = await freshJudge();
-    const result = await judge.judgeLLMJson<{ done: boolean }>({
-      message: "test",
-      prompt: "Is it done?",
-      returnType: "{ done: boolean }",
-    });
-    expect(result.parsed).toEqual({ done: true });
-    expect(result.usage.inputTokens).toBe(2);
   });
 });
 

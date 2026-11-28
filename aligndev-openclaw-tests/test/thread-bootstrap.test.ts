@@ -3,6 +3,8 @@ import { test } from "node:test";
 import type { BusMessage, ScenarioContext } from "@alignfirst/openclaw-test";
 import { bootstrapThreadFromChannel } from "../scenarios/_lib/thread-bootstrap.ts";
 
+// Discord carries the most starter assertions: the starter is the thread's only record.
+const CHANNEL = "discord-mock";
 const PROJECT_PATH = "/home/assistant/projects/nimbus";
 const REQUESTS = [
   {
@@ -28,48 +30,46 @@ const REQUESTS = [
   },
 ];
 
-for (const channel of ["slack-mock", "discord-mock"]) {
-  for (const request of REQUESTS) {
-    test(`${channel}: bootstrap requires the complete ${request.name}`, async () => {
-      const checked = new Error("offline starter assertions completed");
-      const opts = {
-        text: request.text,
-        project: "nimbus",
-        projectPath: PROJECT_PATH,
-        request: request.text,
-        afterStarter: async () => {
-          throw checked;
-        },
-      };
-      const starter = (original: string) =>
-        `Tâche: Remplacer Export par Download.\nProjet: nimbus\nChemin: ${PROJECT_PATH}\n\nDemande:\n${original}\n\nPrêt pour la session de travail.`;
+for (const request of REQUESTS) {
+  test(`bootstrap requires the complete ${request.name}`, async () => {
+    const checked = new Error("offline starter assertions completed");
+    const opts = {
+      text: request.text,
+      project: "nimbus",
+      projectPath: PROJECT_PATH,
+      request: request.text,
+      afterStarter: async () => {
+        throw checked;
+      },
+    };
+    const starter = (original: string) =>
+      `Tâche: Remplacer Export par Download.\nProjet: nimbus\nChemin: ${PROJECT_PATH}\n\nDemande:\n${original}\n\nPrêt pour la session de travail.`;
 
-      // Stop after the real bootstrap assertions; no handoff, gateway or provider is exercised.
+    // Stop after the real bootstrap assertions; no handoff, gateway or provider is exercised.
+    await assert.rejects(
+      bootstrapThreadFromChannel(offlineContext(starter(request.text)), opts),
+      (error) => error === checked,
+    );
+    for (const omission of request.omissions) {
       await assert.rejects(
-        bootstrapThreadFromChannel(offlineContext(channel, starter(request.text)), opts),
-        (error) => error === checked,
-      );
-      for (const omission of request.omissions) {
-        await assert.rejects(
-          bootstrapThreadFromChannel(
-            offlineContext(channel, starter(request.text.replace(omission, ""))),
-            opts,
-          ),
-          (error) => error instanceof Error && error.name === "Error" && error !== checked,
-        );
-      }
-      await assert.rejects(
-        bootstrapThreadFromChannel(offlineContext(channel, starter("")), opts),
+        bootstrapThreadFromChannel(
+          offlineContext(starter(request.text.replace(omission, ""))),
+          opts,
+        ),
         (error) => error instanceof Error && error.name === "Error" && error !== checked,
       );
-    });
-  }
+    }
+    await assert.rejects(
+      bootstrapThreadFromChannel(offlineContext(starter("")), opts),
+      (error) => error instanceof Error && error.name === "Error" && error !== checked,
+    );
+  });
 }
 
-function offlineContext(channel: string, text: string): ScenarioContext {
+function offlineContext(text: string): ScenarioContext {
   const message: BusMessage = {
     id: "starter",
-    accountId: channel,
+    accountId: CHANNEL,
     direction: "outbound",
     conversation: { id: "offline-bootstrap", kind: "channel" },
     senderId: "openclaw",
@@ -79,7 +79,7 @@ function offlineContext(channel: string, text: string): ScenarioContext {
     reactions: [],
   };
   const supported: Partial<ScenarioContext> = {
-    channel,
+    channel: CHANNEL,
     conversationId: message.conversation.id,
     getCursor: async () => 0,
     sendInbound: async (input) => ({

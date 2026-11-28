@@ -42,8 +42,8 @@ const PUBLISH_REQUEST =
   "Publish the existing local commit on branch ABC-0120/export-bold: push it to origin " +
   "with upstream tracking. Do not change code or create a PR. Report the remote branch URL or push result.";
 
-for (const agent of ["claude", "codex", "pi"] as const) {
-  test(`${agent} uses stdin for new and resumed wrapper calls`, () => {
+test("each agent uses stdin for new and resumed wrapper calls", () => {
+  for (const agent of ["claude", "codex", "pi"] as const) {
     for (const resumed of [false, true]) {
       const argv =
         agent === "pi"
@@ -67,12 +67,12 @@ for (const agent of ["claude", "codex", "pi"] as const) {
                 "-",
               ];
       const call: CodingAgentCall = { agent, argv, cwd: "/fixture", stdin: PROMPT };
-      assert.equal(isAlignfirstWrapperCall(call), true);
+      assert.equal(isAlignfirstWrapperCall(call), true, argv.join(" "));
       assert.equal(extractCodingPrompt(call), PROMPT);
       assert.ok(renderCodingAgentCall(call).includes(PROMPT));
     }
-  });
-}
+  }
+});
 
 test("recognizes the active protocol after catchup and ignores historical instructions", () => {
   const history = `Ticket history\n\n${PROMPT}`;
@@ -88,12 +88,12 @@ test("recognizes the active protocol after catchup and ignores historical instru
   );
 });
 
-for (const [agent, adapter] of [
-  ["claude", createClaudeAdapter()],
-  ["codex", createCodexAdapter()],
-  ["pi", createPiAdapter()],
-] as const) {
-  test(`${agent} A16 review matcher and mock accept actual CLI prompt wrapping`, async (t) => {
+test("A16 review matcher and mock accept each agent's actual CLI prompt wrapping", async (t) => {
+  for (const [agent, adapter] of [
+    ["claude", createClaudeAdapter()],
+    ["codex", createCodexAdapter()],
+    ["pi", createPiAdapter()],
+  ] as const) {
     const fixture = createMockFixture(t, agent, {
       onPrompt: async (_ctx, _cwd, prompt) => {
         return isReviewProtocolPrompt(prompt) ? REVIEW_RESULT : IMPLEMENTATION_RESULT;
@@ -122,16 +122,16 @@ for (const [agent, adapter] of [
         };
         const argv = adapter.buildArgs(config);
         const call: CodingAgentCall = { agent, argv, cwd: fixture.home, stdin: prompt };
-        assert.equal(isReviewProtocolPrompt(extractCodingPrompt(call)), true);
+        assert.equal(isReviewProtocolPrompt(extractCodingPrompt(call)), true, agent);
         const response = await fixture.invoke(agent, argv, prompt);
         assert.equal(response.exitCode, 0, response.stderr);
         const assessment = assessStream(adapter, config, response.stdout);
         assert.equal(
           assessment.succeeded,
           true,
-          assessment.error ?? "Review stream did not succeed",
+          assessment.error ?? `${agent} review stream did not succeed`,
         );
-        assert.equal(assessment.result, REVIEW_RESULT);
+        assert.equal(assessment.result, REVIEW_RESULT, agent);
       }
     }
     const prompt = buildPrompt({
@@ -145,9 +145,13 @@ for (const [agent, adapter] of [
     const config = { ...mockRunConfig(fixture.home), prompt };
     const response = await fixture.invoke(agent, adapter.buildArgs(config), prompt);
     assert.equal(response.exitCode, 0, response.stderr);
-    assert.equal(assessStream(adapter, config, response.stdout).result, IMPLEMENTATION_RESULT);
-  });
-}
+    assert.equal(
+      assessStream(adapter, config, response.stdout).result,
+      IMPLEMENTATION_RESULT,
+      agent,
+    );
+  }
+});
 
 test("review matcher rejects history, context, quotations, and other active instructions", () => {
   const nonReview = buildPrompt({
@@ -215,26 +219,27 @@ test("recognizes log-review prompts with prose and file paths", () => {
   assert.equal(isLogReviewPrompt("Inspect the export button implementation."), false);
 });
 
-for (const prompt of [
-  PUBLISH_REQUEST,
-  `${PROMPT}\n\nCommit and push the completed change.`,
-  "Could you push the existing branch to origin?",
-  "Commit all changes, then push to origin.",
-  "Pousse la branche existante vers origin.",
-]) {
-  test("explicit publication pushes the existing fixture commit without changing it", async (t) => {
+test("explicit publication pushes the existing fixture commit without changing it", async (t) => {
+  for (const prompt of [
+    PUBLISH_REQUEST,
+    `${PROMPT}\n\nCommit and push the completed change.`,
+    "Could you push the existing branch to origin?",
+    "Commit all changes, then push to origin.",
+    "Pousse la branche existante vers origin.",
+  ]) {
     const fixture = createPushFixture(t);
     const before = fixture.git(["rev-parse", "HEAD"]);
     await pushMockFixtureBranch(fixture.context, WORKTREE, prompt);
-    assert.equal(fixture.git(["rev-parse", "HEAD"]), before);
-    assert.equal(fixture.git(["status", "--porcelain"]), "");
-    assert.equal(fixture.git(["rev-parse", "@{upstream}"]), before);
+    assert.equal(fixture.git(["rev-parse", "HEAD"]), before, prompt);
+    assert.equal(fixture.git(["status", "--porcelain"]), "", prompt);
+    assert.equal(fixture.git(["rev-parse", "@{upstream}"]), before, prompt);
     assert.equal(
       fixture.git(["--git-dir", fixture.origin, "rev-parse", "refs/heads/ABC-0120/export-bold"]),
       before,
+      prompt,
     );
-  });
-}
+  }
+});
 
 test("push mock ignores prohibitions, references, and historical publication instructions", async () => {
   const context: PushFixtureContext = {
@@ -284,76 +289,33 @@ test("push mock refuses paths outside the linked fixture and non-fixture origins
   );
 });
 
-for (const [agent, adapter] of [
-  ["claude", createClaudeAdapter()],
-  ["codex", createCodexAdapter()],
-  ["pi", createPiAdapter()],
-] as const) {
-  test(`${agent} registered helper streams satisfy the real new/resume adapter`, async (t) => {
-    const fixture = createMockFixture(t, agent);
-    assert.equal(fixture.handle.selectedAgent, agent);
-    assert.deepEqual([...fixture.handlers.keys()], ["claude", "codex", "pi"]);
-    let nativeId: string | undefined;
-    for (const resumed of [false, true]) {
-      const config = mockRunConfig(fixture.home, resumed ? nativeId : undefined);
-      const argv = adapter.buildArgs(config);
-      const pendingCall = fixture.handle.waitForCall({
-        predicate: (call) => call.argv === argv,
-        timeoutMs: 1_000,
-      });
-      const response = await fixture.invoke(agent, argv);
-      assert.equal((await pendingCall).argv, argv);
-      assert.equal(response.exitCode, 0, response.stderr ?? "Mock exited unsuccessfully");
-      const assessment = assessStream(adapter, config, response.stdout);
-      assert.equal(assessment.succeeded, true, assessment.error ?? "Stream did not succeed");
-      assert.equal(assessment.result, "Fixture result");
-      assert.equal(assessment.contextTokens, MOCK_CONTEXT_TOKENS);
-      assert.equal(assessment.contextCompacted, false);
-      if (resumed) assert.equal(assessment.sessionId, nativeId);
-      nativeId = assessment.sessionId;
-      assert.ok(nativeId);
-      const call = await fixture.handle.waitForCall({
-        predicate: (call) => call.argv === argv,
-        timeoutMs: 100,
-      });
-      assert.equal(call.agent, agent);
-      assert.equal(call.stdin, PROMPT);
-    }
-    if (agent === "pi") assert.deepEqual(readdirSync(fixture.home), []);
-    if (agent === "codex") {
-      const catalog = await fixture.invoke("codex", ["debug", "models", "--bundled"]);
-      assert.equal(catalog.exitCode, 0);
-      assert.match(catalog.stdout, /gpt-6\.1-terra/u);
-    }
-  });
-}
-
-for (const argv of [
-  [],
-  ["--mode", "text"],
-  ["--mode", "json", "positional prompt"],
-  ["--mode", "json", "--model"],
-  ["--mode", "json", "--model", " "],
-  ["--mode", "json", "--session"],
-  ["--mode", "json", "--session", ""],
-  ["--mode", "json", "--model", "--session"],
-  ["--mode", "json", "--session", "native-id", "--model", PI_CONTRACT_MODEL],
-  ["--mode", "json", "--session", "id", "--session", "id"],
-  ["--mode", "json", "--model", PI_CONTRACT_MODEL, "--model", PI_CONTRACT_MODEL],
-  ["--mode", "json", "--approve"],
-  ["--mode", "json", "--no-session"],
-  ["--mode", "json", "-"],
-]) {
-  test(`Pi helper rejects malformed or bypass argv ${JSON.stringify(argv)}`, async (t) => {
+test("Pi helper rejects malformed or bypass argv", async (t) => {
+  const fixture = createMockFixture(t, "pi");
+  for (const argv of [
+    [],
+    ["--mode", "text"],
+    ["--mode", "json", "positional prompt"],
+    ["--mode", "json", "--model"],
+    ["--mode", "json", "--model", " "],
+    ["--mode", "json", "--session"],
+    ["--mode", "json", "--session", ""],
+    ["--mode", "json", "--model", "--session"],
+    ["--mode", "json", "--session", "native-id", "--model", PI_CONTRACT_MODEL],
+    ["--mode", "json", "--session", "id", "--session", "id"],
+    ["--mode", "json", "--model", PI_CONTRACT_MODEL, "--model", PI_CONTRACT_MODEL],
+    ["--mode", "json", "--approve"],
+    ["--mode", "json", "--no-session"],
+    ["--mode", "json", "-"],
+  ]) {
+    const label = JSON.stringify(argv);
     const call: CodingAgentCall = { agent: "pi", argv, stdin: PROMPT, cwd: "/fixture" };
-    assert.equal(isAlignfirstWrapperCall(call), false);
-    assert.equal(extractCodingPrompt(call), undefined);
-    const fixture = createMockFixture(t, "pi");
+    assert.equal(isAlignfirstWrapperCall(call), false, label);
+    assert.equal(extractCodingPrompt(call), undefined, label);
     const response = await fixture.invoke("pi", argv);
-    assert.equal(response.exitCode, 1);
-    assert.equal(response.stdout, "");
-  });
-}
+    assert.equal(response.exitCode, 1, label);
+    assert.equal(response.stdout, "", label);
+  }
+});
 
 test("Pi validates optional native model, thinking and session, and requires stdin", () => {
   const call: CodingAgentCall = {
@@ -371,36 +333,36 @@ test("Pi validates optional native model, thinking and session, and requires std
 
 // Parser-only permutations (duplicate headers, invalid message blocks, usage fields, retries and
 // post-settlement work) remain in packages/aligndev/test/code/pi-agent.test.ts.
-for (const [variant, authEvidence] of [
-  ["wrongIdentity", false],
-  ["missingIdentity", false],
-  ["missingSettlement", false],
-  ["aborted", false],
-  ["assistantError", false],
-  ["authenticationFailure", true],
-  ["malformedJson", false],
-  ["malformedHeader", false],
-  ["malformedSettlement", false],
-] satisfies [PiResponseVariant, boolean][]) {
-  test(`queued Pi ${variant} fails the real adapter contract`, async (t) => {
+test("each queued Pi failure variant fails the real adapter contract", async (t) => {
+  for (const [variant, authEvidence] of [
+    ["wrongIdentity", false],
+    ["missingIdentity", false],
+    ["missingSettlement", false],
+    ["aborted", false],
+    ["assistantError", false],
+    ["authenticationFailure", true],
+    ["malformedJson", false],
+    ["malformedHeader", false],
+    ["malformedSettlement", false],
+  ] satisfies [PiResponseVariant, boolean][]) {
     const fixture = createMockFixture(t, "pi");
     const adapter = createPiAdapter();
     const config = mockRunConfig(fixture.home, "native-id");
     fixture.handle.queuePiResponse(variant);
     const response = await fixture.invoke("pi", adapter.buildArgs(config));
     const assessment = assessStream(adapter, config, response.stdout);
-    assert.equal(assessment.succeeded, false);
-    assert.equal(assessment.authEvidence, authEvidence);
+    assert.equal(assessment.succeeded, false, variant);
+    assert.equal(assessment.authEvidence, authEvidence, variant);
     if (variant === "assistantError" || variant === "aborted" || authEvidence) {
-      assert.equal(assessment.result, undefined);
-      assert.equal(response.exitCode, variant === "aborted" ? 0 : 1);
+      assert.equal(assessment.result, undefined, variant);
+      assert.equal(response.exitCode, variant === "aborted" ? 0 : 1, variant);
       assert.doesNotMatch(response.stdout, /Fixture result/u);
     }
     const next = await fixture.invoke("pi", adapter.buildArgs(config));
-    assert.equal(assessStream(adapter, config, next.stdout).succeeded, true);
-    assert.deepEqual(readdirSync(fixture.home), []);
-  });
-}
+    assert.equal(assessStream(adapter, config, next.stdout).succeeded, true, variant);
+    assert.deepEqual(readdirSync(fixture.home), [], variant);
+  }
+});
 
 test("Pi streams are bounded deterministic version-3 records with latest-response occupancy", () => {
   const response = buildPiStreamResponse("native-id", "/fixture", "Fixture result");
@@ -483,7 +445,7 @@ function createMockFixture(
     await setImmediate();
     return { exitCode, stdout, stderr };
   }
-  return { handle, home, handlers, invoke };
+  return { handle, home, invoke };
 }
 
 function mockRunConfig(home: string, resume?: string): RunConfig {

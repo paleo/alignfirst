@@ -70,7 +70,8 @@ async function run(action: string, params: Record<string, unknown>) {
 }
 
 describe("slack-mock action surface", () => {
-  it("exposes native send but not thread-create or thread-reply", () => {
+  it("exposes native send and rejects thread-create and thread-reply", async () => {
+    await startBus();
     const desc = describeMessageTool({
       cfg: cfg() as unknown as Parameters<typeof describeMessageTool>[0]["cfg"],
       accountId: "default",
@@ -83,6 +84,17 @@ describe("slack-mock action surface", () => {
     for (const forbidden of ["thread-create", "thread-reply"]) {
       expect(set.has(forbidden as never)).toBe(false);
     }
+    const thread = bus.state.createThread({
+      accountId: "default",
+      conversationId: "sample-project",
+      title: "Existing thread",
+    });
+    await expect(run("thread-create", { to: "sample-project", title: "x" })).rejects.toThrow();
+    await expect(
+      run("thread-reply", { to: "sample-project", threadId: thread.id, text: "x" }),
+    ).rejects.toThrow();
+    expect(bus.state.getSnapshot().threads).toHaveLength(1);
+    expect(bus.state.getSnapshot().messages).toEqual([]);
   });
 
   it("prepares sends for core delivery and rejects the plugin send path", async () => {
@@ -124,20 +136,5 @@ describe("slack-mock action surface", () => {
       threadId: "171.0001",
       text: "  exact starter\nbody  ",
     });
-  });
-
-  it("rejects thread-create and thread-reply", async () => {
-    await startBus();
-    const thread = bus.state.createThread({
-      accountId: "default",
-      conversationId: "sample-project",
-      title: "Existing thread",
-    });
-    await expect(run("thread-create", { to: "sample-project", title: "x" })).rejects.toThrow();
-    await expect(
-      run("thread-reply", { to: "sample-project", threadId: thread.id, text: "x" }),
-    ).rejects.toThrow();
-    expect(bus.state.getSnapshot().threads).toHaveLength(1);
-    expect(bus.state.getSnapshot().messages).toEqual([]);
   });
 });

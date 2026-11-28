@@ -33,15 +33,14 @@ describe("readScenarioSurfaces", () => {
     );
   });
 
-  it("rejects a non-literal exported array", () => {
-    const dir = makeScenarios({
-      A27: 'const all = ["webchat"];\nexport const surfaces: readonly string[] = all;\n',
-    });
-    expect(() => readScenarioSurfaces(dir, ["A27"])).toThrow();
-  });
-
-  it("rejects a non-literal item", () => {
-    const dir = makeScenarios({ A27: "export const surfaces = [WEBCHAT];\n" });
+  it.each([
+    {
+      name: "exported array",
+      source: 'const all = ["webchat"];\nexport const surfaces: readonly string[] = all;\n',
+    },
+    { name: "item", source: "export const surfaces = [WEBCHAT];\n" },
+  ])("rejects a non-literal $name", ({ source }) => {
+    const dir = makeScenarios({ A27: source });
     expect(() => readScenarioSurfaces(dir, ["A27"])).toThrow();
   });
 });

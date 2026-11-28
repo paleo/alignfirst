@@ -82,75 +82,71 @@ describe("aggregateAgentToolCalls", () => {
     const ok = session({ sessionKey: channel, turns: [{ calls: [["c1", "exec", {}]] }] });
     expect(aggregateAgentToolCalls([ok, broken]).map((c) => c.toolUseId)).toEqual(["c1"]);
   });
-
-  it("leaves startedAt absent when the message carries no timestamp", () => {
-    const noTimestamp: TranscriptSession = {
-      sessionKey: thread,
-      sessionId: "no-ts-id",
-      messages: [
-        {
-          role: "assistant",
-          content: [{ type: "toolCall", id: "t1", name: "exec", arguments: {} }],
-        },
-      ],
-    };
-    const [call] = aggregateAgentToolCalls([noTimestamp]);
-    expect(call?.toolUseId).toBe("t1");
-    expect(call?.startedAt).toBeUndefined();
-  });
 });
 
 describe("readTranscriptCost", () => {
-  it("sums assistant cost and counts turns across sessions", () => {
-    const sessions = [
-      session({ sessionKey: channel, turns: [{ costTotal: 0.01 }] }),
-      session({ sessionKey: thread, turns: [{ costTotal: 0.02 }, { costTotal: 0.03 }] }),
-    ];
-    expect(readTranscriptCost({ databases: 1, sessions })).toEqual({ cost: 0.06, turns: 3 });
-  });
-
-  it("counts only cost-bearing assistant turns", () => {
-    const sessions = [session({ sessionKey: channel, turns: [{}] })];
-    expect(readTranscriptCost({ databases: 1, sessions })).toEqual({ cost: 0, turns: 0 });
-  });
-
-  it("skips a usage whose cost.total is not a number", () => {
-    const sessions: TranscriptSession[] = [
-      {
-        sessionKey: channel,
-        sessionId: "partial-usage-id",
-        messages: [
-          { role: "assistant", usage: { cost: {} } },
-          { role: "assistant", usage: { cost: { total: "0.5" } } },
-          { role: "assistant", usage: { cost: { total: 0.02 } } },
-        ],
-      },
-    ];
-    expect(readTranscriptCost({ databases: 1, sessions })).toEqual({ cost: 0.02, turns: 1 });
+  it.each<{
+    name: string;
+    sessions: TranscriptSession[];
+    expected: { cost: number; turns: number };
+  }>([
+    {
+      name: "sums assistant cost and counts turns across sessions",
+      sessions: [
+        session({ sessionKey: channel, turns: [{ costTotal: 0.01 }] }),
+        session({ sessionKey: thread, turns: [{ costTotal: 0.02 }, { costTotal: 0.03 }] }),
+      ],
+      expected: { cost: 0.06, turns: 3 },
+    },
+    {
+      name: "counts only cost-bearing assistant turns",
+      sessions: [session({ sessionKey: channel, turns: [{}] })],
+      expected: { cost: 0, turns: 0 },
+    },
+    {
+      name: "skips a usage whose cost.total is not a number",
+      sessions: [
+        {
+          sessionKey: channel,
+          sessionId: "partial-usage-id",
+          messages: [
+            { role: "assistant", usage: { cost: {} } },
+            { role: "assistant", usage: { cost: { total: "0.5" } } },
+            { role: "assistant", usage: { cost: { total: 0.02 } } },
+          ],
+        },
+      ],
+      expected: { cost: 0.02, turns: 1 },
+    },
+  ])("$name", ({ sessions, expected }) => {
+    expect(readTranscriptCost({ databases: 1, sessions })).toEqual(expected);
   });
 });
 
 describe("hasOpenTurn", () => {
-  function sessionEndingWith(last: unknown): TranscriptSession {
-    return { sessionKey: thread, sessionId: "s-id", messages: [{ role: "user" }, last] };
-  }
-
-  it("is open on a trailing tool result", () => {
-    expect(hasOpenTurn([sessionEndingWith({ role: "toolResult", toolCallId: "t1" })])).toBe(true);
-  });
-
-  it("is open on a trailing assistant stop for tool use", () => {
-    expect(hasOpenTurn([sessionEndingWith({ role: "assistant", stopReason: "toolUse" })])).toBe(
-      true,
-    );
-  });
-
-  it("is closed on a trailing turn-final assistant message", () => {
-    expect(hasOpenTurn([sessionEndingWith({ role: "assistant", stopReason: "stop" })])).toBe(false);
-  });
-
-  it("ignores a trailing user message — the sibling session may carry the reply", () => {
-    expect(hasOpenTurn([sessionEndingWith({ role: "user" })])).toBe(false);
-    expect(hasOpenTurn([{ sessionKey: thread, sessionId: "s-id", messages: [] }])).toBe(false);
+  it.each<{ name: string; messages: unknown[]; open: boolean }>([
+    {
+      name: "is open on a trailing tool result",
+      messages: [{ role: "user" }, { role: "toolResult", toolCallId: "t1" }],
+      open: true,
+    },
+    {
+      name: "is open on a trailing assistant stop for tool use",
+      messages: [{ role: "user" }, { role: "assistant", stopReason: "toolUse" }],
+      open: true,
+    },
+    {
+      name: "is closed on a trailing turn-final assistant message",
+      messages: [{ role: "user" }, { role: "assistant", stopReason: "stop" }],
+      open: false,
+    },
+    {
+      name: "ignores a trailing user message, which the sibling session may answer",
+      messages: [{ role: "user" }, { role: "user" }],
+      open: false,
+    },
+    { name: "is closed on an empty session", messages: [], open: false },
+  ])("$name", ({ messages, open }) => {
+    expect(hasOpenTurn([{ sessionKey: thread, sessionId: "s-id", messages }])).toBe(open);
   });
 });

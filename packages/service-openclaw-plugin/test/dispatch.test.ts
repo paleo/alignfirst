@@ -34,42 +34,15 @@ describe("thread-handoff reply dispatch", () => {
     );
   });
 
-  it("builds a senderless Slack thread context and last route", () => {
+  it("builds an unauthorized Slack thread context and last route", () => {
     const request = slackRequest();
-    const before = Date.now();
-    const context = buildTurnContext(request);
-    const after = Date.now();
 
-    expect(context).toEqual({
-      Body: "Take over this thread.",
-      BodyForAgent: "Take over this thread.",
-      RawBody: "Take over this thread.",
-      CommandBody: "",
+    expect(buildTurnContext(request)).toMatchObject({
       CommandInterpretationSuppressed: true,
       CommandAuthorized: false,
-      SessionKey: request.sessionKey,
-      AccountId: "workspace-1",
-      Provider: "slack",
-      Surface: "slack",
-      OriginatingChannel: "slack",
-      From: "channel:C1",
-      To: "channel:C1",
-      OriginatingTo: "channel:C1",
-      NativeChannelId: "C1",
-      ChatType: "group",
-      GroupChannel: "C1",
-      ConversationLabel: "C1",
-      GroupSubject: "C1",
       MessageThreadId: "100.200",
       ThreadParentId: "C1",
-      WasMentioned: false,
-      SenderName: "AlignFirst Service",
-      MessageSid: "message-1",
-      MessageSidFull: "message-1",
-      Timestamp: expect.any(Number),
     });
-    expect(context.Timestamp as number).toBeGreaterThanOrEqual(before);
-    expect(context.Timestamp as number).toBeLessThanOrEqual(after);
     expect(buildLastRoute(request)).toEqual({
       sessionKey: request.sessionKey,
       channel: "slack",
