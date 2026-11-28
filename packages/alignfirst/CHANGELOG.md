@@ -1,5 +1,11 @@
 # alignfirst
 
+## 0.22.1
+
+### Patch Changes
+
+- 880b4dd: The setup guide covers the declared models of AlignDev: the `coding-agent-assistant` topic, and "Declare AlignDev Pi Models" and "Declare AlignDev Antigravity Models" in the `upgrade` topic.
+
 ## 0.22.0
 
 ### Minor Changes
