@@ -61,9 +61,9 @@ function permissions(harness: CodingAgent): string {
 }
 
 function modelPolicy(models: readonly string[]): string {
-  if (models.length === 0) return "None: the profile declares no model, so omit `--model`";
+  if (models.length === 0) return "Not accepted: the profile declares no model";
   const names = models.map((model) => `\`${model}\``).join(", ");
-  return models.length === 1 ? `One of ${names}` : `One of ${names}, biggest first`;
+  return models.length === 1 ? `Only ${names}` : `One of ${names}, biggest first`;
 }
 
 // Trusts the settings: no executable, login or environment value is consulted.
@@ -76,7 +76,6 @@ function renderProfiles(profiles: NamedProfile<CodingProfile>[], selected: strin
       cell(name),
       profile.harness,
       name === selected ? "yes" : "no",
-      profile.default === true ? "yes" : "no",
       renderModels(resolveModels(profile)),
       profile.defaultModel === undefined ? "native default" : cell(profile.defaultModel),
       resolveEfforts(profile.harness, profile.efforts).map(cell).join(", "),
@@ -84,8 +83,8 @@ function renderProfiles(profiles: NamedProfile<CodingProfile>[], selected: strin
     ].join(" | "),
   );
   return [
-    "| Profile | Harness | Selected | Default | Models, biggest first | Default model | Efforts | Default effort |",
-    "|---------|---------|----------|---------|-----------------------|---------------|---------|----------------|",
+    "| Profile | Harness | Selected | Models, biggest first | Default model | Efforts | Default effort |",
+    "|---------|---------|----------|-----------------------|---------------|---------|----------------|",
     ...rows.map((row) => `| ${row} |`),
     "",
     "Pass `--profile <name>` for another agent or account; omit it to keep the selected profile.",

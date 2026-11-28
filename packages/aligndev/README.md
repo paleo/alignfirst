@@ -191,7 +191,7 @@ A coding-agent profile accepts:
 - `env` — literal environment values for non-secret configuration. No interpolation or shell expansion. Keep credentials in native stores or separately provisioned process environments.
 - `unset` — inherited variables to remove, including API keys that select an unintended authentication route. A variable cannot occur in both `env` and `unset`. A string or null `configDir` cannot coexist with its native directory variable in either field.
 - `defaultModel` — new-session default, validated against accepted names. Omission uses the native default.
-- `models` — a nonempty list replaces the accepted names. An empty list adds no override. Otherwise a profile accepts its built-in aliases plus the `modelAliases` names. A Pi profile that declares nothing accepts no model: it runs Pi's own default and rejects `--model` and `defaultModel`. The assistant sees the accepted names in their order, biggest model first, so a profile that mixes families or adds names declares `models` in that order. Built-in aliases go from the biggest model to the smallest:
+- `models` — the accepted model names, in the order the assistant sees them: biggest model first. Without it, or with an empty list, a profile accepts its built-in aliases, then its `modelAliases` names. A profile that mixes families or adds names declares `models` to set the order. A Pi profile that declares nothing accepts no model: it runs Pi's own default and rejects `--model` and `defaultModel`. Built-in aliases go from the biggest model to the smallest:
 
   | Harness | Built-in aliases | Pattern |
   | --- | --- | --- |
@@ -208,7 +208,7 @@ A coding-agent profile accepts:
   | `gemini` | `carbon`, `neon`, `hydrogen`, `flash` | `<prefix>/gemini-{latest}-<alias>` |
 
   An id of another shape, such as Bedrock's `us.anthropic.claude-opus-…`, is declared through `modelAliases`.
-- `modelAliases` — one-step name → selector mappings. AlignDev validates the chosen name, expands it once, then replaces a built-in alias with its pattern. An entry named like a built-in alias overrides it. A target with `{latest}` is a pattern: the placeholder stands for the version, and AlignDev selects the newest one in the model list it remembers (see [The AlignDev Memory](#the-aligndev-memory)). `"glm": "zai/glm-{latest}"` follows the newest `glm` model of Pi's `zai` provider; `"kimi": "moonshotai/kimi-k3.1-pro"` pins one model. A pattern holds `{latest}` once and matches a whole name, so a variant with a further suffix never matches. Antigravity's effort ending is the exception: a pattern matches an id with or without it and selects the id without it. A version is a major number, optionally followed by `.` or `-` and a minor number, each of one to three digits, so `{latest}` never stands for a date. The launch fails when several names share the newest version. A pattern takes no thinking suffix, and a `claude` profile rejects `{latest}`.
+- `modelAliases` — maps a name to a selector. AlignDev validates the chosen name, expands it once, then replaces a built-in alias with its pattern. An entry named like a built-in alias overrides it. A full native selector pins one model, as in `"kimi": "moonshotai/kimi-k3.1-pro"`. A selector with `{latest}` follows the newest version, as in `"glm": "zai/glm-{latest}"` for the `glm` models of Pi's `zai` provider: see [Model Patterns](#model-patterns).
 - `efforts` — a nonempty list replaces the harness's built-in effort levels and bounds what AlignDev passes. An empty list adds no override. Entries are free strings, so a level AlignDev does not know can be listed.
 - `defaultEffort` — pins new sessions to one of the accepted levels. Without it, a session launched without `--effort` runs at the native default, which AlignDev does not read.
 
@@ -243,9 +243,18 @@ A named reference never falls through: a `--profile`, project selection, recorde
 
 For example, `"configDir": null` forces native-default mode despite an inherited directory variable; `"configDir": "~/.claude-work"` deliberately selects custom Claude storage. On macOS, explicitly setting `CLAUDE_CONFIG_DIR` to the default path can select different Keychain credentials from leaving it unset. Such a string remains valid and is distinct from omission or null. Confirm the intended mode before changing an existing selection; AlignDev performs no settings rewrite, credential transfer or automatic login. A null reset changes only directory routing, not HOME, PATH or API-key precedence.
 
+### Model Patterns
+
+A selector that holds `{latest}` is a pattern, in a `modelAliases` target or a `models` entry. The placeholder stands for a version, and AlignDev selects the newest one in the model list it remembers (see [The AlignDev Memory](#the-aligndev-memory)). The built-in aliases of `codex`, `agy` and `modelFamilies` are patterns. A `claude` profile rejects `{latest}`: Claude Code resolves its model names itself.
+
+- A pattern holds `{latest}` once and matches a whole name, so a variant with a further suffix never matches. A pattern takes no thinking suffix.
+- A version is a major number, optionally followed by `.` or `-` and a minor number, each of one to three digits. `{latest}` therefore never stands for a date.
+- The launch fails when several names share the newest version.
+- Antigravity lists each model once per effort level. A pattern matches such an id with or without its effort ending, and selects the id without it.
+
 ### The AlignDev Memory
 
-`~/.alignfirst/aligndev.store.sqlite` is the AlignDev memory: a SQLite file shared by the AlignDev instances of the OS account, created at the first use. It holds paths and native CLI versions, so it stays local to the machine. Node.js reads it through `node:sqlite`, Bun through `bun:sqlite`.
+`~/.alignfirst/aligndev.store.sqlite` is the AlignDev memory: a SQLite file shared by the AlignDev instances of the OS account, created at the first use. It holds paths and native CLI versions, so it stays local to the machine.
 
 The memory keeps the model list of each harness and profile, so a `{latest}` pattern needs no catalog command at each launch. A launch reads the native CLI version (`codex --version`, `pi --version` or `agy --version`), then resolves from the remembered list. The catalog command runs again when the list is missing, on the first use of a day, after an upgrade of the native CLI or a change of its native directory, and when the list cannot resolve the pattern. When the command fails, the list of the same directory still serves.
 

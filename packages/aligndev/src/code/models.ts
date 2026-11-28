@@ -16,7 +16,7 @@ export const CODEX_DEFAULT_MODELS = ["astra", "sol", "terra", "luna"] as const;
 // The version placeholder of a model pattern.
 export const LATEST = "{latest}";
 export const NO_DECLARED_MODEL =
-  "the profile declares no Pi model; declare modelFamilies, modelAliases or models";
+  "the profile declares no model. Declare modelFamilies, modelAliases or models in the profile";
 
 const AGY_MODEL_ALIASES = ["carbon", "neon", "hydrogen", "flash"] as const;
 // Each family lists its aliases from the biggest model to the smallest.
@@ -30,19 +30,19 @@ export const MODEL_FAMILY_NAMES: readonly string[] = Object.keys(MODEL_FAMILIES)
 const MODEL_PATTERN_HELP: Readonly<Record<CatalogAgent, ModelPatternHelp>> = {
   codex: {
     label: "Codex",
-    remedy: "update the Codex CLI, or pin a full slug in the profile's `modelAliases`.",
+    remedy: "Update the Codex CLI, or pin a full slug in the profile's `modelAliases`.",
   },
   pi: {
     label: "Pi",
     remedy:
-      "check the pattern against `pi --list-models` (a Pi pattern is `provider/model`), update " +
+      "Check the pattern against `pi --list-models` (a Pi pattern is `provider/model`), update " +
       "Pi or its model catalogs (`pi update`), check the provider credentials, or pin a full " +
       "`provider/model` selector in the profile's `modelAliases`.",
   },
   agy: {
     label: "Antigravity",
     remedy:
-      "check the pattern against `agy models`, update Antigravity, check its sign-in, or pin a " +
+      "Check the pattern against `agy models`, update Antigravity, check its sign-in, or pin a " +
       "full model name in the profile's `modelAliases`.",
   },
 };
@@ -425,18 +425,17 @@ function modelPatternError(agent: CatalogAgent, pattern: string): string {
   const { label, remedy } = MODEL_PATTERN_HELP[agent];
   return (
     `Unable to resolve ${label} model pattern ${JSON.stringify(pattern)} from its model catalog. ` +
-    `To fix it, ${remedy}`
+    remedy
   );
 }
 
 // The remedy for a selector that the catalog of its harness resolves.
-export function modelPatternHint(
+export function modelPatternRemedy(
   agent: CodingAgent,
   selector: string | undefined,
 ): string | undefined {
   if (selector === undefined || !isCatalogAgent(agent) || !selector.includes(LATEST)) return;
-  const { label, remedy } = MODEL_PATTERN_HELP[agent];
-  return `For the ${label} model pattern ${JSON.stringify(selector)}, ${remedy}`;
+  return MODEL_PATTERN_HELP[agent].remedy;
 }
 
 export function expandModelAlias(

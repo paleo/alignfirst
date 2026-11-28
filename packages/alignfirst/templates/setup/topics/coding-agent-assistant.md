@@ -55,15 +55,16 @@ Profiles can supply literal non-secret `env` values and remove inherited variabl
 
 Before login, reproduce the agent's effective environment and cwd: apply `unset`, `env` and `configDir`, including HOME, PATH and credential routing. `aligndev code --help` prints the login command of the selected profile, and so does a run that ends with `auth_required`. Both omit the profile's `env` values. A bare login in another shell may select another account.
 
-Codex's `astra`, `sol`, `terra` and `luna`, and Antigravity's `carbon`, `neon`, `hydrogen` and `flash`, select the newest version of their model in the model list that AlignDev remembers (see "The AlignDev Memory" in the `aligndev` README). Both lists go from the biggest model to the smallest.
+Every profile accepts a closed list of model names, which the assistant sees in order, biggest model first. A `claude`, `codex` or `agy` profile accepts the built-in aliases of its harness without any declaration. The `aligndev` README lists them under `models`, and documents `modelFamilies`, `modelAliases` and the `{latest}` placeholder.
 
-A Pi profile accepts only the models it declares. Ask the developer which providers Pi uses, and read `pi --list-models`. For the `gpt`, `claude` and `gemini` families, write `modelFamilies` with the provider as value, as the first column of `pi --list-models` prints it: `{ "gpt": "openai" }` declares `astra`, `sol`, `terra` and `luna`. Check the listed IDs against the family patterns of the `aligndev` README. For every other model, including a family model of another shape, write one `modelAliases` entry, with `{latest}` in place of the version: `glm` → `zai/glm-{latest}`. Write an ID without a version number in full. A profile that declares nothing runs Pi's own default and accepts no `--model`.
+A Pi profile accepts only the models it declares. Without a declaration, it runs Pi's own default and rejects `--model` and `defaultModel`. Ask the developer which providers Pi uses, and read `pi --list-models`. Then declare each model:
 
-A profile's `modelAliases` maps a name to a native selector. `{latest}` in a target selects the newest version in the remembered model list. A full model ID pins a variant: `sol` → `openai/gpt-6.2-sol-healthcare`. Targets are illustrative and depend on the native catalog. One alias expands after validating the chosen name, without recursion.
+- A `gpt`, `claude` or `gemini` model whose ID follows the family pattern of the README: map the family to its provider in `modelFamilies`, as the first column of `pi --list-models` prints it. `{ "gpt": "openai" }` declares `astra`, `sol`, `terra` and `luna`.
+- Any other model: one `modelAliases` entry, with `{latest}` in place of the version, as in `"glm": "zai/glm-{latest}"`. Write an ID without a version number in full.
 
-Without a nonempty profile `models`, a profile accepts its built-in names plus configured aliases. A nonempty list replaces the accepted names. The assistant sees them in that order, so a profile that mixes families or adds names declares `models`, biggest model first. A native Antigravity name needs a declaration too: list it in `models`, or target it from `modelAliases`. Antigravity's catalog depends on the account: `agy models` lists it. New sessions use the profile's `defaultModel`, else the native default.
+To add a native name to a `codex` or `agy` profile, target it from `modelAliases` or list it in `models`. Antigravity's catalog depends on the account: `agy models` lists it. A profile that mixes families or adds names declares `models`, biggest model first: a nonempty list replaces the accepted names.
 
-Check a declaration with `aligndev code models --refresh --profile <name>`: it looks the model list up and shows the model each name selects.
+Check a declaration with `aligndev code models --refresh --profile <name>`: it looks the model list up and shows the model each name selects. New sessions use the profile's `defaultModel`, else the native default.
 
 A nonempty profile `efforts` replaces the harness's built-in effort levels and bounds what `--effort` accepts. New sessions use the profile's `defaultEffort`, which must be one of the accepted levels, else the native default. A resume keeps its recorded effort. Under Pi, an effort overrides a thinking suffix of the model selector.
 

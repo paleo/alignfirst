@@ -1,13 +1,13 @@
 import type { CodeConfig } from "../config.js";
 import { renderAuthenticationFailure } from "./login.js";
-import { modelPatternHint, ModelSignInRequiredError, PiStartupDialogError } from "./models.js";
+import { modelPatternRemedy, ModelSignInRequiredError, PiStartupDialogError } from "./models.js";
 import { nativeContext } from "./native-context.js";
 
 const PI_STARTUP_DIALOG_ERROR =
-  "A Pi extension opened a dialog at startup, which Pi's RPC mode cannot answer, so the model " +
-  "pattern cannot be resolved from Pi's catalog. To fix it, pin a full `provider/model` selector " +
-  "in the profile's `modelAliases`, or make the extension skip the dialog outside the terminal " +
-  'UI (`ctx.mode !== "tui"`).';
+  "A Pi extension opened a dialog at startup, which cannot be answered in RPC mode, so Pi's model " +
+  "catalog could not be read. Pin a full `provider/model` selector in the profile's " +
+  "`modelAliases`, or make the extension skip the dialog outside the terminal UI " +
+  '(`ctx.mode !== "tui"`).';
 
 export interface ModelFailure {
   message: string;
@@ -35,11 +35,13 @@ function modelResolutionError(
 ): string {
   if (error instanceof PiStartupDialogError)
     return `${PI_STARTUP_DIALOG_ERROR} ${nativeContext(code)}.`;
-  const hint = modelPatternHint(code.harness, selector);
+  const remedy = modelPatternRemedy(code.harness, selector);
+  if (remedy !== undefined) {
+    const pattern = JSON.stringify(selector);
+    return `Could not resolve the model pattern ${pattern} of ${nativeContext(code)}. ${remedy}`;
+  }
   return (
-    `Could not resolve the ${code.harness} model; check --model, ` +
-    "profile.models/modelAliases/modelFamilies and the agent installation. " +
-    `${nativeContext(code)}.` +
-    (hint !== undefined ? ` ${hint}` : "")
+    `Could not resolve the ${code.harness} model; check --model, profile.models/modelAliases ` +
+    `and the agent installation. ${nativeContext(code)}.`
   );
 }

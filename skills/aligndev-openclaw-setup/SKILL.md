@@ -6,7 +6,7 @@ license: CC0 1.0
 compatibility: Requires Node.js, Git, curl and ripgrep.
 metadata:
   author: Paleo
-  version: "0.3.4"
+  version: "0.3.5"
   repository: https://github.com/paleo/alignfirst
 ---
 

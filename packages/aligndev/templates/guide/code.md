@@ -208,8 +208,6 @@ Don't reconstruct what happened: no re-running the agent, no `git` archaeology t
 | `--result` | `status` only. Append a terminal run's final Result when present, without transcript output. Running runs show metadata only. No numeric final-text byte cap. |
 {{/codingAgent}}
 
-The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`.
-
 {{#openclaw}}
 `{{ALIGNDEV}} code status` seals a `running` record only when its `machineId` matches this installation and its pid is conclusively gone or reused. Foreign, legacy and uncertain records stay `running`; a sealed run reports `status: failed`, `exitReason: terminated`. `{{ALIGNDEV}} code quota` works without a `.plans` directory and does not start a coding session. Its output belongs to the selected native quota CLI's account; account pairing with the coding child is not verified.
 {{/openclaw}}
@@ -218,6 +216,8 @@ The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`.
 {{/codingAgent}}
 
 ### Profiles and resume
+
+The current coding agent is `{{AGENT}}`, profile `{{PROFILE}}`.
 
 {{PROFILES}}
 

@@ -59,7 +59,9 @@ const EXIT_AUTH_REQUIRED = 2;
 
 // A session recorded without a profile resumes on Pi's built-ins, which declare nothing.
 const NO_DECLARED_RESUME_MODEL =
-  "the selected profile declares no Pi model; pass --profile with a pi profile that declares models";
+  "the selected profile declares no model. Pass --profile with a pi profile that declares models.";
+
+const PI_EFFORT_NOTE = "Under Pi, --effort overrides a thinking suffix of a declared selector.";
 
 const SESSION_OPTIONS = {
   protocol: { type: "string" },
@@ -519,7 +521,7 @@ export function validateSessionArgs(
     if (models.length === 0) {
       return isNew
         ? `Error: --model is not accepted: ${NO_DECLARED_MODEL}, or omit --model.`
-        : `Error: --model is not accepted: ${NO_DECLARED_RESUME_MODEL}.`;
+        : `Error: --model is not accepted: ${NO_DECLARED_RESUME_MODEL}`;
     }
     if (!models.includes(args.model)) {
       return `Error: --model must be one of: ${models.join(", ")}.`;
@@ -856,7 +858,7 @@ function selectModel(
   if (model === undefined) return;
   const models = resolveModels(code);
   if (models.length === 0) {
-    throw new Error(`Error: retained session model is not accepted: ${NO_DECLARED_RESUME_MODEL}.`);
+    throw new Error(`Error: retained session model is not accepted: ${NO_DECLARED_RESUME_MODEL}`);
   }
   if (model.trim() === "" || !models.includes(model)) {
     throw new Error(
@@ -1013,8 +1015,7 @@ function renderHelp(
 ): string {
   const { harness: agent, profile, defaultModel, defaultEffort } = code;
   const { aligndev, alignfirst } = forms;
-  const modelPolicy =
-    models.length === 0 ? "None: the profile declares no model" : `One of ${models.join(", ")}`;
+  const modelPolicy = describeModelPolicy(models);
   const requires = `Requires: the AlignFirst CLI through \`${forms.alignfirst}\`, for the project layout, side\ntickets and the delegated protocols.`;
   return `aligndev code — run a coding agent through AlignFirst protocols.
 
@@ -1037,7 +1038,7 @@ Commands:
                         contextCompacted. Does not start an agent.
   quota                 Show native account limits via the profile's quota source.
   models                Show the accepted model names of each enabled profile, or of --profile,
-                        and the model each one selects in the remembered model list. --refresh
+                        and the model each name selects in the remembered model list. --refresh
                         looks the lists up again first.
 
 Options (status):
@@ -1116,9 +1117,10 @@ Config (~/.alignfirst/aligndev.settings.json):
                         resume without a recorded profile uses the built-ins of the assistant's
                         harness unless a named selection replaces them.
   Model default         ${defaultModel ?? "native default"} (new only). Resume retains and validates its model.
-                        One configured alias expands. {latest} selects the newest version in the
-                        model list AlignDev remembers, refreshed daily, after an upgrade of the
-                        native CLI or a change of its directory, and by \`code models --refresh\`.
+                        A modelAliases name expands once.
+  {latest}              In a model selector, the newest version in the model list AlignDev
+                        remembers. The list is refreshed daily, after an upgrade of the native CLI
+                        or a change of its directory, and by \`code models --refresh\`.
   Effort default        ${defaultEffort ?? "native default"} (new only). Resume retains and validates its effort.
 
 Native configuration: ${describeNativeStorage(code)}.
@@ -1133,8 +1135,7 @@ strings; no automatic settings rewrite, login or credential transfer occurs. Ope
 require null/string selections for every coding profile and enabled explicit quota source.
 
 Selected-agent permissions: ${permissionMode(agent)}
-The project's companion directory is prepared before launch; pi uses ordinary OS access.
-${modelBehavior(agent)}
+The project's companion directory is prepared before launch; pi uses ordinary OS access.${agent === "pi" ? `\n${PI_EFFORT_NOTE}` : ""}
 
 ${aligndev} code runs a coding agent in the foreground and blocks until it finishes. The transcript
 is durable in a session file under .plans/ or its companion; stdout also streams it unless --quiet.
@@ -1144,6 +1145,12 @@ retrieve status --result with the exact session-file path or a unique per-run --
 
 See the \`code\` topic of \`${aligndev} guide\` for the full delegation guide.
 `;
+}
+
+function describeModelPolicy(models: readonly string[]): string {
+  if (models.length === 0) return "Not accepted: the profile declares no model";
+  if (models.length === 1) return `Only ${models[0]}`;
+  return `One of ${models.join(", ")}, biggest first`;
 }
 
 function permissionMode(agent: CodingAgent): string {
@@ -1156,18 +1163,5 @@ function permissionMode(agent: CodingAgent): string {
       return "Ordinary OS permissions; profile.skipPermissions has no effect. Saved project trust is honored.";
     case "agy":
       return "Antigravity's auto mode with its terminal sandbox (dangerous opt-out: --dangerously-skip-permissions)";
-  }
-}
-
-function modelBehavior(agent: CodingAgent): string {
-  switch (agent) {
-    case "claude":
-      return "Claude model values pass through unchanged.";
-    case "codex":
-      return "Codex's built-in aliases are astra, sol, terra and luna, from the biggest model to the smallest.";
-    case "pi":
-      return "Pi accepts only the names its profile declares through modelFamilies, modelAliases or models. --effort overrides a thinking suffix of a declared selector.";
-    case "agy":
-      return "Antigravity's built-in aliases are carbon, neon, hydrogen and flash, from the biggest model to the smallest.";
   }
 }
