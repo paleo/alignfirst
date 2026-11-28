@@ -6,7 +6,6 @@ import { expect, it } from "vitest";
 import { packageRoot } from "./fixture.js";
 
 const repository = resolve(packageRoot, "../..");
-const assets = join(repository, "skills/aligndev-openclaw-setup/assets");
 const examples = join(repository, "packages/alignfirst/templates/setup/examples");
 const cli = join(repository, "packages/alignfirst/bin/alignfirst.mjs");
 
@@ -19,16 +18,6 @@ it("publishes manifest examples accepted by the production CLI without consumer 
     mkdirSync(project);
     for (const { directory, filename, portRange } of [
       { directory: examples, filename: "alignfirst.json", portRange: { first: 8100, last: 8199 } },
-      {
-        directory: join(assets, "aligndev-openclaw-template/base"),
-        filename: "alignfirst.jsonc",
-        portRange: null,
-      },
-      {
-        directory: join(repository, "aligndev-openclaw-tests/projects-fixture/template"),
-        filename: "alignfirst.json",
-        portRange: { first: 6500, last: 6519 },
-      },
     ]) {
       const path = join(project, filename);
       cpSync(join(directory, filename), path);

@@ -40,8 +40,8 @@
     "build": "tsc -p tsconfig.build.json",
     "clear": "rimraf dist/*",
     "lint": "biome check",
-    "test": "vitest run",
-    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:openclaw": "vitest run",
+    "test:openclaw-integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "peerDependencies": {

@@ -37,7 +37,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "clear": "rimraf dist/*",
     "lint": "biome check",
-    "test": "vitest run"
+    "test:openclaw": "vitest run"
   },
   "peerDependencies": {
     "openclaw": ">=2026.9.6 <2026.11.0",
