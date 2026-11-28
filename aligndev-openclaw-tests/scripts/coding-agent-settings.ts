@@ -1,5 +1,6 @@
 export const MOCK_AGENT_PROFILE = "mock-agent";
-export const PI_CONTRACT_MODEL = "openai/gpt-6.1-terra";
+// The mocked Pi child accepts any fixed selector, so the fixture names no real model.
+export const PI_CONTRACT_MODEL = "mock/contract-model";
 
 export type CodingAgent = "claude" | "codex" | "pi";
 
@@ -32,7 +33,7 @@ export function buildCodingAgentSettings(env: CodingAgentEnvironment): MockAgent
   };
 }
 
-// A Pi profile accepts only the models it declares: without a list, it declares the contract model.
+// A Pi profile accepts only the models it declares: without a list, it declares the fixture model.
 function declaredModels(agent: CodingAgent, list: string): string[] {
   const models = list
     .split(",")
