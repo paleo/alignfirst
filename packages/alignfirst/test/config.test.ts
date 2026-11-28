@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -99,6 +107,34 @@ describe("config command", () => {
     });
     expect(report).not.toHaveProperty("cli");
     expect(readdirSync(cwd)).toEqual(before);
+  });
+
+  it("accepts the published manifest example", async () => {
+    const root = temp();
+    const home = join(root, "home");
+    const project = join(root, "project");
+    mkdirSync(home);
+    mkdirSync(project);
+    const path = join(project, "alignfirst.json");
+    cpSync(new URL("../templates/setup/examples/alignfirst.json", import.meta.url), path);
+    const result = await runMain(["config", "--json"], { cwd: project, home });
+    expect(result.code, result.stderr).toBe(0);
+    const report = JSON.parse(result.stdout);
+    expect(report).toMatchObject({
+      config: { schemaVersion: 1 },
+      workspace: {
+        location: { path },
+        schemaVersion: 1,
+        portRange: { first: 8100, last: 8199 },
+        hasDevServer: true,
+      },
+    });
+    expect(report.config.assistantInstructionsFile).toBeUndefined();
+    expect(report.config.devServer.maxConcurrentDevServers).toEqual({
+      env: "PROJECT_DEV_LIMIT",
+      default: 5,
+    });
+    expect(report.config.devServer.servers[0].error).toEqual({ preset: "node" });
   });
 
   it("reports authored recipes from the worktree root without executing commands or reading environment", async () => {
@@ -250,15 +286,6 @@ describe("config command", () => {
     expect(readdirSync(join(home, ".alignfirst", "companions"))).toEqual(["registry.json"]);
   });
 
-  it.each(["alignfirst"])("reports invalid %s as a CLI error", async (family) => {
-    const cwd = temp();
-    writeFileSync(join(cwd, `${family}.json`), "{");
-    const result = await runMain(["config", "--json"], { cwd });
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain(join(cwd, `${family}.json`));
-    expect(result.stdout).toBe("");
-  });
-
   it("reports each directory of a batch in order, isolating a failed one", async () => {
     const root = temp();
     configureGit(root);
@@ -281,14 +308,6 @@ describe("config command", () => {
     const cwd = temp();
     const result = await runMain(["config", cwd], { cwd });
     expect(result.code).toBe(1);
-  });
-
-  it("reports invalid companion settings", async () => {
-    const home = temp();
-    writeRegistry(home, { projects: { "~/app": { aligndev: { profile: false } } } });
-    const result = await runMain(["config", "--json"], { cwd: home, home });
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain("aligndev.profile");
   });
 });
 

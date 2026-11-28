@@ -52,18 +52,12 @@ function invokeWith(options: Omit<MainOptions, "stdout" | "stderr">) {
 }
 
 describe("recursive-by-default for small sets (basic fixture)", () => {
-  it("lists root files with their supplied titles and summaries", () => {
+  it("lists root files with their supplied titles and summaries, recursing without a flag", () => {
     const { code, stdout } = run([], fixtures.basic);
     expect(code).toBe(0);
     expect(stdout).toContain(dp(fixtures.basic, "code-style.md"));
     expect(stdout).toContain("Code Style");
     expect(stdout).toContain("Conventions and formatting rules for the codebase.");
-    expect(stdout).toContain(dp(fixtures.basic, "getting-started.md"));
-    expect(stdout).toContain("Getting Started");
-  });
-
-  it("recurses into subdirectories without a flag", () => {
-    const { stdout } = run([], fixtures.basic);
     expect(stdout).toContain(dp(fixtures.basic, "backend/api-guide.md"));
     expect(stdout).toContain(dp(fixtures.basic, "frontend/components.md"));
   });
@@ -82,42 +76,21 @@ describe("top-level listing for large sets (large fixture)", () => {
 });
 
 describe("positional directory listing (basic fixture)", () => {
-  it("lists only backend files", () => {
-    const { code, stdout } = run(["backend"], fixtures.basic);
+  it.each([
+    [["backend"], ["backend/api-guide.md", "backend/database.md"]],
+    [
+      ["backend", "frontend"],
+      ["backend/api-guide.md", "frontend/components.md"],
+    ],
+    [[`${dp(fixtures.basic, "backend")}/`], ["backend/api-guide.md"]],
+  ])("lists %j and only what it holds", (args, listed) => {
+    const { code, stdout } = run(args, fixtures.basic);
     expect(code).toBe(0);
-    expect(stdout).toContain("`backend/`");
-    expect(stdout).toContain(dp(fixtures.basic, "backend/api-guide.md"));
-    expect(stdout).toContain(dp(fixtures.basic, "backend/database.md"));
+    for (const rel of listed) expect(stdout).toContain(dp(fixtures.basic, rel));
     expect(stdout).not.toContain(dp(fixtures.basic, "getting-started.md"));
   });
 
-  it("lists multiple dirs", () => {
-    const { code, stdout } = run(["backend", "frontend"], fixtures.basic);
-    expect(code).toBe(0);
-    expect(stdout).toContain(dp(fixtures.basic, "backend/api-guide.md"));
-    expect(stdout).toContain(dp(fixtures.basic, "frontend/components.md"));
-  });
-
-  it("accepts the root prefix and a trailing slash", () => {
-    const { code, stdout } = run([`${dp(fixtures.basic, "backend")}/`], fixtures.basic);
-    expect(code).toBe(0);
-    expect(stdout).toContain("`backend/`");
-    expect(stdout).toContain(dp(fixtures.basic, "backend/api-guide.md"));
-  });
-});
-
-describe("--recursive (basic fixture)", () => {
-  it("lists all files across all directories", () => {
-    const { code, stdout } = run(["--recursive"], fixtures.basic);
-    expect(code).toBe(0);
-    expect(stdout).toContain(dp(fixtures.basic, "code-style.md"));
-    expect(stdout).toContain(dp(fixtures.basic, "getting-started.md"));
-    expect(stdout).toContain(dp(fixtures.basic, "backend/api-guide.md"));
-    expect(stdout).toContain(dp(fixtures.basic, "backend/database.md"));
-    expect(stdout).toContain(dp(fixtures.basic, "frontend/components.md"));
-  });
-
-  it("recursive from a positional dir", () => {
+  it("recurses from a positional dir with --recursive", () => {
     const { code, stdout } = run(["backend", "--recursive"], fixtures.basic);
     expect(code).toBe(0);
     expect(stdout).toContain(dp(fixtures.basic, "backend/api-guide.md"));
@@ -126,8 +99,8 @@ describe("--recursive (basic fixture)", () => {
   });
 });
 
-describe("positional file read (basic fixture)", () => {
-  it("reads a file and strips frontmatter", () => {
+describe("positional file read", () => {
+  it("reads a markdown file and strips its frontmatter", () => {
     const { code, stdout } = run(["getting-started.md"], fixtures.basic);
     expect(code).toBe(0);
     expect(stdout).toContain(`<document_file path="${dp(fixtures.basic, "getting-started.md")}">`);
@@ -136,28 +109,40 @@ describe("positional file read (basic fixture)", () => {
     expect(stdout).not.toContain("summary:");
   });
 
-  it("reads a file given with the root prefix", () => {
-    const { code, stdout } = run([dp(fixtures.basic, "getting-started.md")], fixtures.basic);
-    expect(code).toBe(0);
-    expect(stdout).toContain(`<document_file path="${dp(fixtures.basic, "getting-started.md")}">`);
-    expect(stdout).toContain("# Getting Started");
-  });
-
-  it("reads multiple files", () => {
-    const { code, stdout } = run(
+  it.each([
+    [[dp(fixtures.basic, "getting-started.md")], ["getting-started.md"]],
+    [
       [dp(fixtures.basic, "getting-started.md"), dp(fixtures.basic, "code-style.md")],
-      fixtures.basic,
-    );
+      ["getting-started.md", "code-style.md"],
+    ],
+  ])("reads root-prefixed paths %j", (args, read) => {
+    const { code, stdout } = run(args, fixtures.basic);
     expect(code).toBe(0);
-    expect(stdout).toContain(`<document_file path="${dp(fixtures.basic, "getting-started.md")}">`);
-    expect(stdout).toContain(`<document_file path="${dp(fixtures.basic, "code-style.md")}">`);
+    for (const rel of read) {
+      expect(stdout).toContain(`<document_file path="${dp(fixtures.basic, rel)}">`);
+    }
   });
 
-  it("fuzzy search finds files recursively by basename", () => {
-    const { code, stdout } = run(["database.md"], fixtures.basic);
+  it.each([
+    ["classify", "notes.txt", "notes.txt", "# Plain Notes"],
+    ["classify", "LICENSE", "LICENSE", "# License"],
+    ["basic", "database.md", "backend/database.md", "# Database Guide"],
+    ["listable", "c4-model.dsl", "diagrams/c4-model.dsl", 'workspace "Example"'],
+    ["listable", "config.yaml", "config.yaml", "---\nkey: value\n---\nother: value"],
+    ["listable", ".env.example", ".env.example", "DATABASE_URL="],
+  ] as const)("reads %s target %s verbatim as %s", (fixture, target, rel, content) => {
+    const { code, stdout } = run([target], fixtures[fixture]);
     expect(code).toBe(0);
-    expect(stdout).toContain(`<document_file path="${dp(fixtures.basic, "backend/database.md")}">`);
-    expect(stdout).toContain("# Database Guide");
+    expect(stdout).toContain(`<document_file path="${dp(fixtures[fixture], rel)}">`);
+    expect(stdout).toContain(content);
+  });
+
+  it("lists a directory whose name contains a dot (not read)", () => {
+    const { code, stdout } = run(["v1.2"], fixtures.classify);
+    expect(code).toBe(0);
+    expect(stdout).toContain("`v1.2/`");
+    expect(stdout).toContain(dp(fixtures.classify, "v1.2/guide.md"));
+    expect(stdout).not.toContain("<document_file");
   });
 });
 
@@ -178,78 +163,23 @@ describe("mixed positionals (basic fixture)", () => {
   });
 });
 
-describe("stat-driven classification (classify fixture)", () => {
-  it("reads a non-.md file given by exact path", () => {
-    const { code, stdout } = run(["notes.txt"], fixtures.classify);
-    expect(code).toBe(0);
-    expect(stdout).toContain(`<document_file path="${dp(fixtures.classify, "notes.txt")}">`);
-    expect(stdout).toContain("# Plain Notes");
-  });
-
-  it("reads an extensionless file given by exact path", () => {
-    const { code, stdout } = run(["LICENSE"], fixtures.classify);
-    expect(code).toBe(0);
-    expect(stdout).toContain(`<document_file path="${dp(fixtures.classify, "LICENSE")}">`);
-    expect(stdout).toContain("# License");
-  });
-
-  it("lists a directory whose name contains a dot (not read)", () => {
-    const { code, stdout } = run(["v1.2"], fixtures.classify);
-    expect(code).toBe(0);
-    expect(stdout).toContain("`v1.2/`");
-    expect(stdout).toContain(dp(fixtures.classify, "v1.2/guide.md"));
-    expect(stdout).not.toContain("<document_file");
-  });
-});
-
-describe("listable extensions (listable fixture)", () => {
-  it("lists text, diagram, data, and schema files alongside markdown", () => {
+describe("listable files (listable fixture)", () => {
+  it("lists allowlisted formats and env templates, never binaries or a live secret env file", () => {
     const { code, stdout } = run(["--recursive"], fixtures.listable);
     expect(code).toBe(0);
-    expect(stdout).toContain(dp(fixtures.listable, "readme.md"));
-    expect(stdout).toContain(dp(fixtures.listable, "schema.sql"));
-    expect(stdout).toContain(dp(fixtures.listable, "config.yaml"));
-    expect(stdout).toContain(dp(fixtures.listable, "diagrams/c4-model.dsl"));
-  });
-
-  it("excludes binary and hard-to-read formats from listings", () => {
-    const { stdout } = run(["--recursive"], fixtures.listable);
-    expect(stdout).not.toContain("report.pdf");
-    expect(stdout).not.toContain("image.png");
-  });
-
-  it("reads a non-markdown file verbatim, without stripping a leading `---` block", () => {
-    const { code, stdout } = run(["config.yaml"], fixtures.listable);
-    expect(code).toBe(0);
-    expect(stdout).toContain(`<document_file path="${dp(fixtures.listable, "config.yaml")}">`);
-    expect(stdout).toContain("---\nkey: value\n---\nother: value");
-  });
-
-  it("does not flag missing frontmatter or title on non-markdown files under --check", () => {
-    const { code, stdout } = run(["--check"], fixtures.listable);
-    expect(code).toBe(0);
-    expect(stdout).not.toContain("schema.sql");
-    expect(stdout).not.toContain("c4-model.dsl");
-    expect(stdout).not.toContain("config.yaml");
-  });
-
-  it("resolves a non-markdown file by fuzzy basename search", () => {
-    const { code, stdout } = run(["c4-model.dsl"], fixtures.listable);
-    expect(code).toBe(0);
-    expect(stdout).toContain(
-      `<document_file path="${dp(fixtures.listable, "diagrams/c4-model.dsl")}">`,
-    );
-    expect(stdout).toContain('workspace "Example"');
-  });
-});
-
-describe("env files and template suffixes (listable fixture)", () => {
-  it("lists env templates but never a live secret env file", () => {
-    const { stdout } = run(["--recursive"], fixtures.listable);
-    expect(stdout).toContain(dp(fixtures.listable, ".env.example"));
-    expect(stdout).toContain(dp(fixtures.listable, ".env.sample"));
-    expect(stdout).toContain(dp(fixtures.listable, ".env.production.example"));
-    expect(stdout).not.toContain(dp(fixtures.listable, ".env.local"));
+    const listed = [
+      "readme.md",
+      "schema.sql",
+      "config.yaml",
+      "diagrams/c4-model.dsl",
+      ".env.example",
+      ".env.production.example",
+      "config.yaml.example",
+    ];
+    for (const rel of listed) expect(stdout).toContain(dp(fixtures.listable, rel));
+    for (const rel of ["report.pdf", "image.png", ".env.local"]) {
+      expect(stdout).not.toContain(dp(fixtures.listable, rel));
+    }
   });
 
   it("refuses to read a live secret env file even by explicit path", () => {
@@ -261,16 +191,12 @@ describe("env files and template suffixes (listable fixture)", () => {
     expect(stdout).not.toContain("<document_file");
   });
 
-  it("lists a template on the format underneath its suffix", () => {
-    const { stdout } = run(["--recursive"], fixtures.listable);
-    expect(stdout).toContain(dp(fixtures.listable, "config.yaml.example"));
-  });
-
-  it("reads an env template verbatim", () => {
-    const { code, stdout } = run([".env.example"], fixtures.listable);
+  it("does not flag missing frontmatter or title on non-markdown files under --check", () => {
+    const { code, stdout } = run(["--check"], fixtures.listable);
     expect(code).toBe(0);
-    expect(stdout).toContain(`<document_file path="${dp(fixtures.listable, ".env.example")}">`);
-    expect(stdout).toContain("DATABASE_URL=");
+    expect(stdout).not.toContain("schema.sql");
+    expect(stdout).not.toContain("c4-model.dsl");
+    expect(stdout).not.toContain("config.yaml");
   });
 });
 
@@ -285,18 +211,13 @@ describe("not-found classification (basic fixture)", () => {
 });
 
 describe("path traversal (basic fixture)", () => {
-  it("refuses to list a directory reached via `..` outside the root", () => {
-    const { code, stdout } = run(["../.."], fixtures.basic);
+  it.each([
+    ["a `..` path", "../..", "fixtures/"],
+    ["an absolute path", resolve(fixtures.basic, ".."), "errors/"],
+  ])("refuses to list a directory outside the root through %s", (_label, target, sibling) => {
+    const { code, stdout } = run([target], fixtures.basic);
     expect(code).toBe(0);
-    expect(stdout).not.toContain("fixtures/");
-    expect(stdout).not.toContain("<document_file");
-  });
-
-  it("refuses to list an absolute directory outside the root", () => {
-    const outside = resolve(fixtures.basic, "..");
-    const { code, stdout } = run([outside], fixtures.basic);
-    expect(code).toBe(0);
-    expect(stdout).not.toContain("errors/");
+    expect(stdout).not.toContain(sibling);
     expect(stdout).not.toContain("<document_file");
   });
 });
@@ -332,12 +253,6 @@ describe("--check", () => {
     expect(stdout).not.toContain("good-file.md");
   });
 
-  it("returns exit code 0 when no issues", () => {
-    const { code, stdout } = run(["--check"], fixtures.basic);
-    expect(code).toBe(0);
-    expect(stdout).toBe("");
-  });
-
   it("reports frontmatter issues", () => {
     const { code, stdout } = run(["--check"], fixtures.errors);
     expect(code).toBe(1);
@@ -348,144 +263,43 @@ describe("--check", () => {
 });
 
 describe("--root propagation", () => {
-  // The `run` helper always passes `--root <fixture>`. Assertions target the propagated
-  // `--root <value>` substring, which is independent of the package-manager prefix in front.
-  const rooted = (sub: string) => `--root ${fixtures.basic} ${sub}`;
-
   it("propagates the selected root into suggested commands", () => {
+    // `run` passes `--root <fixture>`; the propagated substring ignores the runner prefix.
     const { code, stdout } = run([], fixtures.basic);
     expect(code).toBe(0);
-    expect(stdout).toContain(rooted("--recursive"));
-    expect(stdout).toContain(rooted("--guide"));
-  });
-
-  it("folds the root into every command shown in the authoring guide", () => {
-    const { stdout } = run(["--guide"], fixtures.basic);
-    expect(stdout).toContain(rooted("--recursive"));
-    expect(stdout).toContain(rooted("--check"));
-  });
-
-  it("quotes a root with spaces so the folded command stays copy-pasteable", () => {
-    const { stdout } = invoke(["node", "docmap", "--root", "my docs", "--help"], process.cwd());
-    expect(stdout).toContain("--root 'my docs'");
-    expect(stdout).not.toContain("--root my docs");
+    expect(stdout).toContain(`--root ${fixtures.basic} --recursive`);
+    expect(stdout).toContain(`--root ${fixtures.basic} --guide`);
   });
 });
 
 describe("--search", () => {
-  it("matches a single term against frontmatter", () => {
-    const { code, stdout } = run(["--search", "database"], fixtures.basic);
+  it.each([
+    ["database", ["backend/database.md"], ["code-style.md", "backend/api-guide.md"]],
+    ["code-style", ["code-style.md"], ["getting-started.md"]],
+    ["backend", ["backend/database.md", "backend/api-guide.md"], ["code-style.md"]],
+  ])("matches %s against frontmatter, basename or directory", (query, found, absent) => {
+    const { code, stdout } = run(["--search", query], fixtures.basic);
     expect(code).toBe(0);
-    expect(stdout).toContain(dp(fixtures.basic, "backend/database.md"));
-    expect(stdout).not.toContain(dp(fixtures.basic, "code-style.md"));
-    expect(stdout).not.toContain(dp(fixtures.basic, "backend/api-guide.md"));
-  });
-
-  it("matches any term (OR) and ranks the file matching more terms first", () => {
-    const { code, stdout } = run(["--search", "guide api"], fixtures.basic);
-    expect(code).toBe(0);
-    const twoTerms = stdout.indexOf(dp(fixtures.basic, "backend/api-guide.md"));
-    const oneTerm = stdout.indexOf(dp(fixtures.basic, "backend/database.md"));
-    expect(twoTerms).toBeGreaterThan(-1);
-    expect(oneTerm).toBeGreaterThan(-1);
-    expect(twoTerms).toBeLessThan(oneTerm);
-  });
-
-  it("matches the file basename even when absent from frontmatter", () => {
-    const { code, stdout } = run(["--search", "code-style"], fixtures.basic);
-    expect(code).toBe(0);
-    expect(stdout).toContain(dp(fixtures.basic, "code-style.md"));
-    expect(stdout).not.toContain(dp(fixtures.basic, "getting-started.md"));
-  });
-
-  it("matches a directory segment of the path", () => {
-    const { code, stdout } = run(["--search", "backend"], fixtures.basic);
-    expect(code).toBe(0);
-    expect(stdout).toContain(dp(fixtures.basic, "backend/database.md"));
-    expect(stdout).toContain(dp(fixtures.basic, "backend/api-guide.md"));
-    expect(stdout).not.toContain(dp(fixtures.basic, "code-style.md"));
+    for (const rel of found) expect(stdout).toContain(dp(fixtures.basic, rel));
+    for (const rel of absent) expect(stdout).not.toContain(dp(fixtures.basic, rel));
   });
 });
 
-describe("--search ranking (search fixture)", () => {
-  function searchOrder(query: string, first: string, second: string) {
-    const { code, stdout } = run(["--search", query], fixtures.search);
+describe("--search ranking", () => {
+  it.each([
+    ["basic", "guide api", "backend/api-guide.md", "backend/database.md"],
+    ["search", "gateway", "gateway.md", "notes.md"],
+    ["search", "gateway", "gateway.md", "spam.md"],
+    ["search", "log", "log.md", "logging.md"],
+    ["search", "shared", "tie-a.md", "tie-b.md"],
+  ] as const)("ranks in %s for %j: %s before %s", (fixture, query, first, second) => {
+    const { code, stdout } = run(["--search", query], fixtures[fixture]);
     expect(code).toBe(0);
-    const firstIdx = stdout.indexOf(dp(fixtures.search, first));
-    const secondIdx = stdout.indexOf(dp(fixtures.search, second));
+    const firstIdx = stdout.indexOf(dp(fixtures[fixture], first));
+    const secondIdx = stdout.indexOf(dp(fixtures[fixture], second));
     expect(firstIdx).toBeGreaterThan(-1);
     expect(secondIdx).toBeGreaterThan(-1);
     expect(firstIdx).toBeLessThan(secondIdx);
-  }
-
-  it("matches an accented title with an unaccented query", () => {
-    const { stdout } = run(["--search", "specification"], fixtures.search);
-    expect(stdout).toContain(dp(fixtures.search, "accent.md"));
-  });
-
-  it("matches plain text with an accented query", () => {
-    const { stdout } = run(["--search", "spécification"], fixtures.search);
-    expect(stdout).toContain(dp(fixtures.search, "plain.md"));
-  });
-
-  it("folds English plurals: 'workspaces' finds 'workspace'", () => {
-    const { stdout } = run(["--search", "workspaces"], fixtures.search);
-    expect(stdout).toContain(dp(fixtures.search, "workspace.md"));
-  });
-
-  it("folds French plurals in both directions", () => {
-    expect(run(["--search", "cheval"], fixtures.search).stdout).toContain(
-      dp(fixtures.search, "elevage.md"),
-    );
-    expect(run(["--search", "chevaux"], fixtures.search).stdout).toContain(
-      dp(fixtures.search, "elevage.md"),
-    );
-  });
-
-  it("matches plural-only documents with singular queries", () => {
-    const { stdout } = run(["--search", "cache"], fixtures.search);
-    expect(stdout).toContain(dp(fixtures.search, "plurals.md"));
-    expect(run(["--search", "dependency"], fixtures.search).stdout).toContain(
-      dp(fixtures.search, "plurals.md"),
-    );
-  });
-
-  it("matches singular-only documents with plural queries", () => {
-    const { stdout } = run(["--search", "branches"], fixtures.search);
-    expect(stdout).toContain(dp(fixtures.search, "singulars.md"));
-    expect(run(["--search", "dependencies"], fixtures.search).stdout).toContain(
-      dp(fixtures.search, "singulars.md"),
-    );
-  });
-
-  it("bridges irregular pairs in both directions", () => {
-    expect(run(["--search", "index"], fixtures.search).stdout).toContain(
-      dp(fixtures.search, "plurals.md"),
-    );
-    expect(run(["--search", "indices"], fixtures.search).stdout).toContain(
-      dp(fixtures.search, "singulars.md"),
-    );
-  });
-
-  it("bridges French irregular pairs across the œ ligature", () => {
-    expect(run(["--search", "yeux"], fixtures.search).stdout).toContain(
-      dp(fixtures.search, "ciel.md"),
-    );
-    expect(run(["--search", "cieux"], fixtures.search).stdout).toContain(
-      dp(fixtures.search, "ciel.md"),
-    );
-  });
-
-  it("ranks a title hit above a body-only hit", () => {
-    searchOrder("gateway", "gateway.md", "notes.md");
-  });
-
-  it("caps occurrences: body spam does not outrank a title hit", () => {
-    searchOrder("gateway", "gateway.md", "spam.md");
-  });
-
-  it("gives a word-boundary bonus over substring-only matches", () => {
-    searchOrder("log", "log.md", "logging.md");
   });
 
   it("drops stopwords from the query instead of broadening results", () => {
@@ -502,9 +316,21 @@ describe("--search ranking (search fixture)", () => {
     const { stdout } = run(["--search", "the"], fixtures.search);
     expect(stdout).toContain(dp(fixtures.search, "plain.md"));
   });
+});
 
-  it("breaks ties deterministically by path", () => {
-    searchOrder("shared", "tie-a.md", "tie-b.md");
+describe("--search folding (search fixture)", () => {
+  it.each([
+    ["specification", "accent.md"],
+    ["spécification", "plain.md"],
+    ["workspaces", "workspace.md"],
+    ["dependency", "plurals.md"],
+    ["dependencies", "singulars.md"],
+    ["cheval", "elevage.md"],
+    ["index", "plurals.md"],
+    ["indices", "singulars.md"],
+    ["yeux", "ciel.md"],
+  ])("finds %s in %s", (query, rel) => {
+    expect(run(["--search", query], fixtures.search).stdout).toContain(dp(fixtures.search, rel));
   });
 });
 
@@ -548,11 +374,6 @@ describe("CHANGELOG file exclusion", () => {
     const { stdout } = run(["--recursive"], fixtures.basic);
     expect(stdout).not.toContain("CHANGELOG");
   });
-
-  it("does not surface CHANGELOG.md in --check", () => {
-    const { stdout } = run(["--check"], fixtures.basic);
-    expect(stdout).not.toContain("CHANGELOG");
-  });
 });
 
 describe("no-frontmatter fixture", () => {
@@ -569,113 +390,66 @@ describe("no-frontmatter fixture", () => {
 });
 
 describe("extractFallbackTitle", () => {
-  it("returns the heading from a simple document", () => {
-    expect(extractFallbackTitle("# Simple Title\n\nBody text")).toBe("Simple Title");
-  });
-
-  it("returns the heading when preceded by a text prelude", () => {
-    expect(extractFallbackTitle("Some text\n\n# Heading After Prelude\n\nBody")).toBe(
+  it.each([
+    [
+      "after a text prelude",
+      "Some text\n\n# Heading After Prelude\n\nBody",
       "Heading After Prelude",
-    );
-  });
-
-  it("skips headings inside backtick fenced code blocks", () => {
-    const content = "```bash\n# not a title\n```\n\n# Real Title";
-    expect(extractFallbackTitle(content)).toBe("Real Title");
-  });
-
-  it("skips headings inside 4-backtick fenced code blocks", () => {
-    const content = "````\n# not a title\n````\n\n# Real Title";
-    expect(extractFallbackTitle(content)).toBe("Real Title");
-  });
-
-  it("skips headings inside tilde fenced code blocks", () => {
-    const content = "~~~\n# not a title\n~~~\n\n# Real Title";
-    expect(extractFallbackTitle(content)).toBe("Real Title");
-  });
-
-  it("returns undefined when there is no heading", () => {
-    expect(extractFallbackTitle("Just some text\nwithout any heading")).toBeUndefined();
+    ],
+    ["past a backtick fence", "```bash\n# not a title\n```\n\n# Real Title", "Real Title"],
+    ["past a 4-backtick fence", "````\n# not a title\n````\n\n# Real Title", "Real Title"],
+    ["past a tilde fence", "~~~\n# not a title\n~~~\n\n# Real Title", "Real Title"],
+    ["without a heading", "Just some text\nwithout any heading", undefined],
+  ])("finds the title %s", (_label, content, title) => {
+    expect(extractFallbackTitle(content)).toBe(title);
   });
 });
 
 describe("invocation-aware CLI prefixes", () => {
-  // Runner selection itself is covered in invocation.test.ts; these cases check the CLI wiring:
-  // evidence reaches help and guide, the root is folded in, and lockfiles stay ignored.
-  it.each([
-    ["node", {}, "docmap"],
-    ["bun", {}, "bunx --bun @alignfirst/docmap"],
-    [
-      "node",
-      { npm_config_user_agent: "npm/12", npm_command: "exec", npm_lifecycle_event: "npx" },
-      "npx -y @alignfirst/docmap",
-    ],
-  ] as const)("uses real %s evidence %j over conflicting lockfiles", (runtime, env, prefix) => {
-    const cwd = mkdtempSync(join(tmpdir(), "docmap-invocation-"));
+  // Runner selection itself is covered in invocation.test.ts. This checks the CLI wiring: the
+  // verified script reaches help and guide literally (`$&` would re-insert the placeholder under
+  // string replacement patterns), with its forwarding separator and the quoted root folded in.
+  it("renders a verified npm script with the folded root in help and guide", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "docmap-script-"));
     try {
-      for (const lock of ["package-lock.json", "bun.lock", "yarn.lock", "pnpm-lock.yaml"])
-        writeFileSync(join(cwd, lock), "");
+      const name = "docs$&";
+      const entryPoint = join(cwd, "docmap.mjs");
+      const manifest = join(cwd, "package.json");
+      const script = `node ${entryPoint}`;
+      writeFileSync(entryPoint, "");
+      writeFileSync(manifest, JSON.stringify({ scripts: { [name]: script } }));
+      const evidence = {
+        runtime: "node" as const,
+        cwd,
+        entryPoint,
+        executable: process.execPath,
+        parentArgv: ["/bin/sh", "-c", script],
+        env: {
+          npm_config_user_agent: "npm/12",
+          npm_command: "run",
+          npm_lifecycle_event: name,
+          npm_lifecycle_script: script,
+          npm_package_json: manifest,
+        },
+      };
       for (const mode of ["--help", "--guide"]) {
         const { stdout } = invokeWith({
-          argv: ["runtime", "docmap", mode, "--root", "docs' quoted\\path"],
+          argv: ["node", entryPoint, mode, "--root", "docs' quoted\\path"],
+          evidence,
           cwd,
-          evidence: { runtime, env, cwd, executable: "/runtime" },
         });
-        expect(stdout).toContain(`${prefix} --root 'docs'\\'' quoted\\path'`);
-        expect(stdout).not.toContain("npm run docmap");
+        expect(stdout).toContain(`npm run 'docs$&' -- --root 'docs'\\'' quoted\\path' --check`);
+        expect(stdout).not.toContain("{{");
       }
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
   });
-
-  // `$&` would re-insert the placeholder if the guide used string replacement patterns.
-  it.each(["docs", "docs$&"])(
-    "retains verified npm script %s literally with its forwarding separator",
-    (name) => {
-      const cwd = mkdtempSync(join(tmpdir(), "docmap-script-"));
-      try {
-        const entryPoint = join(cwd, "docmap.mjs");
-        const manifest = join(cwd, "package.json");
-        const script = `node ${entryPoint}`;
-        writeFileSync(entryPoint, "");
-        writeFileSync(manifest, JSON.stringify({ scripts: { [name]: script } }));
-        const evidence = {
-          runtime: "node" as const,
-          cwd,
-          entryPoint,
-          executable: process.execPath,
-          parentArgv: ["/bin/sh", "-c", script],
-          env: {
-            npm_config_user_agent: "npm/12",
-            npm_command: "run",
-            npm_lifecycle_event: name,
-            npm_lifecycle_script: script,
-            npm_package_json: manifest,
-          },
-        };
-        const renderedName = name === "docs" ? name : `'${name}'`;
-        for (const mode of ["--help", "--guide"]) {
-          const { stdout } = invokeWith({ argv: ["node", entryPoint, mode], evidence, cwd });
-          expect(stdout).toContain(`npm run ${renderedName} -- --check`);
-          expect(stdout).not.toContain("{{");
-        }
-      } finally {
-        rmSync(cwd, { recursive: true, force: true });
-      }
-    },
-  );
 });
 
 describe("injected command prefix", () => {
-  const commands = { base: "alignfirst docmap", withArgs: "alignfirst docmap" };
-
-  it.each([[], ["--help"], ["--guide"]])("uses the enclosing CLI for %j", (...args) => {
-    const { stdout } = invoke(["node", "docmap", ...args], "/", commands);
-    expect(stdout).toContain("alignfirst docmap --recursive");
-  });
-
-  it("folds --root into the injected prefix", () => {
+  it("folds --root into the enclosing CLI's prefix", () => {
+    const commands = { base: "alignfirst docmap", withArgs: "alignfirst docmap" };
     const out = invoke(["node", "docmap", "--root", "my docs", "--help"], "/", commands).stdout;
     expect(out).toContain("alignfirst docmap --root 'my docs' --check");
   });

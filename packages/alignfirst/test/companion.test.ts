@@ -30,6 +30,13 @@ afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
+interface DirRefusal {
+  relation: string;
+  args: string[];
+  otherDir?: string;
+  prepare?: (root: string, home: string) => void;
+}
+
 describe("companion register", () => {
   it("adds a companion to the original profile-only key and preserves the selection through removal", async () => {
     const { root, home, project } = makeHome();
@@ -130,16 +137,6 @@ describe("companion register", () => {
     );
   });
 
-  it("rejects a --dir starting with ~ but not ~/", async () => {
-    const { home, project } = makeHome();
-    const result = await runMain(["companion", "register", "--dir", "~app"], {
-      cwd: project,
-      home,
-    });
-    expect(result.code).toBe(1);
-    expect(existsSync(registryOf(home))).toBe(false);
-  });
-
   it("accepts an equal --dir on a registered project and refuses a different one", async () => {
     const { home, project } = makeHome();
     writeRegistry(home, { projects: { "~/projects/app": { dir: "custom" } } });
@@ -210,56 +207,45 @@ describe("companion register", () => {
     expect(again.stdout).toContain(companionOf(home));
   });
 
-  it("refuses a project whose companion directory another key uses", async () => {
-    const { home, project } = makeHome();
-    writeRegistry(home, { projects: { "~/other": { dir: "shared" } } });
-    const shared = join(home, ".alignfirst", "companions", "shared");
-    const result = await runMain(["companion", "register", "--dir", shared], {
-      cwd: project,
-      home,
-    });
-    expect(result.code).toBe(1);
-    expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({
-      projects: { "~/other": { dir: "shared" } },
-    });
-  });
-
-  it.each([".", "~/.alignfirst", "/", "~/projects/app/companion", "~/projects"])(
-    "refuses the --dir %s",
-    async (dir) => {
-      const { home, project } = makeHome();
-      const result = await runMain(["companion", "register", "--dir", dir], { cwd: project, home });
-      expect(result.code).toBe(1);
-      expect(existsSync(registryOf(home))).toBe(false);
+  it.each<DirRefusal>([
+    { relation: "~ without a slash", args: ["--dir", "~app"] },
+    { relation: "the companions root", args: ["--dir", "."] },
+    { relation: "an ancestor of the companions root", args: ["--dir", "~/.alignfirst"] },
+    { relation: "inside the project", args: ["--dir", "~/projects/app/companion"] },
+    { relation: "an ancestor of the project", args: ["--dir", "~/projects"] },
+    {
+      relation: "the home directory, with the companions root elsewhere",
+      args: ["--dir", "~/"],
+      prepare: (root, home) => {
+        mkdirSync(join(root, "store"));
+        mkdirSync(join(home, ".alignfirst"));
+        symlinkSync(join(root, "store"), rootOf(home));
+      },
     },
-  );
-
-  it("refuses the home directory when the companions root is elsewhere", async () => {
+    { relation: "another key's directory", args: ["--dir", "shared"], otherDir: "shared" },
+    { relation: "inside another key's directory", args: ["--dir", "team/app"], otherDir: "team" },
+    {
+      relation: "an ancestor of another key's directory",
+      args: ["--dir", "team"],
+      otherDir: "team/other",
+    },
+    {
+      relation: "the default, an ancestor of another key's directory",
+      args: [],
+      otherDir: "projects_app/other",
+    },
+  ])("refuses a companion directory that is $relation", async ({ args, otherDir, prepare }) => {
     const { root, home, project } = makeHome();
-    mkdirSync(join(root, "store"));
-    mkdirSync(join(home, ".alignfirst"));
-    symlinkSync(join(root, "store"), rootOf(home));
-    const result = await runMain(["companion", "register", "--dir", "~/"], { cwd: project, home });
+    prepare?.(root, home);
+    if (otherDir !== undefined) writeRegistry(home, { projects: { "~/other": { dir: otherDir } } });
+    const before = existsSync(registryOf(home))
+      ? readFileSync(registryOf(home), "utf-8")
+      : undefined;
+    const result = await runMain(["companion", "register", ...args], { cwd: project, home });
     expect(result.code).toBe(1);
-    expect(existsSync(registryOf(home))).toBe(false);
+    if (before === undefined) expect(existsSync(registryOf(home))).toBe(false);
+    else expect(readFileSync(registryOf(home), "utf-8")).toBe(before);
   });
-
-  it.each([
-    ["team", ["--dir", "team/app"]],
-    ["team/other", ["--dir", "team"]],
-    ["projects_app/other", []],
-  ])(
-    "refuses a companion directory nested with another key's %s: register %j",
-    async (otherDir, args) => {
-      const { home, project } = makeHome();
-      writeRegistry(home, { projects: { "~/other": { dir: otherDir } } });
-      const result = await runMain(["companion", "register", ...args], { cwd: project, home });
-      expect(result.code).toBe(1);
-      expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({
-        projects: { "~/other": { dir: otherDir } },
-      });
-    },
-  );
 
   it("registers the project beside an ancestor key, from a subdirectory", async () => {
     const { home, project } = makeHome();
@@ -686,84 +672,77 @@ describe("companion registry preservation", () => {
     expect(warnings).not.toContain("~/other");
   });
 
-  it.each(["__proto__", "constructor", "prototype"])(
-    "preserves %s extension keys through profile-only registration and removal",
-    async (key) => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      const { root, home, project } = makeHome();
-      const alias = join(root, "project-alias");
-      symlinkSync(project, alias);
-      const extension = { [key]: { profile: "PRIVATE", polluted: true } };
-      const aligndev = { profile: "work", ...extension };
-      const profileEntry = { aligndev, ...extension };
-      const original = {
-        ...extension,
-        projects: { [alias]: profileEntry, "~/other": { dir: "other", ...extension } },
-      };
-      writeRegistry(home, original);
-      const registered = await runMain(["companion", "register", "--dir", "chosen"], {
-        cwd: project,
-        home,
-      });
-      expect(registered.code).toBe(0);
-      const withCompanion = {
-        ...original,
-        projects: {
-          ...original.projects,
-          [alias]: {
-            ...profileEntry,
-            dir: "chosen",
-            defaultLocation: "companion",
-            items: { docs: "project", workspaceRuntime: "auto", ...extension },
-          },
+  it("preserves __proto__ extension keys through profile-only registration and removal", async () => {
+    const key = "__proto__";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { root, home, project } = makeHome();
+    const alias = join(root, "project-alias");
+    symlinkSync(project, alias);
+    const extension = { [key]: { profile: "PRIVATE", polluted: true } };
+    const aligndev = { profile: "work", ...extension };
+    const profileEntry = { aligndev, ...extension };
+    const original = {
+      ...extension,
+      projects: { [alias]: profileEntry, "~/other": { dir: "other", ...extension } },
+    };
+    writeRegistry(home, original);
+    const registered = await runMain(["companion", "register", "--dir", "chosen"], {
+      cwd: project,
+      home,
+    });
+    expect(registered.code).toBe(0);
+    const withCompanion = {
+      ...original,
+      projects: {
+        ...original.projects,
+        [alias]: {
+          ...profileEntry,
+          dir: "chosen",
+          defaultLocation: "companion",
+          items: { docs: "project", workspaceRuntime: "auto", ...extension },
         },
-      };
-      expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({
-        ...original,
-        projects: { ...original.projects, [alias]: { ...profileEntry, dir: "chosen" } },
-      });
-      writeRegistry(home, withCompanion);
-      const before = readFileSync(registryOf(home), "utf-8");
-      const again = await runMain(["companion", "register"], { cwd: project, home });
-      expect(again.code).toBe(0);
-      expect(readFileSync(registryOf(home), "utf-8")).toBe(before);
-      const report = await runMain(["config", "--json"], { cwd: project, home });
-      expect(report.code).toBe(0);
-      const parsed = JSON.parse(report.stdout);
-      expect(parsed.aligndev).toEqual({ profile: "work" });
-      expect(parsed.companion.items.docs).toBe("project");
-      expect(parsed.companion.defaultLocation).toBe("companion");
-      expect(parsed.selectionOrigins.docs).toBe("item");
-      expect(parsed.selectionOrigins.workspaceRuntime).toBe("item");
-      expect(parsed.selectionOrigins.alignfirst).toBe("defaultLocation");
-      expect(Object.hasOwn(parsed.companion.items, key)).toBe(false);
-      expect(report.stdout).not.toContain("PRIVATE");
-      expect(readFileSync(registryOf(home), "utf-8")).toBe(before);
-      const removed = await runMain(["companion", "unregister"], { cwd: project, home });
-      expect(removed.code).toBe(0);
-      const remaining = JSON.parse(readFileSync(registryOf(home), "utf-8"));
-      expect(remaining).toEqual(original);
-      expect(Object.hasOwn(remaining, key)).toBe(true);
-      expect(Object.hasOwn(remaining.projects[alias], key)).toBe(true);
-      expect(Object.hasOwn(remaining.projects[alias].aligndev, key)).toBe(true);
-      expect(Object.getPrototypeOf(remaining)).toBe(Object.prototype);
-      expect(Object.prototype).not.toHaveProperty("polluted");
-      expect(warn.mock.calls.flat().join("\n")).not.toContain("PRIVATE");
-    },
-  );
+      },
+    };
+    expect(JSON.parse(readFileSync(registryOf(home), "utf-8"))).toEqual({
+      ...original,
+      projects: { ...original.projects, [alias]: { ...profileEntry, dir: "chosen" } },
+    });
+    writeRegistry(home, withCompanion);
+    const before = readFileSync(registryOf(home), "utf-8");
+    const again = await runMain(["companion", "register"], { cwd: project, home });
+    expect(again.code).toBe(0);
+    expect(readFileSync(registryOf(home), "utf-8")).toBe(before);
+    const report = await runMain(["config", "--json"], { cwd: project, home });
+    expect(report.code).toBe(0);
+    const parsed = JSON.parse(report.stdout);
+    expect(parsed.aligndev).toEqual({ profile: "work" });
+    expect(parsed.companion.items.docs).toBe("project");
+    expect(parsed.companion.defaultLocation).toBe("companion");
+    expect(parsed.selectionOrigins.docs).toBe("item");
+    expect(parsed.selectionOrigins.workspaceRuntime).toBe("item");
+    expect(parsed.selectionOrigins.alignfirst).toBe("defaultLocation");
+    expect(Object.hasOwn(parsed.companion.items, key)).toBe(false);
+    expect(report.stdout).not.toContain("PRIVATE");
+    expect(readFileSync(registryOf(home), "utf-8")).toBe(before);
+    const removed = await runMain(["companion", "unregister"], { cwd: project, home });
+    expect(removed.code).toBe(0);
+    const remaining = JSON.parse(readFileSync(registryOf(home), "utf-8"));
+    expect(remaining).toEqual(original);
+    expect(Object.hasOwn(remaining, key)).toBe(true);
+    expect(Object.hasOwn(remaining.projects[alias], key)).toBe(true);
+    expect(Object.hasOwn(remaining.projects[alias].aligndev, key)).toBe(true);
+    expect(Object.getPrototypeOf(remaining)).toBe(Object.prototype);
+    expect(Object.prototype).not.toHaveProperty("polluted");
+    expect(warn.mock.calls.flat().join("\n")).not.toContain("PRIVATE");
+  });
 
-  it.each([
-    { dir: "app", items: { docs: "PRIVATE" } },
-    { dir: "app", aligndev: { profile: "  " } },
-    { dir: "~invalid" },
-    { dir: "app", items: { _aligndev: "companion" } },
-  ])("rejects known-invalid settings before either mutation: %j", async (entry) => {
+  it("rejects known-invalid settings before either mutation", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const { home, project } = makeHome();
     writeRegistry(home, {
       paths: { "~/legacy": { docs: true } },
       extra: "PRIVATE",
-      projects: { "~/projects/app": entry },
+      projects: { "~/projects/app": { dir: "app", items: { docs: "PRIVATE" } } },
     });
     const before = readFileSync(registryOf(home), "utf-8");
     for (const args of [

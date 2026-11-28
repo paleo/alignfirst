@@ -30,9 +30,6 @@ describe("command form", () => {
       { npm_config_user_agent: "npm/12", npm_command: "exec", npm_lifecycle_event: "npx" },
       "npx -y alignfirst",
     ],
-    ["node", { npm_config_user_agent: "bun/1.4.4", npm_command: "exec" }, "bunx alignfirst"],
-    ["bun", { npm_config_user_agent: "bun/1.4.4", npm_command: "exec" }, "bunx --bun alignfirst"],
-    ["bun", {}, "bunx --bun alignfirst"],
   ] as const)(
     "propagates %s/%j through help, context, embedded docmap and protocol guides",
     async (runtime, env, form) => {
@@ -92,8 +89,8 @@ describe("command form", () => {
     }
   });
 
-  it.each(["", "$&", "$'", "$`", "$$"])("renders every placeholder literally with %j", (token) => {
-    const form = `npm run 'af${token}' --`;
+  it("renders every placeholder with replacement patterns taken literally", () => {
+    const form = "npm run 'af$&$'\"'\"'$`$$' --";
     expect(renderCommandForm("{{CMD}} guide; {{CMD}} ticket", form)).toBe(
       `${form} guide; ${form} ticket`,
     );

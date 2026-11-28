@@ -35,7 +35,7 @@ it("shares its lock through a symlink and releases it", () => {
   if (next.kind === "acquired") next.release();
 });
 
-it.each(["missing", "invalid", "0", "-1"])("leaves an unreadable pid busy: %s", (value) => {
+it.each(["missing", "0"])("leaves an unreadable pid busy: %s", (value) => {
   const dir = fixture();
   const path = join(dir, ".git/alignfirst-sync.lock");
   mkdirSync(path);

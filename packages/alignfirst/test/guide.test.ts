@@ -12,59 +12,21 @@ afterEach(() => {
 });
 
 describe("guide command", () => {
-  it("rejects invalid protocol selections", async () => {
-    const cwd = temp();
-    const overviewOnly = await runMain(["guide", "overview", "--protocol-only"], { cwd });
-    expect(overviewOnly.code).toBe(1);
-    expect(overviewOnly.stdout).toBe("");
-
-    const missing = await runMain(["guide", "--protocol-only"], { cwd });
-    expect(missing.code).toBe(1);
-    expect(missing.stdout).toBe("");
-
-    const unknown = await runMain(["guide", "unknown"], { cwd });
-    expect(unknown.code).toBe(1);
-    expect(unknown.stdout).toBe("");
+  it.each([
+    ["overview with --protocol-only", ["overview", "--protocol-only"]],
+    ["--protocol-only without a protocol", ["--protocol-only"]],
+    ["an unknown protocol", ["unknown"]],
+    ["a reviewer outside review", ["spec", "--reviewer", "correctness"]],
+    ["a module without a reviewer", ["review", "--module", "python"]],
+    ["an unknown module", ["review", "--reviewer", "quality", "--module", "ruby"]],
+    ["an unknown reviewer", ["review", "--reviewer", "style"]],
+    ["a module with the light reviewer", ["review", "--reviewer", "light", "--module", "python"]],
+  ])("rejects %s", async (_case, args) => {
+    const result = await runMain(["guide", ...args], { cwd: temp() });
+    expect(result).toMatchObject({ code: 1, stdout: "" });
   });
 
-  it("rejects invalid reviewer selections", async () => {
-    const cwd = temp();
-    const wrongProtocol = await runMain(["guide", "spec", "--reviewer", "correctness"], { cwd });
-    expect(wrongProtocol).toMatchObject({ code: 1, stdout: "" });
-
-    const missingReviewer = await runMain(["guide", "review", "--module", "python"], {
-      cwd,
-    });
-    expect(missingReviewer).toMatchObject({ code: 1, stdout: "" });
-
-    const unknownModule = await runMain(
-      ["guide", "review", "--reviewer", "quality", "--module", "ruby"],
-      { cwd },
-    );
-    expect(unknownModule).toMatchObject({ code: 1, stdout: "" });
-
-    const unknownReviewer = await runMain(["guide", "review", "--reviewer", "style"], {
-      cwd,
-    });
-    expect(unknownReviewer).toMatchObject({ code: 1, stdout: "" });
-
-    const lightWithModule = await runMain(
-      ["guide", "review", "--reviewer", "light", "--module", "python"],
-      { cwd },
-    );
-    expect(lightWithModule).toMatchObject({ code: 1, stdout: "" });
-  });
-
-  it("serves the light reviewer guide on its own", async () => {
-    const cwd = temp();
-    const light = await runMain(["guide", "review", "--reviewer", "light"], { cwd });
-    const perspective = await runMain(["guide", "review", "--reviewer", "quality"], { cwd });
-    expect(light.code).toBe(0);
-    expect(light.stdout).toContain("# Light Code Review");
-    expect(light.stdout).not.toContain(firstLine(perspective.stdout));
-  });
-
-  it("renders ticket detection and fallback variants", async () => {
+  it("renders the ticket detected from the branch", async () => {
     const cwd = temp();
     configureGit(cwd);
     git(cwd, "init", "--quiet");
@@ -79,21 +41,6 @@ describe("guide command", () => {
     const detected = await runMain(["guide", "spec"], { cwd });
     expect(detected.stdout).toContain("78");
     expect(detected.stdout).toContain("alignfirst ticket --next spec.md --new-cycle");
-
-    git(cwd, "checkout", "-q", "-b", "side-8/x");
-    const sideWithPattern = await runMain(["guide", "spec"], { cwd });
-    expect(sideWithPattern.stdout).toContain("side-8");
-    writeFileSync(join(cwd, "alignfirst.json"), '{"schemaVersion":1}');
-    const sideWithoutPattern = await runMain(["guide", "spec"], { cwd });
-    expect(sideWithoutPattern.stdout).toContain("side-8");
-
-    git(cwd, "checkout", "-q", "main");
-    writeFileSync(
-      join(cwd, "alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, conventions: { ticketIdPattern: "^\\d+$" } }),
-    );
-    const noMatch = await runMain(["guide", "spec"], { cwd });
-    expect(noMatch.stdout).toContain("alignfirst ticket <id> --next spec.md --new-cycle");
   });
 
   it("includes the configured commit format and default branch", async () => {
@@ -119,10 +66,6 @@ describe("guide command", () => {
     expect(merge.stdout).toContain("release/integration");
   });
 });
-
-function firstLine(text: string): string {
-  return text.slice(0, text.indexOf("\n"));
-}
 
 function temp(): string {
   const dir = makeTempDir();

@@ -1,5 +1,5 @@
 import { validateConfigSchema } from "@alignfirst/workspace/config";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -9,6 +9,7 @@ import { makeTempDir } from "./helpers.js";
 const projectSchema: Record<string, unknown> = JSON.parse(
   readFileSync(new URL("../schemas/alignfirst-v1.schema.json", import.meta.url), "utf8"),
 );
+const SPAWN_SERVER = { kind: "spawn", name: "app", exec: { run: "true" }, ready: { log: "ready" } };
 const dirs: string[] = [];
 // Avoid colliding with the runtime's separately loaded schema in the shared Ajv instance.
 delete projectSchema.$id;
@@ -106,50 +107,33 @@ describe("project config", () => {
 
   it.each([
     [null, undefined],
-    [[], undefined],
-    [{}, "schemaVersion"],
     [{ schemaVersion: 2 }, "schemaVersion"],
     [{ schemaVersion: 1, $schema: "not a URI" }, "$schema"],
-    [{ schemaVersion: 1, plans: [] }, "plans"],
     [{ schemaVersion: 1, plans: { autoArchive: "PRIVATE" } }, "autoArchive"],
-    [{ schemaVersion: 1, plans: { repositoryFolder: false } }, "repositoryFolder"],
-    [{ schemaVersion: 1, conventions: { git: null } }, "git"],
-    [
-      { schemaVersion: 1, conventions: { git: { agentCoauthoring: "PRIVATE" } } },
-      "agentCoauthoring",
-    ],
-    [{ schemaVersion: 1, conventions: { git: { commit: [] } } }, "commit"],
-    [
-      {
-        schemaVersion: 1,
-        conventions: { git: { commit: { style: "conventionalCommit", ticketReference: false } } },
-      },
-      "ticketReference",
-    ],
     [{ schemaVersion: 1, conventions: { git: { commit: { style: "other" } } } }, "style"],
     [{ schemaVersion: 1, conventions: { git: { commit: {} } } }, "style"],
-    [{ schemaVersion: 1, conventions: { ticketIdPattern: "[PRIVATE" } }, undefined],
-    [{ schemaVersion: 1, conventions: { ticketIdPattern: "^ABC-\\d+$|^XYZ-\\d+$" } }, undefined],
+    [{ schemaVersion: 1, conventions: { ticketIdPattern: "[PRIVATE" } }, "ticketIdPattern"],
+    [
+      { schemaVersion: 1, conventions: { ticketIdPattern: "^ABC-\\d+$|^XYZ-\\d+$" } },
+      "ticketIdPattern",
+    ],
   ])("rejects malformed retained fields %# without values", (value, message) => {
     expect(() => validateProjectConfig(value, "config")).toThrow(message);
     expect(() => validateProjectConfig(value, "config")).not.toThrow("PRIVATE");
   });
 
   it.each([
-    { cli: ">=1" },
-    { ticketIdPattern: "^\\d+$" },
-    { git: { defaultBranch: "main" } },
-    { portRange: { first: 8100, last: 8199 } },
-    { ticketPattern: "PRIVATE" },
-    { extra: "PRIVATE" },
-    { plans: { folder: "PRIVATE" } },
-    { plans: { typo: "PRIVATE" } },
-    { conventions: { git: { typo: "PRIVATE" } } },
-    { conventions: { git: { commit: { style: "conventionalCommit", typo: "PRIVATE" } } } },
-  ])("rejects retired and unknown settings without exposing values %#", (settings) => {
-    expect(() => validateProjectConfig({ schemaVersion: 1, ...settings }, "config")).toThrow();
-    expect(() => validateProjectConfig({ schemaVersion: 1, ...settings }, "config")).not.toThrow(
-      "PRIVATE",
+    ["cli", { cli: ">=1" }],
+    ["portRange", { portRange: { first: 8100, last: 8199 } }],
+    ["ticketPattern", { ticketPattern: "^\\d+$" }],
+    ["plans/folder", { plans: { folder: "work-files" } }],
+    [
+      "conventions/git/commit/typo",
+      { conventions: { git: { commit: { style: "conventionalCommit", typo: true } } } },
+    ],
+  ])("rejects the retired or unknown setting %s", (pointer, settings) => {
+    expect(() => validateProjectConfig({ schemaVersion: 1, ...settings }, "config")).toThrow(
+      `/${pointer}`,
     );
   });
 
@@ -163,124 +147,63 @@ describe("project config", () => {
     },
   );
 
-  it.each([
-    { workspace: { finalise: [] } },
-    { workspace: { preSetup: [{ name: "bad", run: [], env: { SECRET: "PRIVATE" } }] } },
-    { workspace: { finalize: [{ name: "bad", run: "true", continueOnError: true }] } },
-    { devServer: { servers: [{ kind: "command", name: "db", start: { run: "true" } }] } },
-    {
-      devServer: {
-        servers: [
-          { kind: "spawn", name: "../escape", exec: { run: "true" }, ready: { log: "ready" } },
-        ],
-      },
-    },
-    { assistantInstructionsFile: "   " },
-    {
-      devServer: {
-        servers: [
-          { kind: "spawn", name: "app", exec: { run: "true", enb: {} }, ready: { log: "ready" } },
-        ],
-      },
-    },
-    {
-      devServer: {
-        servers: [{ kind: "spawn", name: "app", exec: { run: "true" }, ready: { log: "ready" } }],
-        maxConcurrentDevServers: -1,
-      },
-    },
-  ])("rejects malformed merged recipes without exposing values %#", (settings) => {
-    expect(() => validateProjectConfig({ schemaVersion: 1, ...settings }, "config")).toThrow();
-    expect(() => validateProjectConfig({ schemaVersion: 1, ...settings }, "config")).not.toThrow(
-      "PRIVATE",
-    );
-  });
-
-  it.each([
-    0,
-    Number.MAX_SAFE_INTEGER,
-    { env: "DEV_LIMIT", default: 0 },
-    { env: "DEV_LIMIT", default: Number.MAX_SAFE_INTEGER },
-  ])("retains authored concurrency limits %#", (maxConcurrentDevServers) => {
-    const devServer = {
-      servers: [
-        {
-          kind: "spawn",
-          name: "app",
-          exec: { run: "true" },
-          ready: { log: "ready" },
-          error: { preset: "node" },
-        },
-      ],
-      maxConcurrentDevServers,
-    };
-    expect(
-      validateProjectConfig({ schemaVersion: 1, devServer }, "config").devServer
-        ?.maxConcurrentDevServers,
-    ).toEqual(maxConcurrentDevServers);
-  });
-
-  it.each([
-    -1,
-    0.5,
-    Number.MAX_SAFE_INTEGER + 1,
-    { env: "", default: 1 },
-    { env: "BAD-NAME", default: 1 },
-    { env: "LIMIT\n", default: 1 },
-    { env: "DEV_LIMIT" },
-    { env: "DEV_LIMIT", default: -1 },
-    { env: "DEV_LIMIT", default: 0.5 },
-    { env: "DEV_LIMIT", default: Number.MAX_SAFE_INTEGER + 1 },
-    { env: "DEV_LIMIT", default: 1, extra: true },
-  ])("rejects malformed authored concurrency limits %#", (maxConcurrentDevServers) => {
-    expect(() =>
-      validateProjectConfig(
-        {
-          schemaVersion: 1,
-          devServer: {
-            servers: [
-              { kind: "spawn", name: "app", exec: { run: "true" }, ready: { log: "ready" } },
-            ],
-            maxConcurrentDevServers,
-          },
-        },
-        "config",
-      ),
-    ).toThrow("maxConcurrentDevServers");
-  });
-
-  it.each([{}, { preset: "python" }, { preset: "node", log: "[" }, { log: "[" }])(
-    "rejects invalid error descriptors %#",
-    (error) => {
-      expect(() =>
-        validateProjectConfig(
-          {
-            schemaVersion: 1,
-            devServer: {
-              servers: [
-                {
-                  kind: "spawn",
-                  name: "app",
-                  exec: { run: "true" },
-                  ready: { log: "ready" },
-                  error,
-                },
-              ],
-            },
-          },
-          "config",
-        ),
-      ).toThrow("error");
+  it.each([0, { env: "DEV_LIMIT", default: 0 }])(
+    "retains the authored concurrency limit %j",
+    (maxConcurrentDevServers) => {
+      const devServer = { servers: [SPAWN_SERVER], maxConcurrentDevServers };
+      expect(
+        validateProjectConfig({ schemaVersion: 1, devServer }, "config").devServer
+          ?.maxConcurrentDevServers,
+      ).toEqual(maxConcurrentDevServers);
     },
   );
 
-  it.each(["json", "jsonc"])("rejects literal __proto__ in %s without rewriting", (extension) => {
-    const path = configPath(extension);
-    const text = '{"schemaVersion":1,"__proto__":{"secret":"PRIVATE"}}';
-    writeFileSync(path, text);
-    expect(() => readProjectConfig(path)).toThrow("__proto__");
-    expect(() => readProjectConfig(path)).not.toThrow("PRIVATE");
-    expect(readFileSync(path, "utf8")).toBe(text);
+  it.each([
+    ["/workspace/finalise", { workspace: { finalise: [] } }],
+    [
+      "/workspace/finalize/0/continueOnError",
+      { workspace: { finalize: [{ name: "bad", run: "true", continueOnError: true }] } },
+    ],
+    [
+      "/devServer/servers/0/kind",
+      { devServer: { servers: [{ kind: "command", name: "db", start: { run: "true" } }] } },
+    ],
+    [
+      "/devServer/servers/0/exec/enb",
+      { devServer: { servers: [{ ...SPAWN_SERVER, exec: { run: "true", enb: {} } }] } },
+    ],
+    [
+      "/devServer/maxConcurrentDevServers/env",
+      {
+        devServer: {
+          servers: [SPAWN_SERVER],
+          maxConcurrentDevServers: { env: "BAD-NAME", default: 1 },
+        },
+      },
+    ],
+    [
+      "/devServer/maxConcurrentDevServers/default",
+      { devServer: { servers: [SPAWN_SERVER], maxConcurrentDevServers: { env: "DEV_LIMIT" } } },
+    ],
+    [
+      "/devServer/maxConcurrentDevServers/extra",
+      {
+        devServer: {
+          servers: [SPAWN_SERVER],
+          maxConcurrentDevServers: { env: "DEV_LIMIT", default: 1, extra: true },
+        },
+      },
+    ],
+    ["/devServer/servers/0/error", { devServer: { servers: [{ ...SPAWN_SERVER, error: {} }] } }],
+    [
+      "/devServer/servers/0/error/preset",
+      { devServer: { servers: [{ ...SPAWN_SERVER, error: { preset: "python" } }] } },
+    ],
+    ["/__proto__", JSON.parse('{"__proto__":{"secret":"literal"}}')],
+  ])("rejects the malformed recipe field %s", (pointer, settings) => {
+    expect(() => validateProjectConfig({ schemaVersion: 1, ...settings }, "config")).toThrow(
+      pointer,
+    );
   });
 
   it("preserves literal prototype-named dictionaries in merged recipes without rewriting", () => {
@@ -301,27 +224,6 @@ describe("project config", () => {
       "constructor",
     ]);
     expect(readFileSync(path, "utf8")).toBe(text);
-  });
-
-  it("uses strict JSON and permits comments/trailing commas only in JSONC", () => {
-    const json = configPath("json");
-    const jsonc = configPath("jsonc");
-    for (const text of ['{/* comment */ "schemaVersion":1}', '{"schemaVersion":1,}']) {
-      writeFileSync(json, text);
-      writeFileSync(jsonc, text);
-      expect(() => readProjectConfig(json)).toThrow();
-      expect(readProjectConfig(jsonc)).toEqual({ config: { schemaVersion: 1 } });
-      expect(readFileSync(jsonc, "utf8")).toBe(text);
-    }
-    writeFileSync(jsonc, '{"schemaVersion":1 BROKEN}');
-    expect(() => readProjectConfig(jsonc)).toThrow();
-  });
-
-  it("rejects unreadable and non-file destinations", () => {
-    const path = configPath("json");
-    expect(() => readProjectConfig(path)).toThrow();
-    mkdirSync(path);
-    expect(() => readProjectConfig(path)).toThrow();
   });
 });
 

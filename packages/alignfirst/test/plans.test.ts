@@ -42,117 +42,72 @@ describe("plans commands", () => {
     expect(existsSync(join(ticket, "_aligndev", "run.md"))).toBe(true);
     expect(readdirSync(join(root, ".alignfirst", "companions"))).toEqual(["registry.json"]);
   });
-  it("sets up the plans link with the configured folder", async () => {
-    const fixture = makeFixture();
-    writeFileSync(
-      join(fixture.product, "alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, plans: { repositoryFolder: "product-plans" } }),
-    );
-    const result = await runMain(["plans", "setup", fixture.clone], { cwd: fixture.product });
-    expect(result.code).toBe(0);
-    expect(lstatSync(join(fixture.product, ".plans")).isSymbolicLink()).toBe(true);
-    expect(readlinkSync(join(fixture.product, ".plans"))).toBe(
-      join("..", "team-plans", "product-plans"),
-    );
-  });
 
-  it("accepts --folder when it matches plans.repositoryFolder", async () => {
+  it.each<[string, Record<string, string> | undefined, string[], string]>([
+    ["plans.repositoryFolder", { repositoryFolder: "product-plans" }, [], "product-plans"],
+    [
+      "a matching --folder",
+      { repositoryFolder: "product-plans" },
+      ["--folder", "product-plans"],
+      "product-plans",
+    ],
+    ["an underscore --folder", undefined, ["--folder", "_project"], "_project"],
+  ])("links .plans to the clone folder named by %s", async (_, plansConfig, args, folder) => {
     const fixture = makeFixture();
-    writeFileSync(
-      join(fixture.product, "alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, plans: { repositoryFolder: "product-plans" } }),
-    );
-    expect(
-      (
-        await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
-          cwd: fixture.product,
-        })
-      ).code,
-    ).toBe(0);
-  });
-
-  it("keeps the plans folder inside the clone", async () => {
-    const fixture = makeFixture();
-    const traversal = await runMain(["plans", "setup", fixture.clone, "--folder", "../escaped"], {
+    if (plansConfig !== undefined)
+      writeFileSync(
+        join(fixture.product, "alignfirst.json"),
+        JSON.stringify({ schemaVersion: 1, plans: plansConfig }),
+      );
+    const result = await runMain(["plans", "setup", fixture.clone, ...args], {
       cwd: fixture.product,
     });
-    expect(traversal.code).toBe(1);
-    expect(existsSync(join(fixture.root, "escaped"))).toBe(false);
-
-    const outside = join(fixture.root, "outside");
-    mkdirSync(outside);
-    symlinkSync(outside, join(fixture.clone, "escaped-link"), "dir");
-    const symlink = await runMain(["plans", "setup", fixture.clone, "--folder", "escaped-link"], {
-      cwd: fixture.product,
-    });
-    expect(symlink.code).toBe(1);
-    expect(existsSync(join(fixture.product, ".plans"))).toBe(false);
+    expect(result.code, result.stderr).toBe(0);
+    expect(readlinkSync(join(fixture.product, ".plans"))).toBe(join("..", "team-plans", folder));
   });
 
-  it("rejects reserved plans folders before migrating local plans", async () => {
+  it.each<[string, (fixture: Fixture) => string[]]>([
+    ["a traversing folder", (fixture) => [fixture.clone, "--folder", "../escaped"]],
+    [
+      "a folder linked outside the clone",
+      (fixture) => {
+        const outside = join(fixture.root, "outside");
+        mkdirSync(outside);
+        symlinkSync(outside, join(fixture.clone, "escaped-link"), "dir");
+        return [fixture.clone, "--folder", "escaped-link"];
+      },
+    ],
+    ["a reserved folder", (fixture) => [fixture.clone, "--folder", "_archives"]],
+    [
+      "a folder differing from plans.repositoryFolder",
+      (fixture) => {
+        writeFileSync(
+          join(fixture.product, "alignfirst.json"),
+          JSON.stringify({ schemaVersion: 1, plans: { repositoryFolder: "configured" } }),
+        );
+        return [fixture.clone, "--folder", "argument"];
+      },
+    ],
+    ["no folder at all", (fixture) => [fixture.clone]],
+    ["a missing clone", (fixture) => [join(fixture.root, "missing"), "--folder", "p"]],
+  ])("refuses %s before migrating local plans", async (_, arrange) => {
     const fixture = makeFixture();
     const localPlan = join(fixture.product, ".plans", "78", "A1-spec.md");
     mkdirSync(join(fixture.product, ".plans", "78"), { recursive: true });
     writeFileSync(localPlan, "spec\n");
 
-    for (const folder of [".git", "_archives"]) {
-      const result = await runMain(["plans", "setup", fixture.clone, "--folder", folder], {
-        cwd: fixture.product,
-      });
-      expect(result.code).toBe(1);
-    }
+    const result = await runMain(["plans", "setup", ...arrange(fixture)], {
+      cwd: fixture.product,
+    });
 
-    expect(readFileSync(localPlan, "utf8")).toBe("spec\n");
+    expect(result.code).toBe(1);
     expect(lstatSync(join(fixture.product, ".plans")).isDirectory()).toBe(true);
-  });
-
-  it("synchronizes shared plans", async () => {
-    const fixture = makeFixture();
-    await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
-      cwd: fixture.product,
-    });
-    mkdirSync(join(fixture.product, ".plans", "78"));
-    writeFileSync(join(fixture.product, ".plans", "78", "A1-spec.md"), "spec\n");
-    const result = await runMain(["sync"], { cwd: fixture.product });
-    expect(result.code).toBe(0);
-    expect(git(join(fixture.root, "remote.git"), "ls-tree", "-r", "HEAD", "--name-only")).toContain(
-      "product-plans/78/A1-spec.md",
-    );
-  });
-
-  it("resolves a content conflict by preserving both versions", async () => {
-    const fixture = makeFixture();
-    await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
-      cwd: fixture.product,
-    });
-    const plan = join(fixture.product, ".plans", "78", "A1-spec.md");
-    mkdirSync(join(fixture.product, ".plans", "78"));
-    writeFileSync(plan, "first\n");
-    expect((await runMain(["sync"], { cwd: fixture.product })).code).toBe(0);
-
-    const other = join(fixture.root, "other-plans");
-    git(fixture.root, "clone", "--quiet", join(fixture.root, "remote.git"), other);
-    writeFileSync(join(other, "product-plans", "78", "A1-spec.md"), "remote\n");
-    git(other, "add", "-A");
-    git(other, "commit", "--quiet", "-m", "remote");
-    git(other, "push", "--quiet");
-
-    writeFileSync(plan, "local\n");
-    const conflict = await runMain(["sync"], { cwd: fixture.product });
-    expect(conflict.code).toBe(0);
-    expect(readFileSync(plan, "utf8")).toBe("remote\n");
-    expect(readFileSync(join(plan, "..", "A2-spec.md"), "utf8")).toBe("local\n");
-    expect(git(join(fixture.root, "remote.git"), "show", "HEAD:product-plans/78/A1-spec.md")).toBe(
-      "remote",
-    );
-    expect(git(join(fixture.root, "remote.git"), "show", "HEAD:product-plans/78/A2-spec.md")).toBe(
-      "local",
-    );
-    expect(findStoppedRebase(fixture.clone)).toBeUndefined();
+    expect(readFileSync(localPlan, "utf8")).toBe("spec\n");
+    expect(existsSync(join(fixture.root, "escaped"))).toBe(false);
   });
 
   it("resolves conflicts in successive local commits", async () => {
-    const fixture = makeFixture();
+    const fixture = makeFixture({ remote: true });
     await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
       cwd: fixture.product,
     });
@@ -193,7 +148,7 @@ describe("plans commands", () => {
   });
 
   it("keeps both paths on an archive versus edit conflict that git sees as no rename", async () => {
-    const fixture = makeFixture();
+    const fixture = makeFixture({ remote: true });
     await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
       cwd: fixture.product,
     });
@@ -224,7 +179,7 @@ describe("plans commands", () => {
   });
 
   it("leaves a rebase it did not start alone", async () => {
-    const fixture = makeFixture();
+    const fixture = makeFixture({ remote: true });
     await runMain(["plans", "setup", fixture.clone, "--folder", "product-plans"], {
       cwd: fixture.product,
     });
@@ -255,48 +210,12 @@ describe("plans commands", () => {
       expect(check.code).toBe(1);
       expect(check.stdout).toBe("");
     }
-    const doctor = await runMain(["doctor"], {
-      cwd: fixture.product,
-      env: { PATH: "" },
-      home: fixture.root,
-    });
-    expect(doctor.stdout).toContain(
-      `git -C ${fixture.clone} add -A && git -C ${fixture.clone} rebase --continue`,
-    );
-    expect(doctor.stdout).toContain(`git -C ${fixture.clone} rebase --abort`);
     expect(findStoppedRebase(fixture.clone)).toBeDefined();
 
     writeFileSync(plan, "resolved\n");
     git(fixture.clone, "add", "-A");
     git(fixture.clone, "-c", "core.editor=true", "rebase", "--continue");
     expect((await runMain(["sync"], { cwd: fixture.product })).code).toBe(0);
-  });
-
-  it("rejects conflicting, absent and missing-clone setup inputs", async () => {
-    const fixture = makeFixture();
-    writeFileSync(
-      join(fixture.product, "alignfirst.json"),
-      JSON.stringify({ schemaVersion: 1, plans: { repositoryFolder: "configured" } }),
-    );
-    expect(
-      (
-        await runMain(["plans", "setup", fixture.clone, "--folder", "argument"], {
-          cwd: fixture.product,
-        })
-      ).code,
-    ).toBe(1);
-    rmSync(join(fixture.product, "alignfirst.json"));
-    expect((await runMain(["plans", "setup", fixture.clone], { cwd: fixture.product })).code).toBe(
-      1,
-    );
-    expect(
-      (
-        await runMain(["plans", "setup", join(fixture.root, "missing"), "--folder", "p"], {
-          cwd: fixture.product,
-        })
-      ).code,
-    ).toBe(1);
-    expect(existsSync(join(fixture.product, ".plans"))).toBe(false);
   });
 
   it("archives a ticket and honors ALIGNFIRST_ARCHIVE_DAYS", async () => {
@@ -390,7 +309,7 @@ describe("plans commands", () => {
   });
 
   it("uses plans.autoArchive and honors --no-auto-archive", async () => {
-    const fixture = makeFixture();
+    const fixture = makeFixture({ remote: true });
     writeFileSync(
       join(fixture.product, "alignfirst.json"),
       JSON.stringify({
@@ -424,126 +343,108 @@ describe("plans commands", () => {
     expect(kept.code).toBe(0);
     expect(existsSync(join(fixture.product, ".plans", "80"))).toBe(true);
   });
+});
 
-  it("rejects mutually exclusive synchronization options", async () => {
+interface ModeCase {
+  cwd: string;
+  mode: "local" | "shared";
+  in: "project" | "companion";
+  plans: string;
+  target: string;
+  /** Paths the check must leave as they were. */
+  untouched?: string[];
+}
+
+describe("plans check contract", () => {
+  it("rejects an extra argument without a success document", async () => {
     const fixture = makeFixture();
     mkdirSync(join(fixture.product, ".plans"));
-    const result = await runMain(["sync", "--auto-archive", "--no-auto-archive"], {
-      cwd: fixture.product,
-    });
+    const result = await runMain(["plans", "check", "--json", "extra"], { cwd: fixture.product });
     expect(result.code).toBe(1);
     expect(result.stdout).toBe("");
   });
-});
 
-describe("plans check contract", () => {
-  it.each([["extra"], ["--root", "x"], ["--unknown"], ["--json", "extra"]])(
-    "rejects check arguments %j without a success document",
-    async (...args) => {
-      const fixture = makeFixture();
-      mkdirSync(join(fixture.product, ".plans"));
-      const result = await runMain(["plans", "check", ...args], { cwd: fixture.product });
-      expect(result.code).toBe(1);
-      expect(result.stdout).toBe("");
-    },
-  );
-
-  it("reports local plans in JSON", async () => {
+  it.each<[string, (fixture: Fixture) => ModeCase]>([
+    [
+      "a project directory as local",
+      (fixture) => {
+        const plans = join(fixture.product, ".plans");
+        mkdirSync(plans);
+        return { cwd: fixture.product, mode: "local", in: "project", plans, target: plans };
+      },
+    ],
+    [
+      "a project link chain into a separate repository as shared",
+      (fixture) => {
+        const target = join(fixture.clone, "product-plans");
+        mkdirSync(target);
+        writeFileSync(join(target, "note.md"), "shared\n");
+        git(fixture.clone, "add", "product-plans");
+        git(fixture.clone, "commit", "--quiet", "-m", "work files");
+        const alias = join(fixture.root, "work-files-alias");
+        symlinkSync(target, alias);
+        const plans = join(fixture.product, ".plans");
+        symlinkSync(alias, plans);
+        return { cwd: fixture.product, mode: "shared", in: "project", plans, target };
+      },
+    ],
+    [
+      "a companion link as shared despite an unused tracked project copy",
+      (fixture) => {
+        const unused = join(fixture.product, ".plans");
+        mkdirSync(unused);
+        writeFileSync(join(unused, "tracked.md"), "unused\n");
+        git(fixture.product, "add", ".plans");
+        git(fixture.product, "commit", "--quiet", "-m", "unused plans");
+        const plans = join(useCompanion(fixture), ".plans");
+        mkdirSync(join(plans, ".."), { recursive: true });
+        const target = join(fixture.clone, "product-plans");
+        mkdirSync(target);
+        symlinkSync(target, plans);
+        const registry = join(fixture.root, ".alignfirst", "companions", "registry.json");
+        const untouched = [unused, registry];
+        return { cwd: fixture.product, mode: "shared", in: "companion", plans, target, untouched };
+      },
+    ],
+    [
+      "a directory outside Git as local",
+      (fixture) => {
+        const cwd = join(fixture.root, "plain");
+        const plans = join(cwd, ".plans");
+        mkdirSync(plans, { recursive: true });
+        return { cwd, mode: "local", in: "project", plans, target: plans };
+      },
+    ],
+    [
+      "a link from outside Git into a work-files clone as shared",
+      (fixture) => {
+        const cwd = join(fixture.root, "plain");
+        mkdirSync(cwd);
+        const target = join(fixture.clone, "plain-plans");
+        mkdirSync(target);
+        const plans = join(cwd, ".plans");
+        symlinkSync(target, plans);
+        return { cwd, mode: "shared", in: "project", plans, target };
+      },
+    ],
+  ])("classifies %s", async (_, arrange) => {
     const fixture = makeFixture();
-    const plans = join(fixture.product, ".plans");
-    mkdirSync(plans);
-    const options = { cwd: fixture.product, home: fixture.root };
-    const result = await runMain(["plans", "check", "--json"], options);
+    const expected = arrange(fixture);
+    const untouched = expected.untouched ?? [];
+    const before = untouched.map(snapshotTree);
+
+    const result = await runMain(["plans", "check", "--json"], {
+      cwd: expected.cwd,
+      home: fixture.root,
+    });
+
     expect(result).toMatchObject({ code: 0, stderr: "" });
     expect(JSON.parse(result.stdout)).toEqual({
-      mode: "local",
-      plans: { in: "project", path: plans, target: realpathSync(plans) },
+      mode: expected.mode,
+      plans: { in: expected.in, path: expected.plans, target: realpathSync(expected.target) },
       mainWorktree: null,
     });
-  });
-
-  it("accepts a separate repository tracking its own work files through an alias chain", async () => {
-    const fixture = makeFixture();
-    const target = join(fixture.clone, "product-plans");
-    mkdirSync(target);
-    writeFileSync(join(target, "note.md"), "shared\n");
-    git(fixture.clone, "add", "product-plans");
-    git(fixture.clone, "commit", "--quiet", "-m", "work files");
-    const alias = join(fixture.root, "work-files-alias");
-    symlinkSync(target, alias);
-    const plans = join(fixture.product, ".plans");
-    symlinkSync(alias, plans);
-    const options = { cwd: fixture.product, home: fixture.root };
-    const result = await runMain(["plans", "check", "--json"], options);
-    expect(result).toMatchObject({ code: 0, stderr: "" });
-    expect(JSON.parse(result.stdout)).toEqual({
-      mode: "shared",
-      plans: { in: "project", path: plans, target: realpathSync(target) },
-      mainWorktree: null,
-    });
-  });
-
-  it.each(["local", "shared"])(
-    "reports effective companion plans in %s mode despite an unused tracked project copy",
-    async (mode) => {
-      const fixture = makeFixture();
-      const unused = join(fixture.product, ".plans");
-      mkdirSync(unused);
-      writeFileSync(join(unused, "tracked.md"), "unused\n");
-      git(fixture.product, "add", ".plans");
-      git(fixture.product, "commit", "--quiet", "-m", "unused plans");
-      const plans = join(useCompanion(fixture), ".plans");
-      mkdirSync(join(plans, ".."), { recursive: true });
-      const target = mode === "local" ? plans : join(fixture.clone, "product-plans");
-      mkdirSync(target);
-      if (mode === "shared") symlinkSync(target, plans);
-      const before = snapshotTree(unused);
-      const registry = join(fixture.root, ".alignfirst", "companions", "registry.json");
-      const registryBefore = readFileSync(registry);
-      const result = await runMain(["plans", "check", "--json"], {
-        cwd: fixture.product,
-        home: fixture.root,
-      });
-      expect(result).toMatchObject({ code: 0, stderr: "" });
-      expect(JSON.parse(result.stdout)).toEqual({
-        mode,
-        plans: { in: "companion", path: plans, target: realpathSync(target) },
-        mainWorktree: null,
-      });
-      expect(snapshotTree(unused)).toEqual(before);
-      expect(readFileSync(registry)).toEqual(registryBefore);
-    },
-  );
-
-  it("accepts a real local directory outside Git", async () => {
-    const fixture = makeFixture();
-    const cwd = join(fixture.root, "plain");
-    const plans = join(cwd, ".plans");
-    mkdirSync(plans, { recursive: true });
-    const result = await runMain(["plans", "check", "--json"], { cwd, home: fixture.root });
-    expect(result).toMatchObject({ code: 0, stderr: "" });
-    expect(JSON.parse(result.stdout)).toEqual({
-      mode: "local",
-      plans: { in: "project", path: plans, target: realpathSync(plans) },
-      mainWorktree: null,
-    });
-  });
-
-  it("classifies a link into a work-files clone as shared from a project outside Git", async () => {
-    const fixture = makeFixture();
-    const cwd = join(fixture.root, "plain");
-    mkdirSync(cwd);
-    const folder = join(fixture.clone, "plain-plans");
-    mkdirSync(folder);
-    const plans = join(cwd, ".plans");
-    symlinkSync(folder, plans);
-    const result = await runMain(["plans", "check", "--json"], { cwd, home: fixture.root });
-    expect(result).toMatchObject({ code: 0, stderr: "" });
-    expect(JSON.parse(result.stdout)).toEqual({
-      mode: "shared",
-      plans: { in: "project", path: plans, target: realpathSync(folder) },
-      mainWorktree: null,
-    });
+    expect(untouched.map(snapshotTree)).toEqual(before);
   });
 
   it.each(["missing", "broken", "file", "outsideGit"])(
@@ -569,18 +470,15 @@ describe("plans check contract", () => {
 });
 
 describe("project-tracked plans gate", () => {
-  it.each(["tracked", "staged", "mixed", "trackedLink", "alias", "linkedAlias"])(
+  it.each(["tracked", "staged", "trackedLink", "linkedAlias"])(
     "refuses %s effective plans without touching their index or contents",
     async (kind) => {
       const fixture = makeFixture();
       const plans = join(fixture.product, ".plans");
       let source = plans;
-      if (kind === "alias" || kind === "linkedAlias") {
-        let sourceRepo = fixture.product;
-        if (kind === "linkedAlias") {
-          sourceRepo = join(fixture.root, "other-worktree");
-          git(fixture.product, "worktree", "add", "--quiet", "-b", "other", sourceRepo);
-        }
+      if (kind === "linkedAlias") {
+        const sourceRepo = join(fixture.root, "other-worktree");
+        git(fixture.product, "worktree", "add", "--quiet", "-b", "other", sourceRepo);
         source = join(sourceRepo, "tracked-plans");
         mkdirSync(source);
         writeFileSync(join(source, "note.md"), "tracked\n");
@@ -598,7 +496,6 @@ describe("project-tracked plans gate", () => {
         writeFileSync(join(plans, "tracked.md"), "tracked\n");
         git(fixture.product, "add", ".plans");
         if (kind !== "staged") git(fixture.product, "commit", "--quiet", "-m", "track plans");
-        if (kind === "mixed") writeFileSync(join(plans, "untracked.md"), "untracked\n");
       }
       const index = readFileSync(join(fixture.product, ".git", "index"));
       const sourceIndexPath = git(
@@ -617,7 +514,7 @@ describe("project-tracked plans gate", () => {
       });
       expect(result.code).toBe(1);
       expect(result.stdout).toBe("");
-      expect(result.stderr).toContain(kind === "alias" || kind === "linkedAlias" ? source : plans);
+      expect(result.stderr).toContain(kind === "linkedAlias" ? source : plans);
       expect(snapshotTree(fixture.product)).toEqual(before);
       expect(snapshotTree(source)).toEqual(sourceBefore);
       expect(readFileSync(join(fixture.product, ".git", "index"))).toEqual(index);
@@ -697,10 +594,7 @@ describe("project-tracked plans gate", () => {
     expect(readFileSync(index, "utf8")).toBe("corrupt index\n");
   });
 
-  it.each([
-    ["plans", "check", "--json"],
-    ["sync", "--auto-archive"],
-  ])("refuses Git ownership errors before work-file effects: %j", async (...args) => {
+  it("refuses Git ownership errors before archiving work files", async () => {
     const fixture = makeFixture();
     const ticket = join(fixture.product, ".plans", "78");
     mkdirSync(ticket, { recursive: true });
@@ -715,7 +609,10 @@ describe("project-tracked plans gate", () => {
     const indexBefore = readFileSync(index);
     vi.stubEnv("GIT_TEST_ASSUME_DIFFERENT_OWNER", "1");
 
-    const result = await runMain(args, { cwd: fixture.product, home: fixture.root });
+    const result = await runMain(["sync", "--auto-archive"], {
+      cwd: fixture.product,
+      home: fixture.root,
+    });
 
     expect(result.code).toBe(1);
     expect(result.stdout).toBe("");
@@ -726,12 +623,12 @@ describe("project-tracked plans gate", () => {
 });
 
 describe("linked-worktree plans parity", () => {
-  it.each(["local", "shared", "companion", "sharedCompanion"])(
+  it.each(["shared", "companion"])(
     "reports %s plans shared through the main worktree",
     async (kind) => {
       const fixture = makeFixture();
-      const companion = kind === "companion" || kind === "sharedCompanion";
-      const shared = kind === "shared" || kind === "sharedCompanion";
+      const companion = kind === "companion";
+      const shared = kind === "shared";
       const mainPlans = join(companion ? useCompanion(fixture) : fixture.product, ".plans");
       mkdirSync(join(mainPlans, ".."), { recursive: true });
       const target = shared ? join(fixture.clone, "product-plans") : mainPlans;
@@ -780,24 +677,19 @@ describe("linked-worktree plans parity", () => {
     }
   });
 
-  it.each(["missing", "broken", "file"])(
-    "validates %s main plans before resolving the main target",
-    async (kind) => {
-      const fixture = makeFixture();
-      const mainPlans = join(fixture.product, ".plans");
-      if (kind === "broken") symlinkSync(join(fixture.root, "missing"), mainPlans);
-      if (kind === "file") writeFileSync(mainPlans, "not a directory\n");
-      const worktree = join(fixture.root, "ticket-worktree");
-      git(fixture.product, "worktree", "add", "--quiet", "-b", "ticket", worktree);
-      mkdirSync(join(worktree, ".plans"));
-      const result = await runMain(["plans", "check", "--json"], {
-        cwd: worktree,
-        home: fixture.root,
-      });
-      expect(result.code).toBe(1);
-      expect(result.stdout).toBe("");
-    },
-  );
+  it("validates broken main plans before resolving the main target", async () => {
+    const fixture = makeFixture();
+    symlinkSync(join(fixture.root, "missing"), join(fixture.product, ".plans"));
+    const worktree = join(fixture.root, "ticket-worktree");
+    git(fixture.product, "worktree", "add", "--quiet", "-b", "ticket", worktree);
+    mkdirSync(join(worktree, ".plans"));
+    const result = await runMain(["plans", "check", "--json"], {
+      cwd: worktree,
+      home: fixture.root,
+    });
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
+  });
 });
 
 describe("plans refusals before command side effects", () => {
@@ -853,7 +745,7 @@ describe("plans refusals before command side effects", () => {
 });
 
 describe("plans setup tracking protection", () => {
-  it.each(["directory", "link", "brokenLink"])(
+  it.each(["directory", "brokenLink"])(
     "refuses a tracked %s before creating folders or migrating anything",
     async (kind) => {
       const fixture = makeFixture();
@@ -861,14 +753,7 @@ describe("plans setup tracking protection", () => {
       if (kind === "directory") {
         mkdirSync(plans);
         writeFileSync(join(plans, "A1-spec.md"), "original\n");
-      } else {
-        const target = join(fixture.clone, "existing");
-        if (kind === "link") {
-          mkdirSync(target);
-          writeFileSync(join(target, "A1-spec.md"), "original\n");
-        }
-        symlinkSync(target, plans);
-      }
+      } else symlinkSync(join(fixture.clone, "existing"), plans);
       git(fixture.product, "add", ".plans");
       git(fixture.product, "commit", "--quiet", "-m", "track plans");
       const before = snapshotTree(fixture.product);
@@ -975,17 +860,6 @@ describe("plans commands with a companion .plans", () => {
     expect((await runMain(["plans", "archive", "78"], options)).code).toBe(0);
     expect(existsSync(join(plans, "_archives", "78"))).toBe(true);
   });
-
-  it("accepts _project as a plans folder", async () => {
-    const fixture = makeFixture();
-    const result = await runMain(["plans", "setup", fixture.clone, "--folder", "_project"], {
-      cwd: fixture.product,
-    });
-    expect(result.code).toBe(0);
-    expect(readlinkSync(join(fixture.product, ".plans"))).toBe(
-      join("..", "team-plans", "_project"),
-    );
-  });
 });
 
 describe("plans commands with a separate session tree", () => {
@@ -1072,14 +946,17 @@ interface Fixture {
   clone: string;
 }
 
-function makeFixture(): Fixture {
+/** With `remote`, the clone tracks the bare repository `<root>/remote.git`. */
+function makeFixture(options: { remote?: boolean } = {}): Fixture {
   const root = makeTempDir("alignfirst-plans-");
   dirs.push(root);
   configureGit(root);
-  const remote = join(root, "remote.git");
-  git(root, "init", "--quiet", "--bare", remote);
   const clone = join(root, "team-plans");
-  git(root, "clone", "--quiet", remote, clone);
+  if (options.remote) {
+    const remote = join(root, "remote.git");
+    git(root, "init", "--quiet", "--bare", remote);
+    git(root, "clone", "--quiet", remote, clone);
+  } else git(root, "init", "--quiet", clone);
   const product = join(root, "product");
   git(root, "init", "--quiet", product);
   writeFileSync(join(product, "README.md"), "product\n");

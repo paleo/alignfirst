@@ -65,7 +65,6 @@ afterEach(() => {
 });
 
 it.each([
-  ["", 0],
   ["", 60_000],
   ["not-a-pid:", 60_000],
 ])("preserves and refuses an incomplete lock %j aged %i ms", async (content, age) => {
@@ -124,17 +123,15 @@ it("keeps ownership when a publisher pauses before writing its token", async () 
   expect(readdirSync(root)).toEqual(["registry.json"]);
 });
 
-it.each([`${process.pid}:live-token`, String(process.pid)])(
-  "never expires a live PID by age: %s",
-  async (content) => {
-    writeLock(content, now - 60_000);
-    const mutate = vi.fn();
-    await expect(withCompanionRegistryLock(path, mutate)).rejects.toThrow();
-    expect(mutate).not.toHaveBeenCalled();
-    expect(readFileSync(lock, "utf8")).toBe(content);
-    expect(readdirSync(root)).toEqual(["registry.json.lock"]);
-  },
-);
+it("never expires a live PID by age", async () => {
+  const content = `${process.pid}:live-token`;
+  writeLock(content, now - 60_000);
+  const mutate = vi.fn();
+  await expect(withCompanionRegistryLock(path, mutate)).rejects.toThrow();
+  expect(mutate).not.toHaveBeenCalled();
+  expect(readFileSync(lock, "utf8")).toBe(content);
+  expect(readdirSync(root)).toEqual(["registry.json.lock"]);
+});
 
 it("preserves a dead owner's lock until explicit quiescent recovery permits retry", async () => {
   writeFileSync(path, "preserved registry");

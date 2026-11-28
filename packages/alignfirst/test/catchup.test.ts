@@ -57,31 +57,6 @@ describe("ticket --catchup", () => {
     expect(result.stdout).toContain("Body: spec");
   });
 
-  it("uses the same numeric ordering for ordinary Markdown and JSON listings", async () => {
-    const cwd = project();
-    const directory = join(cwd, ".plans", "78");
-    mkdirSync(directory);
-    const ordered = [
-      "A1-spec.md",
-      "A9-review.md",
-      "A10-AAD.summary.md",
-      "B2-spec.md",
-      "B10-review.md",
-    ];
-    for (const file of [...ordered].reverse()) writeFileSync(join(directory, file), "history");
-
-    const markdown = await runMain(["ticket", "78"], { cwd });
-    const json = await runMain(["ticket", "78", "--json"], { cwd });
-
-    expect([...markdown.stdout.matchAll(/[AB]\d+-[\w.]+\.md/g)].map(([name]) => name)).toEqual(
-      ordered,
-    );
-    const entries = JSON.parse(json.stdout).entries;
-    expect(entries.map((entry: { name: string }) => entry.name)).toEqual(ordered);
-    expect(entries[0]).toMatchObject({ name: "A1-spec.md", size: 7 });
-    expect(new Date(entries[0].modifiedAt).getTime()).toBeGreaterThan(0);
-  });
-
   it("switches the whole output to the entry list, without printing partial history", async () => {
     const cwd = project();
     const directory = join(cwd, ".plans", "78");

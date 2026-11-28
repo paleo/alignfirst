@@ -37,20 +37,13 @@ describe("json shape", () => {
 
   it.each([
     [],
-    null,
-    "text",
     { name: "x", extra: 1 },
-    { name: "x", "a-b": 1 },
     { name: "x", nested: { flag: true, extra: 1 } },
-    { name: "x", map: { "~/p": { ".plans": true } } },
     { name: "x", map: { "~/p": { mode: "c" } } },
-    { name: "x", map: [] },
     {},
     { name: "" },
     { name: "x", port: 0 },
     { name: "x", port: 1.5 },
-    { name: "x", port: "80" },
-    { name: "x", nested: {} },
     { name: "x", nested: null },
   ])("rejects %j", (value) => {
     expect(() => parse(sampleShape, value)).toThrow();

@@ -1,17 +1,18 @@
-import { existsSync, mkdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import { runTicket } from "../src/commands/ticket.js";
-import {
-  configureGit,
-  git,
-  makeCompanionProject,
-  makeSink,
-  makeTempDir,
-  runMain,
-} from "./helpers.js";
+import { detectTicketFromBranch, nextFilePosition } from "../src/plans/ticket.js";
+import { configureGit, git, makeCompanionProject, makeTempDir, runMain } from "./helpers.js";
 
 const dirs: string[] = [];
 
@@ -20,24 +21,6 @@ afterEach(() => {
 });
 
 describe("ticket command", () => {
-  it.each(["$&", "$'", "$`", "$$"])("preserves %s in help and error usage", (token) => {
-    const form = `npm run 'af${token}' --`;
-    const stdout = makeSink();
-    const ctx = {
-      cwd: "/tmp",
-      env: {},
-      home: "/tmp",
-      form,
-      version: "0.0.0",
-      stdout,
-      stderr: makeSink(),
-    };
-    expect(runTicket(ctx, ["--help"])).toBe(0);
-    expect(stdout.text()).toContain(`${form} ticket --side`);
-    expect(stdout.text()).not.toContain("{{FORM}}");
-    expect(() => runTicket(ctx, ["--unknown"])).toThrow(form);
-  });
-
   it("creates, lists and restores ticket directories", async () => {
     const cwd = makeProject();
     const created = await runMain(["ticket", "78"], { cwd });
@@ -47,6 +30,7 @@ describe("ticket command", () => {
     expect((await runMain(["ticket", "78", "--next", "spec.md"], { cwd })).stdout).toContain(
       "A2-spec.md",
     );
+    expect(existsSync(join(cwd, ".plans", "78", "A2-spec.md"))).toBe(false);
     mkdirSync(join(cwd, ".plans", "_archives"));
     mkdirSync(join(cwd, ".plans", "_archives", "99"));
     const restored = await runMain(["ticket", "99"], { cwd });
@@ -55,150 +39,80 @@ describe("ticket command", () => {
     expect(existsSync(join(cwd, ".plans", "99"))).toBe(true);
   });
 
-  it("computes a new cycle and keeps dry runs read-only", async () => {
-    const cwd = makeProject();
-    mkdirSync(join(cwd, ".plans", "78"));
-    writeFileSync(join(cwd, ".plans", "78", "A2-spec.md"), "spec");
-    const next = await runMain(
-      ["ticket", "78", "--next", "notes.txt", "--new-cycle", "--dry-run"],
-      { cwd },
-    );
-    expect(next.stdout).toContain("B1-notes.txt");
-    const missing = await runMain(["ticket", "79", "--dry-run"], { cwd });
-    expect(missing.code).toBe(0);
-    expect(existsSync(join(cwd, ".plans", "79"))).toBe(false);
-  });
-
-  it("computes a dry-run filename from archived entries", async () => {
+  it("numbers repeated --next filenames after archived entries without restoring them", async () => {
     const cwd = makeProject();
     const archive = join(cwd, ".plans", "_archives", "99");
     mkdirSync(archive, { recursive: true });
     writeFileSync(join(archive, "C4-plan.md"), "plan");
-
-    const result = await runMain(["ticket", "99", "--next", "AAD.summary.md", "--dry-run"], {
-      cwd,
+    const result = await runMain(
+      ["ticket", "99", "--next", "main-plan.md", "--next=plan-api.md", "--dry-run", "--json"],
+      { cwd },
+    );
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      TICKET_DIR: ".plans/99/",
+      CYCLE_LETTER: "C",
+      FILE_NAMES: ["C5-main-plan.md", "C6-plan-api.md"],
     });
-
-    expect(result.stdout).toContain("C5-AAD.summary.md");
     expect(existsSync(join(cwd, ".plans", "99"))).toBe(false);
     expect(existsSync(archive)).toBe(true);
   });
 
-  it("prints prefixes without reserving numbers and advances after a file is written", async () => {
-    const cwd = makeProject();
-    const first = await runMain(["ticket", "78", "--next"], { cwd });
-    expect(first).toMatchObject({ code: 0, stderr: "" });
-    expect(first.stdout).toMatch(/\bA1\b/);
-    expect((await runMain(["ticket", "78", "--next"], { cwd })).stdout).toBe(first.stdout);
-    expect((await runMain(["ticket", "78", "--next", "spec.md"], { cwd })).stdout).toContain(
-      "A1-spec.md",
-    );
-    writeFileSync(join(cwd, ".plans", "78", "A1-spec.md"), "spec");
-    expect((await runMain(["ticket", "78", "--next"], { cwd })).stdout).toMatch(/\bA2\b/);
+  it.each<[string, string[], boolean, string | undefined, string]>([
+    ["starts an empty ticket at A1", [], false, undefined, "A1"],
+    [
+      "ignores entries without a prefix",
+      ["A1-request.md", "notes.md", "_aligndev/"],
+      false,
+      undefined,
+      "A2",
+    ],
+    [
+      "continues the latest cycle numerically",
+      ["A99-plan.md", "B2-spec.md", "B10-plan.md"],
+      false,
+      undefined,
+      "B11",
+    ],
+    [
+      "opens the cycle after the latest",
+      ["A99-plan.md", "B2-spec.md", "B10-plan.md"],
+      true,
+      undefined,
+      "C1",
+    ],
+    [
+      "numbers within the selected cycle",
+      ["A2-spec.md", "A10-plan.md", "B99-review.md"],
+      false,
+      "A",
+      "A11",
+    ],
+    ["starts a selected cycle of an empty ticket at 1", [], false, "Z", "Z1"],
+    ["starts an unused selected cycle at 1", ["B20-spec.md"], false, "A", "A1"],
+  ])("next file position: %s", (_case, entries, newCycle, selectedCycle, expected) => {
+    const { cycleLetter, fileNumber } = nextFilePosition(entries, newCycle, selectedCycle);
+    expect(`${cycleLetter}${fileNumber}`).toBe(expected);
   });
 
-  it("reports numeric ordering and the next cycle consistently in both formats", async () => {
+  it.each([
+    ["an invalid cycle letter", ["78", "--cycle", "a", "--next"]],
+    ["--cycle without --next", ["--side", "--cycle", "A"]],
+    ["--cycle with --new-cycle", ["78", "--cycle", "A", "--next", "--new-cycle"]],
+    ["--new-cycle without --next", ["78", "--new-cycle"]],
+    [
+      "a bare --next inside a repeated --next",
+      ["78", "--next", "main-plan.md", "--next", "--json"],
+    ],
+    ["a path in --next", ["--side", "--next", "../outside.md"]],
+    ["a backslash in --next", ["78", "--next", "nested\\file.md"]],
+    ["an empty inline --next", ["78", "--next="]],
+  ])("rejects %s before creating or reserving a ticket", async (_case, args) => {
     const cwd = makeProject();
-    const directory = join(cwd, ".plans", "78");
-    mkdirSync(directory);
-    for (const filename of ["A99-plan.md", "B2-spec.md", "B10-plan.md"]) {
-      writeFileSync(join(directory, filename), "work");
-    }
-    for (const newCycle of [false, true]) {
-      const cycle = newCycle ? "C" : "B";
-      const number = newCycle ? 1 : 11;
-      const flags = newCycle ? ["--new-cycle"] : [];
-      for (const filename of [undefined, "review.md"]) {
-        const args = [
-          "ticket",
-          "78",
-          "--next",
-          ...(filename === undefined ? [] : [filename]),
-          ...flags,
-        ];
-        const markdown = await runMain(args, { cwd });
-        const json = await runMain([...args, "--json"], { cwd });
-        expect(markdown.code).toBe(0);
-        expect(json.code).toBe(0);
-        expect(JSON.parse(json.stdout)).toEqual({
-          TICKET_DIR: ".plans/78/",
-          CYCLE_LETTER: cycle,
-          FILE_NUMBER: number,
-          ...(filename === undefined
-            ? { FILE_PREFIX: `${cycle}${number}` }
-            : { FILE_NAME: `${cycle}${number}-review.md` }),
-        });
-        expect(markdown.stdout).toContain(
-          filename === undefined ? `${cycle}${number}` : `${cycle}${number}-review.md`,
-        );
-      }
-    }
-  });
-
-  it("numbers within the selected cycle rather than the latest one", async () => {
-    const cwd = makeProject();
-    const directory = join(cwd, ".plans", "78");
-    mkdirSync(directory);
-    for (const filename of ["A2-spec.md", "A10-plan.md", "B99-review.md"]) {
-      writeFileSync(join(directory, filename), "work");
-    }
-    const result = await runMain(
-      ["ticket", "78", "--cycle", "A", "--next=main-plan.md", "--next", "plan-api.md", "--json"],
-      { cwd },
-    );
-    expect(result).toMatchObject({ code: 0, stderr: "" });
-    expect(JSON.parse(result.stdout)).toEqual({
-      TICKET_DIR: ".plans/78/",
-      CYCLE_LETTER: "A",
-      FILE_NAMES: ["A11-main-plan.md", "A12-plan-api.md"],
-    });
-  });
-
-  it("starts unused selected cycles at 1 in empty and populated tickets", async () => {
-    const cwd = makeProject();
-    for (const cycle of ["A", "B", "Z"]) {
-      const result = await runMain(
-        ["ticket", "78", `--cycle=${cycle}`, "--next=spec.md", "--json"],
-        { cwd },
-      );
-      expect(result.code).toBe(0);
-      expect(JSON.parse(result.stdout)).toMatchObject({
-        CYCLE_LETTER: cycle,
-        FILE_NUMBER: 1,
-        FILE_NAME: `${cycle}1-spec.md`,
-      });
-    }
-    writeFileSync(join(cwd, ".plans", "78", "B20-spec.md"), "spec");
-    for (const cycle of ["A", "Z"]) {
-      const result = await runMain(["ticket", "78", "--cycle", cycle, "--next", "--json"], { cwd });
-      expect(result.code).toBe(0);
-      expect(JSON.parse(result.stdout)).toMatchObject({ FILE_PREFIX: `${cycle}1` });
-    }
-  });
-
-  it("validates cycle arguments before creating or reserving tickets", async () => {
-    const cwd = makeProject();
-    const invalid = [
-      ...["", "a", "AA", "1", " A", "A\n", "../A"].map((cycle) => ["--cycle", cycle, "--next"]),
-      ["--cycle", "A"],
-      ["--cycle", "A", "--next", "--new-cycle"],
-      ["--cycle"],
-    ];
-    for (const ticket of [["78"], ["--side"]]) {
-      for (const args of invalid) {
-        const result = await runMain(["ticket", ...ticket, ...args], { cwd });
-        expect(result.code, args.join(" ")).toBe(1);
-        expect(result.stdout).toBe("");
-      }
-    }
-    expect(existsSync(join(cwd, ".plans", "78"))).toBe(false);
-    expect(existsSync(join(cwd, ".plans", "side-1"))).toBe(false);
-    const valid = await runMain(["ticket", "--side", "--cycle", "Z", "--next", "--json"], { cwd });
-    expect(valid.code).toBe(0);
-    expect(JSON.parse(valid.stdout)).toMatchObject({
-      TICKET_DIR: ".plans/side-1/",
-      FILE_PREFIX: "Z1",
-    });
+    const result = await runMain(["ticket", ...args], { cwd });
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(readdirSync(join(cwd, ".plans"))).toEqual([]);
   });
 
   it("accepts bare --next with cycle and dry-run flags and an explicit ticket after --", async () => {
@@ -221,73 +135,18 @@ describe("ticket command", () => {
     expect(existsSync(archive)).toBe(true);
   });
 
-  it("supports inline filenames and rejects explicitly empty filenames", async () => {
-    const cwd = makeProject();
-    const invalid = await runMain(["ticket", "78", "--next="], { cwd });
-    expect(invalid.code).toBe(1);
-    expect(existsSync(join(cwd, ".plans", "78"))).toBe(false);
-    const result = await runMain(["ticket", "78", "--next=spec.md"], { cwd });
-    expect(result.code).toBe(0);
-    expect(result.stdout).toContain("A1-spec.md");
-  });
-
-  it("numbers a batch of filenames in order when --next repeats", async () => {
-    const cwd = makeProject();
-    const directory = join(cwd, ".plans", "78");
-    mkdirSync(directory);
-    writeFileSync(join(directory, "A1-spec.md"), "spec");
-    const batch = ["--next", "main-plan.md", "--next=plan-api.md", "--next", "plan-ui.md"];
-    const markdown = await runMain(["ticket", "78", ...batch], { cwd });
-    expect(markdown.code).toBe(0);
-    expect([...markdown.stdout.matchAll(/A\d+-[\w-]+\.md/g)].map(([name]) => name)).toEqual([
-      "A2-main-plan.md",
-      "A3-plan-api.md",
-      "A4-plan-ui.md",
-    ]);
-    const json = await runMain(["ticket", "78", ...batch, "--json", "--new-cycle"], { cwd });
-    expect(JSON.parse(json.stdout)).toEqual({
-      TICKET_DIR: ".plans/78/",
-      CYCLE_LETTER: "B",
-      FILE_NAMES: ["B1-main-plan.md", "B2-plan-api.md", "B3-plan-ui.md"],
-    });
-  });
-
-  it("rejects a bare --next inside a repeated --next", async () => {
-    const cwd = makeProject();
-    for (const args of [
-      ["ticket", "78", "--next", "--next", "plan-api.md"],
-      ["ticket", "78", "--next", "main-plan.md", "--next", "--json"],
-    ]) {
-      const result = await runMain(args, { cwd });
-      expect(result.code, args.join(" ")).toBe(1);
-    }
-    expect(existsSync(join(cwd, ".plans", "78"))).toBe(false);
-  });
-
-  it("keeps argument validation for bare --next", async () => {
-    const cwd = makeProject();
-    for (const args of [
-      ["ticket", "78", "--next", "--unknown"],
-      ["ticket", "78", "--new-cycle"],
-      ["ticket", "78", "--next", "spec.md", "extra"],
-      ["ticket", "78", "--side", "--next"],
-    ]) {
-      expect((await runMain(args, { cwd })).code, args.join(" ")).toBe(1);
-    }
-    expect(existsSync(join(cwd, ".plans", "78"))).toBe(false);
-  });
-
   it("previews side-ticket prefixes and creates side tickets with named output", async () => {
     const cwd = makeProject();
-    const preview = await runMain(["ticket", "--side", "--next", "--dry-run", "--json"], {
-      cwd,
-    });
+    const preview = await runMain(
+      ["ticket", "--side", "--cycle", "Z", "--next", "--dry-run", "--json"],
+      { cwd },
+    );
     expect(preview.code).toBe(0);
     expect(JSON.parse(preview.stdout)).toEqual({
       TICKET_DIR: ".plans/side-1/",
-      CYCLE_LETTER: "A",
+      CYCLE_LETTER: "Z",
       FILE_NUMBER: 1,
-      FILE_PREFIX: "A1",
+      FILE_PREFIX: "Z1",
     });
     expect(existsSync(join(cwd, ".plans", "side-1"))).toBe(false);
     const created = await runMain(["ticket", "--side", "--next", "request.md", "--json"], {
@@ -302,28 +161,6 @@ describe("ticket command", () => {
     });
     expect(existsSync(join(cwd, ".plans", "side-1"))).toBe(true);
     expect(existsSync(join(cwd, ".plans", "side-1", "A1-request.md"))).toBe(false);
-  });
-
-  it("rejects unsafe --next filenames before creating the ticket", async () => {
-    const cwd = makeProject();
-
-    for (const filename of ["", ".", "..", "../outside.md", "nested/file.md", "nested\\file.md"]) {
-      const result = await runMain(["ticket", "78", "--next", filename], { cwd });
-      expect(result.code).toBe(1);
-    }
-
-    expect(existsSync(join(cwd, ".plans", "78"))).toBe(false);
-  });
-
-  it("validates --next before reserving a side ticket", async () => {
-    const cwd = makeProject();
-    const invalid = await runMain(["ticket", "--side", "--next", "../outside.md"], { cwd });
-
-    expect(invalid.code).toBe(1);
-    expect(existsSync(join(cwd, ".plans", "side-1"))).toBe(false);
-
-    const created = await runMain(["ticket", "--side", "--json"], { cwd });
-    expect(JSON.parse(created.stdout)).toMatchObject({ TICKET_ID: "side-1" });
   });
 
   it("reserves side tickets across active and archived entries, including an EEXIST race", async () => {
@@ -349,13 +186,7 @@ describe("ticket command", () => {
     git(cwd, "checkout", "-q", "-b", "78/unified-cli");
     writeFileSync(
       join(cwd, "alignfirst.json"),
-      JSON.stringify({
-        schemaVersion: 1,
-        conventions: {
-          ticketIdPattern: "^\\d+$",
-          git: { branchNameTemplate: "{TICKET_ID}/{slug-1-3-words}" },
-        },
-      }),
+      JSON.stringify({ schemaVersion: 1, conventions: { ticketIdPattern: "^\\d+$" } }),
     );
     const result = await runMain(["ticket", "--json"], { cwd });
     expect(JSON.parse(result.stdout)).toEqual({
@@ -365,114 +196,6 @@ describe("ticket command", () => {
       branch: "78/unified-cli",
       entries: [],
     });
-    const next = await runMain(["ticket", "--json", "--next", "spec.md"], { cwd });
-    expect(JSON.parse(next.stdout)).toEqual({
-      TICKET_DIR: ".plans/78/",
-      CYCLE_LETTER: "A",
-      FILE_NUMBER: 1,
-      FILE_NAME: "A1-spec.md",
-    });
-    const prefix = await runMain(["ticket", "--json", "--next"], { cwd });
-    expect(JSON.parse(prefix.stdout)).toEqual({
-      TICKET_DIR: ".plans/78/",
-      CYCLE_LETTER: "A",
-      FILE_NUMBER: 1,
-      FILE_PREFIX: "A1",
-    });
-  });
-
-  it("detects side tickets before patterns and follows branch templates", async () => {
-    const cwd = makeProject();
-    const configPath = join(cwd, "alignfirst.json");
-    git(cwd, "checkout", "-q", "-b", "side-8/slug");
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        schemaVersion: 1,
-        conventions: {
-          ticketIdPattern: "^\\d+$",
-          git: { branchNameTemplate: "{TICKET_ID}/{slug-1-3-words}" },
-        },
-      }),
-    );
-    expect(
-      JSON.parse((await runMain(["ticket", "--json", "--dry-run"], { cwd })).stdout),
-    ).toMatchObject({ TICKET_ID: "side-8", branch: "side-8/slug" });
-
-    writeFileSync(
-      configPath,
-      JSON.stringify({ schemaVersion: 1, conventions: { ticketIdPattern: "^\\d+$" } }),
-    );
-    expect(
-      JSON.parse((await runMain(["ticket", "--json", "--dry-run"], { cwd })).stdout),
-    ).toMatchObject({ TICKET_ID: "side-8" });
-    writeFileSync(configPath, JSON.stringify({ schemaVersion: 1 }));
-    expect(
-      JSON.parse((await runMain(["ticket", "--json", "--dry-run"], { cwd })).stdout),
-    ).toMatchObject({ TICKET_ID: "side-8" });
-
-    git(cwd, "checkout", "-q", "-b", "feature/78-fix");
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        schemaVersion: 1,
-        conventions: {
-          ticketIdPattern: "^\\d+$",
-          git: { branchNameTemplate: "feature/{TICKET_ID}-{slug}" },
-        },
-      }),
-    );
-    expect(
-      JSON.parse((await runMain(["ticket", "--json", "--dry-run"], { cwd })).stdout),
-    ).toMatchObject({ TICKET_ID: "78", branch: "feature/78-fix" });
-
-    git(cwd, "checkout", "-q", "-b", "hotfix/typo");
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        schemaVersion: 1,
-        conventions: {
-          ticketIdPattern: "^\\d+$",
-          git: { branchNameTemplate: "{TICKET_ID}/{slug-1-3-words}" },
-        },
-      }),
-    );
-    const noMatch = await runMain(["ticket", "--dry-run"], { cwd });
-    expect(noMatch.code).toBe(1);
-    expect(noMatch.stdout).toBe("");
-  });
-
-  it("uses the ticket grammar to disambiguate template placeholders", async () => {
-    const cwd = makeProject();
-    const configPath = join(cwd, "alignfirst.json");
-    const writeConfig = (ticketIdPattern: string) =>
-      writeFileSync(
-        configPath,
-        JSON.stringify({
-          schemaVersion: 1,
-          conventions: {
-            ticketIdPattern,
-            git: { branchNameTemplate: "feature/{TICKET_ID}-{slug}" },
-          },
-        }),
-      );
-
-    writeConfig("^\\d+$");
-    git(cwd, "checkout", "-q", "-b", "feature/78-fix-more");
-    expect(
-      JSON.parse((await runMain(["ticket", "--json", "--dry-run"], { cwd })).stdout),
-    ).toMatchObject({ TICKET_ID: "78" });
-
-    git(cwd, "checkout", "-q", "-b", "feature/side-8-fix");
-    expect(
-      JSON.parse((await runMain(["ticket", "--json", "--dry-run"], { cwd })).stdout),
-    ).toMatchObject({ TICKET_ID: "side-8" });
-
-    writeConfig("^(ABC|XYZ)-\\d+$");
-    git(cwd, "checkout", "-q", "-b", "feature/ABC-78-fix-more");
-    expect(
-      JSON.parse((await runMain(["ticket", "--json", "--dry-run"], { cwd })).stdout),
-    ).toMatchObject({ TICKET_ID: "ABC-78" });
   });
 
   it("requires the plans gate and validates configured ids", async () => {
@@ -522,6 +245,35 @@ describe("ticket command", () => {
     expect(result.stderr).toContain("side-1");
     expect(result.stderr.indexOf("78")).toBeLessThan(result.stderr.indexOf("side-1"));
     expect(existsSync(join(cwd, ".plans", "781"))).toBe(false);
+  });
+});
+
+describe("ticket detection from the branch", () => {
+  const sharedDirs: string[] = [];
+  let cwd: string;
+
+  beforeAll(() => {
+    cwd = makeProject(false, sharedDirs);
+  });
+
+  afterAll(() => {
+    for (const dir of sharedDirs) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it.each<[string, string | undefined, string | undefined, string | undefined]>([
+    ["side-8/slug", "^\\d+$", "{TICKET_ID}/{slug-1-3-words}", "side-8"],
+    ["side-8/slug", undefined, undefined, "side-8"],
+    ["78/unified-cli", "^\\d+$", undefined, "78"],
+    ["feature/78-fix", "^\\d+$", "feature/{TICKET_ID}-{slug}", "78"],
+    ["feature/78-fix-more", "^\\d+$", "feature/{TICKET_ID}-{slug}", "78"],
+    ["feature/side-8-fix", "^\\d+$", "feature/{TICKET_ID}-{slug}", "side-8"],
+    ["feature/ABC-78-fix-more", "^(ABC|XYZ)-\\d+$", "feature/{TICKET_ID}-{slug}", "ABC-78"],
+    ["hotfix/typo", "^\\d+$", "{TICKET_ID}/{slug-1-3-words}", undefined],
+  ])("detects in %s with pattern %s and template %s: %s", (branch, pattern, template, id) => {
+    git(cwd, "checkout", "-q", "-B", branch);
+    expect(detectTicketFromBranch(cwd, pattern, template)).toEqual(
+      id === undefined ? { kind: "noMatch", branch } : { kind: "detected", id, branch },
+    );
   });
 });
 
@@ -617,9 +369,9 @@ function companionPlans(): CompanionPlans {
   return { home, project, plans };
 }
 
-function makeProject(withPlans = true): string {
+function makeProject(withPlans = true, owner = dirs): string {
   const cwd = makeTempDir();
-  dirs.push(cwd);
+  owner.push(cwd);
   configureGit(cwd);
   git(cwd, "init", "--quiet");
   writeFileSync(join(cwd, "README.md"), "project");

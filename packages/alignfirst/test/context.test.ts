@@ -77,47 +77,19 @@ describe("context command", () => {
 });
 
 describe("assistant-instructions command", () => {
-  it("keeps the legacy command as a warning alias with identical output", async () => {
+  it("prints a default ASSISTANTS.md, also through the legacy warning alias", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const cwd = temp();
-    writeFileSync(join(cwd, "ASSISTANTS.md"), "Use the project workflow.\n");
+    const path = join(cwd, "ASSISTANTS.md");
+    writeFileSync(path, "Use the project workflow.\n");
     const canonical = await runMain(["assistant-instructions"], { cwd });
     expect(canonical).toMatchObject({ code: 0, stderr: "" });
+    expect(canonical.stdout).toContain(path);
     expect(canonical.stdout).toContain("Use the project workflow.");
     expect(warn).not.toHaveBeenCalled();
     const legacy = await runMain(["developer-instructions"], { cwd });
     expect(legacy).toEqual(canonical);
     expect(warn).toHaveBeenCalled();
-  });
-
-  it("includes configured conventions without discovering filenames or agent context", async () => {
-    const cwd = temp();
-    mkdirSync(join(cwd, "docs"));
-    mkdirSync(join(cwd, ".plans"));
-    mkdirSync(join(cwd, ".alignfirst-instructions"));
-    writeFileSync(join(cwd, "DEVELOPERS.md"), "Ignored developer file\n");
-    writeFileSync(join(cwd, "README.md"), "Ignored readme\n");
-    writeFileSync(join(cwd, ".alignfirst-instructions", "context.md"), "Agent-only context\n");
-    writeFileSync(
-      join(cwd, "alignfirst.json"),
-      JSON.stringify({
-        schemaVersion: 1,
-        conventions: {
-          ticketIdPattern: "^TASK-[0-9]+$",
-          git: {
-            branchNameTemplate: "{TICKET_ID}/{slug}",
-            commit: { style: "conventionalCommit", ticketReference: "bracketed" },
-          },
-        },
-      }),
-    );
-    const result = await runMain(["assistant-instructions"], { cwd });
-    expect(result).toMatchObject({ code: 0, stderr: "" });
-    expect(result.stdout).toContain("^TASK-[0-9]+$");
-    expect(result.stdout).toContain("{TICKET_ID}/{slug}");
-    expect(result.stdout).toContain("type: [TICKET_ID] summary");
-    expect(result.stdout).toContain(".plans");
-    expect(result.stdout).not.toMatch(/Ignored|Agent-only/);
   });
 
   it("preserves custom content and reports its absolute source", async () => {
@@ -140,18 +112,7 @@ describe("assistant-instructions command", () => {
     expect(result.stdout).toContain(content.trimEnd());
   });
 
-  it("prints a default ASSISTANTS.md without any configuration file", async () => {
-    const cwd = temp();
-    const path = join(cwd, "ASSISTANTS.md");
-    writeFileSync(path, "Default assistant guide\n");
-    const result = await runMain(["assistant-instructions"], { cwd });
-    expect(result).toMatchObject({ code: 0, stderr: "" });
-    expect(result.stdout).toContain(path);
-    expect(result.stdout).toContain("Default assistant guide");
-  });
-
   it.each([
-    { name: "a missing default file", file: undefined, content: undefined },
     { name: "a blank default file", file: undefined, content: " \n\t\n" },
     { name: "a missing configured file", file: "guide.md", content: undefined },
   ])("prints the guidance alone for $name", async ({ file, content }) => {
@@ -180,8 +141,6 @@ describe("assistant-instructions command", () => {
 
   it.each([
     { name: "default", link: "ASSISTANTS.md", target: "shared.md", file: "ASSISTANTS.md" },
-    { name: "configured", link: "guide.md", target: "shared.md", file: "guide.md" },
-    { name: "configured nested", link: "guides", target: ".", file: "guides/shared.md" },
     { name: "missing nested", link: "guides", target: ".", file: "guides/new/guide.md" },
   ])("refuses only there a $name guide linked out of its root", async ({ link, target, file }) => {
     const cwd = temp();

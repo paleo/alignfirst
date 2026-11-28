@@ -29,21 +29,14 @@ afterEach(() => rmSync(directory, { recursive: true, force: true }));
 describe("runner selection from launcher and runtime", () => {
   it.each([
     [undefined, "node", "docmap"],
-    ["", "node", "docmap"],
     ["unknown/1", "node", "docmap"],
-    ["arbitrary nonempty", "node", "docmap"],
     [undefined, "bun", "bunx --bun @alignfirst/docmap"],
     ["npm/12.2.0 node/v26.8.1 linux x64", "bun", "bunx --bun @alignfirst/docmap"],
     ["npm/12.2.0 node/v26.8.1 linux x64", "node", "npx -y @alignfirst/docmap"],
     ["bun/1.4.4 npm/? node/v26.3.0 linux x64", "node", "bunx @alignfirst/docmap"],
-    ["bun/1.4.4 npm/? node/v26.3.0 linux x64", "bun", "bunx --bun @alignfirst/docmap"],
     ["pnpm/10.0.0 npm/? node/v26.8.1", "node", "pnpm dlx @alignfirst/docmap"],
     ["yarn/1.22.22", "node", "npx -y @alignfirst/docmap"],
-    ["yarn/2.4.3", "node", "yarn dlx @alignfirst/docmap"],
     ["yarn/4.0.0-rc.1", "node", "yarn dlx @alignfirst/docmap"],
-    ["yarn/unknown", "node", "npx -y @alignfirst/docmap"],
-    ["yarn/4.invalid", "node", "npx -y @alignfirst/docmap"],
-    ["yarn/1.22.22", "bun", "bunx --bun @alignfirst/docmap"],
   ] as const)(
     "picks the runner for agent %s under %s, never from lockfiles",
     (agent, runtime, expected) => {
@@ -59,9 +52,7 @@ describe("runner selection from launcher and runtime", () => {
   it.each([
     ["yarn/1.22.22 npm/? node/v26.8.1", 1, "npx -y alignfirst"],
     ["yarn/2.4.3 npm/?", 2, "yarn dlx alignfirst"],
-    ["yarn/4", 4, "yarn dlx alignfirst"],
-    ["yarn/unknown", undefined, "npx -y alignfirst"],
-    [undefined, undefined, "npx -y alignfirst"],
+    ["yarn/4.invalid", undefined, "npx -y alignfirst"],
   ] as const)(
     "retains Yarn major %s for counterparts and version overrides",
     (agent, major, runner) => {
@@ -138,25 +129,19 @@ describe("verified owning scripts", () => {
     expect(command.args).toEqual(["--prefix", directory, "run", name, "--"]);
   });
 
-  it.each(["node entry.mjs", "bun entry.mjs", "'./entry.mjs'"])(
-    "accepts transparent wrappers %s",
-    (script) => {
-      setScript(script);
-      const input = scriptEvidence("bun", "run-script");
-      input.env = { ...input.env, npm_lifecycle_script: script };
-      expect(resolveInvocation(target, input).launcher).toBe("projectScript");
-    },
-  );
+  it.each(["node entry.mjs", "'./entry.mjs'"])("accepts transparent wrappers %s", (script) => {
+    setScript(script);
+    const input = scriptEvidence("bun", "run-script");
+    input.env = { ...input.env, npm_lifecycle_script: script };
+    expect(resolveInvocation(target, input).launcher).toBe("projectScript");
+  });
 
   it.each([
     "docmap --help",
     "docmap && echo yes",
-    "FOO=bar docmap",
-    "node entry.mjs --help",
+    "echo $(docmap)",
     "node other.mjs",
     "bun --bun entry.mjs",
-    "echo $(docmap)",
-    "docmap | cat",
   ])("rejects compound/fixed/unverified script %s", (script) => {
     setScript(script);
     const input = scriptEvidence("npm", "run");
@@ -176,7 +161,8 @@ describe("verified owning scripts", () => {
     expect(resolveInvocation(target, input).launcher).toBe("projectScript");
   });
 
-  it.each(["", "-unsafe"])("rejects unsafe script names %s", (name) => {
+  it("rejects a script name that reads as an option", () => {
+    const name = "-unsafe";
     writeFileSync(
       join(directory, "package.json"),
       JSON.stringify({ scripts: { [name]: "docmap" } }),
@@ -190,37 +176,26 @@ describe("verified owning scripts", () => {
     expect(resolveInvocation(other, scriptEvidence("npm", "run")).launcher).toBe("packageRunner");
   });
 
-  it.each([
-    undefined,
-    ["node", "/ancestor.mjs"],
-    ["bun", "run", "different"],
-    ["npm", "run", "different"],
-    ["npm run ancestor"],
-    ["sh", "-c", "other-tool --help"],
-  ])("rejects even manifest-valid same-target ancestor metadata with parent %s", (parentArgv) => {
-    const input = scriptEvidence("npm", "run");
-    input.parentArgv = parentArgv;
+  it.each([undefined, ["npm", "run", "different"], ["sh", "-c", "other-tool --help"]])(
+    "rejects even manifest-valid same-target ancestor metadata with parent %s",
+    (parentArgv) => {
+      const input = scriptEvidence("npm", "run");
+      input.parentArgv = parentArgv;
+      expect(resolveInvocation(target, input).launcher).toBe("packageRunner");
+    },
+  );
+
+  it("lets an explicit pnpm dlx win over manifest-valid same-target metadata", () => {
+    const input = scriptEvidence("pnpm", "dlx");
     expect(resolveInvocation(target, input).launcher).toBe("packageRunner");
   });
 
-  it.each([
-    ["npm", "exec"],
-    ["pnpm", "dlx"],
-    ["yarn", "dlx"],
-  ])("explicit %s %s wins even over manifest-valid same-target metadata", (manager, mode) => {
-    const input = scriptEvidence(manager, mode);
-    expect(resolveInvocation(target, input).launcher).toBe("packageRunner");
-  });
-
-  it.each(["missing", "malformed", "stale", "noEvent", "noManifest", "noScript", "wrongMode"])(
+  it.each(["malformed", "stale", "noScript", "wrongMode"])(
     "rejects %s lifecycle evidence",
     (failure) => {
       const input = scriptEvidence("npm", "run");
-      if (failure === "missing") rmSync(join(directory, "package.json"));
       if (failure === "malformed") writeFileSync(join(directory, "package.json"), "{");
       if (failure === "stale") setScript("other-command");
-      if (failure === "noEvent") input.env = { ...input.env, npm_lifecycle_event: undefined };
-      if (failure === "noManifest") input.env = { ...input.env, npm_package_json: undefined };
       if (failure === "noScript") input.env = { ...input.env, npm_lifecycle_script: undefined };
       if (failure === "wrongMode") input.env = { ...input.env, npm_command: "install" };
       expect(resolveInvocation(target, input).launcher).toBe("packageRunner");

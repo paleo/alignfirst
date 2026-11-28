@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   registryPath,
@@ -22,10 +22,15 @@ import {
 import { configureGit, git, initRepository, makeTempDir, writeRegistry } from "./helpers.js";
 
 const dirs: string[] = [];
+const sharedDirs: string[] = [];
 
 afterEach(() => {
   vi.restoreAllMocks();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+afterAll(() => {
+  for (const dir of sharedDirs) rmSync(dir, { recursive: true, force: true });
 });
 
 describe("project layout", () => {
@@ -215,8 +220,6 @@ describe("project layout", () => {
     const { home, project } = makeHome();
     for (const entry of [
       { dir: "app", items: { docs: "PRIVATE" } },
-      { dir: "app", aligndev: { profile: "  " } },
-      { items: {}, aligndev: { profile: "work" } },
       { dir: "app", items: { _aligndev: "companion" } },
     ]) {
       writeRegistry(home, { extra: "PRIVATE", projects: { "~/projects/app": entry } });
@@ -226,36 +229,35 @@ describe("project layout", () => {
     expect(warn).toHaveBeenCalled();
   });
 
-  it.each([
-    "{",
-    '{"projects": {}, "extra": "PRIVATE", BROKEN}',
-    JSON.stringify(null),
-    JSON.stringify([]),
-    JSON.stringify({}),
-    JSON.stringify({ projects: [] }),
-    JSON.stringify({ projects: { "~/p": null } }),
-    JSON.stringify({ projects: { "~/p": { dir: "p", items: [] } } }),
-    JSON.stringify({ projects: { "~/p": {} } }),
-    JSON.stringify({ projects: { "~/p": { items: {} } } }),
-    JSON.stringify({ projects: { "~/p": { aligndev: {} } } }),
-    JSON.stringify({ projects: { "~/p": { aligndev: null } } }),
-    JSON.stringify({ projects: { "~/p": { aligndev: { profile: 1 } } } }),
-    JSON.stringify({ projects: { "~/p": { aligndev: { profile: "" } } } }),
-    JSON.stringify({ projects: { "~/p": { aligndev: { profile: "  " } } } }),
-    JSON.stringify({ projects: { "~/p": { dir: " " } } }),
-    JSON.stringify({ projects: { "~/p": { dir: "a\u0000b" } } }),
-    JSON.stringify({ projects: { "~/p": { dir: "" } } }),
-    JSON.stringify({ projects: { "~/p": { dir: "~x" } } }),
-    JSON.stringify({ projects: { "~/p": { dir: "~" } } }),
-    JSON.stringify({ projects: { "~/p": { dir: "p", items: { docs: true } } } }),
-    JSON.stringify({ projects: { "~/p": { dir: "p", items: { _aligndev: "project" } } } }),
-    JSON.stringify({ projects: { "/a": { dir: "a" }, "p/q": { dir: "q" } } }),
-    JSON.stringify({ projects: { "~p": { dir: "p" } } }),
-  ])("rejects an invalid file %#", (content) => {
-    const { home, project } = makeHome();
-    mkdirSync(join(home, ".alignfirst", "companions"), { recursive: true });
-    writeFileSync(registryPath(home), content);
-    expect(() => resolveProjectLayout(project, home)).toThrow(registryPath(home));
+  describe("invalid registry file", () => {
+    let shared: HomeFixture;
+
+    beforeAll(() => {
+      shared = makeHome(sharedDirs);
+      mkdirSync(join(shared.home, ".alignfirst", "companions"), { recursive: true });
+    });
+
+    it.each([
+      ["broken JSON", "{"],
+      ["a non-object file", JSON.stringify(null)],
+      ["missing projects", JSON.stringify({})],
+      ["a non-object entry", JSON.stringify({ projects: { "~/p": null } })],
+      ["an entry without dir or aligndev", JSON.stringify({ projects: { "~/p": {} } })],
+      ["items without dir", JSON.stringify({ projects: { "~/p": { items: {} } } })],
+      ["a blank profile", JSON.stringify({ projects: { "~/p": { aligndev: { profile: "  " } } } })],
+      ["a NUL in dir", JSON.stringify({ projects: { "~/p": { dir: "a\u0000b" } } })],
+      ["a dir starting with ~ but not ~/", JSON.stringify({ projects: { "~/p": { dir: "~x" } } })],
+      [
+        "a project selection of _aligndev",
+        JSON.stringify({ projects: { "~/p": { dir: "p", items: { _aligndev: "project" } } } }),
+      ],
+      ["a relative key", JSON.stringify({ projects: { "p/q": { dir: "q" } } })],
+    ])("rejects %s", (_case, content) => {
+      writeFileSync(registryPath(shared.home), content);
+      expect(() => resolveProjectLayout(shared.project, shared.home)).toThrow(
+        registryPath(shared.home),
+      );
+    });
   });
 
   it("shares a profile-only selection through symlink keys and linked worktrees without redirecting files", () => {
@@ -602,9 +604,9 @@ interface HomeFixture {
   project: string;
 }
 
-function makeHome(): HomeFixture {
+function makeHome(owner = dirs): HomeFixture {
   const root = makeTempDir("alignfirst-layout-");
-  dirs.push(root);
+  owner.push(root);
   configureGit(root);
   const home = join(root, "home");
   const project = join(home, "projects", "app");

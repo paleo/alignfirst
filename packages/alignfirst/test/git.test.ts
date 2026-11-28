@@ -27,10 +27,11 @@ afterEach(() => {
 });
 
 describe("git failures", () => {
-  it("propagates a missing Git executable instead of treating the directory as outside Git", () => {
+  it("propagates a missing Git executable instead of treating the directory as outside Git", async () => {
     const dir = makeFixture();
     vi.stubEnv("PATH", dir);
     expect(() => optionalRepositoryId(dir)).toThrow("ENOENT");
+    await expect(gitQuiet(dir, ["status"])).rejects.toThrow("ENOENT");
   });
 
   it("propagates an invalid explicit Git directory instead of treating it as discovery absence", () => {
@@ -68,12 +69,6 @@ describe("git failures", () => {
       stdout.mockRestore();
       stderr.mockRestore();
     }
-  });
-
-  it("rejects a quiet spawn error", async () => {
-    const dir = makeFixture();
-    vi.stubEnv("PATH", dir);
-    await expect(gitQuiet(dir, ["status"])).rejects.toThrow("ENOENT");
   });
 
   it("streams output beyond the synchronous child-process buffer limit", async () => {
