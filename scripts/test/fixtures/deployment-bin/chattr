@@ -1,0 +1,24 @@
+#!/bin/sh
+# Records immutable flags. STANDIN_FAIL_HARDEN fails every +i; STANDIN_FAIL_UNLOCK_ONCE fails the
+# first -i of the fixture.
+. "$STANDIN_SOURCE/lib.sh"
+standin_call chattr "$@"
+case ${1:-} in
+  +i) flag=+i ;;
+  -i | -ia) flag=-i ;;
+  *) standin_fail "chattr: unsupported operation ${1:-}" ;;
+esac
+shift
+[ $# -gt 0 ] || standin_fail "chattr: missing target"
+for path do
+  shift
+  standin_inside "$path"
+  set -- "$@" "$resolved"
+done
+if [ "$flag" = +i ] && [ "${STANDIN_FAIL_HARDEN:-}" = 1 ]; then exit 1; fi
+if [ "$flag" = -i ] && [ "${STANDIN_FAIL_UNLOCK_ONCE:-}" = 1 ] &&
+  [ ! -e "$STANDIN_ROOT/.unlock-failed" ]; then
+  : >"$STANDIN_ROOT/.unlock-failed"
+  exit 1
+fi
+for path do printf 'chattr\t%s\t%s\n' "$flag" "$path"; done >>"$STANDIN_JOURNAL"

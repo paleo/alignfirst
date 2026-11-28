@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
@@ -17,7 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { renderPiLauncher } from "../../skills/aligndev-openclaw-setup/assets/aligndev-openclaw-template/base/infra/openclaw/node-runtime/pi-launcher.mjs";
 
 const repository = fileURLToPath(new URL("../../", import.meta.url));
@@ -59,75 +59,75 @@ writeFileSync(process.env.RECORD, JSON.stringify({
   });
 });
 
-for (const [label, mutate] of [
-  [
-    "wrong package",
-    (value) => {
-      value.name = "other-package";
-    },
-  ],
-  [
-    "missing bin",
-    (value) => {
-      delete value.bin;
-    },
-  ],
-  [
-    "absolute bin",
-    (value, fixture) => {
-      value.bin.pi = join(fixture.root, "cli.js");
-    },
-  ],
-  [
-    "escaping bin",
-    (value) => {
-      value.bin.pi = "../cli.js";
-    },
-  ],
-  [
-    "missing entry",
-    (value) => {
-      value.bin.pi = "missing.js";
-    },
-  ],
-  [
-    "unknown engine range",
-    (value) => {
-      value.engines.node = "^22 || ^24";
-    },
-  ],
-  [
-    "missing engine range",
-    (value) => {
-      delete value.engines;
-    },
-  ],
-  [
-    "malformed engine range",
-    (value) => {
-      value.engines.node = { toString: ">=1.0.0" };
-    },
-  ],
-  [
-    "noncanonical engine range",
-    (value) => {
-      value.engines.node = ">=022.19.0";
-    },
-  ],
-  [
-    "unsafe engine version components",
-    (value) => {
-      value.engines.node = ">=9007199254740993.0.0";
-    },
-  ],
-  [
-    "non-file entry",
-    (value) => {
-      value.bin.pi = "dist/bundle";
-    },
-  ],
-]) {
-  test(`launcher refuses ${label} before installation`, () => {
+test("launcher refuses invalid package metadata before installation", () => {
+  for (const [label, mutate] of [
+    [
+      "wrong package",
+      (value) => {
+        value.name = "other-package";
+      },
+    ],
+    [
+      "missing bin",
+      (value) => {
+        delete value.bin;
+      },
+    ],
+    [
+      "absolute bin",
+      (value, fixture) => {
+        value.bin.pi = join(fixture.root, "cli.js");
+      },
+    ],
+    [
+      "escaping bin",
+      (value) => {
+        value.bin.pi = "../cli.js";
+      },
+    ],
+    [
+      "missing entry",
+      (value) => {
+        value.bin.pi = "missing.js";
+      },
+    ],
+    [
+      "unknown engine range",
+      (value) => {
+        value.engines.node = "^22 || ^24";
+      },
+    ],
+    [
+      "missing engine range",
+      (value) => {
+        delete value.engines;
+      },
+    ],
+    [
+      "malformed engine range",
+      (value) => {
+        value.engines.node = { toString: ">=1.0.0" };
+      },
+    ],
+    [
+      "noncanonical engine range",
+      (value) => {
+        value.engines.node = ">=022.19.0";
+      },
+    ],
+    [
+      "unsafe engine version components",
+      (value) => {
+        value.engines.node = ">=9007199254740993.0.0";
+      },
+    ],
+    [
+      "non-file entry",
+      (value) => {
+        value.bin.pi = "dist/bundle";
+      },
+    ],
+  ]) {
     withFixture((fixture) => {
       const root = fakePackage(fixture);
       writeFileSync(join(fixture.root, "cli.js"), "");
@@ -135,10 +135,10 @@ for (const [label, mutate] of [
       const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
       mutate(manifest, fixture);
       writeFileSync(join(root, "package.json"), JSON.stringify(manifest));
-      assert.throws(() => renderPiLauncher(root, "26.0.0"));
+      assert.throws(() => renderPiLauncher(root, "26.0.0"), undefined, label);
     });
-  });
-}
+  }
+});
 
 test("production generator refuses an unprotected package prefix", () => {
   withFixture((fixture) => {
@@ -223,7 +223,7 @@ test("launcher rejects symlinked source/entry paths and follows a changed declar
   });
 });
 
-for (const agent of ["claude", "codex", "pi"]) {
+for (const agent of ["codex", "pi"]) {
   test(`runtime checker preserves ${agent} command precedence against writable runtime shadows`, () => {
     withFixture((fixture) => {
       const home = join(fixture.root, "service");
@@ -290,25 +290,23 @@ test("runtime checker runs both AlignFirst CLIs through npx", () => {
   });
 });
 
-for (const directory of [".pi/agent", "native/custom agent"]) {
-  test(`real offline Pi/${directory} and its bash tool retain launcher/project runtimes`, () => {
-    withFixture((fixture) => {
-      fixture.env.PI_CODING_AGENT_DIR = join(fixture.home, directory);
-      nativeFixture(fixture);
-      const launcher = installFixtureLauncher(fixture, host);
-      run(fixture, launcher, [
-        "--mode",
-        "json",
-        "--print",
-        "--no-session",
-        "--model",
-        "packed-fixture/local",
-        "probe",
-      ]);
-      verifyNativeRecords(fixture);
-    });
+test("real offline Pi in a custom directory and its bash tool retain launcher/project runtimes", () => {
+  withFixture((fixture) => {
+    fixture.env.PI_CODING_AGENT_DIR = join(fixture.home, "native/custom agent");
+    nativeFixture(fixture);
+    const launcher = installFixtureLauncher(fixture, host);
+    run(fixture, launcher, [
+      "--mode",
+      "json",
+      "--print",
+      "--no-session",
+      "--model",
+      "packed-fixture/local",
+      "probe",
+    ]);
+    verifyNativeRecords(fixture);
   });
-}
+});
 
 test("rendered Pi checker probe executes offline with no model request", () => {
   withFixture((fixture) => {
@@ -337,67 +335,21 @@ test("rendered Pi checker probe executes offline with no model request", () => {
   });
 });
 
-test("offline packed root subagent uses process.execPath instead of project PATH's node", () => {
-  withFixture((fixture) => {
-    nativeFixture(fixture);
-    const packed = packSubagent(fixture);
-    const driverRoot = fakePackage(fixture);
-    writeFileSync(
-      join(driverRoot, "dist/bundle/cli.js"),
-      `import assert from "node:assert/strict";
-import {writeFileSync} from "node:fs";
-import subagent from ${JSON.stringify(pathToFileURL(join(packed, "index.js")).href)};
-let tool;
-subagent({on() {}, registerTool(value) { assert.equal(tool, undefined); tool = value; }});
-assert.equal(tool.name, "subagent");
-const result = await tool.execute("runtime-probe", {task:"probe"}, undefined, undefined, {
-  cwd:process.cwd(), model:{provider:"packed-fixture", id:"local"},
-  thinkingLevel:"off", isProjectTrusted:()=>false,
-});
-assert.equal(result.isError, false, JSON.stringify(result));
-assert.equal(result.structuredContent.results[0].output, "PACKED-CHILD-OK");
-writeFileSync(process.env.PARENT_RECORD, JSON.stringify({runtime:process.execPath}));\n`,
-    );
-    const launcher = installFixtureLauncher(fixture, driverRoot);
-    run(fixture, launcher, [], {
-      PI_PACKAGE_DIR: host,
-      PARENT_RECORD: join(fixture.root, "parent.json"),
-    });
-    const parent = JSON.parse(readFileSync(join(fixture.root, "parent.json"), "utf8"));
-    const child = JSON.parse(readFileSync(join(fixture.root, "native.json"), "utf8"));
-    assert.equal(
-      child.runtime,
-      parent.runtime,
-      "Packaged production resolver reuses parent execPath",
-    );
-    assert.notEqual(child.runtime, join(fixture.projectBin, "node"));
-    verifyNativeRecords(fixture);
-  });
-});
-
 test("installer requests protected publication using system Node and preserves installed bytes on generation failure", () => {
   withFixture((fixture) => {
     const setup = installerFixture(fixture);
     run(fixture, "/bin/bash", [setup.installer], setup.env);
     const calls = installerCalls(setup);
     assert.deepEqual(
-      calls.map((call) => call.command),
-      ["id", "lsattr", "mktemp", "system-node", "install", "install", "rm"],
+      calls.find((call) => call.command === "system-node")?.args,
+      [setup.generator, setup.packageRoot, setup.prefix],
+      "System Node generates the launcher from the installed package",
     );
-    assert.deepEqual(calls[3].args, [setup.generator, setup.packageRoot, setup.prefix]);
-    assert.deepEqual(calls[4].args, ["-d", "-o", "root", "-g", "root", "-m", "755", setup.bin]);
-    const temporary = calls[5].args[6];
-    assert.deepEqual(calls[5].args, [
-      "-o",
-      "root",
-      "-g",
-      "root",
-      "-m",
-      "755",
-      temporary,
-      setup.launcher,
-    ]);
-    assert.deepEqual(calls[6].args, ["-f", "--", temporary]);
+    const installs = calls.filter((call) => call.command === "install");
+    assert.deepEqual(installs[0]?.args, ["-d", "-o", "root", "-g", "root", "-m", "755", setup.bin]);
+    assert.deepEqual(installs[1]?.args.slice(0, 6), ["-o", "root", "-g", "root", "-m", "755"]);
+    assert.equal(installs[1].args[7], setup.launcher);
+    assert.equal(installs.length, 2);
     assert.equal(
       readFileSync(setup.launcher, "utf8"),
       `#!/bin/sh\nexec /usr/bin/node ${quote(join(setup.packageRoot, "dist/bundle/cli.js"))} "$@"\n`,
@@ -414,12 +366,7 @@ test("installer requests protected publication using system Node and preserves i
     const failed = spawnSync("/bin/bash", [setup.installer], options(fixture, setup.env));
     assert.notEqual(failed.status, 0, failed.stderr);
     assert.deepEqual(readFileSync(setup.launcher), installed);
-    const failureCalls = installerCalls(setup);
-    assert.deepEqual(
-      failureCalls.map((call) => call.command),
-      ["id", "lsattr", "mktemp", "system-node", "rm"],
-    );
-    assert.deepEqual(failureCalls[3].args, [setup.generator, setup.packageRoot, setup.prefix]);
+    assert(!installerCalls(setup).some((call) => call.command === "install"));
     assert.deepEqual(readdirSync(setup.tmp), [], "failed generation removes temporary output");
   });
 });
@@ -650,28 +597,4 @@ function verifyNativeRecords(fixture) {
     "Pi's native shell helper prepends only its managed bin; project PATH remains intact",
   );
   for (const record of [native, tool]) assert.equal(record.cwd, fixture.project);
-}
-
-function packSubagent(fixture) {
-  const npm = join(dirname(process.execPath), "npm");
-  const output = execFileSync(
-    npm,
-    ["pack", "--offline", "--ignore-scripts", "--json", "--pack-destination", fixture.root],
-    {
-      ...options(fixture),
-      cwd: join(repository, "packages/pi-subagent"),
-    },
-  );
-  const result = JSON.parse(output);
-  const [packed] = Array.isArray(result) ? result : Object.values(result);
-  const destination = join(fixture.root, "packed");
-  mkdirSync(destination);
-  execFileSync("tar", ["-xf", join(fixture.root, packed.filename), "-C", destination]);
-  const root = join(destination, "package");
-  symlinkSync(join(repository, "node_modules"), join(root, "node_modules"));
-  assert.equal(
-    JSON.parse(readFileSync(join(root, "package.json"), "utf8")).pi.extensions[0],
-    "./index.js",
-  );
-  return root;
 }

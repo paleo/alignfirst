@@ -1,0 +1,19 @@
+#!/bin/sh
+# Real bash. A login shell (-l, --login, -lc) applies STANDIN_LOGIN_CODEX_HOME, when set, the way an
+# account profile could: it exports CODEX_HOME and API-key variables.
+. "$STANDIN_SOURCE/lib.sh"
+standin_call bash "$@"
+login=0
+for argument do
+  shift
+  case $argument in
+    -l | --login) login=1 ;;
+    -lc) login=1; set -- "$@" -c ;;
+    *) set -- "$@" "$argument" ;;
+  esac
+done
+if [ "$login" = 1 ] && [ -n "${STANDIN_LOGIN_CODEX_HOME+set}" ]; then
+  export CODEX_HOME="$STANDIN_LOGIN_CODEX_HOME"
+  export CODEX_API_KEY=offline-key-marker OPENAI_API_KEY=offline-key-marker
+fi
+exec /bin/bash "$@"

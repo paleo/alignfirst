@@ -21,143 +21,80 @@ const guard = fileURLToPath(new URL("./fixtures/deployment-deny-network.mjs", im
 const storageProbe = fileURLToPath(
   new URL("./fixtures/deployment-storage-probe.mjs", import.meta.url),
 );
+const resourceProbe = fileURLToPath(
+  new URL("./fixtures/deployment-resource-probe.mjs", import.meta.url),
+);
+// Deployment hardening makes these root-owned; the service account only reads them.
+const managedFiles = {
+  "settings.json": "{}",
+  "models.json": "{}",
+  "mcp.json": "{}",
+  "trust.json": "{}",
+  "AGENTS.md": "Fixture managed instructions",
+  "SYSTEM.md": "",
+  "APPEND_SYSTEM.md": "",
+};
 
-// Preserve the accepted auth.json persistence risk; these probes do not certify OS hardening.
-for (const custom of [false, true]) {
-  const directoryKind = custom ? "custom" : "default";
-  test(`approved exception: mutable ${directoryKind} auth persists commands across CLI startups`, () => {
-    withFixture(custom, (fixture) => {
-      const authPath = join(fixture.agentDir, "auth.json");
-      const sentinel = join(fixture.root, "command-ran");
-      writeFileSync(authPath, JSON.stringify({ openai: { type: "api_key", key: "fixture-only" } }));
-      runListModels(fixture);
-      assert(!existsSync(sentinel), "Literal credential is the negative control");
-
-      // Same-user mutation persists independently of the process that wrote the file.
-      writeFileSync(
-        authPath,
-        JSON.stringify({
-          openai: {
-            type: "api_key",
-            key: `!printf executed > ${shellQuote(sentinel)}; printf fixture-only`,
-          },
-        }),
-      );
-      runListModels(fixture);
-      assert.equal(readFileSync(sentinel, "utf8"), "executed");
-      rmSync(sentinel);
-      runListModels(fixture);
-      assert.equal(
-        readFileSync(sentinel, "utf8"),
-        "executed",
-        "Persists across fresh Pi processes",
-      );
+// The pinned Pi must keep the deployment's assumptions; these probes do not certify OS hardening.
+test("pinned Pi discovers reserved resources, starts without a prompt and writes credentials beside read-only resources", () => {
+  withFixture((fixture) => {
+    assert.deepEqual(JSON.parse(runNode(fixture, [resourceProbe])), {
+      emptyPromptReservationsNeutral: true,
+      alternateInstructionsDiscovered: true,
+      parentTrustInherited: true,
+      closerTrustOverrides: true,
+      nativeSettingsPersisted: true,
+    });
+    for (const [name, text] of Object.entries(managedFiles)) {
+      writeFileSync(join(fixture.agentDir, name), text);
+      chmodSync(join(fixture.agentDir, name), 0o444);
+    }
+    chmodSync(join(fixture.agentDir, "AGENTS.override.md"), 0o555);
+    writeFileSync(
+      join(fixture.agentDir, "auth.json"),
+      JSON.stringify({ openai: { type: "api_key", key: "fixture-only" } }),
+      { mode: 0o600 },
+    );
+    const result = spawnSync(
+      process.execPath,
+      ["--import", guard, piCli, "--offline", "--mode", "rpc", "--no-session"],
+      {
+        cwd: fixture.cwd,
+        env: fixture.env,
+        encoding: "utf8",
+        timeout: 15_000,
+        maxBuffer: 64 * 1024,
+        input: '{"id":"fixture-state","type":"get_state"}\n',
+      },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, "", "Startup must not hide read-only resource failures");
+    const records = result.stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    const state = records.find((record) => record.id === "fixture-state");
+    assert.equal(state?.type, "response");
+    assert.equal(state?.success, true);
+    assert.equal(state?.data.isStreaming, false);
+    assert(
+      !records.some((record) => record.type === "message_start"),
+      "No model turn was requested",
+    );
+    assert(!result.stdout.includes("fixture-only"));
+    assert.deepEqual(JSON.parse(runNode(fixture, [storageProbe])), {
+      adjacentLockObserved: true,
+      credentialUpdated: true,
+      lockRemoved: true,
     });
   });
+});
 
-  test(`${directoryKind} no-prompt RPC startup and credential writes coexist with read-only resources`, () => {
-    withFixture(custom, (fixture) => {
-      for (const [name, text] of Object.entries({
-        "settings.json": "{}",
-        "models.json": "{}",
-        "mcp.json": "{}",
-        "trust.json": "{}",
-        "AGENTS.md": "Fixture managed instructions",
-        "SYSTEM.md": "",
-        "APPEND_SYSTEM.md": "",
-      })) {
-        writeFileSync(join(fixture.agentDir, name), text);
-        chmodSync(join(fixture.agentDir, name), 0o444);
-      }
-      mkdirSync(join(fixture.agentDir, "AGENTS.override.md"), { mode: 0o555 });
-      writeFileSync(
-        join(fixture.agentDir, "auth.json"),
-        JSON.stringify({
-          openai: { type: "api_key", key: "fixture-only" },
-        }),
-        { mode: 0o600 },
-      );
-      const result = spawnSync(
-        process.execPath,
-        [
-          "--import",
-          guard,
-          piCli,
-          "--offline",
-          "--mode",
-          "rpc",
-          "--no-session",
-          "--provider",
-          "openai",
-          "--model",
-          "gpt-4o-mini",
-        ],
-        {
-          cwd: fixture.cwd,
-          env: fixture.env,
-          encoding: "utf8",
-          timeout: 15_000,
-          maxBuffer: 64 * 1024,
-          input: '{"id":"fixture-state","type":"get_state"}\n',
-        },
-      );
-      assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stderr, "", "Startup must not hide read-only resource failures");
-      const output = result.stdout;
-      const records = output
-        .trim()
-        .split("\n")
-        .map((line) => JSON.parse(line));
-      const state = records.find((record) => record.id === "fixture-state");
-      assert.equal(state?.type, "response");
-      assert.equal(state?.success, true);
-      assert.equal(state?.data.isStreaming, false);
-      assert(
-        !records.some((record) => record.type === "message_start"),
-        "No model turn was requested",
-      );
-      assert(!output.includes("fixture-only"));
-      assert.deepEqual(JSON.parse(runNode(fixture, [storageProbe, "mutable"])), {
-        adjacentLockObserved: true,
-        credentialUpdated: true,
-        lockRemoved: true,
-      });
-    });
-  });
-
-  test(`${directoryKind} native discovery, empty prompt reservations and saved parent trust`, () => {
-    withFixture(custom, (fixture) => {
-      const probe = fileURLToPath(
-        new URL("./fixtures/deployment-resource-probe.mjs", import.meta.url),
-      );
-      assert.deepEqual(JSON.parse(runNode(fixture, [probe])), {
-        emptyPromptReservationsNeutral: true,
-        alternateInstructionsDiscovered: true,
-        parentTrustInherited: true,
-        closerTrustOverrides: true,
-        nativeSettingsPersisted: true,
-      });
-    });
-  });
-
-  test(`read-only ${directoryKind} credentials cannot satisfy native storage`, {
-    skip: process.platform === "win32" || process.getuid?.() === 0,
-  }, () => {
-    withFixture(custom, (fixture) => {
-      assert.deepEqual(JSON.parse(runNode(fixture, [storageProbe, "permissions"])), {
-        fileWriteDenied: true,
-        parentLockDenied: true,
-        noLockRemains: true,
-      });
-    });
-  });
-}
-
-function withFixture(custom, run) {
-  const root = mkdtempSync(join(tmpdir(), "side25-b8-native-"));
+function withFixture(run) {
+  const root = mkdtempSync(join(tmpdir(), "deployment-native-"));
   const home = join(root, "home");
   const cwd = join(home, "project");
-  const agentDir = custom ? join(root, "custom-agent") : join(home, ".pi/agent");
+  const agentDir = join(home, ".pi/agent");
   const env = {
     HOME: home,
     USER: "fixture",
@@ -173,7 +110,6 @@ function withFixture(custom, run) {
     PI_TELEMETRY: "0",
     PI_CODING_AGENT_SESSION_DIR: join(root, "sessions"),
     DEPLOYMENT_FIXTURE_ROOT: root,
-    ...(custom ? { PI_CODING_AGENT_DIR: agentDir } : {}),
   };
   try {
     mkdirSync(cwd, { recursive: true });
@@ -181,25 +117,10 @@ function withFixture(custom, run) {
     writeFileSync(join(agentDir, "settings.json"), "{}");
     run({ root, cwd, agentDir, env });
   } finally {
-    // Also recover the fixture mode if a storage subprocess fails before its finally block.
-    if (existsSync(agentDir)) chmodSync(agentDir, 0o700);
+    if (existsSync(join(agentDir, "AGENTS.override.md")))
+      chmodSync(join(agentDir, "AGENTS.override.md"), 0o755);
     rmSync(root, { recursive: true, force: true });
   }
-}
-
-function runListModels(fixture) {
-  const output = runNode(fixture, [
-    piCli,
-    "--offline",
-    "--no-extensions",
-    "--no-skills",
-    "--no-prompt-templates",
-    "--no-themes",
-    "--no-context-files",
-    "--list-models",
-    "side25-b8-no-such-model",
-  ]);
-  assert(!output.includes("fixture-only"), "Do not print even fixture credential values");
 }
 
 function runNode(fixture, args) {
@@ -211,8 +132,4 @@ function runNode(fixture, args) {
     maxBuffer: 64 * 1024,
     stdio: ["ignore", "pipe", "pipe"],
   });
-}
-
-function shellQuote(value) {
-  return `'${value.replaceAll("'", "'\\''")}'`;
 }

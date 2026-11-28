@@ -1,0 +1,10 @@
+#!/bin/sh
+# The service account is "fixture" (uid 1000); the caller's uid follows STANDIN_ROLE.
+. "$STANDIN_SOURCE/lib.sh"
+standin_call id "$@"
+case "$*" in
+  -u) if [ "$standin_role" = root ]; then echo 0; else echo 1000; fi ;;
+  "-u fixture") echo 1000 ;;
+  -un | "-gn fixture") echo fixture ;;
+  *) standin_fail "id: unsupported arguments: $*" ;;
+esac

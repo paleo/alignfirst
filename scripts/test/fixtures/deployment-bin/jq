@@ -1,0 +1,8 @@
+#!/bin/sh
+# Real jq; absolute file arguments stay inside the fixture.
+. "$STANDIN_SOURCE/lib.sh"
+standin_call jq "$@"
+for argument do
+  case $argument in /*) standin_inside "$argument" ;; esac
+done
+exec /usr/bin/jq "$@"

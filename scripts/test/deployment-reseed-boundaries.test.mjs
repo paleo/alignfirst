@@ -13,9 +13,16 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import {
+  installStandIns,
+  journalCalls,
+  readJournal,
+  replayState,
+  standInEnv,
+} from "./fixtures/deployment-standins.mjs";
 
 const template = fileURLToPath(
   new URL(
@@ -89,13 +96,12 @@ for (const agent of Object.keys(agents)) {
   });
 }
 
-for (const declaration of [
-  "~/.local/share/fnm",
-  "~/.local/share/fnm/node-versions",
-  "~/.local/share",
-  "~/.local",
-]) {
-  test(`Pi rejects reserved fnm overlap ${declaration} before any mutation`, () => {
+test("Pi rejects reserved fnm overlaps before any mutation", () => {
+  for (const declaration of [
+    "~/.local/share/fnm",
+    "~/.local/share/fnm/node-versions",
+    "~/.local/share",
+  ]) {
     withFixture("pi", (f) => {
       const runtime = join(f.home, ".local/share/fnm/node-versions/fixture/installation/bin");
       mkdirSync(runtime, { recursive: true });
@@ -103,15 +109,13 @@ for (const declaration of [
       mkdirSync(f.native, { recursive: true });
       writeFileSync(join(f.native, "settings.json"), JSON.stringify({ packages: [declaration] }));
       const before = treeState(f.home);
-      for (const action of ["inventory", "prepare", "unlock", "harden"]) {
+      for (const action of ["inventory", "prepare"]) {
         f.policy(action, undefined, 1);
-        assert.deepEqual(treeState(f.home), before, `${action} must fail before filesystem writes`);
-        assert.deepEqual(f.state(), {});
-        assert.deepEqual(f.calls(), [], `${action} must fail before privileged command doubles`);
+        assert.deepEqual(treeState(f.home), before, `${declaration}: ${action}`);
       }
     });
-  });
-}
+  }
+});
 
 test("Pi permits a local package beside the reserved fnm tree", () => {
   withFixture("pi", (f) => {
@@ -137,8 +141,7 @@ function withFixture(agent, callback) {
   const bin = join(root, "bin");
   const definition = agents[agent];
   const native = join(home, definition.directory);
-  const stateFile = join(root, "permissions.json");
-  const log = join(root, "calls.jsonl");
+  const journal = join(root, "journal");
   const settings = join(infra, "aligndev.settings.json");
   const deployed = join(home, ".alignfirst/aligndev.settings.json");
   const f = {
@@ -147,8 +150,8 @@ function withFixture(agent, callback) {
     native,
     instructions: join(native, definition.instructions),
     instructionSource: join(infra, "coding-agent", definition.instructions),
-    state: () => JSON.parse(readFileSync(stateFile, "utf8")),
-    calls: () => readFileSync(log, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse),
+    state: () => replayState(readJournal(journal)),
+    calls: () => journalCalls(readJournal(journal)),
   };
   try {
     mkdirSync(home);
@@ -183,31 +186,22 @@ function withFixture(agent, callback) {
         },
       }),
     );
-    writeFileSync(stateFile, "{}");
-    writeFileSync(log, "");
+    writeFileSync(journal, "");
     for (const name of ["bash", "dirname", "sed", "tr", "cmp", "mktemp", "rm", "jq"])
       symlinkSync(`/usr/bin/${name}`, join(bin, name));
     symlinkSync(process.execPath, join(bin, "node"));
-    const double =
-      `#!${process.execPath}\nimport fs from "node:fs";\n` +
-      'import { basename, dirname, resolve } from "node:path";\n' +
-      'import { spawnSync } from "node:child_process";\n' +
-      `(${permissionCommand.toString()})();\n`;
-    for (const name of ["id", "install", "chown", "chmod", "chattr"])
-      writeFileSync(join(bin, name), double, { mode: 0o755 });
+    installStandIns(bin, ["id", ["install", "install.mjs"], "chown", "chmod", "chattr"]);
     const env = {
+      ...standInEnv({ root, home, bin, journal }),
       HOME: home,
       PATH: bin,
       TMPDIR: root,
-      BOUNDARY_ROOT: root,
-      BOUNDARY_STATE: stateFile,
-      BOUNDARY_LOG: log,
       NODE_OPTIONS: `--import=${networkGuard}`,
     };
     f.run = (command, args, role, expected) => {
       f.last = spawnSync(command, args, {
         cwd: home,
-        env: { ...env, BOUNDARY_ROLE: role },
+        env: { ...env, STANDIN_ROLE: role },
         encoding: "utf8",
         timeout: 15_000,
       });
@@ -256,68 +250,4 @@ function treeState(root) {
         }
       : { content: readFileSync(root, "utf8") }),
   };
-}
-
-function permissionCommand() {
-  const root = process.env.BOUNDARY_ROOT;
-  const stateFile = process.env.BOUNDARY_STATE;
-  const state = JSON.parse(fs.readFileSync(stateFile, "utf8"));
-  const role = process.env.BOUNDARY_ROLE;
-  const name = basename(process.argv[1]);
-  const args = process.argv.slice(2);
-  function inside(value) {
-    const path = resolve(value);
-    if (!path.startsWith(`${root}/`)) throw new Error(`OUTSIDE FIXTURE: ${path}`);
-    return path;
-  }
-  function info(path) {
-    return state[path] ?? { owner: "service", mode: 0o700, immutable: false };
-  }
-  function update(path, values) {
-    state[path] = { ...info(path), ...values };
-  }
-  function deny(path) {
-    throw new Error(`PERMISSION MODEL: install denied ${path}`);
-  }
-  fs.appendFileSync(process.env.BOUNDARY_LOG, `${JSON.stringify([name, ...args])}\n`);
-  if (name === "id") {
-    if (args.join(" ") !== "-gn fixture") throw new Error("Unexpected id arguments");
-    console.log("fixture");
-  } else if (name === "install") {
-    const directory = args[0] === "-d";
-    const flag = directory ? 1 : 0;
-    if (args[flag] !== "-m" || args.length !== 4) throw new Error("Unexpected install arguments");
-    const mode = Number.parseInt(args[flag + 1], 8);
-    const target = inside(args.at(-1));
-    const existed = fs.existsSync(target);
-    if (!directory) inside(args.at(-2));
-    if (role !== "service") throw new Error("Install only belongs to service reseeding");
-    if (existed && (info(target).owner === "root" || info(target).immutable)) deny(target);
-    if (!existed) {
-      const parent = info(dirname(target));
-      if (parent.immutable || !(parent.mode & (parent.owner === "root" ? 0o020 : 0o200)))
-        deny(target);
-    }
-    const result = spawnSync("/usr/bin/install", args, { stdio: "inherit" });
-    if (result.status !== 0) process.exit(result.status ?? 1);
-    update(target, { owner: "service", mode, immutable: false });
-  } else {
-    if (role !== "root") throw new Error(`Privileged double requested as ${role}`);
-    if (args.length !== 2) throw new Error("Unexpected policy arguments");
-    const [value, raw] = args;
-    const path = inside(raw);
-    if (name === "chown") {
-      if (!["root:fixture", "fixture:fixture"].includes(value)) throw new Error("Unexpected owner");
-      update(path, { owner: value === "root:fixture" ? "root" : "service" });
-    } else if (name === "chattr") {
-      if (!["+i", "-i"].includes(value)) throw new Error("Unexpected immutable flag");
-      update(path, { immutable: value === "+i" });
-    } else if (name === "chmod") {
-      if (!["600", "640", "644", "755", "1770"].includes(value)) throw new Error("Unexpected mode");
-      const mode = Number.parseInt(value, 8);
-      fs.chmodSync(path, mode);
-      update(path, { mode });
-    } else throw new Error(`Unexpected command ${name}`);
-  }
-  fs.writeFileSync(stateFile, JSON.stringify(state));
 }

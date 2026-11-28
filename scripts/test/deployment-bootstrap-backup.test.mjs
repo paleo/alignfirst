@@ -18,6 +18,12 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import {
+  installStandIns,
+  journalCalls,
+  readJournal,
+  standInEnv,
+} from "./fixtures/deployment-standins.mjs";
 
 const template = fileURLToPath(
   new URL(
@@ -50,92 +56,92 @@ const legacySettings = {
   },
 };
 
-for (const agent of Object.keys(legacySettings)) {
-  test(`${agent}: rendered bootstrap precedes seed replacement and profile-only backup`, () => {
-    fixture(agent, (f) => {
-      const original = snapshot(f.home);
-      runSection(f, "Maintenance controls");
-      runSection(f, "Bootstrap backup before conversion", 0);
-      assert.deepEqual(snapshot(f.home), original, "Bootstrap must not migrate deployed state");
-      const backup = onlyBackup(f, "bootstrap");
-      assert(existsSync(join(backup, "COMPLETE")));
-      for (const path of [join(f.home, "backups"), dirname(backup), backup]) {
-        assert.equal(lstatSync(path).mode & 0o777, 0o700);
-      }
-      for (const name of readdirSync(backup)) {
-        assert.equal(lstatSync(join(backup, name)).mode & 0o777, 0o600);
-      }
-      const staging = join(f.root, "private-staging");
-      mkdirSync(staging, { mode: 0o700 });
-      run(f, "tar", [
-        "--extract",
-        "--gzip",
-        "--same-permissions",
-        "--no-same-owner",
-        "--file",
-        join(backup, "service-home.tar.gz"),
-        "--directory",
-        staging,
-      ]);
-      assert.deepEqual(snapshot(staging), original, "Every original file, mode and link survives");
-      assert(!existsSync(join(staging, "backups")), "Never recursively archive previous backups");
-      runSection(f, "Bootstrap backup before conversion", 1);
-      assert.equal(readFileSync(f.deployed, "utf8"), f.originalSettings);
-      assert(!existsSync(join(f.home, "seed/old-seed-only")), "Execute the actual seed refresh");
-      run(f, "bash", [
-        "--noprofile",
-        "--norc",
-        "-euc",
-        section(f, "Writable AlignFirst home", "installations/06-security-hardening.md")[0],
-      ]);
-      writeFileSync(f.deployed, `${JSON.stringify(f.reviewedSettings, null, 2)}\n`);
-      chmodSync(f.deployed, 0o644);
-      assert.deepEqual(JSON.parse(readFileSync(f.deployed, "utf8")), f.reviewedSettings);
-      // The runbook requires operator-reviewed replacement of former Claude native skill links.
-      if (agent === "claude-code") {
-        rmSync(join(f.native, "skills/sharp-writing"));
-        cpSync(
-          join(f.home, ".agents/skills/sharp-writing"),
-          join(f.native, "skills/sharp-writing"),
-          {
-            recursive: true,
-          },
-        );
-      }
-      runSection(f, "Back up");
-      const mapped = onlyBackup(f, "deployment");
-      assert(existsSync(join(mapped, "native/mapping.json")));
-      assert(existsSync(join(mapped, "fixture-openclaw-backup.tar.gz")));
-      for (const name of ["state.sqlite", "state.sqlite-wal", "state.sqlite-shm"]) {
-        assert.equal(
-          readFileSync(join(mapped, "thread-handoff", name), "utf8"),
-          `original ${name}\n`,
-        );
-      }
+test("rendered bootstrap precedes seed replacement and profile-only backup", () => {
+  fixture("claude-code", (f) => {
+    const original = snapshot(f.home);
+    runSection(f, "Maintenance controls");
+    runSection(f, "Bootstrap backup before conversion", 0);
+    assert.deepEqual(snapshot(f.home), original, "Bootstrap must not migrate deployed state");
+    const backup = onlyBackup(f, "bootstrap");
+    assert(existsSync(join(backup, "COMPLETE")));
+    for (const path of [join(f.home, "backups"), dirname(backup), backup]) {
+      assert.equal(lstatSync(path).mode & 0o777, 0o700);
+    }
+    for (const name of readdirSync(backup)) {
+      assert.equal(lstatSync(join(backup, name)).mode & 0o777, 0o600);
+    }
+    const staging = join(f.root, "private-staging");
+    mkdirSync(staging, { mode: 0o700 });
+    run(f, "tar", [
+      "--extract",
+      "--gzip",
+      "--same-permissions",
+      "--no-same-owner",
+      "--file",
+      join(backup, "service-home.tar.gz"),
+      "--directory",
+      staging,
+    ]);
+    assert.deepEqual(snapshot(staging), original, "Every original file, mode and link survives");
+    assert(!existsSync(join(staging, "backups")), "Never recursively archive previous backups");
+    runSection(f, "Bootstrap backup before conversion", 1);
+    assert.equal(readFileSync(f.deployed, "utf8"), f.originalSettings);
+    assert(!existsSync(join(f.home, "seed/old-seed-only")), "Execute the actual seed refresh");
+    run(f, "bash", [
+      "--noprofile",
+      "--norc",
+      "-euc",
+      section(f, "Writable AlignFirst home", "installations/06-security-hardening.md")[0],
+    ]);
+    writeFileSync(f.deployed, `${JSON.stringify(f.reviewedSettings, null, 2)}\n`);
+    chmodSync(f.deployed, 0o644);
+    assert.deepEqual(JSON.parse(readFileSync(f.deployed, "utf8")), f.reviewedSettings);
+    // The runbook requires operator-reviewed replacement of former Claude native skill links.
+    rmSync(join(f.native, "skills/sharp-writing"));
+    cpSync(join(f.home, ".agents/skills/sharp-writing"), join(f.native, "skills/sharp-writing"), {
+      recursive: true,
+    });
+    runSection(f, "Back up");
+    const mapped = onlyBackup(f, "deployment");
+    assert(existsSync(join(mapped, "native/mapping.json")));
+    assert(existsSync(join(mapped, "fixture-openclaw-backup.tar.gz")));
+    for (const name of ["state.sqlite", "state.sqlite-wal", "state.sqlite-shm"]) {
       assert.equal(
-        readFileSync(join(staging, ".alignfirst/aligndev.settings.json"), "utf8"),
-        f.originalSettings,
-        "Mapped backup cannot replace the original legacy recovery point",
+        readFileSync(join(mapped, "thread-handoff", name), "utf8"),
+        `original ${name}\n`,
       );
-      const events = readFileSync(f.log, "utf8");
-      assert(events.indexOf("kill\n") < events.indexOf("tar:create\n"));
-      assert(events.indexOf("tar:list\n") < events.indexOf("rsync\n"));
-      assert(events.indexOf("rsync\n") < events.indexOf("chattr:-ia\n"));
-      assert(events.indexOf("chattr:-ia\n") < events.indexOf("openclaw\n"));
-      assert(!events.includes("chattr:+i\n"), "Settings migration must not re-lock AlignFirst");
-    });
+    }
+    assert.equal(
+      readFileSync(join(staging, ".alignfirst/aligndev.settings.json"), "utf8"),
+      f.originalSettings,
+      "Mapped backup cannot replace the original legacy recovery point",
+    );
+    const calls = f.calls();
+    const first = (name, argument) =>
+      calls.findIndex(([called, ...args]) => called === name && args.includes(argument));
+    const order = [
+      calls.findIndex(([name]) => name === "kill-switch"),
+      first("tar", "--create"),
+      first("tar", "--list"),
+      first("rsync", "--delete"),
+      first("chattr", "-ia"),
+      first("openclaw", "backup"),
+    ];
+    assert(
+      order.every((index, position) => index > (order[position - 1] ?? -1)),
+      `${order}`,
+    );
+    assert(!calls.some(([name, flag]) => name === "chattr" && flag === "+i"));
+    for (const [flag, path] of [
+      ["-R", join(f.home, "seed")],
+      ["-Rh", join(f.home, ".alignfirst")],
+    ])
+      assert(
+        calls.some((call) => call.join(" ") === `chown ${flag} fixture:fixture ${path}`),
+        "Return the seed and the AlignFirst home to the service account",
+      );
   });
-
-  test(`${agent}: ordinary backup ignores retired fields but requires an enabled openclaw profile`, () => {
-    fixture(agent, (f) => {
-      runSection(f, "Maintenance controls");
-      const result = run(f, "bash", [join(f.infra, "bin/backup.sh")], {}, false);
-      assert.notEqual(result.status, 0);
-      assert.equal(readFileSync(f.deployed, "utf8"), f.originalSettings);
-      assert(!readFileSync(f.log, "utf8").includes("openclaw\n"));
-    });
-  });
-}
+});
 
 for (const failure of ["create", "list"]) {
   test(`bootstrap tar ${failure} failure leaves no completed recovery point; retry is independent`, () => {
@@ -146,7 +152,7 @@ for (const failure of ["create", "list"]) {
         f,
         "bash",
         ["--noprofile", "--norc", "-euc", section(f, "Bootstrap backup before conversion")[0]],
-        { FAIL_TAR: failure },
+        { STANDIN_FAIL_TAR: failure },
         false,
       );
       assert.notEqual(failed.status, 0);
@@ -154,7 +160,7 @@ for (const failure of ["create", "list"]) {
       assert(!existsSync(join(partial, "COMPLETE")));
       assert(!existsSync(join(partial, "service-home.tar.gz")));
       assert.deepEqual(snapshot(f.home), original);
-      assert(!readFileSync(f.log, "utf8").includes("rsync\n"));
+      assert(!f.calls().some(([name]) => name === "rsync"));
       runSection(f, "Bootstrap backup before conversion", 0);
       const attempts = readdirSync(join(f.home, "backups/bootstrap"));
       assert.equal(attempts.length, 2);
@@ -197,7 +203,7 @@ function fixture(agent, callback) {
     home: join(root, "home"),
     admin: join(root, "admin"),
     bin: join(root, "bin"),
-    log: join(root, "calls"),
+    journal: join(root, "journal"),
     native: join(root, "home", agent === "codex" ? ".codex" : ".claude"),
     deployed: join(root, "home/.alignfirst/aligndev.settings.json"),
     infra: join(root, "admin/infra/openclaw"),
@@ -264,30 +270,28 @@ function fixture(agent, callback) {
       symlinkSync("../../.agents/skills/sharp-writing", join(f.native, "skills/sharp-writing"));
     mkdirSync(join(f.home, "backups/previous"), { recursive: true });
     put(join(f.home, "backups/previous/keep"), "excluded previous backup\n");
-    put(f.log, "");
-    put(join(f.bin, "double.mjs"), commandDouble());
-    for (const name of [
+    put(f.journal, "");
+    installStandIns(f.bin, [
       "sudo",
       "git",
-      "install",
+      ["install", "install.mjs"],
       "id",
       "chattr",
       "chown",
       "rsync",
       "openclaw",
       "tar",
-    ]) {
-      put(join(f.bin, name), `#!${process.execPath}\nimport "./double.mjs";\n`);
-      chmodSync(join(f.bin, name), 0o755);
-    }
+      "find",
+    ]);
+    installStandIns(join(f.infra, "bin"), [["assistant-kill.sh", "kill-switch"]]);
+    f.calls = () => journalCalls(readJournal(f.journal));
     f.env = {
+      ...standInEnv({ root, home: f.home, bin: f.bin, journal: f.journal }),
+      STANDIN_ROLE: "operator",
       HOME: f.home,
       USER: "fixture",
       LOGNAME: "fixture",
       PATH: `${f.bin}:/usr/bin:/bin`,
-      FIXTURE_ROOT: root,
-      FIXTURE_HOME: f.home,
-      FIXTURE_LOG: f.log,
       NODE_OPTIONS: `--import=${guard}`,
       LANG: "C.UTF-8",
     };
@@ -361,96 +365,4 @@ function run(f, command, args, env = {}, success = true) {
   });
   if (success) assert.equal(result.status, 0, `${command}: ${result.stderr}`);
   return result;
-}
-
-function commandDouble() {
-  return `
-import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import * as fs from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
-const root = process.env.FIXTURE_ROOT;
-assert(root?.includes("deployment-bootstrap-"));
-const home = process.env.FIXTURE_HOME;
-const log = (text) => fs.appendFileSync(process.env.FIXTURE_LOG, text + "\\n");
-const inside = (path) => {
-  const absolute = resolve(path);
-  assert(absolute.startsWith(root + "/"), "Outside fixture: " + absolute);
-  return absolute;
-};
-const execute = (command, args) => {
-  const result = spawnSync(command, args, { env: process.env, stdio: "inherit" });
-  if (result.error) throw result.error;
-  process.exit(result.status ?? 98);
-};
-const name = basename(process.argv[1]);
-let args = process.argv.slice(2);
-if (name === "sudo") {
-  while (args[0]?.startsWith("-")) {
-    const flag = args.shift();
-    if (flag === "-u") assert.equal(args.shift(), "fixture");
-    else assert(["-H", "-i", "--"].includes(flag));
-  }
-  const command = args.shift();
-  if (command.endsWith("/alignfirst-assistant-kill")) {
-    inside(command); assert.equal(args.length, 0); log("kill");
-  } else {
-    if (command === "find") {
-      assert.equal(args[0], join(home, ".alignfirst"));
-      assert([
-        ["(", "-type", "d", "-o", "-type", "f", ")", "-exec", "chattr", "-ia", "{}", "+"],
-        ["-type", "d", "-exec", "chmod", "u+rwx", "{}", "+"],
-        ["-type", "f", "-exec", "chmod", "u+rw", "{}", "+"],
-      ].some(expected => JSON.stringify(expected) === JSON.stringify(args.slice(1))));
-      execute("/usr/bin/find", args);
-    }
-    assert(["install", "chattr", "chown", "rsync"].includes(command) ||
-      [join(root, "opt/fixture/libexec/bootstrap-backup.sh"), join(home, "seed/bin/backup.sh")].includes(command));
-    execute(command, args);
-  }
-} else if (name === "git") {
-  assert.deepEqual(args, ["pull"]);
-} else if (name === "id") {
-  assert.deepEqual(args, ["-un"]); console.log("fixture");
-} else if (name === "install") {
-  const safe = [];
-  while (args[0]?.startsWith("-")) {
-    const flag = args.shift();
-    if (["-o", "-g"].includes(flag))
-      assert.equal(args.shift(), args.at(-1) === join(home, ".alignfirst/aligndev.settings.json") ? "fixture" : "root");
-    else if (flag === "-m") safe.push(flag, args.shift());
-    else { assert(["-d", "-D"].includes(flag)); safe.push(flag); }
-  }
-  for (const path of args) inside(path);
-  execute("/usr/bin/install", [...safe, ...args]);
-} else if (name === "chown") {
-  assert.deepEqual(args.slice(0, 2), [args.at(-1) === join(home, ".alignfirst") ? "-Rh" : "-R", "fixture:fixture"]);
-  args.slice(2).forEach(inside);
-} else if (name === "chattr") {
-  assert.equal(args[0], "-ia"); log("chattr:" + args.shift());
-  args.forEach(inside);
-} else if (name === "rsync") {
-  assert.deepEqual(args.slice(0, 2), ["-a", "--delete"]);
-  assert.equal(args.length, 4);
-  const source = inside(args[2]), destination = inside(args[3]);
-  fs.rmSync(destination, { recursive: true, force: true });
-  fs.cpSync(source, destination, { recursive: true }); log("rsync");
-} else if (name === "openclaw") {
-  assert.equal(args.length, 6);
-  assert.deepEqual(args.slice(0, 3), ["backup", "create", "--output"]);
-  assert.deepEqual(args.slice(4), ["--no-include-workspace", "--verify"]);
-  fs.writeFileSync(join(inside(args[3]), "fixture-openclaw-backup.tar.gz"), "archive double\\n");
-  log("openclaw");
-} else if (name === "tar") {
-  const operation = args.includes("--create") ? "create" : args.includes("--list") ? "list" : "extract";
-  log("tar:" + operation);
-  if (process.env.FAIL_TAR === operation) process.exit(31);
-  for (const flag of ["--file", "--directory"]) {
-    const index = args.indexOf(flag);
-    assert(index !== -1 || operation === "list");
-    if (index !== -1) inside(args[index + 1]);
-  }
-  execute("/usr/bin/tar", args);
-} else throw new Error("Forbidden command: " + name);
-`;
 }

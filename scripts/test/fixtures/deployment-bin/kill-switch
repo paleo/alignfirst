@@ -1,0 +1,11 @@
+#!/bin/sh
+# Contains nothing. STANDIN_FAIL_KILL=always fails every call; after-service fails once the service
+# command has run.
+. "$STANDIN_SOURCE/lib.sh"
+standin_call kill-switch "$@"
+[ $# -eq 0 ] || standin_fail "kill-switch: unexpected arguments"
+case ${STANDIN_FAIL_KILL:-} in
+  always) exit 1 ;;
+  after-service) if [ -e "$STANDIN_ROOT/service-ran" ]; then exit 1; fi ;;
+esac
+exit 0

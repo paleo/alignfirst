@@ -1,0 +1,23 @@
+#!/bin/sh
+# Records ownership; real ownership never changes.
+. "$STANDIN_SOURCE/lib.sh"
+standin_call chown "$@"
+recursive=0
+case ${1:-} in
+  -R | -Rh | -hR) recursive=1; shift ;;
+  -h) shift ;;
+esac
+owner=${1:-}
+[ $# -gt 1 ] || standin_fail "chown: missing owner or target"
+shift
+for path do
+  shift
+  standin_inside "$path"
+  set -- "$@" "$resolved"
+done
+if [ "$recursive" = 1 ]; then
+  standin_change 1 "" "" "$@" || exit
+  /usr/bin/find "$@" -printf "chown\t$owner\t%p\n" >>"$STANDIN_JOURNAL"
+else
+  standin_change 0 chown "$owner" "$@" || exit
+fi

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Supports only "backup create --output <directory> --no-include-workspace --verify".
+. "$STANDIN_SOURCE/lib.sh"
+standin_call openclaw "$@"
+[ $# -eq 6 ] && [ "$1 $2 $3" = "backup create --output" ] && [ "$5 $6" = "--no-include-workspace --verify" ] ||
+  standin_fail "openclaw: unsupported arguments"
+standin_inside "$4"
+printf 'offline archive stand-in\n' >"$resolved/fixture-openclaw-backup.tar.gz"

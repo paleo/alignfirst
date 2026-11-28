@@ -1,0 +1,8 @@
+#!/bin/sh
+# Real cmp on fixture files.
+. "$STANDIN_SOURCE/lib.sh"
+standin_call cmp "$@"
+for argument do
+  case $argument in -*) ;; *) standin_inside "$argument" ;; esac
+done
+exec /usr/bin/cmp "$@"

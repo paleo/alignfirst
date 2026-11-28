@@ -1,0 +1,23 @@
+#!/bin/sh
+# Installed as claude, codex and pi. Records the native-directory variable it received and whether
+# an API key reached it: "native <name> <role> <set 0|1> <directory> <api-key 0|1> <args...>".
+. "$STANDIN_SOURCE/lib.sh"
+name=${0##*/}
+standin_call "$name" "$@"
+case $name in
+  claude) present=${CLAUDE_CONFIG_DIR+1} directory=${CLAUDE_CONFIG_DIR-} ;;
+  codex) present=${CODEX_HOME+1} directory=${CODEX_HOME-} ;;
+  pi) present=${PI_CODING_AGENT_DIR+1} directory=${PI_CODING_AGENT_DIR-} ;;
+  *) standin_fail "native-agent: unknown name $name" ;;
+esac
+case "$name $*" in
+  "$name --version" | "codex login --device-auth" | "codex login status") ;;
+  *) standin_fail "native-agent: unexpected command $name $*" ;;
+esac
+key=0
+if [ -n "${CODEX_API_KEY+set}${OPENAI_API_KEY+set}" ]; then key=1; fi
+{
+  printf 'native\t%s\t%s\t%s\t%s\t%s' "$name" "$standin_role" "${present:-0}" "$directory" "$key"
+  for argument do printf '\t%s' "$argument"; done
+  printf '\n'
+} >>"$STANDIN_JOURNAL"

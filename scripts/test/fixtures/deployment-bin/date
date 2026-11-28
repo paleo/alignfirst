@@ -1,0 +1,6 @@
+#!/bin/sh
+# A fixed backup stamp.
+. "$STANDIN_SOURCE/lib.sh"
+standin_call date "$@"
+[ "$*" = +%Y%m%d-%H%M%S ] || standin_fail "date: unsupported arguments: $*"
+echo 20000101-000000

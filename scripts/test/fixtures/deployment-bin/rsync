@@ -1,0 +1,20 @@
+#!/bin/sh
+# Supports only "-a --delete <source>/ <destination>/"; records the caller's role as the owner of
+# every copied path.
+. "$STANDIN_SOURCE/lib.sh"
+standin_call rsync "$@"
+[ $# -eq 4 ] && [ "$1" = -a ] && [ "$2" = --delete ] || standin_fail "rsync: unsupported arguments"
+standin_inside "$3"
+source=$resolved
+standin_inside "$4"
+destination=$resolved
+depth=1
+if [ -d "$destination" ]; then
+  /usr/bin/find "$destination" -mindepth 1 -delete || exit
+else
+  /usr/bin/mkdir -p "$destination" || exit
+  depth=0
+fi
+/usr/bin/cp -a "$source/." "$destination/" || exit
+/usr/bin/find "$destination" -mindepth "$depth" -printf "create\t$standin_role\t%m\t%p\n" \
+  >>"$STANDIN_JOURNAL"

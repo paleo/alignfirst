@@ -1,0 +1,4 @@
+#!/bin/sh
+. "$STANDIN_SOURCE/lib.sh"
+standin_call false "$@"
+exit 1

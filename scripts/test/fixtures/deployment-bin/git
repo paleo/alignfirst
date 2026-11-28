@@ -1,0 +1,5 @@
+#!/bin/sh
+# Supports only "pull", as a no-op.
+. "$STANDIN_SOURCE/lib.sh"
+standin_call git "$@"
+[ "$*" = pull ] || standin_fail "git: unsupported arguments: $*"

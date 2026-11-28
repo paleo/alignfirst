@@ -1,0 +1,34 @@
+#!/bin/sh
+# Runs an approved command as root (HOME is the fixture root) or, with "-u fixture", as the service
+# account. Approved: the fixture's stand-ins, executables inside the fixture, STANDIN_NODE, /bin/bash.
+. "$STANDIN_SOURCE/lib.sh"
+standin_call sudo "$@"
+role=root
+home=$STANDIN_ROOT
+while :; do
+  case ${1:-} in
+    -u)
+      [ "${2:-}" = fixture ] || standin_fail "sudo: unexpected account ${2:-}"
+      role=service
+      home=$STANDIN_HOME
+      shift 2
+      ;;
+    -H | -i) shift ;;
+    --) shift; break ;;
+    -*) standin_fail "sudo: unexpected flag $1" ;;
+    *) break ;;
+  esac
+done
+command=${1:-}
+[ -n "$command" ] || standin_fail "sudo: missing command"
+shift
+case $command in
+  "$STANDIN_NODE" | /bin/bash) ;;
+  "$STANDIN_ROOT"/*) [ -f "$command" ] && [ -x "$command" ] || standin_fail "UNAPPROVED COMMAND: $command" ;;
+  */*) standin_fail "UNAPPROVED COMMAND: $command" ;;
+  *)
+    [ -x "$STANDIN_PATH/$command" ] || standin_fail "UNAPPROVED COMMAND: $command"
+    command=$STANDIN_PATH/$command
+    ;;
+esac
+STANDIN_ROLE=$role HOME=$home exec "$command" "$@"

@@ -1,0 +1,31 @@
+#!/bin/sh
+# Applies modes for real and records the resulting octal mode.
+. "$STANDIN_SOURCE/lib.sh"
+standin_call chmod "$@"
+recursive=0
+if [ "${1:-}" = -R ]; then recursive=1; shift; fi
+mode=${1:-}
+[ $# -gt 1 ] || standin_fail "chmod: missing mode or target"
+shift
+for path do
+  shift
+  standin_inside "$path"
+  set -- "$@" "$resolved"
+done
+if [ "$recursive" = 1 ]; then
+  standin_change 1 "" "" "$@" || exit
+  /usr/bin/chmod -R "$mode" "$@" || exit
+  /usr/bin/find "$@" -printf 'chmod\t%m\t%p\n' >>"$STANDIN_JOURNAL"
+else
+  case $mode in
+    *[!0-7]*)
+      standin_change 0 "" "" "$@" || exit
+      /usr/bin/chmod "$mode" "$@" || exit
+      /usr/bin/find "$@" -maxdepth 0 -printf 'chmod\t%m\t%p\n' >>"$STANDIN_JOURNAL"
+      ;;
+    *)
+      standin_change 0 chmod "$mode" "$@" || exit
+      /usr/bin/chmod "$mode" "$@"
+      ;;
+  esac
+fi

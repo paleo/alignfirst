@@ -1,0 +1,8 @@
+#!/bin/sh
+# Real rm on fixture paths.
+. "$STANDIN_SOURCE/lib.sh"
+standin_call rm "$@"
+for argument do
+  case $argument in -*) ;; *) standin_inside "$argument" ;; esac
+done
+exec /usr/bin/rm "$@"

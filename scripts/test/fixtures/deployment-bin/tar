@@ -1,0 +1,18 @@
+#!/bin/sh
+# Real tar on fixture archives. STANDIN_FAIL_TAR=create|list fails that operation.
+. "$STANDIN_SOURCE/lib.sh"
+standin_call tar "$@"
+operation=extract
+for argument do
+  case $argument in
+    --create) operation=create ;;
+    --list) operation=list ;;
+  esac
+done
+if [ "${STANDIN_FAIL_TAR:-}" = "$operation" ]; then exit 31; fi
+previous=
+for argument do
+  case $previous in --file | --directory) standin_inside "$argument" ;; esac
+  previous=$argument
+done
+exec /usr/bin/tar "$@"

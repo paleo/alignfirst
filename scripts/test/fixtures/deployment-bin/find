@@ -1,0 +1,9 @@
+#!/bin/sh
+# Real find below the fixture; executed commands resolve to sibling stand-ins through PATH.
+. "$STANDIN_SOURCE/lib.sh"
+standin_call find "$@"
+standin_inside "${1:-}"
+for argument do
+  case $argument in -delete | -execdir) standin_fail "find: unsupported mutation $argument" ;; esac
+done
+exec /usr/bin/find "$@"

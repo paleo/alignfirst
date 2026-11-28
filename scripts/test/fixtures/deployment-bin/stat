@@ -1,0 +1,13 @@
+#!/bin/sh
+# Supports only "-c %u:%a <path>": the recorded owner's uid and the real mode.
+. "$STANDIN_SOURCE/lib.sh"
+standin_call stat "$@"
+[ $# -eq 3 ] && [ "$1" = -c ] && [ "$2" = %u:%a ] || standin_fail "stat: unsupported arguments"
+standin_inside "$3"
+owner=$(/usr/bin/awk -F '\t' -v path="$resolved" '
+  $1 == "create" && $4 == path { owner = $2 }
+  $1 == "chown" && $3 == path { split($2, spec, ":"); owner = spec[1] == "fixture" ? "service" : spec[1] }
+  END { print owner }
+' "$STANDIN_JOURNAL")
+mode=$(/usr/bin/stat -c %a -- "$resolved") || exit
+if [ "$owner" = root ]; then echo "0:$mode"; else echo "1000:$mode"; fi

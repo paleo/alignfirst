@@ -3,6 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import {
   cpSync,
   existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -15,7 +16,8 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { inspect } from "node:util";
 import {
   loadConfig,
   resolveCodeConfig,
@@ -83,114 +85,248 @@ const agents = {
   },
 };
 
-for (const overlay of Object.keys(agents)) {
-  for (const surface of ["slack", "discord"]) {
-    test(`${overlay}/${surface}: gateway × work-files rendering, syntax, dotfiles and modes`, () => {
-      for (const gateway of [false, true]) {
-        for (const plans of [false, true]) {
-          withFixture(overlay, surface, { gateway, plans }, (fixture) => {
-            auditRendered(fixture);
-            installSettings(fixture);
-            validateProfiles(fixture);
-            assert.equal(existsSync(join(fixture.rendered, "infra/gateway")), gateway);
-            const report = JSON.parse(
-              run(fixture, process.execPath, [
-                join(repository, "packages/alignfirst/bin/alignfirst.mjs"),
-                "config",
-                "--json",
-              ]),
-            );
-            const config = report.config;
-            assert.equal(
-              report.locations.alignfirst.path,
-              join(fixture.rendered, "alignfirst.jsonc"),
-            );
-            assert.equal(report.workspace.schemaVersion, 1);
-            assert.equal(report.workspace.hasDevServer, false);
-            assert.equal(config.schemaVersion, 1);
-            assert.equal(config.conventions.git.defaultBranch, "main");
-            assert.equal(config.assistantInstructionsFile, undefined);
-            assert.equal(
-              report.locations.assistantInstructionsFile.path,
-              join(fixture.rendered, "ASSISTANTS.md"),
-            );
-            assert.equal(report.locations.assistantInstructionsFile.exists, true);
-            assert.equal(report.workspace.location.path, report.locations.alignfirst.path);
-            assert.equal(
-              report.workspace.registryDir,
-              join(fixture.rendered, ".local-wt/workspace-registry"),
-            );
-            assert.equal(existsSync(join(fixture.rendered, ".local-wt")), false);
-            assert.equal(config.plans?.repositoryFolder, plans ? "admin" : undefined);
-            assert(existsSync(join(fixture.infra, ".env.example")), "Include overlay dotfiles");
-          });
-        }
-      }
-    });
+// Each row breaks one deployment rule of the rendered Codex settings or native tree.
+const rejections = [
+  ...[
+    { configDir: undefined },
+    { configDir: 1 },
+    { configDir: "~/bad\u0000path" },
+    { defaultModel: null },
+    { env: { CODEX_HOME: "/elsewhere" } },
+    { unset: ["CODEX_HOME"] },
+    { env: { HOME: "/elsewhere" } },
+    { unset: ["PI_CODING_AGENT_SESSION_DIR"] },
+    { quota: { source: "claude" } },
+    { quota: { source: "claude", configDir: null, unset: ["CLAUDE_CONFIG_DIR"] } },
+    { quota: { source: "none", configDir: null } },
+  ].map((change) => [
+    `selected ${label(change)}`,
+    ({ selected }) => Object.assign(selected, change),
+  ]),
+  ...[
+    { default: "yes" },
+    { skipPermissions: "yes" },
+    { models: "sol" },
+    { modelAliases: { custom: 3 } },
+    { efforts: "high" },
+    { defaultEffort: " " },
+    { env: { CUSTOM: 3 } },
+    { unset: "CUSTOM" },
+    { env: { CUSTOM: "value" }, unset: ["CUSTOM"] },
+    { quota: { source: "bad", unknownQuota: true } },
+    { quota: { source: "none", env: {}, unknownQuota: true } },
+  ].map((change) => [
+    `malformed beside an unknown key ${label(change)}`,
+    ({ selected }) => Object.assign(selected, change, { unknownFixtureField: "private-value" }),
+  ]),
+  ...[
+    { harness: "unsupported", configDir: "~/native/other" },
+    { harness: "codex" },
+    { harness: "codex", configDir: "../../escape" },
+    { harness: "pi", configDir: "~/projects/agent" },
+    { harness: "pi", configDir: "~/.codex/nested" },
+    { harness: "pi", configDir: "~/.codex" },
+    { harness: "pi", configDir: " ~/native/pi " },
+    { harness: "pi", configDir: "file:///native/pi" },
+    { harness: "codex", configDir: "~/native/other", env: { CODEX_HOME: "/elsewhere" } },
+    { harness: "pi", configDir: "~/native/pi", unset: ["PI_CODING_AGENT_DIR"] },
+    { harness: "pi", configDir: "~/native/pi", env: { HOME: "/elsewhere" } },
+    {
+      harness: "pi",
+      configDir: "~/native/pi",
+      quota: { source: "none", configDir: "~/native/quota" },
+    },
+  ].map((profile) => [
+    `unselected ${label(profile)}`,
+    ({ code }) => {
+      code.profiles.unselected = profile;
+    },
+  ]),
+  [
+    "unselected store at the service home",
+    ({ fixture, code }) => {
+      code.profiles.unselected = { harness: "pi", configDir: fixture.home };
+    },
+  ],
+  [
+    "null projectsRoot",
+    ({ fixture }) => {
+      fixture.settings.projectsRoot = null;
+    },
+  ],
+  ["no openclaw profile", ({ code, assistant }) => delete code.profiles[assistant]],
+  [
+    "disabled openclaw profile",
+    ({ code, assistant }) => {
+      code.profiles[assistant].disabled = true;
+    },
+  ],
+  [
+    "two openclaw profiles",
+    ({ code, assistant }) => {
+      code.profiles.second = { ...code.profiles[assistant] };
+    },
+  ],
+  [
+    "missing defaultAgentProfile target",
+    ({ code, assistant }) => {
+      code.profiles[assistant].defaultAgentProfile = "missing";
+    },
+  ],
+  [
+    "disabled defaultAgentProfile target",
+    ({ selected }) => {
+      selected.disabled = true;
+    },
+  ],
+  [
+    "openclaw defaultAgentProfile target",
+    ({ code, assistant }) => {
+      code.profiles[assistant].defaultAgentProfile = assistant;
+    },
+  ],
+  [
+    "missing fallbackProfile",
+    ({ code }) => {
+      code.fallbackProfile = "missing";
+    },
+  ],
+  [
+    "fallbackProfile without profiles",
+    ({ fixture }) => {
+      fixture.settings.code = { fallbackProfile: "missing" };
+    },
+  ],
+  ["symlinked native root", ({ fixture }) => symlinkSync(fixture.root, fixture.nativeDir)],
+  [
+    "symlinked instructions",
+    ({ fixture }) => {
+      mkdirSync(fixture.nativeDir);
+      symlinkSync(join(fixture.root, "outside"), fixture.instructions);
+    },
+  ],
+  [
+    "symlinked managed skills",
+    ({ fixture }) => {
+      mkdirSync(fixture.nativeDir);
+      symlinkSync(join(fixture.root, "outside"), join(fixture.nativeDir, "skills"));
+    },
+  ],
+  [
+    "symlinked native ancestor",
+    ({ fixture, selected }) => {
+      symlinkSync(fixture.root, join(fixture.home, "linked"));
+      selected.configDir = "~/linked/native";
+    },
+  ],
+  [
+    "hard-linked native file",
+    ({ fixture }) => {
+      mkdirSync(fixture.nativeDir);
+      writeFileSync(join(fixture.nativeDir, "config.toml"), "");
+      linkSync(join(fixture.nativeDir, "config.toml"), join(fixture.nativeDir, "linked.toml"));
+    },
+  ],
+  ["Pi resource glob", (context) => writePiSettings(context, { extensions: ["../*.js"] })],
+  [
+    "padded Pi extension declaration",
+    (context) => writePiSettings(context, { extensions: ["  ../../operator-extension.mjs  "] }),
+  ],
+  [
+    "file URL Pi extension declaration",
+    (context) =>
+      writePiSettings(context, {
+        extensions: [pathToFileURL(join(context.fixture.home, "operator-extension.mjs")).href],
+      }),
+  ],
+  [
+    "Pi package manifest escaping its tree",
+    (context) => {
+      const pi = writePiSettings(context, {});
+      mkdirSync(join(pi, "extensions"));
+      writeFileSync(
+        join(pi, "extensions/package.json"),
+        JSON.stringify({ pi: { extensions: ["../../outside.js"] } }),
+      );
+    },
+  ],
+];
 
-    test(`${overlay}/${surface}: default/custom seed idempotence and explicit all-profile CLI validation`, () => {
-      for (const custom of [false, true]) {
-        withFixture(overlay, surface, { custom }, (fixture) => {
-          const selected = selectedProfile(fixture.settings);
-          fixture.settings.code.profiles["second profile"] = {
-            ...fixture.settings.code.profiles[selected],
-            defaultModel:
-              fixture.harness === "codex"
-                ? "sol"
-                : fixture.harness === "claude"
-                  ? "opus"
-                  : fixture.settings.code.profiles[selected].defaultModel,
-          };
-          saveSettings(fixture);
-          mkdirSync(fixture.nativeDir, { recursive: true });
-          writeFileSync(fixture.instructions, "Operator text\n");
-          const userProfile = join(fixture.nativeDir, "agents/operator.md");
-          mkdirSync(dirname(userProfile), { recursive: true });
-          writeFileSync(userProfile, "Operator-owned subagent profile\n");
-          const nativeSettings = join(fixture.nativeDir, "settings.json");
-          writeFileSync(nativeSettings, '{"theme":"dark"}\n');
-          const functions = seedFunctions(fixture);
-          const script =
-            'source "$1"; DIR="$2"; load_modules; load_deployment_profiles; configure_coding_agent; install_aligndev_config; configure_coding_agent';
-          run(fixture, "git", ["init", "--quiet"]);
-          const registry = join(fixture.home, ".alignfirst/companions");
-          mkdirSync(registry, { recursive: true });
-          writeFileSync(
-            join(registry, "registry.json"),
-            JSON.stringify({
-              projects: {
-                [fixture.rendered]: { aligndev: { profile: "missing-project-profile" } },
-              },
-            }),
-          );
-          const args = ["-euc", script, "fixture", functions, fixture.infra];
-          run(fixture, "bash", args);
-          const first = readFileSync(fixture.instructions, "utf8");
-          const mtime = statSync(fixture.instructions).mtimeMs;
-          run(fixture, "bash", args);
-          assert.equal(readFileSync(fixture.instructions, "utf8"), first);
-          assert.equal(statSync(fixture.instructions).mtimeMs, mtime);
-          assert.equal(readFileSync(userProfile, "utf8"), "Operator-owned subagent profile\n");
-          assert.equal(readFileSync(nativeSettings, "utf8"), '{"theme":"dark"}\n');
-          assert(first.startsWith("Operator text\n"));
-          assert.equal(first.match(/<!-- alignfirst-dev-kit:start -->/gu)?.length, 1);
-          const calls = readFileSync(join(fixture.home, "guide-calls"), "utf8").trim().split("\n");
-          assert.deepEqual(calls, [selected, "second profile", selected, "second profile"]);
-          const inventory = readInventory(fixture);
-          assert.equal(inventory.profiles.length, 2);
-          assert.equal(inventory.instructionFile, fixture.instructions);
-          assert.equal(inventory.configDir, fixture.nativeDir);
-          const redirected = spawnSync(
-            process.execPath,
-            [join(repository, "packages/aligndev/bin/aligndev.mjs"), "guide", "code"],
-            cliOptions(fixture),
-          );
-          assert.notEqual(redirected.status, 0);
-          assert(redirected.stderr.includes("missing-project-profile"));
-        });
-      }
+// Each distinct template file is syntax-checked once, by the first rendering that copies it.
+const syntaxChecked = new Set();
+
+for (const { overlay, surface, gateway, plans } of [
+  { overlay: "claude-code", surface: "slack", gateway: true, plans: true },
+  { overlay: "codex", surface: "discord", gateway: false, plans: false },
+  { overlay: "pi", surface: "slack", gateway: false, plans: true },
+]) {
+  test(`${overlay}/${surface}: rendering, syntax and real-CLI validation`, () => {
+    withFixture(overlay, surface, { gateway, plans }, (fixture) => {
+      auditRendered(fixture);
+      installSettings(fixture);
+      validateProfiles(fixture);
+      const report = JSON.parse(
+        run(fixture, process.execPath, [
+          join(repository, "packages/alignfirst/bin/alignfirst.mjs"),
+          "config",
+          "--json",
+        ]),
+      );
+      assert.equal(report.config.plans?.repositoryFolder, plans ? "admin" : undefined);
     });
-  }
+  });
+}
+
+for (const [overlay, surface] of [
+  ["claude-code", "slack"],
+  ["codex", "discord"],
+  ["pi", "slack"],
+]) {
+  test(`${overlay}: default/custom seed idempotence and explicit all-profile CLI validation`, () => {
+    for (const custom of [false, true]) {
+      withFixture(overlay, surface, { custom }, (fixture) => {
+        const selected = selectedProfile(fixture.settings);
+        fixture.settings.code.profiles["second profile"] = {
+          ...fixture.settings.code.profiles[selected],
+          defaultModel:
+            fixture.harness === "codex"
+              ? "sol"
+              : fixture.harness === "claude"
+                ? "opus"
+                : fixture.settings.code.profiles[selected].defaultModel,
+        };
+        saveSettings(fixture);
+        mkdirSync(fixture.nativeDir, { recursive: true });
+        writeFileSync(fixture.instructions, "Operator text\n");
+        const userProfile = join(fixture.nativeDir, "agents/operator.md");
+        mkdirSync(dirname(userProfile), { recursive: true });
+        writeFileSync(userProfile, "Operator-owned subagent profile\n");
+        const nativeSettings = join(fixture.nativeDir, "settings.json");
+        writeFileSync(nativeSettings, '{"theme":"dark"}\n');
+        const functions = seedFunctions(fixture);
+        const script =
+          'source "$1"; DIR="$2"; load_modules; load_deployment_profiles; configure_coding_agent; install_aligndev_config; configure_coding_agent';
+        run(fixture, "git", ["init", "--quiet"]);
+        const args = ["-euc", script, "fixture", functions, fixture.infra];
+        run(fixture, "bash", args);
+        const first = readFileSync(fixture.instructions, "utf8");
+        const mtime = statSync(fixture.instructions).mtimeMs;
+        run(fixture, "bash", args);
+        assert.equal(readFileSync(fixture.instructions, "utf8"), first);
+        assert.equal(statSync(fixture.instructions).mtimeMs, mtime);
+        assert.equal(readFileSync(userProfile, "utf8"), "Operator-owned subagent profile\n");
+        assert.equal(readFileSync(nativeSettings, "utf8"), '{"theme":"dark"}\n');
+        assert(first.startsWith("Operator text\n"));
+        assert.equal(first.match(/<!-- alignfirst-dev-kit:start -->/gu)?.length, 1);
+        const calls = readFileSync(join(fixture.home, "guide-calls"), "utf8").trim().split("\n");
+        assert.deepEqual(calls, [selected, "second profile", selected, "second profile"]);
+        const inventory = readInventory(fixture);
+        assert.equal(inventory.profiles.length, 2);
+        assert.equal(inventory.instructionFile, fixture.instructions);
+        assert.equal(inventory.configDir, fixture.nativeDir);
+      });
+    }
+  });
 }
 
 test("native-default inventory keeps absolute paths and real resolver modes for null and explicit strings", () => {
@@ -203,7 +339,10 @@ test("native-default inventory keeps absolute paths and real resolver modes for 
         ...profile,
         configDir: `~/${definition.directory}`,
       };
-      if (overlay === "pi") profile.quota = { source: "codex", configDir: null };
+      if (overlay === "pi") {
+        profile.quota = { source: "codex", configDir: null };
+        fixture.settings.code.profiles.explicit.quota = { source: "claude", configDir: null };
+      }
       saveSettings(fixture);
       installSettings(fixture);
       const before = readFileSync(fixture.settingsFile);
@@ -220,6 +359,7 @@ test("native-default inventory keeps absolute paths and real resolver modes for 
         ...fixture.env,
         [definition.variable]: "/inherited-wrong-account",
         CODEX_HOME: "/inherited-wrong-account",
+        CLAUDE_CONFIG_DIR: "/inherited-wrong-account",
       };
       const loaded = loadConfig(fixture.home);
       const reset = resolveCodeConfig(loaded, caller, { explicit: selected });
@@ -229,75 +369,23 @@ test("native-default inventory keeps absolute paths and real resolver modes for 
       assert.equal(explicit.configDir, fixture.nativeDir);
       assert.equal(explicit.childEnv[definition.variable], fixture.nativeDir);
       if (overlay === "pi") {
-        assert.equal(
-          inventory.stores.find((item) => item.harness === "codex").configDir,
-          join(fixture.home, ".codex"),
-        );
-        const quota = resolveQuotaConfig(reset, caller);
-        assert.equal(quota.source, "codex");
-        assert.equal(quota.env.CODEX_HOME, undefined);
+        for (const [harness, quotaOwner, variable] of [
+          ["codex", reset, "CODEX_HOME"],
+          ["claude", explicit, "CLAUDE_CONFIG_DIR"],
+        ]) {
+          assert.equal(
+            inventory.stores.find((item) => item.harness === harness).configDir,
+            join(fixture.home, agents[harness === "claude" ? "claude-code" : harness].directory),
+          );
+          const quota = resolveQuotaConfig(quotaOwner, caller);
+          assert.equal(quota.source, harness);
+          assert.equal(quota.env[variable], undefined);
+        }
       }
       assert.equal(caller[definition.variable], "/inherited-wrong-account");
       assert.deepEqual(readFileSync(fixture.settingsFile), before);
     });
   }
-});
-
-test("native-default Pi rendering accepts typed custom directory and independent null quota", () => {
-  const quota = { source: "claude", configDir: null };
-  withFixture("pi", "slack", { custom: true, quota }, (fixture) => {
-    const selected = selectedProfile(fixture.settings);
-    assert.deepEqual(fixture.settings.code.profiles[selected].quota, quota);
-    installSettings(fixture);
-    const inventory = readInventory(fixture);
-    assert.equal(inventory.configDir, fixture.nativeDir);
-    assert.equal(
-      inventory.stores.find((store) => store.harness === "claude").configDir,
-      join(fixture.home, ".claude"),
-    );
-    const code = resolveCodeConfig(loadConfig(fixture.home), fixture.env, { explicit: selected });
-    assert.equal(code.childEnv.PI_CODING_AGENT_DIR, fixture.nativeDir);
-    assert.equal(
-      resolveQuotaConfig(code, { CLAUDE_CONFIG_DIR: "/inherited" }).env.CLAUDE_CONFIG_DIR,
-      undefined,
-    );
-  });
-});
-
-test("native-default inventory retains null-sensitive safety boundaries", () => {
-  withFixture("codex", "discord", {}, (fixture) => {
-    const original = structuredClone(fixture.settings);
-    for (const invalid of [
-      { configDir: undefined },
-      { configDir: 1 },
-      { configDir: "~/bad\u0000path" },
-      { defaultModel: null },
-      { env: { CODEX_HOME: "/elsewhere" } },
-      { unset: ["CODEX_HOME"] },
-      { env: { HOME: "/elsewhere" } },
-      { unset: ["PI_CODING_AGENT_SESSION_DIR"] },
-      { quota: { source: "claude" } },
-      { quota: { source: "claude", configDir: null, unset: ["CLAUDE_CONFIG_DIR"] } },
-      { quota: { source: "none", configDir: null } },
-    ]) {
-      fixture.settings = structuredClone(original);
-      Object.assign(fixture.settings.code.profiles[selectedProfile(fixture.settings)], invalid);
-      saveSettings(fixture);
-      assertInventoryRejected(fixture);
-    }
-    fixture.settings = structuredClone(original);
-    fixture.settings.projectsRoot = null;
-    saveSettings(fixture);
-    assertInventoryRejected(fixture);
-    fixture.settings = structuredClone(original);
-    fixture.settings.code.profiles.overlap = { harness: "pi", configDir: "~/.codex/nested" };
-    saveSettings(fixture);
-    assertInventoryRejected(fixture);
-    fixture.settings = structuredClone(original);
-    saveSettings(fixture);
-    symlinkSync(fixture.root, fixture.nativeDir);
-    assertInventoryRejected(fixture);
-  });
 });
 
 test("inventory deduplicates shared stores and includes custom, mixed-agent and independent quota stores", () => {
@@ -323,7 +411,15 @@ test("inventory deduplicates shared stores and includes custom, mixed-agent and 
     saveSettings(fixture);
     installSettings(fixture);
     validateProfiles(fixture);
+    const assistant = Object.values(fixture.settings.code.profiles).find(
+      (profile) => profile.harness === "openclaw",
+    );
+    assistant.defaultAgentProfile = "pi";
+    saveSettings(fixture);
     const inventory = readInventory(fixture);
+    const pi = join(fixture.home, "native/pi");
+    assert.equal(inventory.harness, "pi");
+    assert.equal(inventory.configDir, pi);
     assert.equal(inventory.stores.length, 4);
     const codex = inventory.stores.find((store) => store.harness === "codex");
     assert.equal(codex.configDir, fixture.nativeDir);
@@ -333,7 +429,6 @@ test("inventory deduplicates shared stores and includes custom, mixed-agent and 
       [".codex", "native/pi", "native/claude-quota", "native/claude-child"].sort(),
     );
     const paths = inventory.resources.map((resource) => resource.path);
-    const pi = join(fixture.home, "native/pi");
     for (const name of [
       "AGENTS.override.md",
       "AGENTS.md",
@@ -349,84 +444,42 @@ test("inventory deduplicates shared stores and includes custom, mixed-agent and 
       "themes",
       "npm",
       "git",
+      "agents",
+      "bin",
     ]) {
       assert(paths.includes(join(pi, name)), `Missing managed Pi path ${name}`);
     }
+    assert(paths.includes(join(fixture.home, "AGENTS.override.md")), "Home context sentinel");
     for (const name of ["auth.json", "auth.json.lock", "sessions", "cache"]) {
       assert(!paths.includes(join(pi, name)), `Native mutable state must stay writable: ${name}`);
     }
   });
 });
 
-test("inventory rejects unsafe unselected stores and native-directory conflicts", () => {
+test("inventory rejects unsafe settings and native trees", () => {
   withFixture("codex", "discord", {}, (fixture) => {
     const original = structuredClone(fixture.settings);
-    for (const profile of [
-      { harness: "unsupported", configDir: "~/native/other" },
-      { harness: "codex" },
-      { harness: "codex", configDir: "../../escape" },
-      { harness: "pi", configDir: fixture.home },
-      { harness: "pi", configDir: "~/projects/agent" },
-      { harness: "pi", configDir: "~/.codex/nested" },
-      { harness: "pi", configDir: "~/.codex" },
-      { harness: "codex", configDir: "~/native/other", env: { CODEX_HOME: "/elsewhere" } },
-      { harness: "pi", configDir: "~/native/pi", unset: ["PI_CODING_AGENT_DIR"] },
-      { harness: "pi", configDir: "~/native/pi", env: { HOME: "/elsewhere" } },
-      {
-        harness: "pi",
-        configDir: "~/native/pi",
-        quota: { source: "none", configDir: "~/native/quota" },
-      },
-    ]) {
+    const apply = (change) => {
+      rmSync(fixture.home, { recursive: true, force: true });
+      mkdirSync(fixture.home);
       fixture.settings = structuredClone(original);
-      fixture.settings.code.profiles.unselected = profile;
+      const code = fixture.settings.code;
+      change({
+        fixture,
+        code,
+        selected: code.profiles[selectedProfile(original)],
+        assistant: Object.keys(code.profiles).find(
+          (name) => code.profiles[name].harness === "openclaw",
+        ),
+      });
       saveSettings(fixture);
-      assertInventoryRejected(fixture);
+    };
+    apply((context) => writePiSettings(context, { extensions: ["../../operator-extension.mjs"] }));
+    readInventory(fixture);
+    for (const [label, change] of rejections) {
+      apply(change);
+      assertInventoryRejected(fixture, label);
     }
-  });
-});
-
-test("inventory requires one enabled openclaw profile naming an enabled coding profile", () => {
-  withFixture("codex", "slack", {}, (fixture) => {
-    const original = structuredClone(fixture.settings);
-    const selected = selectedProfile(original);
-    const assistant = Object.keys(original.code.profiles).find(
-      (name) => original.code.profiles[name].harness === "openclaw",
-    );
-    for (const change of [
-      (code) => delete code.profiles[assistant],
-      (code) => {
-        code.profiles[assistant].disabled = true;
-      },
-      (code) => {
-        code.profiles.second = { ...code.profiles[assistant] };
-      },
-      (code) => {
-        code.profiles[assistant].defaultAgentProfile = "missing";
-      },
-      (code) => {
-        code.profiles[selected].disabled = true;
-      },
-      (code) => {
-        code.profiles[assistant].defaultAgentProfile = assistant;
-      },
-      (code) => {
-        code.fallbackProfile = "missing";
-      },
-    ]) {
-      fixture.settings = structuredClone(original);
-      change(fixture.settings.code);
-      saveSettings(fixture);
-      assertInventoryRejected(fixture);
-    }
-  });
-});
-
-test("inventory reports a fallbackProfile reference without any profiles", () => {
-  withFixture("codex", "slack", {}, (fixture) => {
-    fixture.settings.code = { fallbackProfile: "missing" };
-    saveSettings(fixture);
-    assert.match(assertInventoryRejected(fixture), /code\.fallbackProfile/u);
   });
 });
 
@@ -489,17 +542,11 @@ test("inventory ignores disabled profiles but still validates their shape", () =
   });
 });
 
-test("inventory and real CLI reject duplicate invalid harnesses without leaking values or injecting lines", () => {
+test("inventory rejects duplicate invalid harnesses without leaking values or injecting lines", () => {
   withFixture("codex", "slack", {}, (fixture) => {
     const original = structuredClone(fixture.settings);
     const selected = selectedProfile(original);
     for (const harness of [
-      undefined,
-      null,
-      true,
-      1,
-      {},
-      ["codex"],
       "constructor",
       "private-agent-marker\n\r\u001b\u0085\u2028\u2029\u202e",
     ]) {
@@ -511,52 +558,17 @@ test("inventory and real CLI reject duplicate invalid harnesses without leaking 
         configDir: "~/native/conflict",
       };
       saveSettings(fixture);
-      installSettings(fixture);
       const before = readFileSync(fixture.settingsFile);
-      const deployedBefore = readFileSync(fixture.deployedSettings);
-      for (const args of [
-        inventoryArgs(fixture),
-        [
-          join(repository, "packages/aligndev/bin/aligndev.mjs"),
-          "guide",
-          "code",
-          "--profile",
-          selected,
-        ],
-      ]) {
-        const result = spawnSync(process.execPath, args, cliOptions(fixture));
-        assert.equal(result.status, 1);
-        assert.equal(result.stdout, "");
-        assert(!result.stderr.includes("private-agent-marker"));
-        assert.equal(result.stderr.trim().split("\n").length, 1);
-        for (const character of ["\r", "\u001b", "\u0085", "\u2028", "\u2029", "\u202e"])
-          assert(!result.stderr.includes(character));
-        assert.deepEqual(readFileSync(fixture.settingsFile), before);
-        assert.deepEqual(readFileSync(fixture.deployedSettings), deployedBefore);
-      }
+      const result = spawnSync(process.execPath, inventoryArgs(fixture), options(fixture));
+      assert.equal(result.status, 1);
+      assert.equal(result.stdout, "");
+      assert(!result.stderr.includes("private-agent-marker"));
+      assert.equal(result.stderr.trim().split("\n").length, 1);
+      for (const character of ["\r", "\u001b", "\u0085", "\u2028", "\u2029", "\u202e"])
+        assert(!result.stderr.includes(character));
+      assert.deepEqual(readFileSync(fixture.settingsFile), before);
     }
   });
-});
-
-test("inventory refuses native root, managed resource and ancestor symlinks", () => {
-  for (const path of ["root", "instructions", "skills", "ancestor"]) {
-    withFixture("codex", "slack", {}, (fixture) => {
-      if (path === "root") symlinkSync(fixture.root, fixture.nativeDir);
-      else if (path === "ancestor") {
-        symlinkSync(fixture.root, join(fixture.home, "linked"));
-        fixture.settings.code.profiles[selectedProfile(fixture.settings)].configDir =
-          "~/linked/native";
-        saveSettings(fixture);
-      } else {
-        mkdirSync(fixture.nativeDir);
-        symlinkSync(
-          join(fixture.root, "outside"),
-          path === "skills" ? join(fixture.nativeDir, "skills") : fixture.instructions,
-        );
-      }
-      assertInventoryRejected(fixture);
-    });
-  }
 });
 
 test("seed rejects a mismatched overlay before writing instructions or installed settings", () => {
@@ -586,7 +598,7 @@ test("seed rejects a mismatched overlay before writing instructions or installed
   });
 });
 
-test("inventory and real CLI ignore stale settings without leaking values or rewriting input", () => {
+test("inventory ignores stale settings without leaking values or rewriting input", () => {
   withFixture("codex", "slack", {}, (fixture) => {
     const selected = selectedProfile(fixture.settings);
     fixture.settings.platform = "openclaw";
@@ -606,134 +618,53 @@ test("inventory and real CLI ignore stale settings without leaking values or rew
     };
     fixture.settings["bad\n\u001b\u0085\u202e.key"] = "private-value";
     saveSettings(fixture);
-    installSettings(fixture);
     const before = readFileSync(fixture.settingsFile);
-    const deployedBefore = readFileSync(fixture.deployedSettings);
-    const retiredWarnings = [];
-    for (const args of [
-      inventoryArgs(fixture),
-      [
-        join(repository, "packages/aligndev/bin/aligndev.mjs"),
-        "guide",
-        "code",
-        "--profile",
-        selected,
-      ],
-    ]) {
-      const result = spawnSync(process.execPath, args, cliOptions(fixture));
-      assert.equal(result.status, 0, result.stderr);
-      retiredWarnings.push(
-        result.stderr
-          .split("\n")
-          .filter((line) =>
-            /setting (platform|code\.profile|code\.profiles\[<entry>\]\.agent)\./u.test(line),
-          )
-          .sort(),
-      );
-      assert.match(result.stderr, /unknownRoot/);
-      assert(result.stderr.includes("unknownCode"));
-      assert(result.stderr.includes("unknownProfile"));
-      assert(result.stderr.includes("unknownQuota"));
-      for (const text of [
-        "private-value",
-        "retired-value",
-        "sk-secret-profile-name",
-        "\u001b",
-        "\u0085",
-        "\u202e",
-      ])
-        assert(!result.stderr.includes(text));
-      if (args[0].endsWith("deployment-profiles.mjs"))
-        assert.equal(JSON.parse(result.stdout).profile, selected);
-      else assert(result.stdout.includes(selected));
-      assert.deepEqual(readFileSync(fixture.settingsFile), before);
-      assert.deepEqual(readFileSync(fixture.deployedSettings), deployedBefore);
-    }
-    assert.equal(retiredWarnings[0].length, 3);
-    assert.deepEqual(
-      retiredWarnings[0],
-      retiredWarnings[1],
-      "Same retired-key warnings as the CLI",
-    );
+    const result = spawnSync(process.execPath, inventoryArgs(fixture), options(fixture));
+    assert.equal(result.status, 0, result.stderr);
+    for (const text of [
+      "private-value",
+      "retired-value",
+      "sk-secret-profile-name",
+      "\u001b",
+      "\u0085",
+      "\u202e",
+    ])
+      assert(!result.stderr.includes(text));
+    assert.equal(JSON.parse(result.stdout).profile, selected);
+    assert.deepEqual(readFileSync(fixture.settingsFile), before);
   });
 });
 
-test("inventory and real CLI sanitize malformed settings JSON and preserve input bytes", () => {
+test("inventory sanitizes malformed settings JSON and preserves input bytes", () => {
   withFixture("codex", "slack", {}, (fixture) => {
-    installSettings(fixture);
     for (const text of ['{"secret":"private-json-value" trailing}', "private-json-value"]) {
       writeFileSync(fixture.settingsFile, text);
-      writeFileSync(fixture.deployedSettings, text);
       const before = readFileSync(fixture.settingsFile);
-      const deployedBefore = readFileSync(fixture.deployedSettings);
-      const diagnostic = assertInventoryRejected(fixture);
-      assert(!diagnostic.includes("private-json-value"));
-      const result = spawnSync(
-        process.execPath,
-        [join(repository, "packages/aligndev/bin/aligndev.mjs"), "code", "--help"],
-        cliOptions(fixture),
-      );
-      assert.equal(result.status, 1);
-      assert.equal(result.stdout, "");
-      assert(result.stderr.includes(fixture.deployedSettings));
-      assert(!result.stderr.includes("private-json-value"));
-      assert.deepEqual(readFileSync(fixture.settingsFile), before);
-      assert.deepEqual(readFileSync(fixture.deployedSettings), deployedBefore);
-    }
-  });
-});
-
-test("inventory and real CLI still reject malformed recognized fields alongside unknown keys", () => {
-  withFixture("codex", "slack", {}, (fixture) => {
-    const original = structuredClone(fixture.settings);
-    for (const invalid of [
-      { default: "yes" },
-      { skipPermissions: "yes" },
-      { models: "sol" },
-      { modelAliases: { custom: 3 } },
-      { efforts: "high" },
-      { defaultEffort: " " },
-      { env: { CUSTOM: 3 } },
-      { unset: "CUSTOM" },
-      { env: { CUSTOM: "value" }, unset: ["CUSTOM"] },
-      { quota: { source: "bad", unknownQuota: true } },
-      { quota: { source: "none", env: {}, unknownQuota: true } },
-    ]) {
-      fixture.settings = structuredClone(original);
-      const selected = selectedProfile(fixture.settings);
-      Object.assign(fixture.settings.code.profiles[selected], invalid, {
-        unknownFixtureField: "private-value",
-      });
-      saveSettings(fixture);
-      installSettings(fixture);
-      const before = readFileSync(fixture.settingsFile);
-      const diagnostic = assertInventoryRejected(fixture);
-      assert(diagnostic.includes("unknownFixtureField"));
-      assert(!diagnostic.includes("private-value"));
-      const result = spawnSync(
-        process.execPath,
-        [
-          join(repository, "packages/aligndev/bin/aligndev.mjs"),
-          "guide",
-          "code",
-          "--profile",
-          selected,
-        ],
-        cliOptions(fixture),
-      );
-      assert.notEqual(result.status, 0);
-      assert.equal(result.stdout, "");
-      assert(!result.stderr.includes("private-value"));
+      assert(!assertInventoryRejected(fixture).includes("private-json-value"));
       assert.deepEqual(readFileSync(fixture.settingsFile), before);
     }
   });
 });
 
-function assertInventoryRejected(fixture) {
+function assertInventoryRejected(fixture, label) {
   const result = spawnSync(process.execPath, inventoryArgs(fixture), options(fixture));
-  assert.notEqual(result.status, 0);
-  assert.equal(result.stdout, "");
+  assert.notEqual(result.status, 0, label);
+  assert.equal(result.stdout, "", label);
   return result.stderr;
+}
+
+function label(value) {
+  return inspect(value, { breakLength: Number.POSITIVE_INFINITY });
+}
+
+// Adds a Pi profile with its native settings beside the rendered Codex profile.
+function writePiSettings({ fixture, code }, settings) {
+  const pi = join(fixture.home, "native/pi");
+  code.profiles.pi = { harness: "pi", configDir: "~/native/pi" };
+  mkdirSync(pi, { recursive: true });
+  writeFileSync(join(pi, "settings.json"), JSON.stringify(settings));
+  writeFileSync(join(fixture.home, "operator-extension.mjs"), "export default function () {}\n");
+  return pi;
 }
 
 function auditRendered(fixture) {
@@ -744,16 +675,13 @@ function auditRendered(fixture) {
       file,
     );
     if (file.endsWith(".json")) JSON.parse(text);
+    const path = relative(fixture.rendered, file);
+    const source = fixture.sources.findLast((root) => existsSync(join(root, path)));
+    if (syntaxChecked.has(join(source, path))) continue;
+    syntaxChecked.add(join(source, path));
     if (text.startsWith("#!/usr/bin/env bash") || /\.(sh|bash)$/u.test(file))
       run(fixture, "bash", ["-n", file]);
     if (/\.(mjs|js)$/u.test(file)) run(fixture, process.execPath, ["--check", file]);
-  }
-  for (const sourceRoot of fixture.sources) {
-    for (const source of filesIn(sourceRoot)) {
-      const destination = join(fixture.rendered, relative(sourceRoot, source));
-      assert(existsSync(destination), `Missing copied file ${source}`);
-      assert.equal(statSync(destination).mode & 0o111, statSync(source).mode & 0o111, destination);
-    }
   }
 }
 

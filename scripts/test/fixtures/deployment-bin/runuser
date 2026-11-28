@@ -1,0 +1,20 @@
+#!/bin/sh
+# Supports only "-u fixture -- env NAME=value... <command> <args...>": runs a fixture stand-in as the
+# service account, which must receive the service HOME and a PATH without /usr/bin.
+. "$STANDIN_SOURCE/lib.sh"
+standin_call runuser "$@"
+[ "${1:-}" = -u ] && [ "${2:-}" = fixture ] && [ "${3:-}" = -- ] && [ "${4:-}" = env ] ||
+  standin_fail "runuser: unsupported arguments"
+shift 4
+while :; do
+  case ${1:-} in
+    *=*) export "$1"; shift ;;
+    *) break ;;
+  esac
+done
+[ "$HOME" = "$STANDIN_HOME" ] || standin_fail "runuser: unsafe service HOME"
+case $PATH in */usr/bin*) standin_fail "runuser: unsafe service PATH" ;; esac
+command=$STANDIN_PATH/${1:-}
+[ -x "$command" ] || standin_fail "UNAPPROVED COMMAND: ${1:-}"
+shift
+STANDIN_ROLE=service exec "$command" "$@"

@@ -1,0 +1,15 @@
+#!/bin/sh
+# Creates the temporary path for real and records the caller's role as its owner.
+. "$STANDIN_SOURCE/lib.sh"
+standin_call mktemp "$@"
+directory=
+mode=600
+if [ "${1:-}" = -d ]; then directory=-d; mode=700; shift; fi
+case $# in
+  0) template=$STANDIN_ROOT/tmp.XXXXXXXXXX ;;
+  1) standin_inside "$1"; template=$resolved ;;
+  *) standin_fail "mktemp: unsupported arguments" ;;
+esac
+path=$(/usr/bin/mktemp $directory "$template") || exit
+printf 'create\t%s\t%s\t%s\n' "$standin_role" "$mode" "$path" >>"$STANDIN_JOURNAL"
+printf '%s\n' "$path"

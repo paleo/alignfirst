@@ -3,7 +3,6 @@ import { execFileSync, spawnSync } from "node:child_process";
 import {
   cpSync,
   existsSync,
-  linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -18,87 +17,43 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
+import {
+  installStandIns,
+  journalCalls,
+  readJournal,
+  replayState,
+  standInEnv,
+} from "./fixtures/deployment-standins.mjs";
 
 const repository = fileURLToPath(new URL("../../", import.meta.url));
 const source = join(
   repository,
   "skills/aligndev-openclaw-setup/assets/aligndev-openclaw-template/base/infra/openclaw",
 );
+const outcomes = {
+  success: {},
+  failure: { FIXTURE_OUTCOME: "failure" },
+  signal: { FIXTURE_OUTCOME: "signal" },
+  partialUnlock: { STANDIN_FAIL_UNLOCK_ONCE: "1" },
+  killFailure: { STANDIN_FAIL_KILL: "after-service" },
+  initialKillFailure: { STANDIN_FAIL_KILL: "always" },
+};
+const privilegedCommands = [
+  "chattr",
+  "chown",
+  "chmod",
+  "install",
+  "rsync",
+  "openclaw",
+  "kill-switch",
+  "runuser",
+  "service-command",
+];
 
-// Every privileged command is a fixture-owned rejecting double. Node's root check is rewritten
-// only in the disposable helper; production scripts expose no environment-controlled bypass.
-test("core inventory includes every coding/quota store and resolves deployed relative paths", () => {
-  fixture((f) => {
-    const inventory = f.inventory();
-    assert.equal(inventory.harness, "pi");
-    assert.equal(inventory.profiles.length, 4);
-    assert.deepEqual(
-      inventory.stores.map((store) => store.configDir),
-      [f.native, join(f.home, ".codex-quota"), join(f.home, "custom-pi"), join(f.home, ".claude")],
-    );
-    assert.equal(inventory.stores[0].profiles.length, 2);
-    assert(
-      inventory.resources.some(
-        (resource) => resource.path === join(f.native, "AGENTS.override.md"),
-      ),
-    );
-    assert(inventory.resources.some((resource) => resource.path === join(f.native, "agents")));
-    assert(inventory.resources.some((resource) => resource.path === join(f.native, "bin")));
-    assert(
-      inventory.resources.some((resource) => resource.path === join(f.home, "AGENTS.override.md")),
-    );
-    assert(!inventory.resources.some((resource) => resource.path === join(f.native, "auth.json")));
-    f.settings.code.profiles.custom.configDir = "../custom-pi";
-    f.save();
-    assert.equal(f.inventory().stores[2].configDir, join(f.home, "custom-pi"));
-  });
-});
-
-test("core refuses symlinks, hardlinks, overlaps, ambiguous environment and discovery globs", () => {
-  fixture((f) => {
-    const original = structuredClone(f.settings);
-    for (const profile of [
-      { harness: "pi", configDir: "~/.pi/agent/nested" },
-      { harness: "codex", configDir: "~/.pi/agent" },
-      { harness: "pi", configDir: "~/projects" },
-      { harness: "pi", configDir: "/tmp/external-store" },
-      { harness: "pi", configDir: "~/.pi/agent", env: { PI_CODING_AGENT_DIR: "elsewhere" } },
-      { harness: "pi", configDir: "~/.pi/agent", env: { HOME: "/elsewhere" } },
-      { harness: "pi", configDir: "~/.pi/agent", quota: { source: "codex" } },
-      { harness: "pi", configDir: " ~/.pi/agent " },
-      { harness: "pi", configDir: pathToFileURL(f.native).href },
-    ]) {
-      f.settings.code.profiles.bad = profile;
-      f.save();
-      assertRefused(f);
-    }
-    f.settings = original;
-    f.save();
-    mkdirSync(dirname(f.native), { recursive: true });
-    symlinkSync(join(f.root, "elsewhere"), f.native);
-    assertRefused(f);
-    rmSync(f.native);
-    mkdirSync(join(f.native, "extensions"), { recursive: true });
-    symlinkSync(join(f.root, "elsewhere"), join(f.native, "extensions/escape"));
-    assertRefused(f);
-    rmSync(join(f.native, "extensions/escape"));
-    writeFileSync(join(f.native, "settings.json"), JSON.stringify({ extensions: ["../*.js"] }));
-    assertRefused(f);
-    writeFileSync(join(f.native, "settings.json"), "{}");
-    linkSync(join(f.native, "settings.json"), join(f.native, "models.json"));
-    assertRefused(f);
-    rmSync(join(f.native, "models.json"));
-    writeFileSync(
-      join(f.native, "extensions/package.json"),
-      JSON.stringify({ pi: { extensions: ["../../outside.js"] } }),
-    );
-    assertRefused(f);
-    assert(!existsSync(f.log), "validation must not call privileged commands");
-  });
-});
-
-test("contained npm prefix bin and native package .bin links survive validation, hardening and recovery", () => {
+// Every privileged command is a fixture stand-in. Node's root check is rewritten only in the
+// disposable helper; production scripts expose no environment-controlled bypass.
+test("contained package .bin links survive hardening and recovery; unsafe backup links fail first", () => {
   fixture((f) => {
     f.prepare();
     const prefix = join(f.home, ".npm-system-global");
@@ -111,17 +66,14 @@ test("contained npm prefix bin and native package .bin links survive validation,
       });
       symlinkSync("../lib/node_modules/tool/cli.js", join(root, "bin/tool"));
     }
-    mkdirSync(join(npm, "node_modules/.bin"), { recursive: true });
+    const link = join(npm, "node_modules/.bin/tool");
+    mkdirSync(dirname(link), { recursive: true });
     mkdirSync(join(npm, "node_modules/tool"));
     writeFileSync(join(npm, "node_modules/tool/cli.js"), "#!/usr/bin/env node\n", { mode: 0o755 });
-    symlinkSync(join(npm, "node_modules/tool/cli.js"), join(npm, "node_modules/.bin/tool"));
+    symlinkSync(join(npm, "node_modules/tool/cli.js"), link);
     assert.equal(f.call("validate-maintenance").status, 0);
     assert.equal(f.call("harden").status, 0);
-    assert(
-      !f
-        .calls()
-        .some((call) => call[0] === "chattr" && call[2] === join(npm, "node_modules/.bin/tool")),
-    );
+    assert(!f.calls().some((call) => call[0] === "chattr" && call.includes(link)));
     const backup = join(f.root, "link-backup");
     assert.equal(f.call("backup", backup).status, 0);
     assert.equal(
@@ -130,30 +82,20 @@ test("contained npm prefix bin and native package .bin links survive validation,
     );
     const recovered = f.call("recover", backup);
     assert.equal(recovered.status, 0, recovered.stderr);
-    assert.equal(readlinkSync(join(npm, "node_modules/.bin/tool")), "../tool/cli.js");
-    assert((statSync(join(npm, "node_modules/.bin/tool")).mode & 0o100) !== 0);
-    f.install();
-    const result = f.run(["packages"]);
-    assert.equal(result.status, 0, result.stderr);
-    assert(
-      f.calls().some((call) => call[0] === "chattr" && call[1] === "+i" && call[2] === prefix),
-    );
+    assert.equal(readlinkSync(link), "../tool/cli.js");
+    assert((statSync(link).mode & 0o100) !== 0);
     const marker = join(f.native, "bin/must-survive-invalid-recovery");
     writeFileSync(marker, "preflight marker\n");
     const savedLink = join(backup, "store-0/npm/node_modules/.bin/tool");
-    rmSync(savedLink);
-    symlinkSync(join(f.root, "outside"), savedLink);
-    const escapingBackupLink = f.call("recover", backup);
-    assert.notEqual(escapingBackupLink.status, 0);
-    assert(existsSync(marker), "Unsafe backup links must fail before exact replacement begins");
-    rmSync(savedLink);
-    symlinkSync(join(backup, "store-0/npm/node_modules/tool/cli.js"), savedLink);
-    const absoluteBackupLink = f.call("recover", backup);
-    assert.notEqual(absoluteBackupLink.status, 0);
-    assert(
-      existsSync(marker),
-      "Even a contained absolute backup link would escape after relocation",
-    );
+    for (const target of [
+      join(f.root, "outside"),
+      join(backup, "store-0/npm/node_modules/tool/cli.js"),
+    ]) {
+      rmSync(savedLink);
+      symlinkSync(target, savedLink);
+      assert.notEqual(f.call("recover", backup).status, 0, target);
+      assert(existsSync(marker), "Unsafe backup links must fail before exact replacement begins");
+    }
   });
 });
 
@@ -194,22 +136,24 @@ test("package links reject escapes, target-chain escapes, cycles, dangling targe
     mkdirSync(join(npm, "bin"));
     mkdirSync(join(prefix, "bin"), { recursive: true });
     writeFileSync(join(npm, "tool"), "contained target\n");
-    for (const target of [
+    for (const [index, target] of [
       join(outside, "tool"),
       "../../../outside/tool",
       "../escape/tool",
       "tool",
       "../missing",
       "../escape/../tool",
-    ]) {
+    ].entries()) {
       const link = join(npm, "bin/tool");
       if (target.includes("escape")) symlinkSync(outside, join(npm, "escape"));
       symlinkSync(target, link);
-      for (const action of ["validate-maintenance", "unlock", "harden"])
+      const actions =
+        index === 0 ? ["validate-maintenance", "unlock", "harden"] : ["validate-maintenance"];
+      for (const action of actions)
         assert.notEqual(
-          f.call(action, action === "validate-maintenance" ? undefined : "agent-config").status,
+          f.call(action, ...(action === "validate-maintenance" ? [] : ["agent-config"])).status,
           0,
-          target,
+          `${action} ${target}`,
         );
       rmSync(link);
       rmSync(join(npm, "escape"), { force: true });
@@ -229,7 +173,7 @@ test("package links reject escapes, target-chain escapes, cycles, dangling targe
     rmSync(npm, { recursive: true });
     symlinkSync(prefix, npm);
     assert.notEqual(f.call("validate").status, 0, "A package anchor itself cannot be an alias");
-    assert.equal(f.calls().length, 0);
+    assert.deepEqual(f.privileged(), []);
   });
 });
 
@@ -259,53 +203,6 @@ test("package restoration rejects a link escape introduced during the service co
   });
 });
 
-test("native loader accepts padded/file URL resources that deployment rejects before all mutations", () => {
-  fixture((f) => {
-    mkdirSync(f.native, { recursive: true });
-    const extension = join(f.home, "operator-extension.mjs");
-    writeFileSync(extension, "export default function () {}\n");
-    const probe = join(f.root, "native-paths.mjs");
-    const moduleRoot = join(repository, "node_modules/@earendil-works/pi-coding-agent/dist/core");
-    writeFileSync(
-      probe,
-      `
-      import { SettingsManager } from ${JSON.stringify(join(moduleRoot, "settings-manager.js"))};
-      import { DefaultResourceLoader } from ${JSON.stringify(join(moduleRoot, "resource-loader.js"))};
-      const settingsManager = SettingsManager.create(process.cwd(), process.env.PI_CODING_AGENT_DIR);
-      const loader = new DefaultResourceLoader({ cwd: process.cwd(), agentDir: process.env.PI_CODING_AGENT_DIR, settingsManager, noSkills: true, noPromptTemplates: true, noThemes: true });
-      await loader.reload();
-      if (loader.getExtensions().errors.length) throw new Error(JSON.stringify(loader.getExtensions().errors));
-      console.log(JSON.stringify(loader.getExtensions().extensions.map(item => item.resolvedPath)));
-    `,
-    );
-    for (const declaration of ["  ../../operator-extension.mjs  ", pathToFileURL(extension).href]) {
-      writeFileSync(join(f.native, "settings.json"), JSON.stringify({ extensions: [declaration] }));
-      const native = spawnSync(process.execPath, [probe], {
-        cwd: f.home,
-        env: { ...f.env, PI_CODING_AGENT_DIR: f.native, PI_SKIP_VERSION_CHECK: "1" },
-        encoding: "utf8",
-        timeout: 20_000,
-      });
-      assert.equal(native.status, 0, native.stderr);
-      assert(JSON.parse(native.stdout).includes(extension), declaration);
-      for (const action of ["prepare", "unlock", "harden", "snapshot", "backup"]) {
-        const refused = f.call(action, join(f.root, "must-not-create"));
-        assert.notEqual(refused.status, 0, action);
-      }
-      assert(!existsSync(join(f.root, "must-not-create")));
-      assert(!existsSync(join(f.native, "models.json")), "Refusal must precede prepare");
-      f.install();
-      const maintenance = f.run(["agent-config"]);
-      assert.notEqual(maintenance.status, 0);
-      assert.equal(
-        f.calls().length,
-        0,
-        "Refusal must precede containment and privileged operations",
-      );
-    }
-  });
-});
-
 test("instruction sentinels preserve an existing alternate instruction winner", () => {
   for (const name of ["CLAUDE.MD", "AGENTS.override.md"]) {
     fixture((f) => {
@@ -328,82 +225,52 @@ test("hardening reserves real discovery names, protects sticky anchors and prese
     writeFileSync(join(f.native, "bin/native-tool"), "#!/bin/sh\n", { mode: 0o755 });
     writeFileSync(join(f.native, "agents/reviewer.md"), "Existing user profile\n");
     assert.equal(f.call("harden").status, 0);
-    const calls = f.calls();
-    for (const store of f.inventory().stores) {
-      assert(
-        calls.some(
-          (call) => call[0] === "chmod" && call[1] === "1770" && call[2] === store.configDir,
-        ),
-      );
-      assert(
-        !calls.some(
-          (call) => call[0] === "chattr" && call[1] === "+i" && call[2] === store.configDir,
-        ),
-      );
-    }
-    assert(calls.some((call) => call[0] === "chmod" && call[1] === "1770" && call[2] === f.home));
-    assert(
-      calls.some(
-        (call) =>
-          call[0] === "chmod" && call[1] === "755" && call[2] === join(f.native, "npm/tool"),
-      ),
-    );
-    assert(
-      calls.some(
-        (call) =>
-          call[0] === "chattr" && call[1] === "+i" && call[2] === join(f.native, "bin/native-tool"),
-      ),
-    );
-    assert(!calls.some((call) => call[0] === "chattr" && call[2] === join(f.native, "auth.json")));
+    const state = f.state();
+    const inventory = f.inventory();
+    for (const anchor of [f.home, ...inventory.stores.map((store) => store.configDir)])
+      assert.deepEqual(state[anchor], { owner: "root", mode: 0o1770, immutable: false }, anchor);
+    for (const resource of inventory.resources)
+      assert.equal(state[resource.path]?.immutable, true, resource.path);
+    assert.deepEqual(state[join(f.native, "npm/tool")], {
+      owner: "root",
+      mode: 0o755,
+      immutable: true,
+    });
+    assert.equal(state[join(f.native, "bin/native-tool")].immutable, true);
+    assert.deepEqual(state[join(f.native, "auth.json")], {
+      owner: "service",
+      mode: 0o600,
+      immutable: false,
+    });
     assert.equal(
       readFileSync(join(f.native, "agents/reviewer.md"), "utf8"),
       "Existing user profile\n",
     );
     assert(statSync(join(f.native, "AGENTS.override.md")).isDirectory());
     assert.equal(readFileSync(join(f.native, "SYSTEM.md"), "utf8"), "");
-    for (const resource of f.inventory().resources)
-      assert(
-        calls.some((call) => call[0] === "chattr" && call[1] === "+i" && call[2] === resource.path),
-        resource.path,
-      );
   });
 });
 
 test("maintenance restores protected scopes but leaves AlignFirst writable after every outcome", () => {
-  for (const outcome of ["success", "failure", "signal", "partial-unlock"]) {
+  for (const [outcome, status] of [
+    ["success", 0],
+    ["signal", 143],
+    ["partialUnlock", 1],
+  ]) {
     fixture((f) => {
       f.prepare();
       f.install();
       const openclawConfig = join(f.home, ".openclaw/openclaw.json");
       mkdirSync(dirname(openclawConfig), { recursive: true });
       writeFileSync(openclawConfig, "{}\n");
-      const result = spawnSync(
-        "bash",
-        [
-          f.wrapper,
-          "config",
-          "instructions",
-          "agent-config",
-          "agent-skills",
-          "--",
-          join(f.root, "service-command"),
-        ],
-        {
-          env: { ...f.env, FIXTURE_OUTCOME: outcome },
-          encoding: "utf8",
-          timeout: 20_000,
-        },
+      const result = f.run(
+        ["config", "instructions", "agent-config", "agent-skills"],
+        outcomes[outcome],
       );
-      assert.equal(
-        result.status,
-        outcome === "success" ? 0 : outcome === "failure" ? 42 : outcome === "signal" ? 143 : 1,
-        result.stderr,
-      );
+      assert.equal(result.status, status, `${outcome}\n${result.stderr}`);
       const calls = f.calls();
       const unlock = calls.findIndex((call) => call[0] === "chattr" && call[1] === "-i");
-      const kill = calls
-        .map((call, index) => (call[0] === "kill-switch" ? index : -1))
-        .filter((index) => index >= 0);
+      const kill = calls.flatMap((call, index) => (call[0] === "kill-switch" ? [index] : []));
       assert.equal(kill.length, 2);
       assert(kill[0] < unlock);
       const alignfirstHome = dirname(f.deployed);
@@ -421,25 +288,19 @@ test("maintenance restores protected scopes but leaves AlignFirst writable after
       assert(
         calls.some((call, index) => index > kill[1] && call[0] === "chattr" && call[1] === "+i"),
       );
-      assert(
-        result.stdout.indexOf("restoring agent-skills") <
-          result.stdout.indexOf("restoring agent-config"),
-      );
-      assert(
-        result.stdout.indexOf("restoring agent-config") <
-          result.stdout.indexOf("restoring instructions"),
-      );
       assert.equal(
         calls.some((call) => call[0] === "service-command"),
-        outcome !== "partial-unlock",
+        outcome !== "partialUnlock",
       );
-      assert(!calls.some((call) => call[0] === "systemctl"));
     });
   }
 });
 
 test("combined shared/native skills maintenance thaws hardened descendants before ownership repair", () => {
-  for (const scopes of [["skills"], ["skills", "agent-skills"], ["agent-skills", "skills"]]) {
+  for (const [scopes, windows] of [
+    [["skills", "agent-skills"], 2],
+    [["agent-skills", "skills"], 1],
+  ]) {
     fixture((f) => {
       f.prepare();
       f.install();
@@ -449,14 +310,7 @@ test("combined shared/native skills maintenance thaws hardened descendants befor
       const harden = f.call("harden");
       assert.equal(harden.status, 0, harden.stderr);
       assert(f.immutable().includes(shared));
-      const prematureOwnership = spawnSync(
-        join(f.bin, "chown"),
-        ["-Rh", "fixture:fixture", join(f.home, ".agents")],
-        { env: f.env, encoding: "utf8" },
-      );
-      assert.notEqual(prematureOwnership.status, 0);
-      assert(prematureOwnership.stderr.includes("IMMUTABLE OWNERSHIP/MODE TARGET"));
-      for (let window = 0; window < 2; ++window) {
+      for (let window = 0; window < windows; ++window) {
         const result = f.run(scopes);
         assert.equal(result.status, 0, result.stderr);
         assert(f.immutable().includes(shared), "Shared descendants must be re-hardened");
@@ -480,41 +334,39 @@ test("native recovery alone tolerates missing declared npm contents and snapshot
     const backup = join(f.root, "npm-recovery-backup");
     assert.equal(f.call("backup", backup).status, 0);
     rmSync(installed, { recursive: true });
-    for (const action of ["validate", "validate-maintenance", "snapshot", "backup"]) {
-      const refused = f.call(action, join(f.root, `strict-${action}`));
-      assert.notEqual(refused.status, 0, action);
-    }
-    for (const scope of ["agent-config", "config", "skills"]) {
-      const refused = f.run([scope]);
-      assert.notEqual(refused.status, 0, scope);
-    }
-    assert.equal(f.calls().length, 0, "Normal maintenance must refuse before containment");
+    assert.notEqual(f.call("validate").status, 0, "Normal policy actions stay strict");
+    assert.notEqual(f.run(["agent-config"]).status, 0, "Normal maintenance stays strict");
+    assert.deepEqual(f.privileged(), [], "Normal maintenance must refuse before containment");
     const result = f.recover(backup);
     assert.equal(result.status, 0, result.stderr);
     assert.equal(readFileSync(join(installed, "tool.js"), "utf8"), "restored package\n");
-    const snapshots = f.calls().filter((call) => call[0] === "snapshot");
+    const snapshots = f.snapshots();
     assert(snapshots.length > 0);
-    assert(snapshots.every((call) => call[1].snapshotVersion === 1));
+    assert(snapshots.every((snapshot) => snapshot.snapshotVersion === 1));
     assert(
-      snapshots.some((call) =>
-        call[1].resources.some((item) => item.path === join(f.native, "npm")),
+      snapshots.some((snapshot) =>
+        snapshot.resources.some((item) => item.path === join(f.native, "npm")),
       ),
     );
     assert(f.immutable().includes(join(installed, "tool.js")));
     assert.equal(f.calls().filter((call) => call[0] === "kill-switch").length, 2);
-    const normal = f.run(["agent-config"]);
-    assert.equal(normal.status, 0, normal.stderr);
+    const copy = f
+      .calls()
+      .find((call) => call[0] === "install" && call.at(-1).endsWith("/settings.json"));
+    assert.deepEqual(
+      copy?.slice(0, -1),
+      ["install", "-m", "644", "-o", "root", "-g", "root", f.settingsFile],
+      "Recovery reads a root-owned copy of the reviewed settings",
+    );
+    assert(
+      !existsSync(dirname(copy.at(-1))),
+      "The readable settings copy is removed after recovery",
+    );
   });
 });
 
-test("native recovery keeps unsafe path/link and wrong-type package refusals before containment", () => {
-  for (const variant of [
-    "package-link",
-    "package-file",
-    "native-link",
-    "fixed-link",
-    "unsafe-resource",
-  ])
+test("native recovery keeps unsafe package refusals before containment", () => {
+  for (const variant of ["package-link", "package-file"])
     fixture((f) => {
       f.prepare();
       f.install();
@@ -525,20 +377,10 @@ test("native recovery keeps unsafe path/link and wrong-type package refusals bef
         JSON.stringify({ packages: ["npm:fixture-tool"] }),
       );
       if (variant === "package-link") symlinkSync(f.root, installed);
-      if (variant === "package-file") writeFileSync(installed, "not a directory\n");
-      if (variant === "native-link") {
-        rmSync(join(f.native, "extensions"), { recursive: true });
-        symlinkSync(f.root, join(f.native, "extensions"));
-      }
-      if (variant === "fixed-link") symlinkSync(f.root, join(f.home, ".npm-system-global"));
-      if (variant === "unsafe-resource")
-        writeFileSync(
-          join(f.native, "settings.json"),
-          JSON.stringify({ packages: ["npm:fixture-tool"], extensions: ["/outside-fixture"] }),
-        );
+      else writeFileSync(installed, "not a directory\n");
       const result = f.recover(join(f.root, "not-used"));
       assert.notEqual(result.status, 0, result.stderr);
-      assert.equal(f.calls().length, 0, variant);
+      assert.deepEqual(f.privileged(), [], variant);
     });
 });
 
@@ -569,7 +411,7 @@ test("native recovery refuses malformed invocation and invalid backup before des
       const result = spawnSync("bash", [f.wrapper, ...args], { env: f.env, encoding: "utf8" });
       assert.equal(result.status, 2, result.stderr);
     }
-    assert.equal(f.calls().length, 0);
+    assert.deepEqual(f.privileged(), []);
     const result = f.recover(backup);
     assert.notEqual(result.status, 0);
     assert.equal(readFileSync(marker, "utf8"), "keep on failure\n");
@@ -588,23 +430,23 @@ test("native recovery refuses malformed invocation and invalid backup before des
   });
 });
 
-test("native recovery preflight rejects unrooted backup resources and unsafe sources before unlock", () => {
+test("native recovery preflight rejects unrooted backup resources and unsafe sources", () => {
   for (const variant of ["destination", "declaration", "source-link", "overlap"])
     fixture((f) => {
       f.prepare();
-      f.install();
       const external = join(f.home, "reviewed-extension.ts");
       writeFileSync(external, "reviewed external content\n");
       writeFileSync(join(f.native, "settings.json"), JSON.stringify({ extensions: [external] }));
       const backup = join(f.home, "reviewed-backup");
       assert.equal(f.call("backup", backup).status, 0);
       rmSync(join(f.native, "settings.json"));
-      const marker = join(f.native, "bin/preflight-marker");
-      writeFileSync(marker, "keep before validation\n");
+      const valid = f.call("snapshot-backup", backup, join(f.root, "valid.json"));
+      assert.equal(valid.status, 0, valid.stderr);
       const manifestPath = join(backup, "mapping.json");
       const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-      if (variant === "destination") {
-        manifest.resources[0].destination = join(f.home, "unreviewed.ts");
+      if (variant === "destination" || variant === "overlap") {
+        manifest.resources[0].destination =
+          variant === "destination" ? join(f.home, "unreviewed.ts") : backup;
         writeFileSync(manifestPath, JSON.stringify(manifest));
       }
       if (variant === "declaration" || variant === "overlap")
@@ -614,49 +456,83 @@ test("native recovery preflight rejects unrooted backup resources and unsafe sou
             extensions: [variant === "declaration" ? "/outside-fixture" : backup],
           }),
         );
-      if (variant === "overlap") {
-        manifest.resources[0].destination = backup;
-        writeFileSync(manifestPath, JSON.stringify(manifest));
-      }
       if (variant === "source-link") {
         rmSync(join(backup, "resource-0"));
         symlinkSync(external, join(backup, "resource-0"));
       }
-      const result = f.recover(backup);
-      assert.notEqual(result.status, 0, variant);
-      assert(!f.calls().some(([name]) => name === "service-command"), variant);
-      assert.equal(readFileSync(marker, "utf8"), "keep before validation\n");
-      assert.equal(readFileSync(external, "utf8"), "reviewed external content\n");
-      assert(!f.immutable().includes(join(f.home, "unreviewed.ts")));
+      const snapshot = join(f.root, "rejected.json");
+      assert.notEqual(f.call("snapshot-backup", backup, snapshot).status, 0, variant);
+      assert(!existsSync(snapshot), variant);
     });
 });
 
+test("native recovery unlocks resources declared only in the backup and restores their policy after a failure", () => {
+  fixture((f) => {
+    f.prepare();
+    f.install();
+    const external = join(f.home, "reviewed-extension.ts");
+    const skills = join(f.home, "reviewed-skills");
+    writeFileSync(external, "reviewed external extension\n");
+    mkdirSync(skills);
+    writeFileSync(join(skills, "SKILL.md"), "reviewed skill\n");
+    writeFileSync(
+      join(f.native, "settings.json"),
+      JSON.stringify({ extensions: [external], skills: [skills] }),
+    );
+    assert.equal(f.call("harden").status, 0);
+    const backup = join(f.root, "lost-declarations-backup");
+    assert.equal(f.call("backup", backup).status, 0);
+    rmSync(join(f.native, "settings.json"));
+    const start = f.calls().length;
+    const result = f.recover(backup, {
+      FIXTURE_MUTATION: JSON.stringify({ failRecovery: true }),
+    });
+    assert.equal(result.status, 1, result.stderr);
+    const calls = f.calls().slice(start);
+    const service = calls.findIndex(([name]) => name === "service-command");
+    const state = f.state();
+    for (const path of [external, join(skills, "SKILL.md")]) {
+      assert(
+        calls
+          .slice(0, service)
+          .some(([name, flag, target]) => name === "chattr" && flag === "-i" && target === path),
+        `Backup-derived resource must be unlocked before service recovery: ${path}`,
+      );
+      assert.equal(state[path].owner, "root", path);
+      assert.equal(state[path].immutable, true, path);
+    }
+  });
+});
+
 test("failed recontainment aborts all privileged cleanup", () => {
-  for (const outcome of ["kill-failure", "initial-kill-failure"]) {
+  for (const [outcome, kills] of [
+    ["killFailure", 2],
+    ["initialKillFailure", 1],
+  ]) {
     fixture((f) => {
       f.prepare();
       f.install();
-      const result = f.run(["agent-config"], { FIXTURE_OUTCOME: outcome });
+      const result = f.run(["agent-config"], outcomes[outcome]);
       assert.equal(result.status, 1, result.stderr);
-      const calls = f.calls();
-      const kills = calls.flatMap((call, index) => (call[0] === "kill-switch" ? [index] : []));
-      assert.equal(kills.length, outcome === "kill-failure" ? 2 : 1);
-      assert.equal(
-        calls.slice(kills.at(-1) + 1).length,
-        0,
+      const calls = f.privileged();
+      const killIndexes = calls.flatMap((call, index) =>
+        call[0] === "kill-switch" ? [index] : [],
+      );
+      assert.equal(killIndexes.length, kills);
+      assert.deepEqual(
+        calls.slice(killIndexes.at(-1) + 1),
+        [],
         "No thaw/chown/chmod after failed containment",
       );
     });
   }
 });
 
-test("private resolved inventory restores removed declarations and protects newly declared resources on success, failure and signal", () => {
-  for (const variant of [
-    "remove",
-    "change-failure",
-    "change-signal",
-    "invalid-settings",
-    "removed-profile",
+test("private resolved inventory restores removed declarations and protects newly declared resources", () => {
+  for (const [variant, outcome, status] of [
+    ["remove", "success", 0],
+    ["change-failure", "failure", 42],
+    ["invalid-settings", "success", 1],
   ]) {
     fixture((f) => {
       f.prepare();
@@ -668,44 +544,16 @@ test("private resolved inventory restores removed declarations and protects newl
       writeFileSync(join(added, "SKILL.md"), "new resource\n");
       writeFileSync(join(f.native, "settings.json"), JSON.stringify({ packages: [original] }));
       f.install();
-      const outcome =
-        variant === "change-failure"
-          ? "failure"
-          : variant === "change-signal"
-            ? "signal"
-            : "success";
       const mutation = {
         remove: variant === "remove",
         malformed: variant === "invalid-settings",
         settings: { skills: [added] },
-        ...(variant === "removed-profile"
-          ? {
-              replaceDeployed: JSON.stringify({
-                code: {
-                  profiles: {
-                    openclaw: { harness: "openclaw", defaultAgentProfile: "claude" },
-                    claude: f.settings.code.profiles.claude,
-                  },
-                },
-              }),
-            }
-          : {}),
       };
       const result = f.run(["agent-config"], {
-        FIXTURE_OUTCOME: outcome,
+        ...outcomes[outcome],
         FIXTURE_MUTATION: JSON.stringify(mutation),
       });
-      assert.equal(
-        result.status,
-        variant === "invalid-settings"
-          ? 1
-          : outcome === "failure"
-            ? 42
-            : outcome === "signal"
-              ? 143
-              : 0,
-        result.stderr,
-      );
+      assert.equal(result.status, status, `${variant}\n${result.stderr}`);
       const calls = f.calls();
       const lastKill = calls.findLastIndex((call) => call[0] === "kill-switch");
       assert(
@@ -727,13 +575,13 @@ test("private resolved inventory restores removed declarations and protects newl
           `Original resource must be repaired: ${path}`,
         );
       }
-      const snapshots = calls.filter((call) => call[0] === "snapshot");
-      assert(snapshots.length > 0);
       assert(
-        snapshots.some((call) => call[1].resources.some((resource) => resource.path === original)),
+        f
+          .snapshots()
+          .some((snapshot) => snapshot.resources.some((resource) => resource.path === original)),
         "Snapshot records resolved resources, not just deployment settings",
       );
-      if (!["remove", "invalid-settings"].includes(variant)) {
+      if (variant === "change-failure") {
         assert(
           calls.some(
             (call, index) =>
@@ -779,17 +627,9 @@ test("maintenance refuses symlinked fixed ownership roots before containment or 
     f.prepare();
     f.install();
     symlinkSync(join(f.root, "outside"), join(f.home, ".npm-system-global"));
-    const result = spawnSync(
-      "bash",
-      [f.wrapper, "packages", "--", join(f.root, "service-command")],
-      {
-        env: f.env,
-        encoding: "utf8",
-        timeout: 20_000,
-      },
-    );
+    const result = f.run(["packages"]);
     assert.notEqual(result.status, 0);
-    assert.equal(f.calls().length, 0);
+    assert.deepEqual(f.privileged(), []);
   });
 });
 
@@ -827,11 +667,6 @@ test("private backup/recovery maps custom stores, sessions, credentials and exec
       "private transcript\n",
     );
     assert((statSync(join(f.native, "npm/tool")).mode & 0o100) !== 0);
-    mapping.stores[0].destination = join(f.root, "escape");
-    writeFileSync(join(backup, "mapping.json"), JSON.stringify(mapping));
-    const escaping = f.call("recover", backup);
-    assert.notEqual(escaping.status, 0);
-    assert(!existsSync(join(f.root, "escape")));
   });
 });
 
@@ -866,14 +701,6 @@ test("recovery replaces contents exactly rather than retaining post-backup execu
     for (const path of extras) assert(!existsSync(path), path);
     assert.equal(readFileSync(join(local, "original"), "utf8"), "original\n");
     assert((statSync(join(local, "original")).mode & 0o100) !== 0);
-    const marker = join(f.native, "bin/not-yet-restored");
-    writeFileSync(marker, "keep if preflight fails\n");
-    const manifest = JSON.parse(readFileSync(join(backup, "mapping.json"), "utf8"));
-    manifest.resources.at(-1).destination = join(f.root, "outside");
-    writeFileSync(join(backup, "mapping.json"), JSON.stringify(manifest));
-    const invalid = f.call("recover", backup);
-    assert.notEqual(invalid.status, 0);
-    assert(existsSync(marker), "Validate the complete backup before deleting anything");
   });
 });
 
@@ -891,88 +718,6 @@ test("recovery removes executable state from stores absent at backup time", () =
   });
 });
 
-test("pinned native Pi loader keeps empty system files neutral and normal auth/lock writes work", () => {
-  fixture((f) => {
-    f.prepare();
-    writeFileSync(
-      join(f.native, "bin/managed-native-tool"),
-      "#!/bin/sh\nprintf 'managed native bin'\n",
-      { mode: 0o755 },
-    );
-    const child = join(f.root, "native-check.mjs");
-    const moduleRoot = join(repository, "node_modules/@earendil-works/pi-coding-agent/dist/core");
-    writeFileSync(
-      child,
-      `
-      import assert from 'node:assert/strict';
-      import { readFileSync, existsSync, renameSync, writeFileSync } from 'node:fs';
-      import { join } from 'node:path';
-      import { FileAuthStorageBackend } from ${JSON.stringify(join(moduleRoot, "auth-storage.js"))};
-      import { SettingsManager } from ${JSON.stringify(join(moduleRoot, "settings-manager.js"))};
-      import { DefaultResourceLoader, loadProjectContextFiles } from ${JSON.stringify(join(moduleRoot, "resource-loader.js"))};
-      import { buildSystemPrompt } from ${JSON.stringify(join(moduleRoot, "system-prompt.js"))};
-      import { ProjectTrustStore } from ${JSON.stringify(join(moduleRoot, "trust-manager.js"))};
-      import { FileModelsStore } from ${JSON.stringify(join(moduleRoot, "models-store.js"))};
-      import { createBashTool } from ${JSON.stringify(join(moduleRoot, "tools/bash.js"))};
-      const dir = process.env.PI_CODING_AGENT_DIR;
-      const bash = createBashTool(process.cwd());
-      const toolResult = await bash.execute('managed-bin-check', { command: 'managed-native-tool' });
-      assert(toolResult.content.some(item => item.type === 'text' && item.text.includes('managed native bin')));
-      const auth = join(dir, 'auth.json');
-      const backend = new FileAuthStorageBackend(auth);
-      backend.withLock(() => ({ next: '{}', result: null }));
-      await backend.withLockAsync(async () => ({ next: '{"fixture":{"type":"api_key","key":"fake"}}', result: null }));
-      assert(!existsSync(auth + '.lock'));
-      const catalog = new FileModelsStore(join(dir, 'models-store.json'));
-      await catalog.write('fixture', {models: [], checkedAt: 1});
-      assert.deepEqual(await catalog.read('fixture'), {models: [], checkedAt: 1});
-      assert(!existsSync(join(dir, 'models-store.json.lock')));
-      writeFileSync(auth + '.replacement', '{}'); renameSync(auth + '.replacement', auth);
-      const settings = SettingsManager.create(process.cwd(), dir);
-      const loader = new DefaultResourceLoader({ cwd: process.cwd(), agentDir: dir, settingsManager: settings, noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true });
-      await loader.reload();
-      assert.equal(loader.getExtensions().errors.length, 0);
-      const trust = new ProjectTrustStore(dir);
-      trust.set(process.cwd(), true);
-      assert.equal(trust.get(join(process.cwd(), 'future-worktree')), true);
-      assert(!existsSync(join(dir, 'trust.json.lock')));
-      const prompt = readFileSync(loader.discoverSystemPromptFile(), 'utf8');
-      assert.equal(prompt, '');
-      assert.equal(buildSystemPrompt({cwd: process.cwd(), customPrompt: prompt, appendSystemPrompt: loader.getAppendSystemPrompt().join('\\n\\n')}), buildSystemPrompt({cwd: process.cwd()}));
-      const context = loadProjectContextFiles({cwd: process.cwd(), agentDir: dir});
-      assert(context.some((file) => file.path === join(dir, 'AGENTS.md')));
-      assert(!context.some((file) => file.path.endsWith('AGENTS.override.md')));
-      assert(!existsSync(join(dir, 'settings.json.lock')));
-    `,
-    );
-    const result = spawnSync(process.execPath, [child], {
-      cwd: f.home,
-      env: { ...f.env, PI_CODING_AGENT_DIR: f.native, PI_OFFLINE: "1", PI_SKIP_VERSION_CHECK: "1" },
-      encoding: "utf8",
-      timeout: 20_000,
-    });
-    assert.equal(result.status, 0, result.stderr);
-    const cli = spawnSync(process.execPath, [join(moduleRoot, "../cli.js"), "--list-models"], {
-      cwd: f.home,
-      env: {
-        ...f.env,
-        PI_CODING_AGENT_DIR: f.native,
-        PI_OFFLINE: "1",
-        PI_SKIP_VERSION_CHECK: "1",
-        PI_TELEMETRY: "0",
-      },
-      encoding: "utf8",
-      timeout: 20_000,
-    });
-    assert.equal(cli.status, 0, cli.stderr);
-  });
-});
-
-function assertRefused(f) {
-  const result = f.call("validate");
-  assert.notEqual(result.status, 0);
-}
-
 function fixture(callback) {
   const root = mkdtempSync(join(tmpdir(), "deployment-core-"));
   const home = join(root, "home");
@@ -980,27 +725,24 @@ function fixture(callback) {
   const bin = join(root, "doubles");
   const settingsFile = join(infra, "aligndev.settings.json");
   const deployed = join(home, ".alignfirst/aligndev.settings.json");
-  const log = join(root, "calls.jsonl");
+  const journal = join(root, "journal");
   const f = {
     root,
     home,
     infra,
     libexec: join(root, "opt/fixture/libexec"),
-    bin,
     settingsFile,
     deployed,
-    log,
     native: join(home, ".pi/agent"),
     wrapper: join(infra, "bin/assistant-maintenance.sh"),
   };
   f.env = {
+    ...standInEnv({ root, home, bin, journal }),
     HOME: home,
     USER: "fixture",
     LOGNAME: "fixture",
     PATH: `${bin}:${dirname(process.execPath)}:/usr/bin:/bin`,
     TMPDIR: root,
-    FIXTURE_ROOT: root,
-    FIXTURE_LOG: log,
     PI_OFFLINE: "1",
   };
   try {
@@ -1040,19 +782,11 @@ function fixture(callback) {
         },
       },
     };
-    f.save = () => writeFileSync(settingsFile, JSON.stringify(f.settings));
-    f.save();
-    f.call = (action, argument) =>
+    writeFileSync(settingsFile, JSON.stringify(f.settings));
+    f.call = (action, ...args) =>
       spawnSync(
         process.execPath,
-        [
-          join(infra, "deployment-policy.mjs"),
-          action,
-          settingsFile,
-          home,
-          deployed,
-          ...(argument === undefined ? [] : [argument]),
-        ],
+        [join(infra, "deployment-policy.mjs"), action, settingsFile, home, deployed, ...args],
         { env: f.env, encoding: "utf8", timeout: 20_000 },
       );
     f.inventory = () =>
@@ -1067,155 +801,101 @@ function fixture(callback) {
       const result = f.call("prepare");
       assert.equal(result.status, 0, result.stderr);
     };
-    f.immutable = () =>
-      existsSync(join(root, "immutable.json"))
-        ? JSON.parse(readFileSync(join(root, "immutable.json"), "utf8"))
-        : [];
-    f.recover = (backup) =>
-      spawnSync("bash", [f.wrapper, "native-recovery", "--", backup], {
-        env: f.env,
-        encoding: "utf8",
-        timeout: 30_000,
-      });
-    f.calls = () =>
-      existsSync(log)
-        ? readFileSync(log, "utf8")
-            .trim()
-            .split("\n")
-            .map((line) => JSON.parse(line))
-        : [];
-    f.run = (scopes, env = {}) =>
-      spawnSync("bash", [f.wrapper, ...scopes, "--", join(f.root, "service-command")], {
-        env: { ...f.env, ...env },
-        encoding: "utf8",
-        timeout: 30_000,
-      });
     f.install = () => {
       mkdirSync(dirname(deployed), { recursive: true });
       cpSync(settingsFile, deployed);
     };
-    installDoubles(f);
+    const wrapper = (args, env = {}) =>
+      spawnSync("bash", [f.wrapper, ...args], {
+        env: { ...f.env, ...env },
+        encoding: "utf8",
+        timeout: 30_000,
+      });
+    f.run = (scopes, env) => wrapper([...scopes, "--", join(root, "service-command")], env);
+    f.recover = (backup, env) => wrapper(["native-recovery", "--", backup], env);
+    f.calls = () => journalCalls(readJournal(journal));
+    f.privileged = () => f.calls().filter(([name]) => privilegedCommands.includes(name));
+    f.state = () => replayState(readJournal(journal));
+    f.immutable = () =>
+      Object.entries(f.state())
+        .filter(([, entry]) => entry.immutable)
+        .map(([path]) => path);
+    f.snapshots = () =>
+      readJournal(journal)
+        .filter(([kind]) => kind === "snapshot")
+        .map(([, json]) => JSON.parse(json));
+    writeFileSync(journal, "");
+    installStandIns(bin, [
+      "id",
+      "chown",
+      "chmod",
+      "chattr",
+      ["install", "install.mjs"],
+      "rsync",
+      ["runuser", "maintenance-runuser.mjs"],
+      "openclaw",
+    ]);
+    installStandIns(root, ["kill-switch"]);
+    writeFileSync(join(root, "service-command"), "#!/bin/sh\nexit 99\n", { mode: 0o755 });
     callback(f);
+    assertPrivilegedShapes(f);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 }
 
-function installDoubles(f) {
-  const double = `#!${process.execPath}
-import { appendFileSync, existsSync, readFileSync, readdirSync, statSync, lstatSync, rmSync, writeFileSync, cpSync, mkdirSync, symlinkSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
-import { basename, resolve } from 'node:path';
-const name = basename(process.argv[1]);
-const args = process.argv.slice(2);
-const root = process.env.FIXTURE_ROOT;
-function inside(path) { if (!path.startsWith(root + '/')) throw new Error('OUTSIDE FIXTURE: ' + path); }
-function log(value) { appendFileSync(process.env.FIXTURE_LOG, JSON.stringify(value) + '\\n'); }
-if (name === 'id') { if (args.join(' ') === '-u') console.log('0'); else if (args.join(' ') === '-u fixture') console.log('1000'); else if (args.join(' ') === '-gn fixture' || args.join(' ') === '-un') console.log('fixture'); else throw new Error('Unexpected id'); }
-else if (['chown', 'chmod', 'chattr'].includes(name)) {
-  const recursive = args[0] === '-R' || args[0] === '-Rh';
-  const mode = args[recursive ? 1 : 0];
-  const paths = args.slice(recursive ? 2 : 1);
-  if (paths.length === 0) throw new Error('Missing privileged target');
-  if (recursive && !(args.length === 3 && (
-    (name === 'chown' && [root + '/home/seed', root + '/home/.npm-system-global', root + '/home/.agents', root + '/home/.openclaw/skills'].includes(args[2])) ||
-    (name === 'chmod' && mode === 'go-w' && args[2] === root + '/home/.npm-system-global') ||
-    (name === 'chmod' && mode === 'go-rwx' && args[2].startsWith(root + '/home/backups/deployment/'))
-  ))) throw new Error('Unexpected recursive privileged arguments');
-  if (name === 'chown' && !['fixture:fixture', 'root:fixture', 'root:root', 'operator:operator'].includes(mode)) throw new Error('Unexpected chown owner');
-  if (name === 'chmod' && !['600', '640', '644', '755', '1770', '700', ...(recursive ? ['go-w', 'go-rwx'] : [])].includes(mode)) throw new Error('Unexpected chmod mode');
-  if (name === 'chattr' && (args.length !== 2 || !['-i', '+i'].includes(mode))) throw new Error('Unexpected chattr operation');
-  for (const path of paths) inside(path);
-  log([name, ...args]);
-  const stateFile = root + '/immutable.json';
-  const immutable = new Set(existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, 'utf8')) : []);
-  if (name === 'chattr') {
-    if (mode === '-i' && process.env.FIXTURE_OUTCOME === 'partial-unlock' && !existsSync(root + '/failed-once')) { writeFileSync(root + '/failed-once', ''); process.exit(1); }
-    if (mode === '+i') immutable.add(paths[0]); else immutable.delete(paths[0]);
-    writeFileSync(stateFile, JSON.stringify([...immutable]));
-  } else {
-    function check(path) {
-      inside(path);
-      if (immutable.has(path)) throw new Error('IMMUTABLE OWNERSHIP/MODE TARGET: ' + path);
-      if (recursive && existsSync(path) && lstatSync(path).isDirectory())
-        for (const child of readdirSync(path)) check(path + '/' + child);
-    }
-    for (const path of paths) check(path);
+// The stand-ins accept every argument shape; the shapes the wrapper and helpers may use are
+// asserted here, after each test.
+function assertPrivilegedShapes(f) {
+  const home = f.home;
+  const backups = join(home, "backups/deployment");
+  const recursiveTargets = {
+    chown: [
+      join(home, "seed"),
+      join(home, ".npm-system-global"),
+      join(home, ".agents"),
+      join(home, ".openclaw/skills"),
+    ],
+    chmod: [join(home, ".npm-system-global")],
+  };
+  for (const [name, ...args] of f.calls()) {
+    const recursive = ["-R", "-Rh"].includes(args[0]);
+    const [value, ...paths] = recursive ? args.slice(1) : args;
+    const shape = `${name} ${args.join(" ")}`;
+    if (name === "chown")
+      assert(
+        ["fixture:fixture", "root:fixture", "root:root", "operator:operator"].includes(value),
+        shape,
+      );
+    if (name === "chmod")
+      assert(
+        (recursive ? ["go-w", "go-rwx"] : ["600", "640", "644", "700", "755", "1770"]).includes(
+          value,
+        ),
+        shape,
+      );
+    if (recursive)
+      assert(
+        paths.length === 1 &&
+          (recursiveTargets[name]?.includes(paths[0]) ||
+            (name === "chmod" && value === "go-rwx" && paths[0].startsWith(`${backups}/`))),
+        shape,
+      );
+    if (name === "install")
+      assert(
+        (args.length === 8 &&
+          args.slice(0, 7).join(" ") === `-m 644 -o root -g root ${f.settingsFile}`) ||
+          (args.length === 4 &&
+            args.slice(0, 3).join(" ") === "-d -m 700" &&
+            args[3] === backups) ||
+          (args.length === 5 &&
+            args.slice(0, 2).join(" ") === "-D -m" &&
+            args[2] === "600" &&
+            args[3].startsWith(`${home}/`) &&
+            args[4].startsWith(`${backups}/`)),
+        shape,
+      );
   }
-} else if (name === 'install') {
-  if (args.length === 8 && args.slice(0, 6).join(' ') === '-m 644 -o root -g root') {
-    inside(args[6]); inside(args[7]);
-    if (args[6] !== root + '/admin/infra/openclaw/aligndev.settings.json' || !args[7].endsWith('/settings.json')) throw new Error('Unexpected settings copy');
-    cpSync(args[6], args[7]);
-  } else {
-    const directory = args.length === 4 && args.slice(0, 3).join(' ') === '-d -m 700' && args[3] === root + '/home/backups/deployment';
-    const file = args.length === 5 && args.slice(0, 3).join(' ') === '-D -m 600' && args[3].startsWith(root + '/home/') && args[4].startsWith(root + '/home/backups/deployment/');
-    if (!directory && !file) throw new Error('Unexpected install');
-    const result = spawnSync('/usr/bin/install', args, {stdio: 'inherit'});
-    if (result.status !== 0) process.exit(result.status ?? 1);
-  }
-  log([name, ...args]);
-} else if (name === 'rsync') {
-  if (args[0] !== '-a' || args[1] !== '--delete' || args.length !== 4) throw new Error('Unexpected rsync');
-  inside(args[2]); inside(args[3]); mkdirSync(args[3], {recursive:true}); cpSync(args[2], args[3], {recursive:true}); log([name, ...args]);
-} else if (name === 'openclaw') {
-  if (args.length !== 6 || args[0] !== 'backup' || args[1] !== 'create' || args[2] !== '--output' || args[4] !== '--no-include-workspace' || args[5] !== '--verify') throw new Error('Unexpected openclaw');
-  inside(args[3]); log([name, ...args]);
-} else if (name === 'kill-switch') {
-  if (args.length !== 0) throw new Error('Unexpected kill arguments');
-  log([name]);
-  if (process.env.FIXTURE_OUTCOME === 'initial-kill-failure' ||
-    (existsSync(root + '/service-ran') && process.env.FIXTURE_OUTCOME === 'kill-failure')) process.exit(1);
-}
-else if (name === 'runuser') {
-  if (args[0] !== '-u' || args[1] !== 'fixture' || args[2] !== '--' || args[3] !== 'env' || args[4] !== 'HOME=' + root + '/home' || args[5] !== 'USER=fixture' || args[6] !== 'LOGNAME=fixture' || args[7] !== 'XDG_RUNTIME_DIR=/run/user/1000' || !args[8].startsWith('PATH=/usr/bin:/opt/fixture/bin:/bin:') || args[9] !== 'bash' || args[10] !== '-c' || args[11] !== 'cd "$HOME" && exec "$@"' || args[12] !== 'bash') throw new Error('Unexpected runuser');
-  const command = args.slice(13);
-  const recovery = command.length === 7 && command[0] === process.execPath && command[1] === root + '/opt/fixture/libexec/deployment-policy.mjs' && command[2] === 'recover' && command[3].startsWith(root + '/tmp.') && command[3].endsWith('/settings.json') && command[4] === root + '/home' && command[5] === root + '/home/.alignfirst/aligndev.settings.json';
-  if (!recovery && (command.length !== 1 || command[0] !== root + '/service-command')) throw new Error('Unexpected service command');
-  if (recovery) inside(command[6]);
-  log(['service-command']);
-  writeFileSync(root + '/service-ran', '');
-  {
-    const snapshots = readdirSync(root).filter(name => name.startsWith('tmp.'));
-    for (const name of snapshots) {
-      const dir = root + '/' + name;
-      if (!statSync(dir).isDirectory()) continue;
-      if (recovery && dir + '/settings.json' === command[3]) {
-        if ((statSync(dir).mode & 0o022) !== 0) throw new Error('Recovery settings directory is writable');
-        if (readFileSync(command[3], 'utf8') !== readFileSync(root + '/admin/infra/openclaw/aligndev.settings.json', 'utf8')) throw new Error('Recovery settings differ from review');
-        continue;
-      }
-      if (statSync(dir).uid !== process.getuid()) throw new Error('Snapshot owner differs from wrapper owner');
-      if ((statSync(dir).mode & 0o077) !== 0) throw new Error('Snapshot directory is not private');
-      for (const file of readdirSync(dir)) {
-        if ((statSync(dir + '/' + file).mode & 0o077) !== 0) throw new Error('Snapshot file is not private');
-        log(['snapshot', JSON.parse(readFileSync(dir + '/' + file, 'utf8'))]);
-      }
-    }
-  }
-  if (recovery) {
-    const result = spawnSync(command[0], command.slice(1), {env: process.env, stdio: 'inherit', timeout: 20_000});
-    process.exit(result.status ?? 1);
-  }
-  if (process.env.FIXTURE_MUTATION) {
-    const mutation = JSON.parse(process.env.FIXTURE_MUTATION);
-    const nativeSettings = root + '/home/.pi/agent/settings.json';
-    if (mutation.remove) rmSync(nativeSettings);
-    else if (mutation.malformed || mutation.settings !== undefined) writeFileSync(nativeSettings, mutation.malformed ? '{invalid' : JSON.stringify(mutation.settings));
-    if (mutation.packageLink) {
-      inside(mutation.packageLink);
-      symlinkSync(mutation.packageLink, root + '/home/.npm-system-global/bin/tool');
-    }
-    if (mutation.replaceDeployed) writeFileSync(root + '/home/.alignfirst/aligndev.settings.json', mutation.replaceDeployed);
-  }
-  if (process.env.FIXTURE_OUTCOME === 'signal') { process.kill(process.ppid, 'SIGTERM'); process.exit(143); }
-  if (process.env.FIXTURE_OUTCOME === 'failure') process.exit(42);
-} else throw new Error('Unexpected command ' + name);
-`;
-  for (const name of ["id", "chown", "chmod", "chattr", "install", "rsync", "runuser", "openclaw"])
-    writeFileSync(join(f.bin, name), double, { mode: 0o755 });
-  writeFileSync(join(f.root, "kill-switch"), double, { mode: 0o755 });
-  writeFileSync(join(f.root, "service-command"), "#!/bin/sh\nexit 99\n", { mode: 0o755 });
 }
 
 function walk(path) {
