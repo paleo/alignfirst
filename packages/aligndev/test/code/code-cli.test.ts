@@ -902,13 +902,17 @@ describe("models", () => {
     ).toEqual(["gpt-7-sol"]);
   });
 
-  it("reports a memory that fails at the first read as unavailable", async () => {
+  it("reports a memory that fails at the first read as unavailable, without a refresh", async () => {
     mkdirSync(dirname(memoryPath(home)), { recursive: true });
     const database = new DatabaseSync(memoryPath(home));
     database.exec("PRAGMA user_version = 1");
     database.close();
-    const result = await runModels([], catalogs([]));
+    const runners = catalogs(["gpt-7-sol"]);
+    const result = await runModels(["--refresh"], runners);
+    expect(result.code).toBe(1);
     expect(result.stdout).toContain("no such table: store");
+    expect(runners.codex).not.toHaveBeenCalled();
+    expect(runners.agy).not.toHaveBeenCalled();
   });
 
   it("refuses to refresh without an available memory", async () => {

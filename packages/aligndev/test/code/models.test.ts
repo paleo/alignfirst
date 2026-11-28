@@ -406,6 +406,15 @@ describe("remembered model lists", () => {
     ]);
   });
 
+  it("tells apart a relative native directory under two working directories", async () => {
+    const env = { PI_CODING_AGENT_DIR: "pi-agent" };
+    const runner = vi.fn(async () => completed(piResponse([["openai", "gpt-6-sol"]])));
+    for (const cwd of ["/a", "/b"]) {
+      await resolver({ pi: runner })("pi", PI_PATTERN, { cwd, env });
+    }
+    expect(runner).toHaveBeenCalledTimes(2);
+  });
+
   it("looks a fresh list without a match up again once", async () => {
     await seed("codex", ["gpt-6-terra"]);
     const runner = vi.fn(async () => codexCatalog(["gpt-6-terra", "gpt-6-sol"]));

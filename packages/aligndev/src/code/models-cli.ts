@@ -129,7 +129,10 @@ async function loadLists(
   const { catalogAgent, context } = profile;
   if (catalogAgent === undefined) return { lists: {}, failed: false };
   const stored = await ctx.modelLists.read(catalogAgent, context);
-  if (!refresh) return { lists: { current: stored }, failed: false };
+  // A failed read makes the memory unavailable: no native command runs.
+  if (!refresh || (await ctx.modelLists.unavailability()) !== undefined) {
+    return { lists: { current: stored }, failed: false };
+  }
   let current: StoredModelList;
   try {
     current = await ctx.modelLists.refresh(catalogAgent, context);

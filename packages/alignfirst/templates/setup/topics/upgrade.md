@@ -222,7 +222,7 @@ For each `pi` profile of `aligndev.settings.json`, collect its `defaultModel` an
 
 A `modelAliases` entry that pins a full id only to avoid a wrong variant can become a family or a `{latest}` target: neither matches a variant with a further suffix.
 
-Then run `aligndev code models --refresh --profile <name>` for each enabled `pi` profile: it shows the model each name selects, and fails when a pattern has no single match. It shows a full id listed in `models` as written: the first launch checks it.
+Then run `aligndev code models --refresh --profile <name>` for each enabled `pi` profile: it shows the model each name selects, and fails when a pattern has no single match. It shows a full id listed in `models` as written: the first launch checks it. For a project that holds `.pi`, run the check from the project directory: Pi's extensions there can add models.
 
 A session keeps the model name it recorded. After a `defaultModel` changes from a full id to an alias, resume such a session with `--model <alias>`. A session recorded without a profile resumes on Pi's built-in profile, which declares nothing. When it recorded a model, resume it with `--profile <name>`, naming a `pi` profile that accepts that model. To choose another model, keep `--profile` and add `--model <name>`.
 

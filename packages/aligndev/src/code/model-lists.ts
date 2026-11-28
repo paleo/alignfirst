@@ -1,5 +1,5 @@
 import { realpathSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 
 import { entryName, GLOBAL_REALM, type Memory, type MemoryRow } from "../memory/memory.js";
 import type { CodingAgent } from "./coding-agent.js";
@@ -90,11 +90,13 @@ function isModelListRecord(payload: unknown): payload is ModelListRecord {
   );
 }
 
-// The value of the harness's native directory variable in the agent's environment.
-export function nativeDirectory(harness: CodingAgent, env: NodeJS.ProcessEnv): string | null {
+// The harness's native directory variable of the agent's environment. A relative value names a
+// directory under the working directory. Pi expands a leading `~`, so such a value is kept.
+export function nativeDirectory(harness: CodingAgent, { cwd, env }: ModelListOwner): string | null {
   const variable = CONFIG_DIRECTORY_VARIABLES[harness];
   const value = variable === undefined ? undefined : env[variable];
-  return value === undefined || value === "" ? null : value;
+  if (value === undefined || value === "") return null;
+  return isAbsolute(value) || value.startsWith("~") ? value : resolve(cwd, value);
 }
 
 // Same CLI version, same native directory, and written on the local calendar day of `now`.

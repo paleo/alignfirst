@@ -228,7 +228,7 @@ async function resolveRemembered(
   context: ModelDiscoveryContext,
 ): Promise<string> {
   const cliVersion = await readVersion(agent, context);
-  const configDir = nativeDirectory(agent, context.env);
+  const configDir = nativeDirectory(agent, context);
   const stored = await readModelList(memory, agent, context);
   // The model of the stored list of the same directory, fresh or not.
   const remembered =
@@ -259,7 +259,7 @@ export function createModelLists(
       const cliVersion = await readVersion(agent, context);
       const entry = entries[agent];
       const models = readCatalog(entry, agent, await entry.run(context));
-      const configDir = nativeDirectory(agent, context.env);
+      const configDir = nativeDirectory(agent, context);
       const stored = await writeModelList(memory, agent, context, {
         cliVersion,
         configDir,
