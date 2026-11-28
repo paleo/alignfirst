@@ -2,11 +2,17 @@ import { type LaunchEvidence, readLaunchEvidence } from "@alignfirst/docmap/invo
 import { homedir } from "node:os";
 
 import { runCode } from "./code/code-cli.js";
-import { createExecutableModelResolver, type ExecutableModelResolver } from "./code/models.js";
+import {
+  createExecutableModelResolver,
+  createModelLists,
+  type ExecutableModelResolver,
+  type ModelLists,
+} from "./code/models.js";
 import { type QuotaReader, readQuota } from "./code/quota.js";
 import { type CommandForms, resolveCommandForms } from "./command-form.js";
 import { ASSISTANT_HARNESS_VARIABLE, HARNESSES } from "./assistant-harness.js";
 import { loadConfig } from "./config.js";
+import { createMemory, type Memory } from "./memory/memory.js";
 import { errorMessage } from "./errors.js";
 import { runGuide } from "./guide/guide-cli.js";
 import type { Output } from "./output.js";
@@ -23,6 +29,7 @@ export interface MainOptions {
   home?: string;
   alignfirstCommand?: string[];
   modelResolver?: ExecutableModelResolver;
+  modelLists?: ModelLists;
   quotaReader?: QuotaReader;
 }
 
@@ -35,12 +42,22 @@ interface CliContext {
   forms: CommandForms;
   alignfirstCommand: string[];
   modelResolver: ExecutableModelResolver;
+  modelLists: ModelLists;
   quotaReader: QuotaReader;
+  memory: Memory;
 }
 
 export async function main(options?: MainOptions): Promise<number> {
   const ctx = resolveContext(options);
-  const [command, ...tokens] = (options?.argv ?? process.argv).slice(2);
+  try {
+    return await runCommand(ctx, options?.argv ?? process.argv);
+  } finally {
+    ctx.memory.close();
+  }
+}
+
+async function runCommand(ctx: CliContext, argv: string[]): Promise<number> {
+  const [command, ...tokens] = argv.slice(2);
   if (command === "--help" || command === "-h") {
     ctx.stdout.write(renderHelp(ctx.forms.aligndev));
     return 0;
@@ -119,10 +136,12 @@ function resolveContext(options: MainOptions | undefined): CliContext {
     cwd: options?.cwd ?? process.cwd(),
   };
   const forms = resolveCommandForms(env, evidence);
+  const home = options?.home ?? env.HOME ?? env.USERPROFILE ?? homedir();
+  const memory = createMemory(home);
   return {
     cwd: options?.cwd ?? process.cwd(),
     env,
-    home: options?.home ?? env.HOME ?? env.USERPROFILE ?? homedir(),
+    home,
     stdout: options?.stdout ?? process.stdout,
     stderr: options?.stderr ?? process.stderr,
     forms,
@@ -130,7 +149,9 @@ function resolveContext(options: MainOptions | undefined): CliContext {
       forms.counterpart.executable,
       ...forms.counterpart.args,
     ],
-    modelResolver: options?.modelResolver ?? createExecutableModelResolver(),
+    modelResolver: options?.modelResolver ?? createExecutableModelResolver({}, { memory }),
+    modelLists: options?.modelLists ?? createModelLists(memory),
     quotaReader: options?.quotaReader ?? readQuota,
+    memory,
   };
 }

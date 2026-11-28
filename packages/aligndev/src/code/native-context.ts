@@ -1,7 +1,18 @@
-import { type CodeConfig, CONFIG_DIRECTORY_VARIABLES } from "../config.js";
+import type { CodeConfig } from "../config.js";
+import { CONFIG_DIRECTORY_VARIABLES } from "./harness-environment.js";
+import type { ModelDiscoveryContext } from "./models.js";
 
 // The storage of an agent without a native directory variable: Antigravity's.
 const FIXED_NATIVE_STORAGE = "native store: fixed ~/.gemini; account in the OS keyring";
+
+// A launch and `aligndev code models` address the same remembered model list.
+export function modelDiscoveryContext(code: CodeConfig, cwd: string): ModelDiscoveryContext {
+  return { cwd, env: code.childEnv, profile: code.profile ?? undefined };
+}
+
+export function nativeContext(code: CodeConfig): string {
+  return `${describeProfile(code)} (${describeNativeStorage(code)})`;
+}
 
 export function describeProfile(code: CodeConfig): string {
   return `${code.harness} profile ${JSON.stringify(code.profile ?? "(built-in)")}`;

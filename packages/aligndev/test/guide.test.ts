@@ -78,22 +78,12 @@ describe("guide code profile table", () => {
         "`work`",
         "claude",
         "no",
-        "yes",
         expect.stringContaining("`fast`"),
         "`opus`",
         "`low`, `medium`, `high`, `xhigh`, `max`",
         "native default",
       ],
-      [
-        "`local`",
-        "pi",
-        "yes",
-        "no",
-        expect.stringMatching(/native selector.*`quick`/),
-        expect.any(String),
-        "`shallow`, `deep`",
-        "`deep`",
-      ],
+      ["`local`", "pi", "yes", "`quick`", expect.any(String), "`shallow`, `deep`", "`deep`"],
     ]);
   });
 

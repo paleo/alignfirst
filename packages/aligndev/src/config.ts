@@ -9,7 +9,8 @@ import {
 } from "./assistant-harness.js";
 import { CODING_AGENTS, type CodingAgent, createAgentAdapter } from "./code/coding-agent.js";
 import { resolveEfforts } from "./code/efforts.js";
-import { resolveModels } from "./code/models.js";
+import { CONFIG_DIRECTORY_VARIABLES } from "./code/harness-environment.js";
+import { LATEST, MODEL_FAMILY_NAMES, NO_DECLARED_MODEL, resolveModels } from "./code/models.js";
 import { buildAgentEnv } from "./code/run-agent.js";
 import { errorMessage } from "./errors.js";
 import {
@@ -30,14 +31,6 @@ import {
 } from "./json-shape.js";
 import type { AligndevProjectSettings } from "./project/layout.js";
 
-// Antigravity has one native store and one account per OS user: no variable moves them.
-export const CONFIG_DIRECTORY_VARIABLES: Readonly<Record<CodingAgent, string | undefined>> = {
-  claude: "CLAUDE_CONFIG_DIR",
-  codex: "CODEX_HOME",
-  pi: "PI_CODING_AGENT_DIR",
-  agy: undefined,
-};
-
 const environmentName = matching(/^[A-Za-z_][A-Za-z0-9_]*$/);
 const environmentShape = record(nulFreeString, environmentName);
 const RETIRED_CODE_KEYS = ["agent", "defaultModel", "models", "skipPermissions", "unset"];
@@ -48,6 +41,7 @@ const CODING_ONLY_PROFILE_KEYS = [
   "defaultModel",
   "models",
   "modelAliases",
+  "modelFamilies",
   "defaultEffort",
   "efforts",
   "skipPermissions",
@@ -83,6 +77,8 @@ export interface CodingProfile {
   defaultModel?: string;
   models?: string[];
   modelAliases?: Record<string, string>;
+  // Pi only: maps a model family to the text placed before its model names.
+  modelFamilies?: Record<string, string>;
   defaultEffort?: string;
   efforts?: string[];
   skipPermissions?: boolean;
@@ -126,6 +122,8 @@ export function loadConfig(home: string, alignfirst: string): LoadedConfig {
     if (profile.harness === "openclaw") continue;
     const field = `code.profiles[${JSON.stringify(name)}]`;
     validateEnvironment(profile, profile.harness, field, path);
+    checkModelFamilies(profile, field, path);
+    checkModelPatterns(profile, field, path);
     checkDefaultEffort(profile, field, path);
     if (typeof profile.configDir === "string")
       profile.configDir = resolvePath(profile.configDir, home, path);
@@ -221,6 +219,7 @@ function profileShape(warn: (path: string, key: string) => void): Check<Profile>
       defaultModel: optional(nonblankString),
       models: optional(arrayOf(nonblankString)),
       modelAliases: optional(record(nonblankString, nonblankString)),
+      modelFamilies: optional(record(nonblankString, nonblankString)),
       defaultEffort: optional(nonblankString),
       efforts: optional(arrayOf(nonblankString)),
       skipPermissions: optional(boolean),
@@ -347,6 +346,58 @@ function validateEnvironment(
   if (Object.hasOwn(settings.env ?? {}, variable) || settings.unset?.includes(variable)) {
     throw invalidConfig(path, `${field}.configDir conflicts with env/unset for ${variable}`);
   }
+}
+
+function checkModelFamilies(profile: CodingProfile, field: string, path: string): void {
+  if (profile.modelFamilies === undefined) return;
+  if (profile.harness !== "pi") {
+    throw invalidConfig(path, `${field}.modelFamilies is valid only in a pi profile; remove it`);
+  }
+  for (const [family, prefix] of Object.entries(profile.modelFamilies)) {
+    const entry = `${field}.modelFamilies[${JSON.stringify(family)}]`;
+    if (!MODEL_FAMILY_NAMES.includes(family)) {
+      throw invalidConfig(
+        path,
+        `${entry} is not a known family; use one of ${MODEL_FAMILY_NAMES.join(", ")}`,
+      );
+    }
+    if (prefix.includes(LATEST)) {
+      throw invalidConfig(path, `${entry} must not contain ${LATEST}: the family adds it`);
+    }
+  }
+}
+
+// A model value holding `{latest}` is a pattern. Claude Code lists no models to match one.
+function checkModelPatterns(profile: CodingProfile, field: string, path: string): void {
+  for (const { name, value } of modelValues(profile, field)) {
+    const count = value.split(LATEST).length - 1;
+    if (count > 0 && profile.harness === "claude") {
+      throw invalidConfig(
+        path,
+        `${name} must not contain ${LATEST}: Claude Code resolves its model names itself`,
+      );
+    }
+    if (count > 1) throw invalidConfig(path, `${name} must contain ${LATEST} at most once`);
+  }
+}
+
+interface ModelValue {
+  name: string;
+  value: string;
+}
+
+function modelValues(profile: CodingProfile, field: string): ModelValue[] {
+  const values = Object.entries(profile.modelAliases ?? {}).map(([alias, value]) => ({
+    name: `${field}.modelAliases[${JSON.stringify(alias)}]`,
+    value,
+  }));
+  (profile.models ?? []).forEach((value, index) => {
+    values.push({ name: `${field}.models[${index}]`, value });
+  });
+  if (profile.defaultModel !== undefined) {
+    values.push({ name: `${field}.defaultModel`, value: profile.defaultModel });
+  }
+  return values;
 }
 
 function resolvePath(written: string, home: string, path: string): string {
@@ -624,11 +675,14 @@ function fallbackRemedy(config: LoadedConfig): string {
 
 function checkDefaultModel(code: CodingProfile, path: string, profile: string | undefined): void {
   if (code.defaultModel === undefined) return;
-  const models = resolveModels(code.harness, code.models, code.modelAliases);
-  if (models === undefined || models.includes(code.defaultModel)) return;
+  const models = resolveModels(code);
+  if (models.includes(code.defaultModel)) return;
+  const field = `code.profiles[${JSON.stringify(profile)}].defaultModel`;
   throw invalidConfig(
     path,
-    `code.profiles[${JSON.stringify(profile)}].defaultModel must be one of: ${models.join(", ")}`,
+    models.length === 0
+      ? `${field} is not accepted: ${NO_DECLARED_MODEL}, or remove defaultModel`
+      : `${field} must be one of: ${models.join(", ")}`,
   );
 }
 

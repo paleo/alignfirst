@@ -436,6 +436,7 @@ describe("effective profiles through CLI launch and resume", () => {
     expect(initial.modelResolver).toHaveBeenCalledWith("claude", undefined, {
       cwd: project,
       env: expect.not.objectContaining({ CLAUDE_CONFIG_DIR: expect.anything() }),
+      profile: "a",
     });
     expect(existsSync(join(home, ".claude/identity"))).toBe(true);
     expect(existsSync(join(nativeB, "identity"))).toBe(false);
@@ -796,6 +797,7 @@ process.exitCode = 1;
         CLAUDE_CONFIG_DIR: nativeA,
         CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: "0",
       }),
+      profile: "a",
     });
     expect(observed()).toMatchObject({
       store: nativeA,

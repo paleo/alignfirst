@@ -19,7 +19,9 @@ appendFileSync(
 );
 assert.equal(runtime, process.env.CLI_NATIVE_EXPECT ?? "node", "external native runtime");
 
-if (process.argv[2] === "debug") {
+if (process.argv[2] === "--version") {
+  console.log(`${executable} 9.0.0`);
+} else if (process.argv[2] === "debug") {
   console.log(JSON.stringify({ models: [{ slug: "gpt-9-sol" }] }));
 } else if (process.argv[2] === "app-server") {
   createInterface({ input: process.stdin }).on("line", (line) => {

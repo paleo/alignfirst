@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -311,6 +312,7 @@ test("inventory deduplicates shared stores and includes custom, mixed-agent and 
       harness: "pi",
       configDir: "~/native/pi",
       defaultModel: "openai/fixture-model",
+      models: ["openai/fixture-model"],
       quota: { source: "claude", configDir: "~/native/claude-quota" },
     };
     fixture.settings.code.profiles.other = {
@@ -489,6 +491,29 @@ test("inventory ignores disabled profiles but still validates their shape", () =
   });
 });
 
+test("inventory accepts the Pi settings deployed before model declarations", () => {
+  withFixture("pi", "slack", {}, (fixture) => {
+    const selected = selectedProfile(fixture.settings);
+    delete fixture.settings.code.profiles[selected].models;
+    saveSettings(fixture);
+    assert.deepEqual(readInventory(fixture).profiles, [selected]);
+  });
+});
+
+test("inventory rejects a malformed Pi modelFamilies", () => {
+  withFixture("pi", "slack", {}, (fixture) => {
+    const selected = selectedProfile(fixture.settings);
+    for (const modelFamilies of [{ glm: "zai" }, { gpt: " " }, ["gpt"]]) {
+      fixture.settings.code.profiles[selected].modelFamilies = modelFamilies;
+      saveSettings(fixture);
+      assertInventoryRejected(fixture);
+    }
+    fixture.settings.code.profiles[selected].modelFamilies = { gpt: "openai" };
+    saveSettings(fixture);
+    assert.deepEqual(readInventory(fixture).profiles, [selected]);
+  });
+});
+
 test("inventory and real CLI reject duplicate invalid harnesses without leaking values or injecting lines", () => {
   withFixture("codex", "slack", {}, (fixture) => {
     const original = structuredClone(fixture.settings);
@@ -585,6 +610,43 @@ test("seed rejects a mismatched overlay before writing instructions or installed
     assert(!existsSync(join(fixture.home, ".claude")));
   });
 });
+
+for (const state of ["deployed", "absent", "backed up by an interrupted seed"]) {
+  test(`seed leaves the settings ${state} when the real CLI rejects the candidate`, () => {
+    withFixture("pi", "slack", {}, (fixture) => {
+      if (state !== "absent") installSettings(fixture);
+      const before = state === "absent" ? undefined : readFileSync(fixture.deployedSettings);
+      const selected = selectedProfile(fixture.settings);
+      // The inventory accepts an undeclared default; only the CLI rejects it.
+      fixture.settings.code.profiles[selected].models = ["fixture/another-model"];
+      if (state === "backed up by an interrupted seed") {
+        // That seed stopped during its check: its candidate is installed beside the backup.
+        renameSync(fixture.deployedSettings, `${fixture.deployedSettings}.previous`);
+        writeFileSync(fixture.deployedSettings, JSON.stringify(fixture.settings));
+        fixture.settings.code.profiles[selected].models = ["fixture/a-third-model"];
+      }
+      saveSettings(fixture);
+      const result = spawnSync(
+        "bash",
+        [
+          "-euc",
+          'source "$1"; DIR="$2"; load_modules; load_deployment_profiles; install_aligndev_config',
+          "fixture",
+          seedFunctions(fixture),
+          fixture.infra,
+        ],
+        options(fixture),
+      );
+      assert.notEqual(result.status, 0);
+      assert.equal(readFileSync(join(fixture.home, "guide-calls"), "utf8"), `${selected}\n`);
+      assert.deepEqual(
+        readdirSync(dirname(fixture.deployedSettings)),
+        before === undefined ? [] : ["aligndev.settings.json"],
+      );
+      if (before !== undefined) assert.deepEqual(readFileSync(fixture.deployedSettings), before);
+    });
+  });
+}
 
 test("inventory and real CLI ignore stale settings without leaking values or rewriting input", () => {
   withFixture("codex", "slack", {}, (fixture) => {
@@ -691,6 +753,7 @@ test("inventory and real CLI still reject malformed recognized fields alongside 
       { skipPermissions: "yes" },
       { models: "sol" },
       { modelAliases: { custom: 3 } },
+      { modelFamilies: { gpt: "openai" } },
       { efforts: "high" },
       { defaultEffort: " " },
       { env: { CUSTOM: 3 } },

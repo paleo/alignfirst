@@ -422,6 +422,10 @@ export function setupCodingAgentMock(
       const call: CodingAgentCall = { agent, argv, cwd, stdin: await text(stdin) };
       codingAgentCalls.push(call);
       try {
+        if (isNativeVersionCall(call)) {
+          stdout.write(agent === "codex" ? "codex-cli 0.172.0\n" : "1.6.1\n");
+          return 0;
+        }
         if (agent === "codex" && isCodexCatalogCall(call)) {
           stdout.write(`${JSON.stringify(CODEX_MODEL_CATALOG)}\n`);
           return 0;
@@ -672,6 +676,20 @@ function isPiWrapperCall(call: CodingAgentCall): boolean {
   return index === args.length;
 }
 
+// The calls AlignDev makes to resolve a `{latest}` selector, before any execution.
+export function isModelDiscoveryCall(call: CodingAgentCall): boolean {
+  return isNativeVersionCall(call) || isCodexCatalogCall(call);
+}
+
+// AlignDev reads the version of Codex and Pi before it uses a remembered model list.
+export function isNativeVersionCall(call: CodingAgentCall): boolean {
+  return (
+    (call.agent === "codex" || call.agent === "pi") &&
+    call.argv.length === 1 &&
+    call.argv[0] === "--version"
+  );
+}
+
 export function isCodexCatalogCall(call: CodingAgentCall): boolean {
   return (
     call.agent === "codex" &&
@@ -911,7 +929,7 @@ export async function expectNoProtocolDelegation(
       !isCodingProtocolPrompt(extractCodingPrompt(call)) &&
       (matches?.(call) ?? true),
     rejectOn: (call) =>
-      !isCodexCatalogCall(call) &&
+      !isModelDiscoveryCall(call) &&
       (!isAlignfirstWrapperCall(call) ||
         call.agent !== handle.selectedAgent ||
         (isCodingProtocolPrompt(extractCodingPrompt(call)) && (matches?.(call) ?? true))),
@@ -971,7 +989,7 @@ export async function expectCodingDelegation(
       isCodingProtocolPrompt(extractCodingPrompt(call)) &&
       (matches?.(call) ?? true),
     rejectOn: (call) =>
-      !isCodexCatalogCall(call) &&
+      !isModelDiscoveryCall(call) &&
       (!isAlignfirstWrapperCall(call) || call.agent !== handle.selectedAgent),
     rejectMessage: (call) =>
       `unexpected non-wrapper coding-agent call: agent=${call.agent} argv=${JSON.stringify(call.argv)}`,

@@ -35,6 +35,7 @@ const codingOnlyProfileKeys = [
   "defaultModel",
   "models",
   "modelAliases",
+  "modelFamilies",
   "defaultEffort",
   "efforts",
   "skipPermissions",
@@ -42,6 +43,7 @@ const codingOnlyProfileKeys = [
   "unset",
   "quota",
 ];
+const modelFamilyNames = ["gpt", "claude", "gemini"];
 
 if (resolve(process.argv[1] ?? ".") === fileURLToPath(import.meta.url)) {
   try {
@@ -207,6 +209,8 @@ function readProfile(value) {
     throw new Error(`${path}.defaultAgentProfile must be a nonblank string`);
   validateDisabled(profile, path);
   validateLaunchFields(profile, path);
+  if (profile.modelFamilies !== undefined && profile.harness !== "pi")
+    throw new Error(`${path}.modelFamilies must be removed: it is valid only in a pi profile`);
   if (profile.quota !== undefined) {
     profile.quota = settingsObject(
       profile.quota,
@@ -310,6 +314,14 @@ function validateLaunchFields(value, path) {
       ))
   )
     throw new Error(`${path}.modelAliases must map nonblank names to nonblank strings`);
+  if (
+    value.modelFamilies !== undefined &&
+    (!isObject(value.modelFamilies) ||
+      !Object.entries(value.modelFamilies).every(
+        ([family, prefix]) => modelFamilyNames.includes(family) && nonblank(prefix),
+      ))
+  )
+    throw new Error(`${path}.modelFamilies must map gpt, claude or gemini to nonblank strings`);
   if (
     value.env !== undefined &&
     (!isObject(value.env) ||

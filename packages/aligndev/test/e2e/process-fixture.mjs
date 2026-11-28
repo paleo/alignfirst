@@ -7,6 +7,7 @@ import { readMachineId } from "../../dist/code/machine-id.js";
 import { createExecutableModelResolver } from "../../dist/code/models.js";
 import { runQuotaProcess } from "../../dist/code/quota-process.js";
 import { runAgent } from "../../dist/code/run-agent.js";
+import { createMemory } from "../../dist/memory/memory.js";
 import {
   completedSessionPath,
   readCompletion,
@@ -218,22 +219,45 @@ async function stopPipeOwner(pid) {
   }
 }
 
+// Two resolvers on one memory: the second resolves from the remembered list.
 async function checkCatalog() {
   const bin = join(cwd, "bin");
   mkdirSync(bin);
   const executable = join(bin, "codex");
-  for (const [script, success] of [
-    [
-      "process.stdin.resume(); process.stdin.on('end', () => console.log(JSON.stringify({ models: [{slug:'gpt-9-terra'}] })));",
-      true,
-    ],
-    ["process.stdout.write('x'.repeat(8 * 1024 * 1024 + 1));", false],
-  ]) {
-    writeFileSync(executable, `#!${process.execPath}\n${script}\n`, { mode: 0o755 });
-    const result = createExecutableModelResolver()("codex", "terra", { cwd, env: { PATH: bin } });
-    if (success) assert.equal(await result, "gpt-9-terra");
-    else await assert.rejects(result, Error);
+  const calls = join(cwd, "catalog-calls");
+  const context = { cwd, env: { PATH: bin } };
+  writeFileSync(
+    executable,
+    `#!${process.execPath}
+if (process.argv[2] === "--version") {
+  console.log("codex-cli 9.0.0");
+  process.exit(0);
+}
+require("node:fs").appendFileSync(${JSON.stringify(calls)}, "debug models\\n");
+process.stdin.resume();
+process.stdin.on("end", () => console.log(JSON.stringify({ models: [{ slug: "gpt-9-terra" }] })));
+`,
+    { mode: 0o755 },
+  );
+  for (let i = 0; i < 2; ++i) {
+    const memory = createMemory(join(cwd, "memory-home"));
+    try {
+      const resolve = createExecutableModelResolver({}, { memory });
+      assert.equal(await resolve("codex", "gpt-{latest}-terra", context), "gpt-9-terra");
+    } finally {
+      memory.close();
+    }
   }
+  assert.equal(readFileSync(calls, "utf8"), "debug models\n");
+  writeFileSync(
+    executable,
+    `#!${process.execPath}\nprocess.stdout.write('x'.repeat(8 * 1024 * 1024 + 1));\n`,
+    { mode: 0o755 },
+  );
+  await assert.rejects(
+    createExecutableModelResolver()("codex", "gpt-{latest}-terra", context),
+    Error,
+  );
 }
 
 async function checkSessionIdentity() {

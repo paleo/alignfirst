@@ -25,9 +25,18 @@ import { type CodingAgent, createAgentAdapter } from "./coding-agent.js";
 import { readLinkedGitCommonDir } from "./linked-worktree.js";
 import { readMachineId } from "./machine-id.js";
 import { resolveEfforts } from "./efforts.js";
-import { expandModelAlias, type ExecutableModelResolver, resolveModels } from "./models.js";
+import { describeModelFailure } from "./model-failure.js";
+import {
+  type ExecutableModelResolver,
+  expandBuiltInAlias,
+  expandModelAlias,
+  type ModelLists,
+  NO_DECLARED_MODEL,
+  resolveModels,
+} from "./models.js";
+import { showModels } from "./models-cli.js";
 import { renderAuthenticationFailure, renderLoginInstructions } from "./login.js";
-import { describeNativeStorage, describeProfile } from "./native-context.js";
+import { describeNativeStorage, modelDiscoveryContext, nativeContext } from "./native-context.js";
 import { buildPrompt, PROTOCOLS } from "./prompt.js";
 import type { QuotaReader } from "./quota.js";
 import { runAgent, type RunConfig } from "./run-agent.js";
@@ -47,6 +56,12 @@ import {
 // Distinct from 1 (ordinary run failure) so a script can branch on an auth failure that needs an
 // operator re-login rather than a retry.
 const EXIT_AUTH_REQUIRED = 2;
+
+// A session recorded without a profile resumes on Pi's built-ins, which declare nothing.
+const NO_DECLARED_RESUME_MODEL =
+  "the selected profile declares no model. Pass --profile with a pi profile that declares models.";
+
+const PI_EFFORT_NOTE = "Under Pi, --effort overrides a thinking suffix of a declared selector.";
 
 const SESSION_OPTIONS = {
   protocol: { type: "string" },
@@ -83,6 +98,7 @@ export interface CodeContext {
   forms: CommandForms;
   alignfirstCommand: string[];
   modelResolver: ExecutableModelResolver;
+  modelLists: ModelLists;
   quotaReader: QuotaReader;
 }
 
@@ -96,9 +112,10 @@ interface SessionTree {
 }
 
 export type CodeCommand =
-  | { kind: "help"; profile?: string; status?: boolean }
+  | { kind: "help"; profile?: string; subcommand?: "status" | "models" }
   | { kind: "status"; target: StatusTarget; includeResult: boolean }
   | { kind: "quota"; profile?: string }
+  | { kind: "models"; profile?: string; refresh: boolean }
   | { kind: "session"; args: SessionArgs };
 
 export type StatusTarget =
@@ -131,13 +148,12 @@ export async function runCode(
   try {
     const command = parseCodeArgs(tokens, ctx.forms.aligndev);
     if (command.kind === "status") return showStatus(ctx, command.target, command.includeResult);
-    if (command.kind === "help" && command.status === true) {
-      ctx.stdout.write(
-        `${ctx.forms.aligndev} code status (<session-file> | --ticket <id> | --no-ticket | --meta <key>) [--result]\nRead durable metadata without reading settings.\n`,
-      );
+    if (command.kind === "help" && command.subcommand !== undefined) {
+      ctx.stdout.write(renderSubcommandHelp(command.subcommand, ctx.forms.aligndev));
       return 0;
     }
     const config = loadSettings();
+    if (command.kind === "models") return await showModels(ctx, config, command);
     const report = readReport(ctx);
     if (command.kind === "session") validateEffectivePlans(ctx);
     const tree = command.kind === "session" ? sessionTreeOf(report, ctx) : undefined;
@@ -156,7 +172,7 @@ export async function runCode(
       recorded: previous?.frontmatter.profile,
     });
     if (command.kind === "quota") return await showQuota(ctx, code);
-    const models = resolveModels(code.harness, code.models, code.modelAliases);
+    const models = resolveModels(code);
     const efforts = resolveEfforts(code.harness, code.efforts);
     if (command.kind === "help") {
       ctx.stdout.write(renderHelp(code, models, efforts, ctx));
@@ -174,6 +190,18 @@ export async function runCode(
     ctx.stderr.write(`${errorMessage(error)}\n`);
     return 1;
   }
+}
+
+function renderSubcommandHelp(subcommand: "status" | "models", aligndev: string): string {
+  if (subcommand === "status") {
+    return `${aligndev} code status (<session-file> | --ticket <id> | --no-ticket | --meta <key>) [--result]\nRead durable metadata without reading settings.\n`;
+  }
+  return `${aligndev} code models [--profile <name>] [--refresh]
+Show the accepted model names of each enabled coding profile, or of --profile, and the model each
+name selects in the remembered model list. The project's profile selection does not apply.
+--refresh looks the lists up again first, and exits with 1 when a pattern has no single match. A
+fixed selector is shown as written: the first launch checks it.
+`;
 }
 
 function showStatus(ctx: CodeContext, target: StatusTarget, includeResult: boolean): number {
@@ -358,6 +386,8 @@ export function parseCodeArgs(tokens: string[], aligndev: string): CodeCommand {
       return parseStatusCommand(rest);
     case "quota":
       return parseBareCommand(rest, "quota");
+    case "models":
+      return parseModelsCommand(rest);
     default:
       throw new Error(`Error: unknown command "${command}". Run \`${aligndev} code --help\`.`);
   }
@@ -376,7 +406,7 @@ function parseStatusCommand(tokens: string[]): CodeCommand {
     strict: true,
     allowPositionals: true,
   });
-  if (values.help) return { kind: "help", status: true };
+  if (values.help) return { kind: "help", subcommand: "status" };
   const targetCount =
     positionals.length +
     Number(values.ticket !== undefined) +
@@ -456,6 +486,21 @@ function parseResumeCommand(tokens: string[]): CodeCommand {
   };
 }
 
+function parseModelsCommand(tokens: string[]): CodeCommand {
+  const { values } = parseArgs({
+    args: tokens,
+    options: {
+      help: { type: "boolean", short: "h", default: false },
+      profile: { type: "string" },
+      refresh: { type: "boolean", default: false },
+    },
+    strict: true,
+  });
+  if (values.help) return { kind: "help", subcommand: "models" };
+  const profile = values.profile === undefined ? {} : { profile: values.profile };
+  return { kind: "models", ...profile, refresh: values.refresh };
+}
+
 function parseBareCommand(tokens: string[], kind: "quota" | "help"): CodeCommand {
   const { values } = parseArgs({
     args: tokens,
@@ -473,7 +518,7 @@ function parseBareCommand(tokens: string[], kind: "quota" | "help"): CodeCommand
 
 export function validateSessionArgs(
   args: SessionArgs,
-  models: readonly string[] | undefined,
+  models: readonly string[],
   efforts: readonly string[],
 ): string | undefined {
   const isNew = args.resume === undefined;
@@ -483,7 +528,12 @@ export function validateSessionArgs(
   }
   if (args.model !== undefined) {
     if (args.model.trim() === "") return "Error: --model must be nonblank.";
-    if (models !== undefined && !models.includes(args.model)) {
+    if (models.length === 0) {
+      return isNew
+        ? `Error: --model is not accepted: ${NO_DECLARED_MODEL}, or omit --model.`
+        : `Error: --model is not accepted: ${NO_DECLARED_RESUME_MODEL}`;
+    }
+    if (!models.includes(args.model)) {
       return `Error: --model must be one of: ${models.join(", ")}.`;
     }
   }
@@ -594,28 +644,12 @@ async function runSession(
   );
   stdout.write(`Session file: ${displayPath(tree.cwd, sessionFilePath)}\n\n`);
 
+  const selector = expandBuiltInAlias(code, expandModelAlias(model, code.modelAliases));
   let executableModel: string | undefined;
   try {
-    executableModel = await modelResolver(agent, expandModelAlias(model, code.modelAliases), {
-      cwd,
-      env: code.childEnv,
-    });
-  } catch {
-    const message =
-      `Could not resolve the ${agent} model; check --model, profile.models/modelAliases and the agent installation. ` +
-      `${nativeContext(code)}.` +
-      (agent === "codex"
-        ? " For Codex aliases, update the Codex CLI or select an explicit full model slug."
-        : "");
-    const completedPath = applyCompletion(sessionFilePath, {
-      status: "failed",
-      endedAt: new Date().toISOString(),
-      exitReason: "error",
-      sessionId: args.resume ?? null,
-      result: message,
-    });
-    writeFailureDiagnostic(ctx, completedPath, message);
-    return 1;
+    executableModel = await modelResolver(agent, selector, modelDiscoveryContext(code, cwd));
+  } catch (error) {
+    return failModelResolution(ctx, code, args, sessionFilePath, selector, error);
   }
 
   const runConfig = buildRunConfig({
@@ -652,8 +686,24 @@ async function runSession(
   return 1;
 }
 
-function nativeContext(code: CodeConfig): string {
-  return `${describeProfile(code)} (${describeNativeStorage(code)})`;
+function failModelResolution(
+  ctx: CodeContext,
+  code: CodeConfig,
+  args: SessionArgs,
+  sessionFilePath: string,
+  selector: string | undefined,
+  error: unknown,
+): number {
+  const { message, authRequired } = describeModelFailure(code, ctx.cwd, selector, error);
+  const completedPath = applyCompletion(sessionFilePath, {
+    status: "failed",
+    endedAt: new Date().toISOString(),
+    exitReason: authRequired ? "auth_required" : "error",
+    sessionId: args.resume ?? null,
+    result: message,
+  });
+  writeFailureDiagnostic(ctx, completedPath, message);
+  return authRequired ? EXIT_AUTH_REQUIRED : 1;
 }
 
 function writeFailureDiagnostic(ctx: CodeContext, sessionFilePath: string, message: string): void {
@@ -815,11 +865,12 @@ function selectModel(
   if (args.model !== undefined) return args.model;
   if (args.resume === undefined) return code.defaultModel;
   const model = previous?.frontmatter.model ?? undefined;
-  const models = resolveModels(code.harness, code.models, code.modelAliases);
-  if (
-    model !== undefined &&
-    (model.trim() === "" || (models !== undefined && !models.includes(model)))
-  ) {
+  if (model === undefined) return;
+  const models = resolveModels(code);
+  if (models.length === 0) {
+    throw new Error(`Error: retained session model is not accepted: ${NO_DECLARED_RESUME_MODEL}`);
+  }
+  if (model.trim() === "" || !models.includes(model)) {
     throw new Error(
       "Error: retained session model is not accepted by the selected profile; supply --model with an accepted replacement.",
     );
@@ -968,14 +1019,13 @@ function createMissingCompanion(report: ProjectReport) {
 
 function renderHelp(
   code: CodeConfig,
-  models: readonly string[] | undefined,
+  models: readonly string[],
   efforts: readonly string[],
   { forms, cwd }: CodeContext,
 ): string {
   const { harness: agent, profile, defaultModel, defaultEffort } = code;
   const { aligndev, alignfirst } = forms;
-  const modelPolicy =
-    models === undefined ? "Any nonblank native selector" : `One of ${models.join(", ")}`;
+  const modelPolicy = describeModelPolicy(models);
   const requires = `Requires: the AlignFirst CLI through \`${forms.alignfirst}\`, for the project layout, side\ntickets and the delegated protocols.`;
   return `aligndev code — run a coding agent through AlignFirst protocols.
 
@@ -986,6 +1036,7 @@ Usage:
   ${aligndev} code resume <sessionId> [--protocol <protocol>] [--message "..."]
   ${aligndev} code status (<session-file> | --ticket <id> | --no-ticket | --meta <key>) [--result]
   ${aligndev} code quota
+  ${aligndev} code models [--profile <name>] [--refresh]
   ${aligndev} code -h, --help
 
 Commands:
@@ -996,6 +1047,10 @@ Commands:
                         contextTokens, the context-window occupancy the run ended on, and
                         contextCompacted. Does not start an agent.
   quota                 Show native account limits via the profile's quota source.
+  models                Show the accepted model names of each enabled profile, or of --profile,
+                        and the model each name selects in the remembered model list. --refresh
+                        looks the lists up again first, and fails when a pattern has no single
+                        match. A fixed selector is checked by the first launch.
 
 Options (status):
   --ticket <id>         Newest run of that ticket.
@@ -1036,7 +1091,7 @@ Config (~/.alignfirst/aligndev.settings.json):
   code.profiles         Complete named profiles, without inheritance. harness (required): claude,
                         codex, pi, agy or openclaw. Other keys: defaultAgentProfile, disabled,
                         default, configDir, env, unset, defaultModel, models, modelAliases,
-                        defaultEffort, efforts, skipPermissions, quota.
+                        modelFamilies, defaultEffort, efforts, skipPermissions, quota.
   profile.defaultAgentProfile
                         The profile a session delegates to when this profile is the assistant's
                         profile; omitted means the profile itself. Followed once.
@@ -1061,7 +1116,7 @@ Config (~/.alignfirst/aligndev.settings.json):
                         no other recognized fields, including configDir: null.
   profile.default       Breaks a tie between several profiles matching the assistant's session;
                         at most one true per harness.
-  --profile <name>      Override for new, resume, quota and help (also guide code).
+  --profile <name>      Override for new, resume, quota, models and help (also guide code).
   Selection             --profile > project registry > recorded named resume > the assistant
                         profile's defaultAgentProfile, or that profile itself > built-ins of a
                         claude, codex, pi or agy harness > code.fallbackProfile. A named reference
@@ -1073,7 +1128,10 @@ Config (~/.alignfirst/aligndev.settings.json):
                         resume without a recorded profile uses the built-ins of the assistant's
                         harness unless a named selection replaces them.
   Model default         ${defaultModel ?? "native default"} (new only). Resume retains and validates its model.
-                        One configured alias expands before native model handling.
+                        A modelAliases name expands once.
+  {latest}              In a model selector, the newest version in the model list AlignDev
+                        remembers. The list is refreshed daily, after an upgrade of the native CLI
+                        or a change of its directory, and by \`code models --refresh\`.
   Effort default        ${defaultEffort ?? "native default"} (new only). Resume retains and validates its effort.
 
 Native configuration: ${describeNativeStorage(code)}.
@@ -1088,8 +1146,7 @@ strings; no automatic settings rewrite, login or credential transfer occurs. Ope
 require null/string selections for every coding profile and enabled explicit quota source.
 
 Selected-agent permissions: ${permissionMode(agent)}
-The project's companion directory is prepared before launch; pi uses ordinary OS access.
-${modelBehavior(agent)}
+The project's companion directory is prepared before launch; pi uses ordinary OS access.${agent === "pi" ? `\n${PI_EFFORT_NOTE}` : ""}
 
 ${aligndev} code runs a coding agent in the foreground and blocks until it finishes. The transcript
 is durable in a session file under .plans/ or its companion; stdout also streams it unless --quiet.
@@ -1099,6 +1156,12 @@ retrieve status --result with the exact session-file path or a unique per-run --
 
 See the \`code\` topic of \`${aligndev} guide\` for the full delegation guide.
 `;
+}
+
+function describeModelPolicy(models: readonly string[]): string {
+  if (models.length === 0) return "Not accepted: the profile declares no model";
+  if (models.length === 1) return `Only ${models[0]}`;
+  return `One of ${models.join(", ")}, biggest first`;
 }
 
 function permissionMode(agent: CodingAgent): string {
@@ -1111,18 +1174,5 @@ function permissionMode(agent: CodingAgent): string {
       return "Ordinary OS permissions; profile.skipPermissions has no effect. Saved project trust is honored.";
     case "agy":
       return "Antigravity's auto mode with its terminal sandbox (dangerous opt-out: --dangerously-skip-permissions)";
-  }
-}
-
-function modelBehavior(agent: CodingAgent): string {
-  switch (agent) {
-    case "claude":
-      return "Claude model values pass through unchanged.";
-    case "codex":
-      return "Codex aliases astra, sol, terra, and luna resolve on demand; configured full slugs pass through.";
-    case "pi":
-      return "Pi native selectors (including provider/model:thinking) pass through unchanged. --effort overrides a thinking suffix of the model selector.";
-    case "agy":
-      return "Antigravity model names pass through unchanged. Prefer a base name with --effort: a name with an effort suffix conflicts with a different effort.";
   }
 }

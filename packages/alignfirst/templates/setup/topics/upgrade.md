@@ -13,6 +13,7 @@ For `.alignfirst.json`, workspace wrappers, old port slots or `aligndev worktree
 1. Verify the Git working tree is clean immediately before mutations.
 2. Use the existing `AGENTS.md` or `CLAUDE.md`; create `AGENTS.md` when neither exists.
 3. Preserve the project's commit, default-branch and other local conventions.
+4. Check that every host that runs `aligndev` has Node.js 22.13 or later, or Bun.
 
 ## Detect the Installed Layout
 
@@ -34,6 +35,8 @@ When `skills-lock.json` is present, inspect it through the current skills CLI. I
 - Full-content protocol skills or `plans-share`: follow `{{CMD}} setup guide upgrade-v3`.
 - Retired workspace files or registries: follow `{{CMD}} setup guide upgrade-workspaces`.
 - AlignDev settings with `platform`, `code.profile`, `portRange` or a profile `agent`, or a `.alignfirst-projects.json` marker: apply "Convert AlignDev Harness Settings" below.
+- AlignDev settings with a `pi` profile: apply "Declare AlignDev Pi Models" below.
+- AlignDev settings with an `agy` profile, or scripts and instructions that pass a native Antigravity model name to `aligndev code`: apply "Declare AlignDev Antigravity Models" below.
 - CLI-backed skills: keep the current skills. Set `plans.autoArchive: true` in the selected `alignfirst.json` or `alignfirst.jsonc`; the user can remove it after the upgrade to opt out. If `plans-share` artifacts remain, apply the cleanup, command sweep and check of `{{CMD}} setup guide upgrade-v3`.
 - `assistantInstructionsFile` or `developerInstructions` in the selected `alignfirst.json` or `.jsonc`: apply "Rename the Assistant Guide" below.
 - No detected installation: follow `{{CMD}} setup guide protocols`.
@@ -204,6 +207,91 @@ After:
 ```
 
 On an AlignDev OpenClaw host, port the settings and project changes of the current `aligndev-openclaw-setup` template to the admin repository, then re-seed through controlled maintenance, preserving the writable service AlignFirst home (see "Keep the Service AlignFirst Home Writable").
+
+## Declare AlignDev Pi Models
+
+A `pi` profile accepts only the model names it declares: without a declaration, it rejects `--model` and `defaultModel`. A profile that uses neither runs Pi's own default and needs no change.
+
+A host that runs `npx -y aligndev` without a version pin picks up the release at once. Convert the settings with the upgrade. To convert before it, use step 3 alone: earlier versions know neither `modelFamilies` nor `{latest}`.
+
+For each `pi` profile of `aligndev.settings.json`, collect its `defaultModel` and the `--model` values that scripts and instructions pass, then declare each model:
+
+1. A model whose id follows the pattern of its `gpt`, `claude` or `gemini` family, given under `modelFamilies` in the `aligndev` README: map the family to its Pi provider in `modelFamilies`. The entry declares the aliases of the family, such as `astra`, `sol`, `terra` and `luna` for `gpt`, and each alias selects the newest version of its model.
+2. Another model: add a `modelAliases` entry that targets `provider/model`, with `{latest}` in place of the version to follow the newest one. Write an id without a version number in full.
+3. A full id selected as is: list it in `models`. A nonempty `models` replaces the accepted names, so it lists every name the profile accepts.
+
+A `modelAliases` entry that pins a full id only to avoid a wrong variant can become a family or a `{latest}` target: neither matches a variant with a further suffix.
+
+Then run `aligndev code models --refresh --profile <name>` for each enabled `pi` profile: it shows the model each name selects, and fails when a pattern has no single match. It shows a full id listed in `models` as written: the first launch checks it. For a project that holds `.pi`, run the check from the project directory: Pi's extensions there can add models.
+
+A session keeps the model name it recorded. After a `defaultModel` changes from a full id to an alias, resume such a session with `--model <alias>`. A session recorded without a profile resumes on Pi's built-in profile, which declares nothing. When it recorded a model, resume it with `--profile <name>`, naming a `pi` profile that accepts that model. To choose another model, keep `--profile` and add `--model <name>`.
+
+Before:
+
+```json
+{
+  "code": {
+    "profiles": {
+      "solo": { "harness": "pi", "defaultModel": "openai/gpt-6.2-sol" }
+    }
+  }
+}
+```
+
+After:
+
+```json
+{
+  "code": {
+    "profiles": {
+      "solo": { "harness": "pi", "defaultModel": "sol", "modelFamilies": { "gpt": "openai" } }
+    }
+  }
+}
+```
+
+On an AlignDev OpenClaw host, add `models` beside `defaultModel` in the admin repository's `infra/openclaw/aligndev.settings.json`. The list replaces the accepted names: include the `defaultModel` and every `modelAliases` name in use. Bring `infra/openclaw/deployment-profiles.mjs` to the current `aligndev-openclaw-setup` template, then re-seed through controlled maintenance, preserving the writable service AlignFirst home (see "Keep the Service AlignFirst Home Writable").
+
+## Declare AlignDev Antigravity Models
+
+An `agy` profile now accepts a closed list of model names, like the other harnesses: its built-in aliases `carbon`, `neon`, `hydrogen` and `flash` plus its `modelAliases` names, or its nonempty `models`. Any other name passed through `--model` or `defaultModel` fails. A profile that uses neither needs no change. A host that runs `npx -y aligndev` without a version pin picks up the release at once.
+
+For each `agy` profile of `aligndev.settings.json`, collect its `defaultModel` and the `--model` values that scripts and instructions pass. A built-in alias stays valid. Declare each native name:
+
+1. To follow the newest version, use the built-in alias of its model, or a `modelAliases` entry with `{latest}` in place of the version.
+2. To keep the name, add a `modelAliases` entry that targets it and use the entry's name, or list the name in `models`.
+
+A nonempty `models` replaces the accepted names, so it lists every name the profile accepts, a replacement alias included.
+
+Then run `aligndev code models --refresh --profile <name>` for each enabled `agy` profile: it shows the model each name selects, and fails when a pattern has no single match.
+
+Without an `agy` profile, an Antigravity assistant delegates to the built-in profile, which accepts only the built-in aliases. Replace each native name that scripts and instructions pass with the built-in alias of its model. To keep a native name, create an `agy` profile that declares it.
+
+A session keeps the model name it recorded. When the profile no longer accepts that name, resume the session with `--model <name>`.
+
+Before:
+
+```json
+{
+  "code": {
+    "profiles": {
+      "gemini": { "harness": "agy", "defaultModel": "gemini-4-neon" }
+    }
+  }
+}
+```
+
+After:
+
+```json
+{
+  "code": {
+    "profiles": {
+      "gemini": { "harness": "agy", "defaultModel": "neon" }
+    }
+  }
+}
+```
 
 ## Rename the AlignDev Message-Tool Topics
 

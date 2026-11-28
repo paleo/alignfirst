@@ -12,6 +12,8 @@ import {
   type CodingAgentCall,
   type CodingAgentMockHandle,
   isCodexCatalogCall,
+  isModelDiscoveryCall,
+  isNativeVersionCall,
   MOCK_CONTEXT_TOKENS,
   type PiResponseVariant,
   setupCodingAgentMock,
@@ -230,20 +232,27 @@ function assertSelectedResumeCall(
 
 function assertNoOtherAgentExecutions(mock: CodingAgentMockHandle, agent: CodingAgent): void {
   const unexpected = mock.codingAgentCalls.filter(
-    (call) => call.agent !== agent && !isCodexCatalogCall(call),
+    (call) => call.agent !== agent && !isModelDiscoveryCall(call),
   );
   assertEqual(unexpected.length, 0, "other coding-agent execution count");
 }
 
 function executionCalls(mock: CodingAgentMockHandle, agent: CodingAgent): CodingAgentCall[] {
-  return mock.codingAgentCalls.filter((call) => call.agent === agent && !isCodexCatalogCall(call));
+  return mock.codingAgentCalls.filter(
+    (call) => call.agent === agent && !isModelDiscoveryCall(call),
+  );
 }
 
+// The AlignDev memory can outlive a scenario: a remembered model list skips the catalog call.
 function assertCodexCatalogOrder(mock: CodingAgentMockHandle, firstExec: CodingAgentCall): void {
+  const versionIndex = mock.codingAgentCalls.findIndex(isNativeVersionCall);
   const catalogIndex = mock.codingAgentCalls.findIndex(isCodexCatalogCall);
   const execIndex = mock.codingAgentCalls.indexOf(firstExec);
-  if (catalogIndex === -1 || catalogIndex >= execIndex) {
-    throw new Error("Codex bundled catalog was not queried before the first exec");
+  if (versionIndex === -1 || versionIndex >= execIndex) {
+    throw new Error("Codex version was not read before the first exec");
+  }
+  if (catalogIndex >= execIndex) {
+    throw new Error("Codex bundled catalog was queried after the first exec");
   }
 }
 

@@ -1,4 +1,5 @@
-import { type CodeConfig, CONFIG_DIRECTORY_VARIABLES } from "../config.js";
+import type { CodeConfig } from "../config.js";
+import { CONFIG_DIRECTORY_VARIABLES } from "./harness-environment.js";
 import { escapeControlCharacters } from "../project/format.js";
 import { CODING_AGENT_NAMES, type CodingAgent } from "./coding-agent.js";
 import { describeProfile } from "./native-context.js";

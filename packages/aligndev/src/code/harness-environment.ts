@@ -1,5 +1,13 @@
 import type { CodingAgent } from "./coding-agent.js";
 
+// Antigravity has one native store and one account per OS user: no variable moves them.
+export const CONFIG_DIRECTORY_VARIABLES: Readonly<Record<CodingAgent, string | undefined>> = {
+  claude: "CLAUDE_CONFIG_DIR",
+  codex: "CODEX_HOME",
+  pi: "PI_CODING_AGENT_DIR",
+  agy: undefined,
+};
+
 // What each harness gives the commands it runs. Detection and the child environment read the same
 // table, so every detection marker is stripped.
 export const HARNESS_ENVIRONMENTS: Record<CodingAgent, HarnessEnvironment> = {

@@ -6,7 +6,7 @@ license: CC0 1.0
 compatibility: Requires Node.js, Git, curl and ripgrep.
 metadata:
   author: Paleo
-  version: "0.3.2"
+  version: "0.3.5"
   repository: https://github.com/paleo/alignfirst
 ---
 
@@ -195,7 +195,7 @@ The **assistant** is fixed: every deployment uses OpenClaw and its embedded runt
 | `{{TIME_ZONE}}` | Operator | `timedatectl` (`01`), `USER.md`, overview |
 | `{{GIT_HOSTS}}` | Operator | `03`, `05` (git-host CLIs), workspace `AGENTS.md`, coding-agent instructions |
 | `{{RUNTIME_PROVIDER}}`, `{{RUNTIME_MODEL}}` | Operator | `.env.example`, `IDENTITY.md`, `04` (OpenClaw provider login) |
-| `{{PI_PROVIDER}}`, `{{PI_MODEL}}` | Operator, Pi only | Explicit child provider and native model ID; settings constructs `provider/model` |
+| `{{PI_PROVIDER}}`, `{{PI_MODEL}}` | Operator, Pi only | Explicit child provider and native model ID; the settings declare `provider/model` in `models` and select it as `defaultModel` |
 | `{{PI_CONFIG_DIR_JSON}}` | Operator, Pi only | Raw JSON `null` for native defaults, or a JSON-encoded string for an isolated custom service-home directory |
 | `{{PI_CONFIG_DIR_DISPLAY}}` | Derived, Pi only | Human-facing directory/mode description for Markdown, separate from the typed settings value |
 | `{{PI_AUTH_METHOD}}` | Operator, Pi only | Non-secret description of the selected native OAuth/API-key/environment flow |

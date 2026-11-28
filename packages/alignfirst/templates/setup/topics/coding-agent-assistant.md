@@ -33,7 +33,7 @@ The assistant's profile is the enabled profile that describes the session: it ha
 
 New-session, help, `guide code` and quota selection is `--profile` → actual-cwd project registry selection → on resume, the latest recorded named profile → the assistant's profile or its `defaultAgentProfile` → the built-ins of the assistant's harness. `code.fallbackProfile` replaces the built-ins only when the assistant's harness is OpenClaw or unrecognized, such as a shell outside any coding agent. `ALIGNDEV_ASSISTANT_HARNESS` forces the assistant's harness for one invocation. A named reference that is missing, disabled or an `openclaw` profile fails. A deleted recorded name requires an explicit or project replacement. Historical null or missing profiles use the built-ins of the assistant's harness unless an explicit or project selection replaces them. The original transcript stays unchanged. Help, guide and quota share the resolver outside Git and `.plans`. Status reads durable metadata without validating launch settings.
 
-Unknown or obsolete settings keys are ignored with value-free warnings on stderr. Recognized invalid values and duplicate defaults still fail. The CLI never rewrites settings or applies retired launch or default-map semantics. For existing settings, follow the sections "Convert AlignDev Launch Settings", "Convert AlignDev Profile Defaults" and "Convert AlignDev Harness Settings" of `{{CMD}} setup guide upgrade`.
+Unknown or obsolete settings keys are ignored with value-free warnings on stderr. Recognized invalid values and duplicate defaults still fail. The CLI never rewrites settings or applies retired launch or default-map semantics. For existing settings, follow the sections "Convert AlignDev Launch Settings", "Convert AlignDev Profile Defaults", "Convert AlignDev Harness Settings", "Declare AlignDev Pi Models" and "Declare AlignDev Antigravity Models" of `{{CMD}} setup guide upgrade`.
 
 ### Native-directory selection
 
@@ -55,13 +55,18 @@ Profiles can supply literal non-secret `env` values and remove inherited variabl
 
 Before login, reproduce the agent's effective environment and cwd: apply `unset`, `env` and `configDir`, including HOME, PATH and credential routing. `aligndev code --help` prints the login command of the selected profile, and so does a run that ends with `auth_required`. Both omit the profile's `env` values. A bare login in another shell may select another account.
 
-For Pi, prefer provider-qualified `modelAliases` targets. Exact IDs pin a model; fuzzy native selectors and thinking suffixes pass unchanged to Pi. For example, separate `pi-codex` and `pi-anthropic` profiles can map `sol` to `openai/sol` and `opus` to `anthropic/opus`, using separately provisioned native configurations. AlignDev never infers their providers or account identity. Targets are illustrative and depend on the native catalog. One alias expands after validating the chosen name, without recursion.
+Every profile accepts a closed list of model names, which the assistant sees in order, biggest model first. A `claude`, `codex` or `agy` profile accepts the built-in aliases of its harness without any declaration. The `aligndev` README lists them under `models`, and documents `modelFamilies`, `modelAliases` and the `{latest}` placeholder.
 
-Without a nonempty profile `models`, Pi and Antigravity accept any nonblank selector, and Claude and Codex accept their built-in names plus configured aliases. A nonempty list replaces the accepted names. New sessions use the profile's `defaultModel`, else the native default.
+A Pi profile accepts only the models it declares. Without a declaration, it runs Pi's own default and rejects `--model` and `defaultModel`. Ask the developer which providers Pi uses, and read `pi --list-models`. Then declare each model:
+
+- A `gpt`, `claude` or `gemini` model whose ID follows the family pattern of the README: map the family to its provider in `modelFamilies`, as the first column of `pi --list-models` prints it. `{ "gpt": "openai" }` declares `astra`, `sol`, `terra` and `luna`.
+- Any other model: one `modelAliases` entry, with `{latest}` in place of the version, as in `"glm": "zai/glm-{latest}"`. Write an ID without a version number in full.
+
+To add a native name to a `codex` or `agy` profile, target it from `modelAliases` or list it in `models`. Antigravity's catalog depends on the account: `agy models` lists it. A profile that mixes families or adds names declares `models`, biggest model first: a nonempty list replaces the accepted names.
+
+Check a declaration with `aligndev code models --refresh --profile <name>`: it looks the model list up, shows the model each name selects, and fails when a pattern has no single match. It shows a fixed selector as written: the first launch checks it. For a project that holds `.pi`, run the check from the project directory: Pi's extensions there can add models. New sessions use the profile's `defaultModel`, else the native default.
 
 A nonempty profile `efforts` replaces the harness's built-in effort levels and bounds what `--effort` accepts. New sessions use the profile's `defaultEffort`, which must be one of the accepted levels, else the native default. A resume keeps its recorded effort. Under Pi, an effort overrides a thinking suffix of the model selector.
-
-For Antigravity, prefer a base model name with an effort, such as `--model gemini-3.8-flash --effort low`. A name with an effort suffix conflicts with a different effort, a profile's `defaultEffort` included, and the run fails. The catalog depends on the account: `agy models` lists it.
 
 Resume retains and validates its recorded user-facing model, ignoring profile defaults. Disallowed names require `--model`; null keeps the native conversation model. Current alias mappings apply even to retained names. The selected native account must contain the original conversation; cross-agent resumes fail, and Pi requires the recorded real directory. No fallback account or replacement conversation is accepted.
 

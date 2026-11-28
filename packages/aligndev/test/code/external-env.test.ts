@@ -231,7 +231,10 @@ console.log(JSON.stringify({subtype: "success", result: "Current session: 25% us
     );
     const code = resolveCodeConfig(config({ harness: "codex" }), caller, SELECTED);
     await expect(
-      createExecutableModelResolver()("codex", "sol", { cwd: root, env: code.childEnv }),
+      createExecutableModelResolver()("codex", "gpt-{latest}-sol", {
+        cwd: root,
+        env: code.childEnv,
+      }),
     ).resolves.toBe("gpt-9-sol");
     const reader = createQuotaReader(undefined, 2000);
     for (const source of ["claude", "codex"] as const) {

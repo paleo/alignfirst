@@ -9,7 +9,7 @@ read_when:
 
 Position: after `04-openclaw.md`, before `06-security-hardening.md`. [Admin Account](#admin-account) runs during `01-server-setup.md`; [Install](#install) runs during `03-toolchain.md` after the other protected npm CLIs are installed.
 
-OpenClaw is the persistent parent. The `openclaw` profile's `defaultAgentProfile` names the `service-pi` profile, which selects Pi independently of OpenClaw's conversational model. It uses provider `{{PI_PROVIDER}}`, model `{{PI_MODEL}}`, native directory {{PI_CONFIG_DIR_DISPLAY}}, and authentication method **{{PI_AUTH_METHOD}}**. The optional quota source in `infra/openclaw/aligndev.settings.json` belongs to its separately authenticated native CLI account; AlignDev does not verify that account against Pi's.
+OpenClaw is the persistent parent. The `openclaw` profile's `defaultAgentProfile` names the `service-pi` profile, which selects Pi independently of OpenClaw's conversational model. It uses provider `{{PI_PROVIDER}}`, model `{{PI_MODEL}}`, native directory {{PI_CONFIG_DIR_DISPLAY}}, and authentication method **{{PI_AUTH_METHOD}}**. A Pi profile accepts only the models it declares: `models` lists `{{PI_PROVIDER}}/{{PI_MODEL}}`. The optional quota source in `infra/openclaw/aligndev.settings.json` belongs to its separately authenticated native CLI account; AlignDev does not verify that account against Pi's.
 
 ## Admin Account
 

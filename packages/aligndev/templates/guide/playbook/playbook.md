@@ -163,6 +163,6 @@ Keep scratch artifacts out of tracked git directories.
 ## Vocabulary
 
 - **the agent** — the coding agent you launch with `{{ALIGNDEV}} code`. Call it _the agent_ with the user too.
-- **ticket** — an issue, a card or any tracked work item. With the user, use the word of the project or its tracker: _issue_ and _issue ID_ on GitHub, GitLab or Linear.
+- **ticket** — an issue, a card or any tracked work item. With the user, use the word of the project or its tracker. On GitHub, GitLab or Linear, say _issue_, _issue ID_ and, for a side ticket, _side issue_.
 - **project workspace** — a branch in its own worktree, with an isolated dev server when the project runs one. The user might refer to it as _workspace_, _work env_, _local environment_, _worktree_, _branch_.
 - **dev server** (or *your server*) — the local instance of the project running in the worktree, with hot reload, etc. The user might refer to it as _server_, _local server_, or even the _env URL_.

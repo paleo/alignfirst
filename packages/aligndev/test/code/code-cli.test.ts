@@ -10,7 +10,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { main as runMain, type MainOptions } from "../../src/cli.js";
@@ -25,7 +26,16 @@ import {
 } from "../../src/code/code-cli.js";
 import { resolveEfforts } from "../../src/code/efforts.js";
 import { readMachineId } from "../../src/code/machine-id.js";
-import { CLAUDE_DEFAULT_MODELS } from "../../src/code/models.js";
+import { readModelList, writeModelList } from "../../src/code/model-lists.js";
+import {
+  CLAUDE_DEFAULT_MODELS,
+  createExecutableModelResolver,
+  createModelLists,
+  type ExecutableModelResolver,
+  type ModelCatalogRunner,
+  PiStartupDialogError,
+} from "../../src/code/models.js";
+import { createMemory, type Memory, memoryPath } from "../../src/memory/memory.js";
 import {
   appendTranscript,
   applyCompletion,
@@ -46,6 +56,7 @@ import {
   makeCompanionProject,
   makeSink,
   writeConfig,
+  writeSettings,
 } from "../helpers.js";
 import {
   addWorktree,
@@ -99,6 +110,13 @@ describe("coding-agent selection", () => {
     expect(
       await main({ argv: ["node", "aligndev", "code", "--help"], env: {}, home, stderr }),
     ).toBe(1);
+  });
+
+  it("prints the help of the models command without an agent or a project", async () => {
+    const home = makeHome();
+    expect(
+      await main({ argv: ["node", "aligndev", "code", "models", "--help"], env: {}, home }),
+    ).toBe(0);
   });
 
   it("rejects an invalid agent in the config", async () => {
@@ -159,6 +177,13 @@ describe("parseCodeArgs", () => {
       includeResult: false,
     });
     expect(parseCodeArgs(["quota"], "aligndev")).toEqual({ kind: "quota" });
+    expect(parseCodeArgs(["models"], "aligndev")).toEqual({ kind: "models", refresh: false });
+    expect(parseCodeArgs(["models", "--profile", "p", "--refresh"], "aligndev")).toEqual({
+      kind: "models",
+      profile: "p",
+      refresh: true,
+    });
+    expect(() => parseCodeArgs(["models", "codex"], "aligndev")).toThrow(Error);
   });
 
   it("leaves the version and guide flags to other commands", () => {
@@ -233,7 +258,10 @@ describe("parseCodeArgs", () => {
   it("renders help after a command", () => {
     expect(parseCodeArgs(["new", "--help"], "aligndev")).toEqual({ kind: "help" });
     expect(parseCodeArgs(["resume", "-h"], "aligndev")).toEqual({ kind: "help" });
-    expect(parseCodeArgs(["status", "--help"], "aligndev")).toEqual({ kind: "help", status: true });
+    expect(parseCodeArgs(["status", "--help"], "aligndev")).toEqual({
+      kind: "help",
+      subcommand: "status",
+    });
     expect(parseCodeArgs(["quota", "--help"], "aligndev")).toEqual({ kind: "help" });
   });
 
@@ -769,6 +797,142 @@ describe("quota", () => {
   });
 });
 
+describe("models", () => {
+  let home: string;
+  let memory: Memory;
+
+  beforeEach(() => {
+    home = makeHome();
+    writeSettings(home, {
+      code: {
+        profiles: {
+          work: { harness: "codex", modelAliases: { fast: "gpt-6.2-luna-fast" } },
+          gemini: { harness: "agy" },
+        },
+      },
+    });
+    memory = createMemory(home);
+  });
+
+  afterEach(() => memory.close());
+
+  async function seed(harness: "codex" | "agy", profile: string, models: string[]): Promise<void> {
+    await writeModelList(
+      memory,
+      harness,
+      { cwd: home, env: {}, profile },
+      { cliVersion: "1.0.0", configDir: null, models },
+    );
+  }
+
+  async function runModels(
+    tokens: string[],
+    runners: Partial<Record<"codex" | "agy", ModelCatalogRunner>>,
+  ) {
+    const stdout = makeSink();
+    const stderr = makeSink();
+    const code = await main({
+      argv: ["node", "aligndev", "code", "models", ...tokens],
+      env: {},
+      home,
+      stdout,
+      stderr,
+      modelLists: createModelLists(memory, runners, async () => "1.0.0"),
+    });
+    return { code, stdout: stdout.text(), stderr: stderr.text() };
+  }
+
+  function catalogs(codex: string[], agyExitCode = 0) {
+    const codexRunner = vi.fn(async () => ({
+      exitCode: 0,
+      stdout: JSON.stringify({ models: codex.map((slug) => ({ slug })) }),
+      stderr: "",
+    }));
+    const agyRunner = vi.fn(async () => ({
+      exitCode: agyExitCode,
+      stdout: "gemini-4-neon-high\tNeon\n",
+      stderr: "native-agy-secret\n",
+    }));
+    return { codex: codexRunner, agy: agyRunner };
+  }
+
+  it("reports the model of each name from the remembered lists without a native command", async () => {
+    await seed("codex", "work", ["gpt-6.2-sol", "gpt-6.1-sol", "gpt-6.2-luna"]);
+    await seed("agy", "gemini", ["gemini-4-neon-high"]);
+    const runners = catalogs([]);
+    const result = await runModels([], runners);
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toMatch(/sol: gpt-6\.2-sol\b/);
+    expect(result.stdout).toMatch(/luna: gpt-6\.2-luna\b/);
+    expect(result.stdout).toMatch(/fast: gpt-6\.2-luna-fast\b/);
+    expect(result.stdout).toMatch(/neon: gemini-4-neon\b/);
+    expect(runners.codex).not.toHaveBeenCalled();
+    expect(runners.agy).not.toHaveBeenCalled();
+  });
+
+  it("refreshes the other profiles when one fails, and keeps the failing profile's list", async () => {
+    await seed("agy", "gemini", ["gemini-3-neon-high"]);
+    const result = await runModels(["--refresh"], catalogs(["gpt-7-sol"], 1));
+    expect(result.code).toBe(1);
+    expect(result.stdout + result.stderr).not.toContain("native-agy-secret");
+    expect(
+      (await readModelList(memory, "codex", { cwd: home, env: {}, profile: "work" }))?.models,
+    ).toEqual(["gpt-7-sol"]);
+    expect(
+      (await readModelList(memory, "agy", { cwd: home, env: {}, profile: "gemini" }))?.models,
+    ).toEqual(["gemini-3-neon-high"]);
+  });
+
+  it("shows the old and the new model of a name that a refresh changed", async () => {
+    await seed("codex", "work", ["gpt-6.2-sol", "gpt-6.2-luna"]);
+    const result = await runModels(
+      ["--refresh", "--profile", "work"],
+      catalogs(["gpt-6.2-astra", "gpt-7-sol", "gpt-6.2-terra", "gpt-6.2-luna"]),
+    );
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toMatch(/sol: gpt-6\.2-sol → gpt-7-sol\b/);
+    expect(result.stdout).toMatch(/luna: gpt-6\.2-luna \(/);
+  });
+
+  it("fails a refresh that leaves a pattern without a single match, and stores the list", async () => {
+    const result = await runModels(["--refresh", "--profile", "work"], catalogs(["gpt-7-sol"]));
+    expect(result.code).toBe(1);
+    expect(
+      (await readModelList(memory, "codex", { cwd: home, env: {}, profile: "work" }))?.models,
+    ).toEqual(["gpt-7-sol"]);
+  });
+
+  it("reports a memory that fails at the first read as unavailable, without a refresh", async () => {
+    mkdirSync(dirname(memoryPath(home)), { recursive: true });
+    const database = new DatabaseSync(memoryPath(home));
+    database.exec("PRAGMA user_version = 1");
+    database.close();
+    const runners = catalogs(["gpt-7-sol"]);
+    const result = await runModels(["--refresh"], runners);
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain("no such table: store");
+    expect(runners.codex).not.toHaveBeenCalled();
+    expect(runners.agy).not.toHaveBeenCalled();
+  });
+
+  it("refuses to refresh without an available memory", async () => {
+    const file = join(home, "file");
+    writeFileSync(file, "");
+    const runners = catalogs(["gpt-7-sol"]);
+    const code = await main({
+      argv: ["node", "aligndev", "code", "models", "--refresh"],
+      env: {},
+      home,
+      stdout: makeSink(),
+      stderr: makeSink(),
+      modelLists: createModelLists(createMemory(file), runners, async () => "1.0.0"),
+    });
+    expect(code).toBe(1);
+    expect(runners.codex).not.toHaveBeenCalled();
+    expect(runners.agy).not.toHaveBeenCalled();
+  });
+});
+
 describe("resolveTicket", () => {
   function record(overrides: Partial<SessionFrontmatter>): SessionRecord {
     return {
@@ -1139,7 +1303,10 @@ describe("launch guards", () => {
     expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(before);
   });
 
-  it("sanitizes injected model-discovery failures on every output surface", async () => {
+  it.each([
+    new Error("catalog unavailable: injected-resolver-secret"),
+    new PiStartupDialogError("injected-resolver-secret"),
+  ])("sanitizes injected model-discovery failures on every output surface: %s", async (failure) => {
     const stdout = makeSink();
     const stderr = makeSink();
     const codexHome = makeHome({ code: { harness: "codex" } });
@@ -1152,7 +1319,7 @@ describe("launch guards", () => {
       stdout,
       stderr,
       modelResolver: async () => {
-        throw new Error("catalog unavailable: injected-resolver-secret");
+        throw failure;
       },
     });
 
@@ -1166,6 +1333,48 @@ describe("launch guards", () => {
     });
     expect(readFileSync(records[0].path, "utf8")).not.toContain("injected-resolver-secret");
   });
+
+  it.each([
+    [
+      { harness: "pi", modelFamilies: { gpt: "openai" } },
+      "sol",
+      {
+        exitCode: 0,
+        stdout: `${JSON.stringify({ id: "aligndev-models", type: "response", success: true, data: { models: [] } })}\n`,
+        stderr: "Warning: No models available. secret-catalog-text\n",
+      },
+    ],
+    [
+      { harness: "agy" },
+      "neon",
+      { exitCode: 1, stdout: "", stderr: "Error: Please sign in. secret-catalog-text\n" },
+    ],
+  ] as const)(
+    "hands the catalog sign-in of %j over to the login instructions",
+    async (profile, alias, output) => {
+      const stderr = makeSink();
+      const agentHome = makeHome({ code: profile });
+      const code = await main({
+        argv: ["node", "aligndev", "code", "new", "--message", "go", "--model", alias],
+        cwd: dir,
+        env: { HOME: agentHome },
+        home: agentHome,
+        alignfirstCommand: ALIGNFIRST,
+        stdout: makeSink(),
+        stderr,
+        modelResolver: createExecutableModelResolver({ [profile.harness]: async () => output }),
+      });
+
+      expect(code).toBe(2);
+      expect(stderr.text()).not.toContain("secret-catalog-text");
+      const [record] = listSessionRecords(plans, readMachineId(agentHome));
+      expect(readCompletion(record.path).frontmatter).toMatchObject({
+        status: "failed",
+        exitReason: "auth_required",
+      });
+      expect(readFileSync(record.path, "utf8")).not.toContain("secret-catalog-text");
+    },
+  );
 
   it("reserves the next side ticket through alignfirst for --no-ticket", async () => {
     mkdirSync(join(dir, ".plans", "side-1"));
@@ -1911,6 +2120,7 @@ describe("quiet execution", () => {
 });
 
 describe("pi launches", () => {
+  const DECLARED_MODELS = ["provider/model:high", "terra:high", " provider/model:high "];
   let base: string;
   let home: string;
   let project: string;
@@ -1923,7 +2133,7 @@ describe("pi launches", () => {
     project = join(base, "project");
     plans = join(project, ".plans");
     mkdirSync(plans, { recursive: true });
-    writeConfig(home, { code: { harness: "pi" } });
+    writeConfig(home, { code: { harness: "pi", models: DECLARED_MODELS } });
     fake = installFakePi(base);
   });
 
@@ -1978,23 +2188,56 @@ describe("pi launches", () => {
     expect(newest().frontmatter.model).toBe(selected);
   });
 
-  it.each([undefined, "terra", " provider/model:high "])(
-    "preserves native model selection %j",
+  it.each(["terra:high", " provider/model:high "])(
+    "passes the declared selector %j unchanged",
     async (model) => {
-      const result = await launch([
-        "new",
-        "-m",
-        "go",
-        ...(model === undefined ? [] : ["--model", model]),
-      ]);
+      const result = await launch(["new", "-m", "go", "--model", model]);
       expect(result.code, result.stderr).toBe(0);
-      expect(fake.received().args).toEqual([
-        "--mode",
-        "json",
-        ...(model === undefined ? [] : ["--model", model]),
-      ]);
+      expect(fake.received().args).toEqual(["--mode", "json", "--model", model]);
     },
   );
+
+  it("runs Pi's own default on a profile that declares no model", async () => {
+    writeConfig(home, { code: { harness: "pi" } });
+    const result = await launch(["new", "-m", "go"]);
+    expect(result.code, result.stderr).toBe(0);
+    expect(fake.received().args).toEqual(["--mode", "json"]);
+  });
+
+  it("rejects --model on a profile that declares no model before creating a run", async () => {
+    writeConfig(home, { code: { harness: "pi" } });
+    expect((await launch(["new", "-m", "go", "--model", "provider/model"])).code).toBe(1);
+    expect(listSessionRecords(plans, readMachineId(home))).toHaveLength(0);
+  });
+
+  it("hands the resolver the selector of the chosen name", async () => {
+    writeConfig(home, {
+      code: {
+        harness: "pi",
+        modelFamilies: { gpt: "openai" },
+        modelAliases: { sol: "openai/gpt-6.2-sol-healthcare", small: "luna" },
+      },
+    });
+    const modelResolver = vi.fn<ExecutableModelResolver>(async () => undefined);
+    for (const model of ["terra", "sol", "small"]) {
+      const code = await main({
+        argv: ["node", "aligndev", "code", "new", "-m", "go", "--model", model],
+        cwd: project,
+        home,
+        env: { HOME: home, PATH: fake.path },
+        alignfirstCommand: ALIGNFIRST,
+        stdout: makeSink(),
+        stderr: makeSink(),
+        modelResolver,
+      });
+      expect(code).toBe(0);
+    }
+    expect(modelResolver.mock.calls.map(([, selector]) => selector)).toEqual([
+      "openai/gpt-{latest}-terra",
+      "openai/gpt-6.2-sol-healthcare",
+      "openai/gpt-{latest}-luna",
+    ]);
+  });
 
   it("validates blank selectors and exact configured allowlists before creating runs", async () => {
     for (const model of ["", " \t "]) {
