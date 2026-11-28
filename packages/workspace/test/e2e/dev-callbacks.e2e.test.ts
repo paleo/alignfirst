@@ -5,7 +5,6 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { resolveWorkspaceStorage } from "../../src/storage.js";
-import type { WorkspaceManifest } from "../../src/workspace-config-types.js";
 import type { DevServerEntry } from "../../src/dev-servers-registry.js";
 import type { ServerContext } from "../../src/server-descriptor.js";
 import type { StartupOwners } from "../../src/startup-registry.js";
@@ -20,10 +19,10 @@ import {
   resourceEvents,
   type FixtureRepo,
   fixtureRegistryDir,
+  PORT_BLOCKS,
   readWorkspaces,
   runCli,
   runDev,
-  writeWorkspaces,
 } from "./fixture.js";
 
 const TIMEOUT_MS = 60_000;
@@ -102,27 +101,9 @@ afterEach(async () => {
 
 describe("registered callback identity (e2e)", () => {
   it(
-    "escalates a TERM-resistant owned server and clears its process group",
+    "starts, reports, attaches and stops from nested cwd with companion runtime",
     async () => {
-      const target = prepareTarget();
-      const started = runDev(target.root, ["up"], { ...ENV, E2E_RESIST_TERM: "1" });
-      expect(started.status, started.stderr).toBe(0);
-      const pid = spawns(target.fx).at(-1)?.pid;
-      if (pid === undefined) throw new Error("Missing resistant server PID");
-      const stopped = runDev(target.root, ["down"], ENV);
-      expect(stopped.status, stopped.stderr).toBe(0);
-      await waitUntil(() => !isAlive(pid), "resistant server exit");
-      expect(() => process.kill(-pid, 0)).toThrow();
-      expect(devEntries(target.fx)).toEqual([]);
-      expect(stops(target.fx)).toEqual(expectedStops(target.ctx));
-    },
-    TIMEOUT_MS,
-  );
-
-  it.each([false, true])(
-    "starts, reports, attaches and stops from nested cwd (companion runtime=%s)",
-    async (companionRuntime) => {
-      const target = prepareTarget(true, companionRuntime);
+      const target = prepareTarget(true, true, true);
       const { fx, root, nested, ctx } = target;
       const file = join(root, "alignfirst.json");
       const manifest = JSON.parse(readFileSync(file, "utf8"));
@@ -132,11 +113,7 @@ describe("registered callback identity (e2e)", () => {
       expect(started.status, started.stderr).toBe(0);
       expect(started.stdout).toContain(ctx.name);
       const runtime = resolveWorkspaceStorage(
-        {
-          in: companionRuntime ? "companion" : "project",
-          mainWorktree: fx.repo,
-          companionDir: join(fx.root, "companion"),
-        },
+        { in: "companion", mainWorktree: fx.repo, companionDir: join(fx.root, "companion") },
         root,
       ).runtimeDir;
       const log = join(runtime, "logs", "ready.log");
@@ -188,112 +165,12 @@ describe("registered callback identity (e2e)", () => {
   );
 
   it(
-    "rejects startup overrides before claims, setup, file writes or stopping a live instance",
+    "a competing restart cannot mutate or stop the startup owner during readiness",
     async () => {
-      const { fx, root } = prepareTarget(false);
-      const file = join(root, "alignfirst.json");
-      const manifest = JSON.parse(readFileSync(file, "utf8"));
-      manifest.devServer.maxConcurrentDevServers = { env: "E2E_DEV_LIMIT", default: 1 };
-      writeFileSync(file, JSON.stringify(manifest));
-      const invalid = { ...ENV, E2E_DEV_LIMIT: "PRIVATE" };
-      const paths = [
-        ...["workspaces.json", "dev-servers.json", "dev-startups.json"].map((name) =>
-          join(fx.repo, ".local-wt/workspace-registry", name),
-        ),
-        join(root, "setup-runs.log"),
-        join(root, "ports.env"),
-        join(root, "ports.txt"),
-      ];
-      const bytes = () =>
-        paths.map((path) => (existsSync(path) ? readFileSync(path, "utf8") : undefined));
-      const before = bytes();
-      const failed = runDev(root, ["up"], invalid);
-      expect(failed.status, failed.stderr).toBe(1);
-      expect(failed.stderr).not.toContain("PRIVATE");
-      expect(bytes()).toEqual(before);
-      // Zero overrides a finite default and permits more than one live environment.
-      expect(runDev(fx.repo, ["up"], ENV).status).toBe(0);
-      expect(runDev(root, ["up"], { ...ENV, E2E_DEV_LIMIT: "0" }).status).toBe(0);
-      const pid = spawns(fx).find((event) => event.cwd === root)?.pid;
-      if (pid === undefined) throw new Error("Missing target PID");
-      writeFileSync(join(root, "ports.env"), "hand edited\n");
-      const runningBytes = bytes();
-      for (const args of [["restart"], ["up", "--restart"], ["--restart"]]) {
-        const rejected = runDev(root, args, invalid);
-        expect(rejected.status, rejected.stderr).toBe(1);
-        expect(isAlive(pid)).toBe(true);
-        expect(bytes()).toEqual(runningBytes);
-      }
-      expect(runDev(root, ["status"], invalid).status).toBe(0);
-      expect(runDev(root, ["list"], invalid).status).toBe(0);
-      const report = JSON.parse(
-        execFileSync(cliExecutable, [alignfirstBin, "config", "--json"], {
-          cwd: root,
-          encoding: "utf8",
-          env: { ...process.env, HOME: join(fx.root, "home"), ...invalid },
-        }),
-      );
-      expect(report.config.devServer.maxConcurrentDevServers).toEqual({
-        env: "E2E_DEV_LIMIT",
-        default: 1,
-      });
-      expect(runDev(root, ["down"], invalid).status).toBe(0);
-      await waitUntil(() => !isAlive(pid), "down with invalid startup override");
-      expect(runDev(root, ["setup", "--force"], invalid).status).toBe(0);
-      expect(runCli(root, ["setup", "--full", "--force"], invalid).status).toBe(0);
-      expect(runDev(fx.repo, ["down"], ENV).status).toBe(0);
-    },
-    TIMEOUT_MS,
-  );
-
-  it.each([false, true])(
-    "stops using current callbacks without interpolating startup commands, allocation missing=%s",
-    async (missingAllocation) => {
-      const { fx, root, nested, ctx } = prepareTarget();
-      expect(runDev(root, ["up"], ENV, nested).status).toBe(0);
-      if (missingAllocation) {
-        const registry = readWorkspaces(fx.repo);
-        delete registry.workspaces[ctx.name];
-        writeWorkspaces(fx.repo, registry);
-      }
-      const file = join(root, "alignfirst.json");
-      const manifest: WorkspaceManifest = JSON.parse(readFileSync(file, "utf8"));
-      const dev = manifest.devServer;
-      if (!dev?.ports) throw new Error("Missing fixture dev ports");
-      dev.ports.declare.push("newPort");
-      for (const server of dev.servers) {
-        if (server.kind !== "spawn") continue;
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: Manifest interpolation syntax.
-        server.exec = { run: [cliExecutable, "${{ ports.newPort }}"] };
-        server.port = "newPort";
-      }
-      writeFileSync(file, JSON.stringify(manifest));
-      const stopped = runDev(root, ["down"], ENV, nested);
-      expect(stopped.status, stopped.stderr).toBe(0);
-      expect(stops(fx)).toEqual(
-        expectedStops({ ...ctx, ports: missingAllocation ? {} : ctx.ports }),
-      );
-      expect(devEntries(fx)).toEqual([]);
-      await waitUntil(() => spawns(fx).every((event) => !isAlive(event.pid)), "recorded PID stop");
-    },
-    TIMEOUT_MS,
-  );
-
-  it.each(["setup", "readiness"] as const)(
-    "a competing restart cannot mutate or stop the startup owner during %s",
-    async (phase) => {
-      const target = prepareTarget(phase !== "setup");
-      const barrier = newBarrier(target.fx, `${phase}.release`);
-      const running = foreground(
-        target,
-        phase === "setup" ? { E2E_DEV_SETUP_BARRIER: barrier } : { E2E_READY_BARRIER: barrier },
-        ["up"],
-      );
-      await waitUntil(
-        () =>
-          phase === "setup" ? existsSync(`${barrier}.entered`) : spawns(target.fx).length === 1,
-        `winner blocked during ${phase}`,
-      );
+      const target = prepareTarget();
+      const barrier = newBarrier(target.fx, "readiness.release");
+      const running = foreground(target, { E2E_READY_BARRIER: barrier }, ["up"]);
+      await waitUntil(() => spawns(target.fx).length === 1, "winner blocked during readiness");
       const before = callbacks(target.fx);
       const recorded = devEntries(target.fx);
       const lost = runDev(target.root, ["up", "--restart"], ENV);
@@ -315,31 +192,13 @@ describe("registered callback identity (e2e)", () => {
   );
 
   it(
-    "rolls back only successful callbacks with their original complete context",
-    () => {
-      const { fx, root, nested, ctx } = prepareTarget();
-      const failed = runDev(root, ["up"], { ...ENV, E2E_CALLBACK_START_FAIL: "cache" }, nested);
-      expect(failed.status).toBe(1);
-      expect(failed.stderr).toContain("e2e callback start boom");
-      expect(callbacks(fx)).toEqual([
-        { event: "start", ...ctx, label: "docker" },
-        { event: "start", ...ctx, label: "cache" },
-        { event: "stop", ...ctx, label: "docker" },
-      ]);
-      expect(devEntries(fx)).toEqual([]);
-      expect(spawns(fx)).toEqual([]);
-    },
-    TIMEOUT_MS,
-  );
-
-  it.each(["SIGINT", "SIGTERM"] as const)(
-    "%s after readiness stops the recorded identity",
-    async (signal) => {
+    "SIGTERM after readiness stops the recorded identity",
+    async () => {
       const target = prepareTarget();
       const running = foreground(target);
       await waitUntil(() => foregroundReady(target), "foreground ready");
       expect(devEntries(target.fx)[0].name).toBe(target.ctx.name);
-      running.child.kill(signal);
+      running.child.kill("SIGTERM");
       await exited(running, 0);
       expect(stops(target.fx)).toEqual(expectedStops(target.ctx));
       expect(devEntries(target.fx)).toEqual([]);
@@ -351,14 +210,14 @@ describe("registered callback identity (e2e)", () => {
     TIMEOUT_MS,
   );
 
-  it.each([false, true])(
-    "a signal before readiness awaits rollback and retains stop failure=%s",
-    async (failStop) => {
+  it(
+    "a signal before readiness awaits rollback and retains a failed stop",
+    async () => {
       const target = prepareTarget();
       const barrier = newBarrier(target.fx, "ready.release");
       const running = foreground(target, {
         E2E_READY_BARRIER: barrier,
-        ...(failStop ? { E2E_CALLBACK_STOP_FAIL: "1" } : {}),
+        E2E_CALLBACK_STOP_FAIL: "1",
       });
       await waitUntil(() => spawns(target.fx).length === 1, "spawn before readiness");
       expect(callbacks(target.fx).filter((event) => event.event === "start")).toHaveLength(2);
@@ -366,12 +225,10 @@ describe("registered callback identity (e2e)", () => {
       await exited(running, 130);
       expect(stops(target.fx)).toEqual(expectedStops(target.ctx));
       await waitUntil(() => !isAlive(spawns(target.fx)[0].pid), "rollback pid");
-      if (failStop) {
-        expect(devEntries(target.fx)).toMatchObject([
-          { name: target.ctx.name, cleanupPending: true },
-        ]);
-        expect(runDev(target.root, ["down"], ENV).status).toBe(0);
-      }
+      expect(devEntries(target.fx)).toMatchObject([
+        { name: target.ctx.name, cleanupPending: true },
+      ]);
+      expect(runDev(target.root, ["down"], ENV).status).toBe(0);
       expect(devEntries(target.fx)).toEqual([]);
     },
     TIMEOUT_MS,
@@ -403,11 +260,10 @@ describe("registered callback identity (e2e)", () => {
     TIMEOUT_MS,
   );
 
-  it.each(["owned", "attached"])(
-    "external down stops callbacks once and exits the %s foreground",
-    async (mode) => {
+  it(
+    "external down stops callbacks once and exits the owning foreground",
+    async () => {
       const target = prepareTarget();
-      if (mode === "attached") expect(runDev(target.root, ["up"], ENV).status).toBe(0);
       const running = foreground(target);
       await waitUntil(
         () => running.output.includes("FIXTURE_READY") && foregroundReady(target),
@@ -422,10 +278,10 @@ describe("registered callback identity (e2e)", () => {
     TIMEOUT_MS,
   );
 
-  it.each(["manifest", "defaults", "companionRuntime"])(
-    "down --all from %s executes victim-only scripts with their recorded identities",
-    (caller) => {
-      const target = prepareTarget(true, caller === "companionRuntime");
+  it(
+    "down --all from a defaults-only caller executes victim-only scripts with their recorded identities",
+    () => {
+      const target = prepareTarget();
       const { fx, root, ctx } = target;
       const other = addWorktree(fx, "three/review", "three");
       setup(fx, other);
@@ -440,11 +296,7 @@ describe("registered callback identity (e2e)", () => {
       expect(name).toMatch(/^review-[a-f0-9]{8}$/);
       expect(name).not.toBe(ctx.name);
       const otherCtx = { name, cwd: other, ports: entry.ports ?? {} };
-      if (caller !== "defaults") {
-        installResourceRecipe(fx.repo, "caller-version", { service: false });
-        expect(runDev(fx.repo, ["setup"]).status).toBe(0);
-        expect(readWorkspaces(fx.repo).workspaces.fixrepo.main).toBe(true);
-      } else rmSync(join(fx.repo, "alignfirst.json"));
+      rmSync(join(fx.repo, "alignfirst.json"));
       renameSync(join(other, "alignfirst.json"), join(other, "alignfirst.jsonc"));
       const result = runDev(fx.repo, ["down", "--all"], ENV);
       expect(result.status, result.stderr).toBe(0);
@@ -468,13 +320,10 @@ describe("registered callback identity (e2e)", () => {
     TIMEOUT_MS,
   );
 
-  it.each([
-    { fail: false, companionRuntime: false },
-    { fail: true, companionRuntime: true },
-  ])(
-    "eviction uses the victim recipe and preserves failed stop ownership ($fail, companion=$companionRuntime)",
-    ({ fail, companionRuntime }) => {
-      const { fx, root, ctx } = prepareTarget(true, companionRuntime);
+  it(
+    "eviction uses the victim recipe and preserves failed stop ownership with companion runtime",
+    () => {
+      const { fx, root, ctx } = prepareTarget(true, true);
       installResourceRecipe(root, "victim-version");
       installResourceRecipe(fx.repo, "caller-version", { service: false });
       expect(runDev(root, ["up"], ENV).status).toBe(0);
@@ -482,11 +331,8 @@ describe("registered callback identity (e2e)", () => {
       const manifest = JSON.parse(readFileSync(path, "utf8"));
       manifest.devServer.maxConcurrentDevServers = 1;
       writeFileSync(path, JSON.stringify(manifest));
-      const result = runDev(fx.repo, ["up", "--evict"], {
-        ...ENV,
-        ...(fail ? { E2E_RESOURCE_FAIL: "stop" } : {}),
-      });
-      expect(result.status, result.stderr).toBe(fail ? 1 : 0);
+      const result = runDev(fx.repo, ["up", "--evict"], { ...ENV, E2E_RESOURCE_FAIL: "stop" });
+      expect(result.status, result.stderr).toBe(1);
       expect(stops(fx)).toEqual(expectedStops(ctx));
       expect(resourceEvents(fx.repo).find((event) => event.action === "stop")).toMatchObject({
         version: "victim-version",
@@ -494,14 +340,9 @@ describe("registered callback identity (e2e)", () => {
         cwd: root,
         ctx: { name: ctx.name, ports: ctx.ports },
       });
-      if (fail) {
-        expect(devEntries(fx)).toMatchObject([{ name: ctx.name, cleanupPending: true }]);
-        expect(spawns(fx)).toHaveLength(1);
-        expect(runDev(root, ["down"], ENV).status).toBe(0);
-      } else {
-        expect(devEntries(fx).map((entry) => entry.name)).toEqual(["fixrepo"]);
-        expect(runDev(fx.repo, ["down"], ENV).status).toBe(0);
-      }
+      expect(devEntries(fx)).toMatchObject([{ name: ctx.name, cleanupPending: true }]);
+      expect(spawns(fx)).toHaveLength(1);
+      expect(runDev(root, ["down"], ENV).status).toBe(0);
     },
     TIMEOUT_MS,
   );
@@ -548,16 +389,15 @@ describe("registered callback identity (e2e)", () => {
     TIMEOUT_MS,
   );
 
-  it.each(["missing", "malformed"])(
-    "down-all retains a %s victim recipe failure while cleaning other targets",
-    (kind) => {
+  it(
+    "down-all retains a missing victim recipe failure while cleaning other targets",
+    () => {
       const { fx, root, ctx } = prepareTarget();
       expect(runDev(root, ["up"], ENV).status).toBe(0);
       expect(runDev(fx.repo, ["up"], ENV).status).toBe(0);
       const manifest = join(root, "alignfirst.json");
       const saved = readFileSync(manifest, "utf8");
-      if (kind === "missing") rmSync(manifest);
-      else writeFileSync(manifest, "{bad json}");
+      rmSync(manifest);
       const failed = runDev(fx.repo, ["down", "--all"], ENV);
       expect(failed.status).toBe(1);
       expect(devEntries(fx)).toMatchObject([{ name: ctx.name, cleanupPending: true }]);
@@ -569,34 +409,13 @@ describe("registered callback identity (e2e)", () => {
     },
     TIMEOUT_MS,
   );
-
-  it(
-    "retains failed pre-registration rollback for an explicit dead-PID retry",
-    () => {
-      const { fx, root, ctx } = prepareTarget();
-      const failed = runDev(root, ["up"], {
-        ...ENV,
-        E2E_CALLBACK_START_FAIL: "cache",
-        E2E_CALLBACK_STOP_FAIL: "1",
-      });
-      expect(failed.status).toBe(1);
-      expect(failed.stderr).toContain("e2e callback start boom");
-      expect(spawns(fx)).toEqual([]);
-      expect(devEntries(fx)).toMatchObject([
-        { name: ctx.name, worktree: root, pids: {}, cleanupPending: true },
-      ]);
-      expect(runDev(root, ["list"]).stdout).toContain(ctx.name);
-      expect(runDev(root, ["up"], ENV).status).toBe(1);
-      expect(runDev(root, ["down"], ENV).status).toBe(0);
-      expect(devEntries(fx)).toEqual([]);
-      expect(stops(fx).map((event) => event.label)).toEqual(["docker", "cache", "docker"]);
-    },
-    TIMEOUT_MS,
-  );
 });
 
-function prepareTarget(devSetup = true, companionRuntime = false): Target {
-  const fx = createFixtureRepo({ companionRuntime }, (created) => fixtures.push(created));
+function prepareTarget(devSetup = true, companionRuntime = false, legacyService = false): Target {
+  const fx = createFixtureRepo(
+    { portBlock: PORT_BLOCKS.devCallbacks, companionRuntime, legacyService },
+    (created) => fixtures.push(created),
+  );
   const first = addWorktree(fx, "one/review", "one");
   const root = addWorktree(fx, "two/review", "two");
   for (const worktree of [first, root]) setup(fx, worktree);

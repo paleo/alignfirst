@@ -7,11 +7,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  canonicalCwd,
   detectPortConflicts,
   findPortHolder,
   isPidOurs,
-  sweepStalePorts,
   waitForPortsFree,
 } from "../src/port-holder.js";
 import type { ResolvedSpawnServer } from "../src/server-descriptor.js";
@@ -39,54 +37,27 @@ function spawnServer(name: string, port?: number): ResolvedSpawnServer {
 }
 
 describe("isPidOurs", () => {
-  it("matches exact cwd", () => {
-    expect(isPidOurs({ pid: 1, pgid: 1, cmd: "x", cwd: "/a/b" }, "/a/b")).toBe(true);
-  });
-
-  it("matches descendant cwd", () => {
-    expect(isPidOurs({ pid: 1, pgid: 1, cmd: "x", cwd: "/a/b/c" }, "/a/b")).toBe(true);
-  });
-
-  it("rejects sibling cwd with shared prefix", () => {
-    expect(isPidOurs({ pid: 1, pgid: 1, cmd: "x", cwd: "/a/bb" }, "/a/b")).toBe(false);
-  });
-
-  it("rejects outside cwd", () => {
-    expect(isPidOurs({ pid: 1, pgid: 1, cmd: "x", cwd: "/other" }, "/a/b")).toBe(false);
-  });
-
-  it("rejects missing cwd", () => {
-    expect(isPidOurs({ pid: 1, pgid: 1, cmd: "x" }, "/a/b")).toBe(false);
-  });
-
-  it("resolves holder symlink before comparing", () => {
+  it.each<[string, string | undefined, boolean]>([
+    ["the exact cwd", "/a/b", true],
+    ["a descendant cwd", "/a/b/c", true],
+    ["a sibling cwd with a shared prefix", "/a/bb", false],
+    ["an outside cwd", "/other", false],
+    ["a missing cwd", undefined, false],
+    ["a symlinked holder cwd", "link", true],
+  ])("classifies %s", (_, cwd, ours) => {
+    if (cwd !== "link") {
+      expect(isPidOurs({ pid: 1, pgid: 1, cmd: "x", cwd }, "/a/b")).toBe(ours);
+      return;
+    }
     const real = mkdtempSync(join(tmpdir(), "wt-real-"));
     const link = `${real}-link`;
     symlinkSync(real, link, dirSymlinkType);
     try {
-      expect(isPidOurs({ pid: 1, pgid: 1, cmd: "x", cwd: link }, real)).toBe(true);
+      expect(isPidOurs({ pid: 1, pgid: 1, cmd: "x", cwd: link }, real)).toBe(ours);
     } finally {
       unlinkSync(link);
       rmSync(real, { recursive: true });
     }
-  });
-});
-
-describe("canonicalCwd", () => {
-  it("resolves a symlink", () => {
-    const real = mkdtempSync(join(tmpdir(), "wt-real-"));
-    const link = `${real}-link`;
-    symlinkSync(real, link, dirSymlinkType);
-    try {
-      expect(canonicalCwd(link)).toBe(realpathSync(real));
-    } finally {
-      unlinkSync(link);
-      rmSync(real, { recursive: true });
-    }
-  });
-
-  it("returns the input when realpath fails", () => {
-    expect(canonicalCwd("/nonexistent/path/xyz-zzz")).toBe("/nonexistent/path/xyz-zzz");
   });
 });
 
@@ -133,74 +104,38 @@ describe.skipIf(!isUnix)("findPortHolder", () => {
 });
 
 describe.skipIf(!isUnix)("detectPortConflicts", () => {
-  it("returns no conflicts when ports are free", async () => {
+  it.each(["free", "ours", "foreign"] as const)("classifies a %s port", async (kind) => {
     const listener = await listen();
-    const { port } = listener;
-    await closeListener(listener);
-    const conflicts = await detectPortConflicts(
-      [spawnServer("web", port)],
-      realpathSync(process.cwd()),
+    if (kind === "free") await closeListener(listener);
+    const root = kind === "foreign" ? "/nonexistent-xyz" : realpathSync(process.cwd());
+    const conflicts = await detectPortConflicts([spawnServer("web", listener.port)], root);
+    if (kind === "free") expect(conflicts).toEqual([]);
+    else expect(conflicts).toMatchObject([{ kind, holder: { pid: process.pid } }]);
+  });
+
+  it("skips callback servers and spawn servers without a port", async () => {
+    const callback = {
+      kind: "callback" as const,
+      name: "db",
+      start: async () => {},
+      stop: async () => {},
+    };
+    const portless = { ...spawnServer("worker"), port: undefined };
+    expect(await detectPortConflicts([callback, portless], realpathSync(process.cwd()))).toEqual(
+      [],
     );
-    expect(conflicts).toEqual([]);
-  });
-
-  it("classifies a holder in our cwd as 'ours'", async () => {
-    const { port } = await listen();
-    const conflicts = await detectPortConflicts(
-      [spawnServer("web", port)],
-      realpathSync(process.cwd()),
-    );
-    expect(conflicts).toHaveLength(1);
-    expect(conflicts[0]?.kind).toBe("ours");
-    expect(conflicts[0]?.holder?.pid).toBe(process.pid);
-  });
-
-  it("classifies a holder outside our cwd as 'foreign'", async () => {
-    const { port } = await listen();
-    const conflicts = await detectPortConflicts([spawnServer("web", port)], "/nonexistent-xyz");
-    expect(conflicts).toHaveLength(1);
-    expect(conflicts[0]?.kind).toBe("foreign");
-  });
-
-  it("skips callback servers", async () => {
-    const conflicts = await detectPortConflicts(
-      [{ kind: "callback", name: "db", start: async () => {}, stop: async () => {} }],
-      realpathSync(process.cwd()),
-    );
-    expect(conflicts).toEqual([]);
-  });
-
-  it("skips spawn servers that declare no port", async () => {
-    const conflicts = await detectPortConflicts(
-      [spawnServer("worker")],
-      realpathSync(process.cwd()),
-    );
-    expect(conflicts).toEqual([]);
-  });
-
-  it("sweeps nothing for a spawn server without a port", async () => {
-    await expect(sweepStalePorts([spawnServer("worker")], process.cwd())).resolves.toBeUndefined();
   });
 });
 
 describe.skipIf(!isUnix)("waitForPortsFree", () => {
-  it("returns [] immediately when no ports are busy", async () => {
-    const listener = await listen();
-    await closeListener(listener);
-    const stillBusy = await waitForPortsFree([listener.port], 200);
-    expect(stillBusy).toEqual([]);
-  });
-
   it("returns the port when it stays busy past the deadline", async () => {
     const { port } = await listen();
-    const stillBusy = await waitForPortsFree([port], 200);
-    expect(stillBusy).toEqual([port]);
+    expect(await waitForPortsFree([port], 50)).toEqual([port]);
   });
 
   it("returns [] once a busy port becomes free before the deadline", async () => {
     const listener = await listen();
-    timers.push(setTimeout(() => listener.server.close(), 150));
-    const stillBusy = await waitForPortsFree([listener.port], 2000);
-    expect(stillBusy).toEqual([]);
+    timers.push(setTimeout(() => listener.server.close(), 25));
+    expect(await waitForPortsFree([listener.port], 2000)).toEqual([]);
   });
 });

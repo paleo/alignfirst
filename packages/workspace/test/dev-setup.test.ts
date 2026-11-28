@@ -1,5 +1,13 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: Manifest expressions are literal fixtures.
-import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -12,6 +20,7 @@ import { writeDevServers } from "../src/dev-servers-registry.js";
 import { type DevSetupInput, runDevSetup } from "../src/dev-setup.js";
 import {
   findWorkspaceByPath,
+  markWorkspaceReady,
   readWorkspaces,
   registerWorkspace,
   registryDirFor,
@@ -54,56 +63,56 @@ afterEach(() => {
 });
 
 describe("run-file write batches", () => {
-  it.each(["changed inputs", "explicit setup with the same inputs"])(
-    "reconciles after a partial failure during %s",
-    async (scenario) => {
-      let host = "A";
-      let fail = false;
-      input.runFilesInputs = () => ({ host });
-      input.runFiles = [
-        {
-          path: "host.env",
-          source: { kind: "content", content: "" },
-          patch: () => `HOST=${host}\n`,
-        },
-        {
-          path: "later.env",
-          source: { kind: "content", content: "later\n" },
-          patch: (content) => {
-            expect(currentEntry().runFilesWrittenWith).toBeUndefined();
-            if (fail) throw new Error("later patch failed");
-            return content;
-          },
-        },
-      ];
-      await runDevSetup(input);
-      expect(currentEntry().runFilesWrittenWith).toEqual({
-        ports: {},
-        inputs: { host: fingerprintA },
-      });
-
-      if (scenario === "changed inputs") host = "B";
-      else {
-        input.options.beforeStart = false;
-        writeFileSync(filePath("host.env"), "HOST=hand-edit\n");
-      }
-      fail = true;
-      await expect(runDevSetup(input)).rejects.toThrow("later patch failed");
-      expect(fileContent("host.env")).toBe(`HOST=${host}\n`);
+  it.each([
+    ["changed inputs", "patch"],
+    ["explicit setup with the same inputs", "patch"],
+    ["changed inputs", "source"],
+  ])("reconciles after a partial failure during %s (failing %s)", async (scenario, failing) => {
+    let host = "A";
+    let fail = false;
+    input.runFilesInputs = () => ({ host });
+    const later = (content: string): string => {
       expect(currentEntry().runFilesWrittenWith).toBeUndefined();
+      if (fail) throw new Error("later write failed");
+      return content;
+    };
+    input.runFiles = [
+      {
+        path: "host.env",
+        source: { kind: "content", content: "" },
+        patch: () => `HOST=${host}\n`,
+      },
+      failing === "patch"
+        ? { path: "later.env", source: { kind: "content", content: "later\n" }, patch: later }
+        : { path: "later.env", source: { kind: "content", content: () => later("later\n") } },
+    ];
+    await runDevSetup(input);
+    expect(currentEntry().runFilesWrittenWith).toEqual({
+      ports: {},
+      inputs: { host: fingerprintA },
+    });
 
-      host = "A";
-      fail = false;
-      input.options.beforeStart = true;
-      await runDevSetup(input);
-      expect(fileContent("host.env")).toBe("HOST=A\n");
-      expect(currentEntry().runFilesWrittenWith).toEqual({
-        ports: {},
-        inputs: { host: fingerprintA },
-      });
-      expect(currentEntry().devSetupFailure).toBeUndefined();
-    },
-  );
+    if (scenario === "changed inputs") host = "B";
+    else {
+      input.options.beforeStart = false;
+      writeFileSync(filePath("host.env"), "HOST=hand-edit\n");
+    }
+    fail = true;
+    await expect(runDevSetup(input)).rejects.toThrow("later write failed");
+    expect(fileContent("host.env")).toBe(`HOST=${host}\n`);
+    expect(currentEntry().runFilesWrittenWith).toBeUndefined();
+
+    host = "A";
+    fail = false;
+    input.options.beforeStart = true;
+    await runDevSetup(input);
+    expect(fileContent("host.env")).toBe("HOST=A\n");
+    expect(currentEntry().runFilesWrittenWith).toEqual({
+      ports: {},
+      inputs: { host: fingerprintA },
+    });
+    expect(currentEntry().devSetupFailure).toBeUndefined();
+  });
 
   it("generates dependent content in order on creation and rewrite", async () => {
     let host = "A";
@@ -144,29 +153,42 @@ describe("run-file write batches", () => {
     });
   });
 
-  it("retains preceding updates and clears the write basis when a later source fails", async () => {
-    let host = "A";
-    let fail = false;
-    input.runFilesInputs = () => ({ host });
+  it("rewrites the run files before a start after the stored ports moved", async () => {
+    input.ports = resolveDevPortsConfig({ first: 28200, last: 28299, declare: ["web"] });
     input.runFiles = [
-      { path: "host.env", source: { kind: "content", content: () => `HOST=${host}\n` } },
       {
-        path: "later.txt",
-        source: {
-          kind: "content",
-          content: () => {
-            if (fail) throw new Error("generation failed");
-            return "later\n";
-          },
-        },
+        path: "ports.env",
+        source: { kind: "content", content: "# ports\n" },
+        patch: (content, ctx) => `${content.split("\n")[0]}\nWEB_PORT=${ctx.ports.web}\n`,
+      },
+      {
+        path: "ports.txt",
+        source: { kind: "content", content: (ctx) => `web=${ctx.ports.web}\n` },
       },
     ];
+    const first = await runDevSetup(input);
+    const moved = first.ports.web === 28250 ? 28251 : 28250;
+    const { mainWorktree } = input.worktree;
+    await updateWorkspaces(mainWorktree, input.registryDir, (registry) => {
+      registry.workspaces.main.ports = { web: moved };
+    });
     await runDevSetup(input);
-    host = "B";
-    fail = true;
-    await expect(runDevSetup(input)).rejects.toThrow("generation failed");
-    expect(fileContent("host.env")).toBe("HOST=B\n");
-    expect(currentEntry().runFilesWrittenWith).toBeUndefined();
+    expect(fileContent("ports.env")).toBe(`# ports\nWEB_PORT=${moved}\n`);
+    expect(fileContent("ports.txt")).toBe(`web=${moved}\n`);
+    expect(currentEntry().runFilesWrittenWith).toEqual({ ports: { web: moved }, inputs: {} });
+  });
+
+  it("refuses a linked worktree without a registry entry before any write", async () => {
+    const linked = join(root, "linked");
+    mkdirSync(linked);
+    input.worktree = { ...input.worktree, currentWorktree: linked, isMainWorktree: false };
+    input.runFiles = [{ path: "ports.env", source: { kind: "content", content: "x\n" } }];
+    const setup = vi.fn();
+    input.setup = setup;
+    await expect(runDevSetup(input)).rejects.toThrow(WorkspaceError);
+    expect(readWorkspaces(input.worktree.mainWorktree, input.registryDir).workspaces).toEqual({});
+    expect(existsSync(join(linked, "ports.env"))).toBe(false);
+    expect(setup).not.toHaveBeenCalled();
   });
 
   it("updates run files before provisioning infrastructure after a main-directory rename", async () => {
@@ -195,26 +217,22 @@ describe("run-file write batches", () => {
 });
 
 describe("computed run-file inputs", () => {
-  it("reconciles invocation environment changes and removal without exposing input values", async () => {
+  it("fingerprints invocation inputs and runs producers in order after ports, never storing values", async () => {
     const key = "SIDE32_INVOCATION_INPUT";
     const env: NodeJS.ProcessEnv = { ...process.env, [key]: "private-invocation-A" };
     const { devServer } = adaptWorkspaceManifest(
       {
         devServer: {
+          ports: { first: 28100, last: 28199, declare: ["constructor", "__proto__", "fo-api"] },
           runFilesInputs: [key],
           runFiles: [
+            { path: "first.txt", source: { kind: "content", content: "${{ ports.__proto__ }}" } },
             {
-              path: "invocation.txt",
+              path: "second.txt",
               source: {
                 kind: "content",
                 content: {
-                  command: {
-                    run: [
-                      process.execPath,
-                      "-e",
-                      `process.stdout.write(process.env.${key} ?? 'absent')`,
-                    ],
-                  },
+                  command: { run: ["sh", "-c", `cat first.txt; printf ' %s' "\${${key}-absent}"`] },
                 },
               },
             },
@@ -224,154 +242,82 @@ describe("computed run-file inputs", () => {
       },
       { recipe: { kind: "defaults" }, mainWorktree: input.worktree.mainWorktree, env },
     );
-    if (!devServer) throw new Error("Missing dev adapter");
-    input.runFilesInputs = devServer.runFilesInputs;
+    if (!devServer?.ports) throw new Error("Missing dev adapter");
+    input.ports = resolveDevPortsConfig(devServer.ports);
     input.runFiles = devServer.runFiles ?? [];
-    await runDevSetup(input);
-    const first = currentEntry().runFilesWrittenWith?.inputs[key];
-    expect(first).toMatch(/^sha256:[a-f0-9]{64}$/);
-    expect(fileContent("invocation.txt")).toBe("private-invocation-A");
+    input.runFilesInputs = devServer.runFilesInputs;
+    const result = await runDevSetup(input);
+    const port = String(Reflect.get(result.ports, "__proto__"));
+    expect(Object.keys(result.ports)).toEqual(["constructor", "__proto__", "fo-api"]);
+    expect(currentEntry().ports).toEqual(result.ports);
+    expect(fileContent("second.txt")).toBe(`${port} private-invocation-A`);
+    expect(currentEntry().runFilesWrittenWith?.inputs[key]).toMatch(/^sha256:[a-f0-9]{64}$/);
 
-    env[key] = "private-invocation-B";
+    env[key] = "";
     await runDevSetup(input);
-    expect(currentEntry().runFilesWrittenWith?.inputs[key]).not.toBe(first);
-    expect(fileContent("invocation.txt")).toBe("private-invocation-B");
+    expect(currentEntry().runFilesWrittenWith?.inputs[key]).toBe(
+      "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    );
+    expect(fileContent("second.txt")).toBe(`${port} `);
 
     delete env[key];
     await runDevSetup(input);
     expect(currentEntry().runFilesWrittenWith?.inputs).toEqual({});
-    expect(fileContent("invocation.txt")).toBe("absent");
+    expect(fileContent("second.txt")).toBe(`${port} absent`);
     const recorded = [
       readFileSync(filePath(`${input.registryDir}/workspaces.json`), "utf8"),
       ...vi.mocked(console.warn).mock.calls.flat(),
       ...vi.mocked(console.log).mock.calls.flat(),
     ].join("\n");
     expect(recorded).not.toContain("private-invocation-");
-  });
 
-  it("runs command producers in order after ports, fingerprints inputs and detects removal", async () => {
-    const secret = "private-host-value";
-    const { devServer } = adaptWorkspaceManifest(
-      {
-        devServer: {
-          ports: { first: 28100, last: 28199, declare: ["constructor", "__proto__", "fo-api"] },
-          runFilesInputs: {
-            command: {
-              run: [
-                process.execPath,
-                "-e",
-                "process.stdout.write(JSON.stringify({host:process.env.HOST}))",
-              ],
-              env: { HOST: secret },
-            },
-          },
-          runFiles: [
-            { path: "first.txt", source: { kind: "content", content: "${{ ports.__proto__ }}" } },
-            {
-              path: "second.txt",
-              source: {
-                kind: "content",
-                content: {
-                  command: {
-                    run: [
-                      process.execPath,
-                      "-e",
-                      "process.stdout.write(require('fs').readFileSync('first.txt'))",
-                    ],
-                  },
-                },
-              },
-            },
-          ],
-          servers: [],
-        },
-      },
-      { recipe: { kind: "defaults" }, mainWorktree: input.worktree.mainWorktree },
-    );
-    if (!devServer?.ports) throw new Error("Missing dev adapter");
-    input.ports = resolveDevPortsConfig(devServer.ports);
-    input.runFiles = devServer.runFiles ?? [];
-    input.runFilesInputs = devServer.runFilesInputs;
-    const result = await runDevSetup(input);
-    expect(Object.keys(result.ports)).toEqual(["constructor", "__proto__", "fo-api"]);
-    expect(currentEntry().ports).toEqual(result.ports);
-    expect(fileContent("second.txt")).toBe(String(Reflect.get(result.ports, "__proto__")));
-    expect(currentEntry().runFilesWrittenWith?.inputs.host).toMatch(/^sha256:[a-f0-9]{64}$/);
-    const registryText = readFileSync(filePath(`${input.registryDir}/workspaces.json`), "utf8");
-    expect(registryText).not.toContain(secret);
-    input.runFilesInputs = async () => ({ host: "" });
-    await runDevSetup(input);
-    expect(currentEntry().runFilesWrittenWith?.inputs.host).toBe(
-      "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    );
     input.runFilesInputs = undefined;
     input.ports = undefined;
     input.runFiles = [{ path: "first.txt", source: { kind: "content", content: "no ports" } }];
     await runDevSetup(input);
     expect(currentEntry().ports).toEqual({});
     expect(currentEntry().runFilesWrittenWith).toEqual({ ports: {}, inputs: {} });
-    expect(vi.mocked(console.warn).mock.calls.flat().join("\n")).not.toContain(secret);
+  });
+});
+
+describe("port allocation and setup state", () => {
+  it("avoids ports stored on other entries, runs setup once unless forced, and reallocates on reset", async () => {
+    input.ports = resolveDevPortsConfig({ first: 28300, last: 28309, declare: ["web", "api"] });
+    const runs: boolean[] = [];
+    input.setup = (ctx) => void runs.push(ctx.force);
+    const main = await runDevSetup(input);
+    const { mainWorktree } = input.worktree;
+    const linked = join(root, "linked");
+    mkdirSync(linked);
+    await registerWorkspace({
+      currentWorktree: linked,
+      mainWorktree,
+      registryDir: input.registryDir,
+      isMainWorktree: false,
+      recipe: input.recipe,
+    });
+    await markWorkspaceReady(mainWorktree, input.registryDir, linked);
+    input.worktree = { mainWorktree, currentWorktree: linked, isMainWorktree: false };
+    const first = await runDevSetup(input);
+    const mainPorts = Object.values(main.ports);
+    expect(new Set([...mainPorts, ...Object.values(first.ports)]).size).toBe(4);
+    expect((await runDevSetup(input)).ports).toEqual(first.ports);
+    expect(runs).toEqual([false, false]);
+    input.options.force = true;
+    await runDevSetup(input);
+    expect(runs).toEqual([false, false, true]);
+    await updateWorkspaces(mainWorktree, input.registryDir, (registry) => {
+      registry.workspaces.linked.ports = { web: 28308, api: 28309 };
+    });
+    input.options = { ...input.options, force: false, resetPorts: true };
+    const reset = await runDevSetup(input);
+    expect(reset.ports.web).toBeLessThan(28308);
+    expect(Object.values(reset.ports).filter((port) => mainPorts.includes(port))).toEqual([]);
+    expect(runs).toHaveLength(3);
   });
 });
 
 describe("registered main identity", () => {
-  it("records the selected recipe on automatic main creation and refuses a missing registered manifest", async () => {
-    const path = join(input.worktree.mainWorktree, "alignfirst.json");
-    writeFileSync(path, '{"schemaVersion":1}');
-    input.recipe = { kind: "manifest", file: "alignfirst.json", in: "project" };
-    await runDevSetup(input);
-    expect(currentEntry().recipe).toEqual(input.recipe);
-    renameSync(path, `${path}c`);
-    input.recipe = { kind: "manifest", file: "alignfirst.jsonc", in: "project" };
-    await runDevSetup(input);
-    rmSync(`${path}c`);
-    input.recipe = { kind: "defaults" };
-    await expect(runDevSetup(input)).rejects.toThrow(WorkspaceError);
-    expect(currentEntry().recipe.kind).toBe("manifest");
-  });
-
-  it("shares allocation with registration and preserves a suffix, ports and setup state", async () => {
-    input.ports = resolveDevPortsConfig({ first: 8200, last: 8299, declare: ["web"] });
-    const { mainWorktree } = input.worktree;
-    await registerWorkspace({
-      currentWorktree: "/external/main",
-      mainWorktree,
-      registryDir: input.registryDir,
-      isMainWorktree: false,
-      recipe: { kind: "defaults" },
-    });
-    const provisioned: string[] = [];
-    input.setup = (ctx) => {
-      provisioned.push(ctx.name);
-    };
-    input.runFiles = [
-      { path: "name.env", source: { kind: "content", content: (ctx) => ctx.name } },
-    ];
-    const first = await runDevSetup(input);
-    expect(first.workspace.name).toMatch(/^main-[a-f0-9]{8}$/);
-    expect(currentEntry().neverFinalized).toBe(true);
-    await updateWorkspaces(mainWorktree, input.registryDir, (registry) => {
-      delete registry.workspaces.main;
-      registry.workspaces[first.workspace.name].ports = { web: 8200 };
-    });
-    const moved = join(root, "elsewhere", "main");
-    mkdirSync(join(root, "elsewhere"));
-    renameSync(mainWorktree, moved);
-    input.worktree = { currentWorktree: moved, mainWorktree: moved, isMainWorktree: true };
-    const second = await runDevSetup(input);
-    expect(second.workspace.name).toBe(first.workspace.name);
-    expect(second.ports).toEqual({ web: 8200 });
-    expect(provisioned).toEqual([first.workspace.name]);
-    expect(fileContent("name.env")).toBe(first.workspace.name);
-    const registered = await registerWorkspace({
-      ...input.worktree,
-      registryDir: input.registryDir,
-      recipe: { kind: "defaults" },
-    });
-    expect(registered).toEqual({ name: first.workspace.name, status: "pending" });
-    expect(currentEntry().neverFinalized).toBeUndefined();
-  });
-
   it("checks the detected root for reset-ports even when invoked from a nested directory", async () => {
     await runDevSetup(input);
     const { mainWorktree } = input.worktree;

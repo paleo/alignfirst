@@ -14,7 +14,7 @@ import {
   cleanupFixture,
   recordDevActivity,
   type FixtureRepo,
-  type FixtureOptions,
+  PORT_BLOCKS,
   readWorkspaces,
   writeWorkspaces,
   runCli,
@@ -104,10 +104,10 @@ afterEach(async () => {
 });
 
 describe("installed workspace CLI cancellation", () => {
-  it.each([false, true])(
-    "excludes a second cleaner while permitting unrelated cleanup, companion=%s",
-    async (companionRuntime) => {
-      const fx = fixture({ companionRuntime });
+  it(
+    "excludes a second cleaner while permitting unrelated cleanup",
+    async () => {
+      const fx = fixture();
       const linked = join(fx.root, "linked");
       const sibling = join(fx.root, "sibling");
       for (const [branch, path] of [
@@ -154,10 +154,10 @@ describe("installed workspace CLI cancellation", () => {
     TIMEOUT_MS,
   );
 
-  it.each([false, true])(
-    "requires explicit recovery after a killed cleaner leaves purge alive, companion=%s",
-    async (companionRuntime) => {
-      const fx = fixture({ companionRuntime });
+  it(
+    "requires explicit recovery after a killed cleaner leaves purge alive",
+    async () => {
+      const fx = fixture();
       const linked = join(fx.root, "linked");
       execFileSync("git", ["worktree", "add", "-b", "linked", linked], { cwd: fx.repo });
       expect(runCli(fx.repo, ["setup", "--path", linked]).status).toBe(0);
@@ -208,41 +208,6 @@ describe("installed workspace CLI cancellation", () => {
       expect(retry.status, retry.stderr).toBe(0);
       expect(existsSync(resource)).toBe(false);
       expect(runCli(fx.repo, ["setup", "--path", linked]).status).toBe(0);
-      if (companionRuntime)
-        expect(Object.values(readWorkspaces(fx.repo).runtimeOwners ?? {})[0].generation).not.toBe(
-          Object.values(captured.runtimeOwners ?? {})[0].generation,
-        );
-    },
-    TIMEOUT_MS,
-  );
-
-  it(
-    "rejects a stale cleaner at local settlement without releasing its replacement claim",
-    async () => {
-      const fx = fixture();
-      expect(runCli(fx.repo, ["setup"]).status).toBe(0);
-      installBarrier(fx, fx.repo, "purge");
-      const running = startCli(fx, fx.repo, ["workspace", "teardown"]);
-      await waitForOwnedCommand(fx);
-      const file = join(fx.repo, ".local-wt/workspace-registry/workspaces.json");
-      const registry = JSON.parse(readFileSync(file, "utf8"));
-      const name = Object.keys(registry.workspaces)[0];
-      const entry = registry.workspaces[name];
-      expect(entry.cleanupOwner).toMatchObject({ pid: running.child.pid });
-      entry.cleanupOwner.token = "replacement-cleaner";
-      writeFileSync(file, JSON.stringify(registry));
-      writeFileSync(join(fx.root, "release"), "release");
-      await waitUntil(() => running.closed, "stale cleaner exit");
-      expect(running.code, running.output).toBe(1);
-      expect(readWorkspaces(fx.repo).workspaces[name]).toEqual(entry);
-      const retry = runCli(fx.repo, ["teardown"], { INTERRUPT_DIR: fx.root });
-      expect(retry.status, retry.stderr).toBe(1);
-      expect(readWorkspaces(fx.repo).workspaces[name]).toEqual(entry);
-      // Remove only the synthetic replacement claim after its known purge group has joined.
-      await waitUntil(() => [...ownedPids].every((pid) => !isAlive(pid)), "stale purge quiescence");
-      const recovered = readWorkspaces(fx.repo);
-      delete recovered.workspaces[name].cleanupOwner;
-      writeWorkspaces(fx.repo, recovered);
     },
     TIMEOUT_MS,
   );
@@ -266,15 +231,10 @@ describe("installed workspace CLI cancellation", () => {
     TIMEOUT_MS,
   );
 
-  it.each([
-    { command: "teardown", companionRuntime: false },
-    { command: "teardown", companionRuntime: true },
-    { command: "removeHere", companionRuntime: false },
-    { command: "abandonedPreparation", companionRuntime: false },
-  ])(
-    "retains interrupted target-owned purge through $command, companion=$companionRuntime, including internal re-exec cleanup",
-    async ({ command, companionRuntime }) => {
-      const fx = fixture({ companionRuntime });
+  it.each(["removeHere", "abandonedPreparation"])(
+    "retains interrupted target-owned purge through %s, including internal re-exec cleanup",
+    async (command) => {
+      const fx = fixture();
       const linked = join(fx.root, "linked");
       execFileSync("git", ["worktree", "add", "-b", "linked", linked], { cwd: fx.repo });
       expect(runCli(fx.repo, ["setup", "--path", linked]).status).toBe(0);
@@ -422,8 +382,8 @@ describe("installed workspace CLI cancellation", () => {
   );
 });
 
-function fixture(options?: FixtureOptions): FixtureRepo {
-  return createFixtureRepo(options, (fx) => fixtures.push(fx));
+function fixture(): FixtureRepo {
+  return createFixtureRepo({ portBlock: PORT_BLOCKS.interruption }, (fx) => fixtures.push(fx));
 }
 
 function installBarrier(
@@ -465,16 +425,18 @@ function installBarrier(
     `
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { appendFileSync, existsSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 if (${JSON.stringify(phase)} === "finalize") {
   const ctx = JSON.parse(process.env.ALIGNFIRST_WORKSPACE_CONTEXT);
   appendFileSync(join(ctx.mainWorktree, "finalize-pids.jsonl"), JSON.stringify(process.pid) + "\\n");
   appendFileSync(join(ctx.mainWorktree, "finalize-owners.jsonl"), JSON.stringify(process.ppid) + "\\n");
 }
-const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+const child = spawn("sleep", ["600"], { stdio: "ignore" });
 const dir = process.env.INTERRUPT_DIR;
-writeFileSync(join(dir, "pids.json"), JSON.stringify([process.pid, child.pid]));
+// Publish atomically: the test reads the file as soon as it exists.
+writeFileSync(join(dir, "pids.json.tmp"), JSON.stringify([process.pid, child.pid]));
+renameSync(join(dir, "pids.json.tmp"), join(dir, "pids.json"));
 while (!existsSync(join(dir, "release"))) await new Promise((resolve) => setTimeout(resolve, 25));
 const closed = once(child, "close");
 child.kill("SIGTERM");

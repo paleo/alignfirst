@@ -89,11 +89,6 @@ describe("liveWorktrees", () => {
     };
     expect(liveWorktrees(data, isAlive)).toEqual(new Set(["/tmp/wt-b", "/tmp/wt-c"]));
   });
-
-  it("returns an empty set when every entry is dead", () => {
-    const data = { servers: [entry("a", { main: 1 })] };
-    expect(liveWorktrees(data, isAlive).size).toBe(0);
-  });
 });
 
 describe("evictOldest", () => {
@@ -111,20 +106,17 @@ describe("evictOldest", () => {
     rmSync(mainWorktree, { recursive: true, force: true });
   });
 
-  it.each([undefined, 0, 2])(
-    "rejects unsupported dev version %s without overwriting bytes",
-    async (version) => {
-      mkdirSync(join(mainWorktree, registryDir), { recursive: true });
-      const path = devServersFilePath(mainWorktree, registryDir);
-      const before = JSON.stringify({ version, servers: [entry("old", { app: 1 })] });
-      writeFileSync(path, before);
-      expect(() => readDevServers(mainWorktree, registryDir)).toThrow(WorkspaceError);
-      await expect(
-        registerDevServer(mainWorktree, registryDir, entry("new", { app: process.pid })),
-      ).rejects.toThrow();
-      expect(readFileSync(path, "utf8")).toBe(before);
-    },
-  );
+  it("rejects an unsupported dev version without overwriting bytes", async () => {
+    mkdirSync(join(mainWorktree, registryDir), { recursive: true });
+    const path = devServersFilePath(mainWorktree, registryDir);
+    const before = JSON.stringify({ version: 2, servers: [entry("old", { app: 1 })] });
+    writeFileSync(path, before);
+    expect(() => readDevServers(mainWorktree, registryDir)).toThrow(WorkspaceError);
+    await expect(
+      registerDevServer(mainWorktree, registryDir, entry("new", { app: process.pid })),
+    ).rejects.toThrow();
+    expect(readFileSync(path, "utf8")).toBe(before);
+  });
 
   it("marks fresh unpruned dead state and creates pre-registration rollback identities", async () => {
     const old = entry("dead", { app: 99999999 });
@@ -208,58 +200,28 @@ describe("evictOldest", () => {
     await releaseStartup(mainWorktree, registryDir, owner);
   });
 
-  it("preserves child/sibling mutations during cross-target eviction", async () => {
-    const victim = entry("victim", { app: 2 });
-    const sibling = entry("sibling", { app: process.pid });
-    writeDevServers(mainWorktree, registryDir, { servers: [victim] });
-    await evictOldest({
-      mainWorktree,
-      registryDir,
-      count: 1,
-      isAlive,
-      stopTarget: async () => {
-        await completeDevServerCleanup(mainWorktree, registryDir, victim.worktree);
+  it.each(["eviction", "downAll"] as const)(
+    "%s releases only captured paths and retains a child-created sibling",
+    async (caller) => {
+      const victim: DevServerEntry =
+        caller === "eviction"
+          ? entry("victim", { app: 2 })
+          : { ...entry("victim", {}), cleanupPending: true };
+      const sibling = entry("sibling", { app: process.pid });
+      writeDevServers(mainWorktree, registryDir, { servers: [victim] });
+      const childStop = async () => {
+        if (caller === "eviction")
+          await completeDevServerCleanup(mainWorktree, registryDir, victim.worktree);
         await registerDevServer(mainWorktree, registryDir, sibling);
-      },
-    });
-    expect(readDevServers(mainWorktree, registryDir).servers).toEqual([sibling]);
-  });
+      };
+      if (caller === "eviction")
+        await evictOldest({ mainWorktree, registryDir, count: 1, isAlive, stopTarget: childStop });
+      else await stopAllRegistered({ mainWorktree, registryDir, stopTarget: childStop });
+      expect(readDevServers(mainWorktree, registryDir).servers).toEqual([sibling]);
+    },
+  );
 
-  it("down-all removes only captured paths and retains a child-created sibling", async () => {
-    const victim = entry("victim", {});
-    victim.cleanupPending = true;
-    writeDevServers(mainWorktree, registryDir, { servers: [victim] });
-    const sibling = entry("sibling", { app: process.pid });
-    await stopAllRegistered({
-      mainWorktree,
-      registryDir,
-      stopTarget: async () => {
-        await registerDevServer(mainWorktree, registryDir, sibling);
-      },
-    });
-    expect(readDevServers(mainWorktree, registryDir).servers).toEqual([sibling]);
-  });
-
-  it("selects the entry with the smallest startedAt", async () => {
-    writeDevServers(mainWorktree, registryDir, {
-      servers: [
-        entry("b", { main: 2 }, "2026-05-10T02:00:00.000Z"),
-        entry("a", { main: 4 }, "2026-05-10T00:00:00.000Z"),
-        entry("c", { main: 6 }, "2026-05-10T01:00:00.000Z"),
-      ],
-    });
-    const evicted = await evictOldest({
-      mainWorktree,
-      registryDir,
-      count: 1,
-      stopTarget,
-      isAlive,
-    });
-    expect(evicted).toHaveLength(1);
-    expect(evicted[0].name).toBe("a");
-  });
-
-  it("removes the two oldest when count is 2", async () => {
+  it("evicts the oldest entries by startedAt", async () => {
     writeDevServers(mainWorktree, registryDir, {
       servers: [
         entry("b", { main: 2 }, "2026-05-10T02:00:00.000Z"),

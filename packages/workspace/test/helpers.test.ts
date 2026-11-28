@@ -26,105 +26,57 @@ import {
 import { ConfigError, WorkspaceError } from "../src/errors.js";
 
 describe("patchEnvFile", () => {
-  it("ends with a single trailing newline", () => {
-    expect(patchEnvFile("KEY=v\n\n\n", { KEY: "x" })).toBe("KEY=x\n");
-  });
-
-  it("handles multiple patches at once", () => {
-    const out = patchEnvFile("A=1\nB=2\n", { A: "10", C: "30" });
-    expect(out).toBe("A=10\nB=2\nC=30\n");
+  it.each([
+    ["KEY=v\n\n\n", { KEY: "x" }, "KEY=x\n"],
+    ["A=1\nB=2\n", { A: "10", C: "30" }, "A=10\nB=2\nC=30\n"],
+  ])("patches %j with %j", (content, patches, expected) => {
+    expect(patchEnvFile(content, patches)).toBe(expected);
   });
 });
 
 describe("extractHost", () => {
-  it("falls back to localhost when key absent", () => {
-    expect(extractHost("OTHER=x\n", "API_URL")).toBe("localhost");
-  });
-
-  it("extracts an IPv4 host", () => {
-    expect(extractHost("API_URL=http://1.2.3.4:8001\n", "API_URL")).toBe("1.2.3.4");
-  });
-
-  it("extracts a hostname", () => {
-    expect(extractHost("API_URL=https://example.com:443\n", "API_URL")).toBe("example.com");
-  });
-
-  it("works without a scheme", () => {
-    expect(extractHost("HOST=myhost:1000\n", "HOST")).toBe("myhost");
-  });
-
-  it("uses custom fallback", () => {
-    expect(extractHost("", "API_URL", "fallback.example")).toBe("fallback.example");
+  it.each<[string, string | undefined, string]>([
+    ["OTHER=x\n", undefined, "localhost"],
+    ["API_URL=https://example.com:443\n", undefined, "example.com"],
+    ["API_URL=myhost:1000\n", undefined, "myhost"],
+    ["", "fallback.example", "fallback.example"],
+  ])("extracts the host of %j (fallback %s)", (content, fallback, expected) => {
+    expect(extractHost(content, "API_URL", fallback)).toBe(expected);
   });
 });
 
 describe("composeProjectName", () => {
-  it("keeps ordinary projects compatible and distinguishes a collision suffix", () => {
-    expect(composeProjectName("Review-ABC")).toBe("review-abc");
-    expect(composeProjectName("Review-ABC-deadbeef")).toBe("review-abc-deadbeef");
-  });
-
-  it("drops characters outside [a-z0-9_-]", () => {
-    expect(composeProjectName("my.repo-v1.2")).toBe("myrepo-v12");
-  });
-
-  it("trims leading dashes and underscores", () => {
-    expect(composeProjectName("_-.repo")).toBe("repo");
+  it.each([
+    ["Review-ABC-deadbeef", "review-abc-deadbeef"],
+    ["my.repo-v1.2", "myrepo-v12"],
+    ["_-.repo", "repo"],
+  ])("derives %s as %s", (name, expected) => {
+    expect(composeProjectName(name)).toBe(expected);
   });
 });
 
 describe("detectCommonJsError", () => {
-  it("matches nodemon crash", () => {
-    expect(detectCommonJsError("foo\n[nodemon] app crashed - waiting\n")).toBe(
-      "[nodemon] app crashed",
-    );
-  });
-
-  it("matches Node.js footer at line start", () => {
-    expect(detectCommonJsError("Error: bad\n    at x\nNode.js v24.11.1\n")).toBe("Node.js v");
-  });
-
-  it("does not match Node.js v inside another line", () => {
-    expect(detectCommonJsError("Running on Node.js v24 (info)")).toBe(false);
-  });
-
-  it("matches Cannot find module", () => {
-    expect(detectCommonJsError("Error: Cannot find module 'foo'")).toBe(
-      "Error: Cannot find module",
-    );
-  });
-
-  it("matches SyntaxError at line start", () => {
-    expect(detectCommonJsError("...\nSyntaxError: Unexpected token\n")).toBe("SyntaxError");
-  });
-
-  it("matches UnhandledPromiseRejection", () => {
-    expect(detectCommonJsError("UnhandledPromiseRejection: blah")).toBe(
-      "UnhandledPromiseRejection",
-    );
-  });
-
-  it("returns false on clean startup log", () => {
-    expect(detectCommonJsError("Server ready on port 3000\n")).toBe(false);
+  it.each<[string, string | false]>([
+    ["foo\n[nodemon] app crashed - waiting\n", "[nodemon] app crashed"],
+    ["Error: bad\n    at x\nNode.js v24.11.1\n", "Node.js v"],
+    ["Running on Node.js v24 (info)", false],
+    ["Error: Cannot find module 'foo'", "Error: Cannot find module"],
+    ["...\nSyntaxError: Unexpected token\n", "SyntaxError"],
+    ["UnhandledPromiseRejection: blah", "UnhandledPromiseRejection"],
+    ["Server ready on port 3000\n", false],
+  ])("detects %j as %j", (log, expected) => {
+    expect(detectCommonJsError(log)).toBe(expected);
   });
 });
 
 describe("lastLines", () => {
-  it("returns all lines when fewer than count", () => {
-    expect(lastLines("a\nb", 5)).toBe("a\nb");
-  });
-
-  it("keeps only the last count lines", () => {
-    expect(lastLines("a\nb\nc\nd", 2)).toBe("c\nd");
-  });
-
-  it("preserves a trailing newline as an empty last line", () => {
-    expect(lastLines("a\nb\n", 2)).toBe("b\n");
-  });
-
-  it("returns an empty string for a count of zero or less", () => {
-    expect(lastLines("a\nb\nc", 0)).toBe("");
-    expect(lastLines("a\nb\nc", -3)).toBe("");
+  it.each([
+    ["a\nb", 5, "a\nb"],
+    ["a\nb\nc\nd", 2, "c\nd"],
+    ["a\nb\n", 2, "b\n"],
+    ["a\nb\nc", 0, ""],
+  ])("keeps the last lines of %j for count %i", (content, count, expected) => {
+    expect(lastLines(content, count)).toBe(expected);
   });
 });
 
@@ -137,153 +89,136 @@ describe("copyAndPatchFile", () => {
   };
   const source = (resolved: ResolvedFileSource) => async () => resolved;
   const noSource = () => vi.fn(async (): Promise<ResolvedFileSource> => ({ content: "unused\n" }));
+  const setPort2 = (content: string) => content.replace(/^PORT=.*$/m, "PORT=2");
   afterEach(() => {
     for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
   });
 
-  it("reads from a path source and patches it", async () => {
-    const cur = tmp();
-    const src = join(tmp(), "in.txt");
-    writeFileSync(src, "PORT=1\n");
-    const outcome = await copyAndPatchFile({
-      currentWorktree: cur,
-      relPath: "out.txt",
-      resolveSource: source({ path: src }),
-      patch: async (c) => c.replace("1", "2"),
-      existing: "patch",
-      optional: false,
-    });
-    expect(outcome).toEqual({ kind: "created" });
-    expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("PORT=2\n");
-  });
+  interface OutcomeCase {
+    existingFile?: string;
+    source: { content: string } | "missingPath";
+    patch?: (content: string) => string;
+    existing: "patch" | "keep" | "reseed";
+    optional?: boolean;
+    outcome: string;
+    written?: string;
+  }
 
-  it("uses a content source verbatim through patch", async () => {
+  it.each<[string, OutcomeCase]>([
+    [
+      "creates from a path source through its patch",
+      { source: { content: "PORT=1\n" }, patch: setPort2, existing: "patch", outcome: "created" },
+    ],
+    [
+      "keeps an existing file without a patch",
+      {
+        existingFile: "orig\n",
+        source: { content: "new\n" },
+        existing: "patch",
+        outcome: "keptExisting",
+      },
+    ],
+    [
+      "re-applies the patch to an existing file, keeping the rest",
+      {
+        existingFile: "PORT=1\nCUSTOM=kept\n",
+        source: { content: "new\n" },
+        patch: setPort2,
+        existing: "patch",
+        outcome: "updated",
+        written: "PORT=2\nCUSTOM=kept\n",
+      },
+    ],
+    [
+      "keeps an existing file with the keep policy",
+      {
+        existingFile: "PORT=1\n",
+        source: { content: "new\n" },
+        patch: setPort2,
+        existing: "keep",
+        outcome: "keptExisting",
+      },
+    ],
+    [
+      "leaves an existing file untouched when the patch changes nothing",
+      {
+        existingFile: "PORT=2\n",
+        source: { content: "new\n" },
+        patch: setPort2,
+        existing: "patch",
+        outcome: "upToDate",
+      },
+    ],
+    [
+      "reseeds an existing file from its source",
+      {
+        existingFile: "orig\n",
+        source: { content: "new\n" },
+        patch: (c) => c,
+        existing: "reseed",
+        outcome: "overwritten",
+        written: "new\n",
+      },
+    ],
+    [
+      "skips a missing optional path source",
+      { source: "missingPath", existing: "patch", optional: true, outcome: "sourceMissing" },
+    ],
+  ])("%s", async (_, row) => {
     const cur = tmp();
-    const outcome = await copyAndPatchFile({
-      currentWorktree: cur,
-      relPath: "out.txt",
-      resolveSource: source({ content: "A=1\nB=1\n" }),
-      patch: (c) => c.replace(/^B=.*$/m, "B=2"),
-      existing: "patch",
-      optional: false,
-    });
-    expect(outcome).toEqual({ kind: "created" });
-    expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("A=1\nB=2\n");
-  });
-
-  it("keeps an existing target when the entry has no patch", async () => {
-    const cur = tmp();
-    writeFileSync(join(cur, "out.txt"), "orig\n");
-    const resolveSource = noSource();
+    const target = join(cur, "out.txt");
+    const past = new Date("2020-01-01T00:00:00Z");
+    if (row.existingFile !== undefined) {
+      writeFileSync(target, row.existingFile);
+      utimesSync(target, past, past);
+    }
+    let resolved: ResolvedFileSource;
+    if (row.source === "missingPath") resolved = { path: join(cur, "nope.txt") };
+    else if (row.existingFile === undefined) {
+      const path = join(tmp(), "in.txt");
+      writeFileSync(path, row.source.content);
+      resolved = { path };
+    } else resolved = row.source;
+    const resolveSource = vi.fn(async () => resolved);
     const outcome = await copyAndPatchFile({
       currentWorktree: cur,
       relPath: "out.txt",
       resolveSource,
-      existing: "patch",
-      optional: false,
+      patch: row.patch,
+      existing: row.existing,
+      optional: row.optional ?? false,
     });
-    expect(outcome).toEqual({ kind: "keptExisting" });
-    expect(resolveSource).not.toHaveBeenCalled();
-    expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("orig\n");
+    expect(outcome.kind).toBe(row.outcome);
+    if (row.existingFile === undefined) {
+      expect(existsSync(target)).toBe(row.outcome === "created");
+      if (row.outcome === "created") expect(readFileSync(target, "utf8")).toBe("PORT=2\n");
+    } else if (row.written === undefined) {
+      expect(readFileSync(target, "utf8")).toBe(row.existingFile);
+      expect(statSync(target).mtime).toEqual(past);
+    } else expect(readFileSync(target, "utf8")).toBe(row.written);
+    if (row.existingFile !== undefined && row.existing !== "reseed")
+      expect(resolveSource).not.toHaveBeenCalled();
   });
 
-  it("re-applies the patch to an existing target, keeping the rest", async () => {
-    const cur = tmp();
-    writeFileSync(join(cur, "out.txt"), "PORT=1\nCUSTOM=kept\n");
-    const resolveSource = noSource();
-    const outcome = await copyAndPatchFile({
-      currentWorktree: cur,
-      relPath: "out.txt",
-      resolveSource,
-      patch: (c) => c.replace(/^PORT=.*$/m, "PORT=2"),
-      existing: "patch",
-      optional: false,
-    });
-    expect(outcome).toEqual({ kind: "updated" });
-    expect(resolveSource).not.toHaveBeenCalled();
-    expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("PORT=2\nCUSTOM=kept\n");
-  });
-
-  it("keeps an existing target with the keep policy, without patching it", async () => {
-    const cur = tmp();
-    writeFileSync(join(cur, "out.txt"), "PORT=1\n");
-    const outcome = await copyAndPatchFile({
-      currentWorktree: cur,
-      relPath: "out.txt",
-      resolveSource: noSource(),
-      patch: (c) => c.replace(/^PORT=.*$/m, "PORT=2"),
-      existing: "keep",
-      optional: false,
-    });
-    expect(outcome).toEqual({ kind: "keptExisting" });
-    expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("PORT=1\n");
-  });
-
-  it("leaves an existing target alone when the patch changes nothing", async () => {
+  it.each<["patch" | "reseed", string | undefined]>([
+    ["patch", "PORT=2\n"],
+    ["patch", undefined],
+    ["reseed", "orig\n"],
+  ])("refuses a non-idempotent patch (%s over %j) before writing", async (existing, file) => {
     const cur = tmp();
     const target = join(cur, "out.txt");
-    writeFileSync(target, "PORT=2\n");
-    const past = new Date("2020-01-01T00:00:00Z");
-    utimesSync(target, past, past);
-    const outcome = await copyAndPatchFile({
-      currentWorktree: cur,
-      relPath: "out.txt",
-      resolveSource: noSource(),
-      patch: (c) => c.replace(/^PORT=.*$/m, "PORT=2"),
-      existing: "patch",
-      optional: false,
-    });
-    expect(outcome).toEqual({ kind: "upToDate" });
-    expect(statSync(target).mtime).toEqual(past);
-  });
-
-  it("refuses a patch that is not idempotent on re-apply, leaving the target untouched", async () => {
-    const cur = tmp();
-    const target = join(cur, "out.txt");
-    writeFileSync(target, "PORT=2\n");
-    const past = new Date("2020-01-01T00:00:00Z");
-    utimesSync(target, past, past);
-    const run = copyAndPatchFile({
-      currentWorktree: cur,
-      relPath: "out.txt",
-      resolveSource: noSource(),
-      patch: async (c) => `${c}x\n`,
-      existing: "patch",
-      optional: false,
-    });
-    await expect(run).rejects.toThrow(WorkspaceError);
-    expect(readFileSync(target, "utf-8")).toBe("PORT=2\n");
-    expect(statSync(target).mtime).toEqual(past);
-  });
-
-  it("refuses a patch that is not idempotent on create, writing nothing", async () => {
-    const cur = tmp();
+    if (file !== undefined) writeFileSync(target, file);
     const run = copyAndPatchFile({
       currentWorktree: cur,
       relPath: "out.txt",
       resolveSource: source({ content: "PORT=2\n" }),
       patch: (c) => `${c}x\n`,
-      existing: "patch",
+      existing,
       optional: false,
     });
     await expect(run).rejects.toThrow(WorkspaceError);
-    expect(existsSync(join(cur, "out.txt"))).toBe(false);
-  });
-
-  it("refuses a patch that is not idempotent on reseed, leaving the target untouched", async () => {
-    const cur = tmp();
-    const target = join(cur, "out.txt");
-    writeFileSync(target, "orig\n");
-    const run = copyAndPatchFile({
-      currentWorktree: cur,
-      relPath: "out.txt",
-      resolveSource: source({ content: "PORT=2\n" }),
-      patch: (c) => `${c}x\n`,
-      existing: "reseed",
-      optional: false,
-    });
-    await expect(run).rejects.toThrow(WorkspaceError);
-    expect(readFileSync(target, "utf-8")).toBe("orig\n");
+    if (file === undefined) expect(existsSync(target)).toBe(false);
+    else expect(readFileSync(target, "utf-8")).toBe(file);
   });
 
   it.each(["index", "stagedDeletion"])(
@@ -370,36 +305,6 @@ describe("copyAndPatchFile", () => {
       }),
     ).rejects.toThrow(ConfigError);
     expect(readFileSync(target, "utf8")).toBe("original");
-  });
-
-  it("reseeds an existing target from its source", async () => {
-    const cur = tmp();
-    writeFileSync(join(cur, "out.txt"), "orig\n");
-    const outcome = await copyAndPatchFile({
-      currentWorktree: cur,
-      relPath: "out.txt",
-      resolveSource: source({ content: "new\n" }),
-      patch: (c) => c,
-      existing: "reseed",
-      optional: false,
-    });
-    expect(outcome).toEqual({ kind: "overwritten" });
-    expect(readFileSync(join(cur, "out.txt"), "utf-8")).toBe("new\n");
-  });
-
-  it("skips an optional path source that is missing", async () => {
-    const cur = tmp();
-    const sourcePath = join(cur, "nope.txt");
-    const outcome = await copyAndPatchFile({
-      currentWorktree: cur,
-      relPath: "out.txt",
-      resolveSource: source({ path: sourcePath }),
-      patch: (c) => c,
-      existing: "patch",
-      optional: true,
-    });
-    expect(outcome).toEqual({ kind: "sourceMissing", sourcePath });
-    expect(existsSync(join(cur, "out.txt"))).toBe(false);
   });
 
   it("throws a WorkspaceError on a missing required path source", async () => {

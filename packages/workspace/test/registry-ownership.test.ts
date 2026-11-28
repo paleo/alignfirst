@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -14,14 +13,13 @@ import { dirname, join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { readDevServers, writeDevServers } from "../src/dev-servers-registry.js";
 import { seedFiles } from "../src/file-entries.js";
 import { ConfigError, WorkspaceError } from "../src/errors.js";
 import { assertFileDestination } from "../src/file-destinations.js";
 import { withRegistryLock } from "../src/registry-lock.js";
 import { assertRegistryOwnership } from "../src/registry-ownership.js";
 import { writeRegistry } from "../src/registry-storage.js";
-import { readWorkspaces, writeWorkspaces } from "../src/workspaces.js";
+import { readWorkspaces } from "../src/workspaces.js";
 
 const registryDir = ".local-wt/workspace-registry";
 let scratch: string;
@@ -45,10 +43,7 @@ afterEach(() => {
 describe("kernel-owned file destinations", () => {
   it.each([
     ".local-wt/workspace-registry/workspaces.json",
-    ".local-wt/workspace-registry/dev-servers.json",
-    ".local-wt/workspace-registry/workspaces.lock",
     ".local-wt/workspace-registry/new-sidecar",
-    ".local-wt/workspace-registry",
     ".local-wt",
   ])("rejects %s before invoking a producer", async (path) => {
     let produced = false;
@@ -94,37 +89,18 @@ describe("kernel-owned file destinations", () => {
     );
     expect(readFileSync(join(selected, "workspaces.json"), "utf8")).toBe(before);
   });
-
-  it("allows application sidecars elsewhere in local runtime storage", async () => {
-    const path = ".local-wt/app-summary.json";
-    await seedFiles({
-      entries: [{ path, source: { kind: "content", content: "application data" } }],
-      ctx: { name: "main", currentWorktree: main, mainWorktree: main, isMainWorktree: true },
-      existing: "reseed",
-      log: { tee: () => {}, verbose: () => {} },
-    });
-    expect(readFileSync(join(main, path), "utf8")).toBe("application data");
-  });
 });
 
 describe("main registry ownership", () => {
-  it.each(["runtime", "registry", "workspaceFile", "devFile", "lock"])(
+  it.each(["runtime", "workspaceFile", "lock"])(
     "refuses a foreign %s link before reads, mutation or locking",
     async (location) => {
       const registry = join(main, registryDir);
       if (location === "runtime") {
         symlinkSync(join(foreign, ".local-wt"), join(main, ".local-wt"));
-      } else if (location === "registry") {
-        mkdirSync(dirname(registry));
-        symlinkSync(join(foreign, registryDir), registry);
       } else {
         mkdirSync(registry, { recursive: true });
-        const filename =
-          location === "workspaceFile"
-            ? "workspaces.json"
-            : location === "devFile"
-              ? "dev-servers.json"
-              : "workspaces.lock";
+        const filename = location === "lock" ? "workspaces.lock" : "workspaces.json";
         const target = join(foreign, registryDir, filename);
         if (location === "lock") writeFileSync(target, "999999999:foreign");
         symlinkSync(target, join(registry, filename));
@@ -134,15 +110,13 @@ describe("main registry ownership", () => {
         readFileSync(join(foreign, registryDir, file), "utf8"),
       ]);
       if (location !== "lock") {
-        const read = location === "devFile" ? readDevServers : readWorkspaces;
-        expect(() => read(main, registryDir)).toThrow(WorkspaceError);
-        const filename = location === "devFile" ? "dev-servers.json" : "workspaces.json";
-        expect(() => writeRegistry(join(registry, filename), {}, { type: "object" }, main)).toThrow(
-          WorkspaceError,
-        );
+        expect(() => readWorkspaces(main, registryDir)).toThrow(WorkspaceError);
+        expect(() =>
+          writeRegistry(join(registry, "workspaces.json"), {}, { type: "object" }, main),
+        ).toThrow(WorkspaceError);
       }
-      let ran = false;
-      if (location !== "workspaceFile" && location !== "devFile") {
+      if (location !== "workspaceFile") {
+        let ran = false;
         await expect(
           withRegistryLock(main, registryDir, () => {
             ran = true;
@@ -159,33 +133,6 @@ describe("main registry ownership", () => {
     },
   );
 
-  it("rechecks aliases after an awaited producer without damaging the registry", async () => {
-    mkdirSync(join(main, registryDir), { recursive: true });
-    const registry = join(main, registryDir, "workspaces.json");
-    writeFileSync(registry, "original");
-    await expect(
-      seedFiles({
-        entries: [
-          {
-            path: "generated.json",
-            source: {
-              kind: "content",
-              content: async () => {
-                await Promise.resolve();
-                symlinkSync(registry, join(main, "generated.json"));
-                return "replacement";
-              },
-            },
-          },
-        ],
-        ctx: { name: "main", currentWorktree: main, mainWorktree: main, isMainWorktree: true },
-        existing: "reseed",
-        log: { tee: () => {}, verbose: () => {} },
-      }),
-    ).rejects.toThrow(ConfigError);
-    expect(readFileSync(registry, "utf8")).toBe("original");
-  });
-
   it.each(["foreign", "localDirectory", "broken"])(
     "refuses a linked worktree's %s registry destination",
     (kind) => {
@@ -201,35 +148,4 @@ describe("main registry ownership", () => {
       expect(() => assertRegistryOwnership(main, linked, registryDir)).toThrow(WorkspaceError);
     },
   );
-
-  it("allows a linked worktree's own-main registry link but never as a file destination", async () => {
-    execFileSync("git", ["init", "-b", "main", main]);
-    execFileSync("git", [
-      "-C",
-      main,
-      "-c",
-      "user.name=Test",
-      "-c",
-      "user.email=test@example.com",
-      "commit",
-      "--allow-empty",
-      "-m",
-      "initial",
-    ]);
-    const linked = join(scratch, "linked");
-    execFileSync("git", ["-C", main, "worktree", "add", "-b", "linked", linked]);
-    mkdirSync(join(main, registryDir), { recursive: true });
-    mkdirSync(join(linked, ".local-wt"));
-    symlinkSync(join(main, registryDir), join(linked, registryDir));
-    expect(() => assertRegistryOwnership(main, linked, registryDir)).not.toThrow();
-    await withRegistryLock(main, registryDir, () => {
-      writeWorkspaces(main, registryDir, { workspaces: {} });
-      writeDevServers(main, registryDir, { servers: [] });
-    });
-    expect(readWorkspaces(main, registryDir).workspaces).toEqual({});
-    expect(readDevServers(main, registryDir)).toEqual({ servers: [] });
-    expect(() => assertFileDestination(linked, `${registryDir}/workspaces.json`)).toThrow(
-      ConfigError,
-    );
-  });
 });

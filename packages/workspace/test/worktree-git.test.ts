@@ -3,20 +3,21 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { WorkspaceError } from "../src/errors.js";
 import { headCommit } from "../src/git.js";
-import { createBranch, useExistingBranch, type WorktreeContext } from "../src/worktree.js";
+import { createBranch, type WorktreeContext } from "../src/worktree.js";
 
-// These exercise `worktree.ts` against a real git repo. The functions read the process cwd, so we
-// chdir into the fixture repo (vitest's default `forks` pool isolates the cwd mutation per file).
+// These exercise `worktree.ts` against one real git repo, with fresh branch names per case. The
+// functions read the process cwd, so we chdir into the fixture repo (vitest's default `forks` pool
+// isolates the cwd mutation per file).
 let root: string;
 let repo: string;
 let ctx: WorktreeContext;
 let originalCwd: string;
 
-beforeEach(() => {
+beforeAll(() => {
   originalCwd = process.cwd();
   root = mkdtempSync(join(tmpdir(), "workspace-worktree-"));
   repo = join(root, "repo");
@@ -30,7 +31,7 @@ beforeEach(() => {
   ctx = { currentWorktree: repo, mainWorktree: repo, isMainWorktree: true };
 });
 
-afterEach(() => {
+afterAll(() => {
   process.chdir(originalCwd);
   rmSync(root, { recursive: true, force: true });
 });
@@ -38,45 +39,23 @@ afterEach(() => {
 const run = { verbose: false };
 
 describe("createBranch conflicts", () => {
-  it("throws on an exact conflict without --dedupe", async () => {
-    git(["branch", "test"]);
-    const attempt = Promise.resolve().then(() => createBranch("test", ctx, run));
-    await expect(attempt).rejects.toThrow(WorkspaceError);
-  });
-
-  it("suffixes an exact conflict with --dedupe", () => {
-    git(["branch", "test"]);
-    createBranch("test", ctx, run, { dedupe: true });
-    expect(branchExists("test-2")).toBe(true);
-    expect(existsSync(join(root, "repo-test-2"))).toBe(true);
-  });
-
-  it("throws on a namespace conflict by default", () => {
-    git(["branch", "test/abc"]);
-    expect(() => createBranch("test", ctx, run)).toThrow(WorkspaceError);
-  });
-
-  it("suffixes a namespace conflict with --dedupe", () => {
-    git(["branch", "test/abc"]);
-    createBranch("test", ctx, run, { dedupe: true });
-    expect(branchExists("test-2")).toBe(true);
-    expect(existsSync(join(root, "repo-test-2"))).toBe(true);
-  });
-
-  it("throws on an ancestor conflict even with --dedupe", async () => {
-    git(["branch", "test"]);
-    const attempt = Promise.resolve().then(() =>
-      createBranch("test/abc", ctx, run, { dedupe: true }),
-    );
-    await expect(attempt).rejects.toThrow(WorkspaceError);
-  });
-
-  it("keeps branch and directory aligned when a candidate directory is taken", () => {
-    git(["branch", "test"]);
-    mkdirSync(join(root, "repo-test-2"));
-    createBranch("test", ctx, run, { dedupe: true });
-    expect(branchExists("test-3")).toBe(true);
-    expect(existsSync(join(root, "repo-test-3"))).toBe(true);
+  it.each<[string, string[], string, boolean, string | undefined, string?]>([
+    ["an exact conflict", ["exact"], "exact", false, undefined],
+    ["an exact conflict with --dedupe", ["exactd"], "exactd", true, "exactd-2"],
+    ["a namespace conflict", ["space/abc"], "space", false, undefined],
+    ["a namespace conflict with --dedupe", ["spaced/abc"], "spaced", true, "spaced-2"],
+    ["an ancestor conflict even with --dedupe", ["ancestor"], "ancestor/abc", true, undefined],
+    ["a taken candidate directory", ["aligned"], "aligned", true, "aligned-3", "repo-aligned-2"],
+  ])("resolves %s", (_, existing, requested, dedupe, created, takenDir) => {
+    for (const branch of existing) git(["branch", branch]);
+    if (takenDir !== undefined) mkdirSync(join(root, takenDir));
+    if (created === undefined) {
+      expect(() => createBranch(requested, ctx, run, { dedupe })).toThrow(WorkspaceError);
+      return;
+    }
+    createBranch(requested, ctx, run, { dedupe });
+    expect(branchExists(created)).toBe(true);
+    expect(existsSync(join(root, `repo-${created}`))).toBe(true);
   });
 });
 
@@ -93,42 +72,42 @@ describe("createBranch start point", () => {
       "",
     );
   });
-});
-
-describe("worktree error paths", () => {
-  it("distinguishes an unborn HEAD from a broken or non-commit branch", () => {
-    const source = { cwd: repo, env: process.env };
-    const head = gitOutput(["rev-parse", "HEAD"]);
-    expect(headCommit(source)).toBe(head);
-    git(["update-ref", "-d", "refs/heads/main"]);
-    expect(headCommit(source)).toBeUndefined();
-    writeFileSync(join(repo, ".git/refs/heads/main"), `${"1".repeat(40)}\n`);
-    expect(() => headCommit(source)).toThrow();
-    const tree = gitOutput(["rev-parse", `${head}^{tree}`]);
-    writeFileSync(join(repo, ".git/refs/heads/main"), `${tree}\n`);
-    expect(() => headCommit(source)).toThrow(Error);
-  });
 
   it("throws when --from does not resolve", () => {
     expect(() => createBranch("feat", ctx, run, { from: "does-not-exist" })).toThrow(
       WorkspaceError,
     );
   });
+});
 
-  it("throws when the existing branch is missing", () => {
-    expect(() => useExistingBranch("nope", ctx, run)).toThrow(WorkspaceError);
+describe("headCommit", () => {
+  it("distinguishes an unborn HEAD from a broken or non-commit branch", () => {
+    const unborn = join(root, "unborn");
+    mkdirSync(unborn);
+    git(["init", "-b", "main"], unborn);
+    git(["commit", "--allow-empty", "-m", "init"], unborn);
+    const source = { cwd: unborn, env: process.env };
+    const head = gitOutput(["rev-parse", "HEAD"], unborn);
+    expect(headCommit(source)).toBe(head);
+    git(["update-ref", "-d", "refs/heads/main"], unborn);
+    expect(headCommit(source)).toBeUndefined();
+    writeFileSync(join(unborn, ".git/refs/heads/main"), `${"1".repeat(40)}\n`);
+    expect(() => headCommit(source)).toThrow();
+    const tree = gitOutput(["rev-parse", `${head}^{tree}`], unborn);
+    writeFileSync(join(unborn, ".git/refs/heads/main"), `${tree}\n`);
+    expect(() => headCommit(source)).toThrow(Error);
   });
 });
 
-function git(args: string[]): void {
+function git(args: string[], cwd = repo): void {
   execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], {
-    cwd: repo,
+    cwd,
     stdio: "pipe",
   });
 }
 
-function gitOutput(args: string[]): string {
-  return execFileSync("git", args, { cwd: repo, encoding: "utf-8" }).trim();
+function gitOutput(args: string[], cwd = repo): string {
+  return execFileSync("git", args, { cwd, encoding: "utf-8" }).trim();
 }
 
 function branchExists(branch: string): boolean {

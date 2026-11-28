@@ -89,16 +89,11 @@ describe("findOrphanNames", () => {
     }
   });
 
-  it("returns linked workspaces whose worktree directory is missing", () => {
-    const exists = (p: string) => p !== "/repo/wt-b";
-    expect(findOrphanNames(registry(), exists)).toEqual(["wt-b"]);
-  });
-
-  it("never reports the main worktree even when its directory is missing", () => {
-    expect(findOrphanNames(registry(), () => false)).toEqual(["wt-a", "wt-b"]);
-  });
-
-  it("returns an empty array when every worktree exists", () => {
-    expect(findOrphanNames(registry(), () => true)).toEqual([]);
+  it.each<[string, (path: string) => boolean, string[]]>([
+    ["a missing linked worktree", (path) => path !== "/repo/wt-b", ["wt-b"]],
+    ["every missing linked worktree, never main", () => false, ["wt-a", "wt-b"]],
+    ["nothing when every worktree exists", () => true, []],
+  ])("returns %s", (_, exists, expected) => {
+    expect(findOrphanNames(registry(), exists)).toEqual(expected);
   });
 });

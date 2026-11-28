@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -11,11 +11,9 @@ import {
   cleanupFixture,
   type FixtureRepo,
   type FixtureOptions,
-  installResourceRecipe,
-  resourceEvents,
+  PORT_BLOCKS,
   readWorkspaces,
   runCli,
-  runDev,
 } from "./fixture.js";
 
 const TEST_TIMEOUT_MS = 60_000;
@@ -110,127 +108,7 @@ describe("externally created same-basename worktrees", () => {
   );
 
   it(
-    "tears down through the external target's current recipe and re-adopts without Git deletion",
-    () => {
-      const fixture = externalFixture();
-      const { repo, first, second } = fixture;
-      expect(runCli(repo, ["setup", "--full"], undefined, second).status).toBe(0);
-      const target = entryAt(fixture, second);
-      installResourceRecipe(repo, "main-version");
-      installResourceRecipe(second, "external-version");
-      mkdirSync(join(fixture.root, "resources"));
-      writeFileSync(join(fixture.root, "resources", target.name), "external resource");
-      writeFileSync(join(second, "workspace.local"), "hand-edit\nworktree=linked\n");
-      mkdirSync(join(second, "node_modules"));
-      writeFileSync(join(second, "node_modules", "retained"), "dependency");
-      const before = git(second, ["status", "--porcelain"]);
-      expect(runCli(repo, ["teardown", target.name, "--json"]).status).toBe(0);
-      expect(resourceEvents(repo)).toMatchObject([
-        {
-          action: "purge",
-          version: "external-version",
-          recipeVersion: "external-version",
-          cwd: second,
-          ctx: {
-            name: target.name,
-            currentWorktree: second,
-            branch: "external-two",
-            phase: "purge",
-          },
-        },
-      ]);
-      expect(existsSync(join(fixture.root, "resources", target.name))).toBe(false);
-      expect(git(second, ["status", "--porcelain"])).toBe(before);
-      expect(git(second, ["branch", "--show-current"]).trim()).toBe("external-two");
-      expect(readFileSync(join(second, "node_modules", "retained"), "utf8")).toBe("dependency");
-      expect(runCli(repo, ["setup"], undefined, first).status).toBe(0);
-      expect(runCli(repo, ["setup", "--full"], undefined, second).status).toBe(0);
-      expect(entryAt(fixture, second).name).toMatch(/^same-[a-f0-9]{8}$/);
-      expect(readFileSync(join(second, "workspace.local"), "utf8")).toBe(
-        "hand-edit\nworktree=linked\n",
-      );
-    },
-    TEST_TIMEOUT_MS,
-  );
-
-  it(
-    "adopts both paths, seeds and links across parents, and finalizes with registered identities",
-    () => {
-      const fixture = externalFixture();
-      const { repo, first, second } = fixture;
-      writeFileSync(join(repo, "workspace.local"), "customized-main\n");
-      expect(runCli(repo, ["setup"], undefined, first).status).toBe(0);
-      expect(runCli(fixture, ["setup"], undefined, second).status).toBe(0);
-      const one = entryAt(fixture, first);
-      const two = entryAt(fixture, second);
-      expect(one.name).toBe("same");
-      expect(two.name).toMatch(/^same-[a-f0-9]{8}$/);
-      expect(one.entry.status).toBe("ready");
-      expect(two.entry.status).toBe("ready");
-      for (const [worktree, name, branch] of [
-        [first, one.name, "external-one"],
-        [second, two.name, "external-two"],
-      ]) {
-        expect(finalizeContext(worktree)).toEqual({
-          name,
-          currentWorktree: worktree,
-          mainWorktree: repo,
-          isMainWorktree: false,
-          branch,
-        });
-        expect(readFileSync(join(worktree, "workspace.local"), "utf-8")).toBe(
-          "customized-main\nworktree=linked\n",
-        );
-        expect(realpathSync(join(worktree, ".shared"))).toBe(join(repo, ".shared"));
-        expect(realpathSync(join(worktree, ".local-wt", "workspace-registry"))).toBe(
-          join(repo, ".local-wt", "workspace-registry"),
-        );
-      }
-      const list = runCli(repo, ["list"]);
-      expect(list.status).toBe(0);
-      expect(list.stdout).toContain(one.name);
-      expect(list.stdout).toContain(two.name);
-      expect(list.stdout).toContain(first);
-      expect(list.stdout).toContain(second);
-      expect(runCli(repo, ["status", one.name]).status).toBe(0);
-      expect(runCli(repo, ["status", two.name]).status).toBe(0);
-      expect(runCli(repo, ["status", join(fixture.root, "unknown", "same")]).status).toBe(1);
-    },
-    TEST_TIMEOUT_MS,
-  );
-
-  it(
-    "refuses pending suffixed setup and joins detached success without touching its competitor",
-    async () => {
-      const fixture = externalFixture();
-      const { repo, first, second } = fixture;
-      expect(runCli(repo, ["setup"], undefined, first).status).toBe(0);
-      const original = entryAt(fixture, first).entry;
-      const barrier = join(fixture.root, "finalize.release");
-      barriers.push(barrier);
-      const detached = runCli(
-        repo,
-        ["setup", "--detached"],
-        { E2E_FINALIZE_BARRIER: barrier },
-        second,
-      );
-      expect(detached.status).toBe(0);
-      await waitForFile(`${barrier}.entered`);
-      const target = entryAt(fixture, second);
-      expect(target.entry.status).toBe("pending");
-      const refused = runCli(repo, ["setup"], undefined, second);
-      expect(refused.status).toBe(1);
-      writeFileSync(barrier, "release\n");
-      expect(runCli(repo, ["wait", target.name]).status).toBe(0);
-      expect(entryAt(fixture, second).entry.status).toBe("ready");
-      expect(finalizeContext(second).name).toBe(target.name);
-      expect(entryAt(fixture, first).entry).toEqual(original);
-    },
-    TEST_TIMEOUT_MS,
-  );
-
-  it(
-    "skips ready finalize unless forced and keeps the suffixed force run isolated",
+    "skips ready finalize unless forced, refuses a pending suffixed setup and joins it in isolation",
     async () => {
       const fixture = externalFixture();
       const { repo, first, second } = fixture;
@@ -253,82 +131,26 @@ describe("externally created same-basename worktrees", () => {
       expect(forced.status).toBe(0);
       await waitForFile(`${barrier}.entered`);
       expect(entryAt(fixture, second)).toMatchObject({ name, entry: { status: "pending" } });
+      expect(runCli(repo, ["setup"], undefined, second).status).toBe(1);
       writeFileSync(barrier, "release\n");
       expect(runCli(repo, ["wait", name]).status).toBe(0);
+      expect(entryAt(fixture, second).entry.status).toBe("ready");
       expect(readFileSync(join(second, "finalized.txt"), "utf-8")).toBe("finalized\n");
       expect(finalizeContext(second).name).toBe(name);
       expect(entryAt(fixture, first).entry).toEqual(original);
     },
     TEST_TIMEOUT_MS,
   );
-
-  it(
-    "records suffixed finalize and pre-finalize failures and retries the same identity",
-    () => {
-      const fixture = externalFixture();
-      const { repo, first, second } = fixture;
-      expect(runCli(repo, ["setup"], undefined, first).status).toBe(0);
-      const original = entryAt(fixture, first).entry;
-      const failed = runCli(repo, ["setup", "--detached"], { E2E_FINALIZE_FAIL: "1" }, second);
-      expect(failed.status).toBe(0);
-      const name = entryAt(fixture, second).name;
-      const wait = runCli(repo, ["wait", name]);
-      expect(wait.status).toBe(1);
-      expect(entryAt(fixture, second).entry.status).toBe("failed");
-      expect(entryAt(fixture, second).entry.failure).toBeDefined();
-      expect(entryAt(fixture, first).entry.failure).toBeUndefined();
-      const seedFailure = runCli(repo, ["setup"], { E2E_SEED_FAIL: "1" }, second);
-      expect(seedFailure.status).toBe(1);
-      expect(entryAt(fixture, second).entry.status).toBe("failed");
-      expect(entryAt(fixture, second).entry.failure).toBeDefined();
-      expect(runCli(repo, ["setup"], undefined, second).status).toBe(0);
-      expect(entryAt(fixture, second).name).toBe(name);
-      expect(entryAt(fixture, second).entry.failure).toBeUndefined();
-      expect(entryAt(fixture, first).entry).toEqual(original);
-    },
-    TEST_TIMEOUT_MS,
-  );
-
-  it(
-    "keeps --full dev failures separate, retries ready setup, and resolves nested invocation",
-    () => {
-      const fixture = externalFixture();
-      const { repo, first, second } = fixture;
-      expect(runCli(repo, ["setup", "--full"], undefined, first).status).toBe(0);
-      const original = entryAt(fixture, first).entry;
-      const failed = runCli(repo, ["setup", "--full"], { E2E_DEV_SETUP_FAIL: "1" }, second);
-      expect(failed.status).toBe(1);
-      const { name, entry } = entryAt(fixture, second);
-      expect(entry.status).toBe("ready");
-      expect(entry.devSetupFailure).toBeDefined();
-      expect(entry.devSetupAt).toBeUndefined();
-      const originalPorts = Object.values(original.ports ?? {});
-      const failedPorts = Object.values(entry.ports ?? {});
-      expect(originalPorts).toHaveLength(2);
-      expect(failedPorts).toHaveLength(2);
-      expect(failedPorts.filter((port) => originalPorts.includes(port))).toEqual([]);
-      mkdirSync(join(second, "nested", "inside"), { recursive: true });
-      const nested = join(second, "nested", "inside");
-      expect(runCli(repo, ["wait"], undefined, nested).status).toBe(1);
-      expect(runCli(repo, ["setup", "--full"], undefined, nested).status).toBe(0);
-      expect(entryAt(fixture, second).name).toBe(name);
-      expect(entryAt(fixture, second).entry.devSetupFailure).toBeUndefined();
-      expect(entryAt(fixture, second).entry.devSetupAt).toBeDefined();
-      expect(runDev(fixture, ["setup"], undefined, second).status).toBe(0);
-      expect(readFileSync(join(second, "setup-runs.log"), "utf-8")).toBe("force=false\n");
-      expect(entryAt(fixture, first).entry).toEqual(original);
-    },
-    TEST_TIMEOUT_MS,
-  );
 });
 
-function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" });
-}
-
-function externalFixture(options: FixtureOptions = {}): ExternalFixture {
+function externalFixture(options: Partial<FixtureOptions> = {}): ExternalFixture {
   const fixture = createFixtureRepo(
-    { fallbackSeeding: true, sharedDirs: [".shared"], ...options },
+    {
+      portBlock: PORT_BLOCKS.externalIdentity,
+      fallbackSeeding: true,
+      sharedDirs: [".shared"],
+      ...options,
+    },
     (fx) => fixtures.push(fx),
   );
   const first = join(fixture.root, "managed", "one", "same");

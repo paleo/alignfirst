@@ -69,21 +69,21 @@ it("resolves safe nonnegative startup limits without reading ambient values", as
     await expect(attempt).rejects.toThrow(ConfigError);
     await expect(attempt).rejects.not.toThrow("PRIVATE");
   }
-  for (const value of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1, Number.POSITIVE_INFINITY]) {
-    expect(() =>
-      validateWorkspaceSettings(
-        { devServer: { servers: [], maxConcurrentDevServers: value } },
-        "recipe",
-      ),
-    ).toThrow(ConfigError);
-    expect(() =>
-      validateWorkspaceSettings(
-        { devServer: { servers: [], maxConcurrentDevServers: { ...binding, default: value } } },
-        "recipe",
-      ),
-    ).toThrow(ConfigError);
-  }
 });
+
+it.each([-1, 0.5, Number.MAX_SAFE_INTEGER + 1, Number.POSITIVE_INFINITY])(
+  "rejects the startup limit %s, literal or as a default",
+  (value) => {
+    const binding = { env: "DEV_LIMIT", default: value };
+    for (const maxConcurrentDevServers of [value, binding])
+      expect(() =>
+        validateWorkspaceSettings(
+          { devServer: { servers: [], maxConcurrentDevServers } },
+          "recipe",
+        ),
+      ).toThrow(ConfigError);
+  },
+);
 
 it("checks source-independent recipe semantics after structural validation", () => {
   const spawn = {

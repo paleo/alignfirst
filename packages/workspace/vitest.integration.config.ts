@@ -6,6 +6,5 @@ requireBuiltArtifacts(sharedCliArtifacts);
 export default defineConfig({
   test: {
     include: ["test/e2e/**/*.test.ts"],
-    fileParallelism: false,
   },
 });

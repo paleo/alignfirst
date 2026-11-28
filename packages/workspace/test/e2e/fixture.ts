@@ -28,7 +28,14 @@ const probe = spawnSync(
 );
 if (probe.status !== 0) throw new Error(`Workspace CLI runtime failed: ${probe.stderr}`);
 export const cliRuntime: { bun?: string; executable: string } = JSON.parse(probe.stdout);
-export const DEV_PORTS = { first: 47100, last: 47109, excluded: 47101 };
+/** One 10-port block per e2e file, so files allocate and probe disjoint ports in parallel. */
+export const PORT_BLOCKS = {
+  setup: 0,
+  externalIdentity: 1,
+  interruption: 2,
+  devCallbacks: 3,
+  teardown: 4,
+} as const;
 const fixtures = new Set<FixtureRepo>();
 
 export interface FixtureRepo {
@@ -38,7 +45,11 @@ export interface FixtureRepo {
 }
 
 export interface FixtureOptions {
+  /** Index into the port blocks starting at 47100; see {@link PORT_BLOCKS}. */
+  portBlock: number;
   portless?: boolean;
+  /** Adds the command service whose events record as `legacyStart`/`legacyStop`. */
+  legacyService?: boolean;
   fallbackSeeding?: boolean;
   oldConfig?: boolean;
   sharedDirs?: string[];
@@ -48,7 +59,7 @@ export interface FixtureOptions {
 
 /** Disposable Git, home and project-owned scripts. No consumer wrapper or local dependencies. */
 export function createFixtureRepo(
-  options: FixtureOptions = {},
+  options: FixtureOptions,
   register?: (fixture: FixtureRepo) => void,
 ): FixtureRepo {
   const root = mkdtempSync(join(tmpdir(), "workspace-e2e-"));
@@ -109,6 +120,11 @@ function fixtureManifest(options: FixtureOptions): WorkspaceManifest {
   const command = (phase: string): Command => ({
     run: [cliExecutable, "scripts/lifecycle.mjs", phase],
   });
+  // Without recording, a callback is a no-op: let the shell exit before a runtime starts.
+  const callback = (phase: string): Command => ({
+    run: `[ -n "$E2E_CALLBACK_LIFECYCLE$E2E_CALLBACK_RECORD" ] || exit 0; exec ${shellQuote(cliExecutable)} scripts/lifecycle.mjs ${phase}`,
+  });
+  const firstPort = 47_100 + 10 * options.portBlock;
   return {
     workspace: {
       sharedDirs: options.sharedDirs,
@@ -135,9 +151,9 @@ function fixtureManifest(options: FixtureOptions): WorkspaceManifest {
       ? undefined
       : {
           ports: {
-            first: DEV_PORTS.first,
-            last: DEV_PORTS.last,
-            exclude: [DEV_PORTS.excluded],
+            first: firstPort,
+            last: firstPort + 9,
+            exclude: [firstPort + 1],
             declare: ["web", "api"],
           },
           runFiles: [
@@ -155,11 +171,11 @@ function fixtureManifest(options: FixtureOptions): WorkspaceManifest {
           runFilesInputs: ["E2E_HOST"],
           setup: [{ name: "infrastructure", ...command("devSetup") }],
           servers: [
-            ...["docker", "cache", "legacy"].map((name) => ({
+            ...["docker", "cache", ...(options.legacyService ? ["legacy"] : [])].map((name) => ({
               kind: "command" as const,
               name,
-              start: command(`start:${name}`),
-              stop: command(`stop:${name}`),
+              start: callback(`start:${name}`),
+              stop: callback(`stop:${name}`),
             })),
             {
               kind: "spawn",
@@ -170,6 +186,10 @@ function fixtureManifest(options: FixtureOptions): WorkspaceManifest {
           ],
         },
   };
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function lifecycleSource(): string {
@@ -211,7 +231,7 @@ if (action === "finalize") {
   process.stdout.write("web=" + (process.env.E2E_HOST ?? "localhost") + ":" + ctx.ports.web + "\\n");
 } else if (action === "devSetup") {
   if (process.env.E2E_SETUP_GRANDCHILD_FILE !== undefined) {
-    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+    const child = spawn("sleep", ["600"], { stdio: "ignore" });
     writeFileSync(process.env.E2E_SETUP_GRANDCHILD_FILE, String(child.pid));
   }
   await barrier("E2E_DEV_SETUP_BARRIER");
@@ -225,7 +245,6 @@ if (action === "finalize") {
   if (process.env.E2E_PURGE_LOCK_WORKTREE === "1") execFileSync("git", ["worktree", "lock", ctx.currentWorktree], { cwd: ctx.mainWorktree });
 } else {
   const [event, label] = action.split(":");
-  if (process.env.E2E_CALLBACK_LIFECYCLE !== "1" && process.env.E2E_CALLBACK_RECORD !== "1") process.exit(0);
   const legacy = label === "legacy";
   appendFileSync(join(ctx.mainWorktree, "callback-runs.jsonl"), JSON.stringify({ event: legacy ? (event === "start" ? "legacyStart" : "legacyStop") : event, name: ctx.name, cwd: ctx.currentWorktree, ports: ctx.ports, ...(legacy ? {} : { label }) }) + "\\n");
   if (event === "start" && process.env.E2E_CALLBACK_START_FAIL === label) throw new Error("e2e callback start boom");

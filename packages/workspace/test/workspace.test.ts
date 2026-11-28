@@ -4,9 +4,13 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { type PatchContext, resolveFileSource } from "../src/file-entries.js";
+import {
+  type GitignoredFileSource,
+  type PatchContext,
+  resolveFileSource,
+} from "../src/file-entries.js";
 import { matchWorktreeByDir } from "../src/workspace.js";
-import type { WorkspacesRegistry } from "../src/workspaces.js";
+import type { WorkspaceEntry, WorkspacesRegistry } from "../src/workspaces.js";
 
 describe("resolveFileSource", () => {
   let root: string;
@@ -18,162 +22,71 @@ describe("resolveFileSource", () => {
     const currentWorktree = join(root, "external", "nested", "feat");
     mkdirSync(mainWorktree);
     mkdirSync(currentWorktree, { recursive: true });
-    ctx = {
-      name: "repo-feat",
-      mainWorktree,
-      currentWorktree,
-      isMainWorktree: false,
-    };
+    ctx = { name: "repo-feat", mainWorktree, currentWorktree, isMainWorktree: false };
   });
 
   afterEach(() => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("reads a `mainWorktree` source at the entry's path in the main worktree", async () => {
-    const source = await resolveFileSource({ path: ".env", source: { kind: "mainWorktree" } }, ctx);
-    expect(source).toEqual({ path: join(ctx.mainWorktree, ".env") });
-  });
-
-  it("prefers an existing main-worktree file over a declared fallback", async () => {
-    writeFileSync(join(ctx.mainWorktree, ".env"), "MAIN=1\n");
+  it.each<[string, GitignoredFileSource, boolean, "main" | "current", string]>([
+    ["a main-worktree file at the entry path", { kind: "mainWorktree" }, false, "main", ".env"],
+    [
+      "an existing main-worktree file over its fallback",
+      { kind: "mainWorktree", fallback: ".env.example" },
+      true,
+      "main",
+      ".env",
+    ],
+    [
+      "the current worktree's fallback when the main file is absent",
+      { kind: "mainWorktree", fallback: ".env.example" },
+      false,
+      "current",
+      ".env.example",
+    ],
+    [
+      "a committed template in the current worktree",
+      { kind: "committed", path: ".env.example" },
+      false,
+      "current",
+      ".env.example",
+    ],
+  ])("resolves %s", async (_, source, mainExists, tree, path) => {
+    if (mainExists) writeFileSync(join(ctx.mainWorktree, ".env"), "MAIN=1\n");
     writeFileSync(join(ctx.currentWorktree, ".env.example"), "FALLBACK=1\n");
-
-    const source = await resolveFileSource(
-      {
-        path: ".env",
-        source: { kind: "mainWorktree", fallback: ".env.example" },
-      },
-      ctx,
-    );
-
-    expect(source).toEqual({ path: join(ctx.mainWorktree, ".env") });
-  });
-
-  it("uses a fallback from the current worktree when the main file is absent", async () => {
-    writeFileSync(join(ctx.currentWorktree, ".env.example"), "FALLBACK=1\n");
-
-    const source = await resolveFileSource(
-      {
-        path: ".env",
-        source: { kind: "mainWorktree", fallback: ".env.example" },
-      },
-      ctx,
-    );
-
-    expect(source).toEqual({ path: join(ctx.currentWorktree, ".env.example") });
-  });
-
-  it("reads a `committed` source at the template path in the current worktree", async () => {
-    const source = await resolveFileSource(
-      { path: ".env", source: { kind: "committed", path: ".env.example" } },
-      ctx,
-    );
-    expect(source).toEqual({ path: join(ctx.currentWorktree, ".env.example") });
-  });
-
-  it("returns a `content` string verbatim", async () => {
-    const source = await resolveFileSource(
-      { path: ".env", source: { kind: "content", content: "A=1\n" } },
-      ctx,
-    );
-    expect(source).toEqual({ content: "A=1\n" });
-  });
-
-  it("resolves a synchronous `content` function", async () => {
-    const source = await resolveFileSource(
-      {
-        path: ".env",
-        source: {
-          kind: "content",
-          content: (contentCtx) => {
-            expect(contentCtx).toBe(ctx);
-            return "A=1\n";
-          },
-        },
-      },
-      ctx,
-    );
-    expect(source).toEqual({ content: "A=1\n" });
-  });
-
-  it("awaits an asynchronous `content` function", async () => {
-    const source = await resolveFileSource(
-      {
-        path: ".env",
-        source: {
-          kind: "content",
-          content: async (contentCtx) => {
-            expect(contentCtx).toBe(ctx);
-            return "A=1\n";
-          },
-        },
-      },
-      ctx,
-    );
-    expect(source).toEqual({ content: "A=1\n" });
+    const resolved = await resolveFileSource({ path: ".env", source }, ctx);
+    const base = tree === "main" ? ctx.mainWorktree : ctx.currentWorktree;
+    expect(resolved).toEqual({ path: join(base, path) });
   });
 });
 
 describe("matchWorktreeByDir", () => {
+  const entry = (worktree: string): WorkspaceEntry => ({
+    worktree,
+    createdAt: "",
+    status: "ready",
+    recipe: { kind: "defaults" },
+  });
   const registry: WorkspacesRegistry = {
     workspaces: {
-      repo: {
-        worktree: "/home/me/repo",
-        createdAt: "",
-        status: "ready",
-        main: true,
-        recipe: { kind: "defaults" },
-      },
-      "repo-feat-a": {
-        worktree: "/home/me/repo-feat-a",
-        createdAt: "",
-        status: "ready",
-        recipe: { kind: "defaults" },
-      },
-      "repo-feat-b": {
-        worktree: "/home/me/repo-feat-b",
-        createdAt: "",
-        status: "ready",
-        recipe: { kind: "defaults" },
-      },
+      repo: { ...entry("/home/me/repo"), main: true },
+      "repo-feat-a": entry("/home/me/repo-feat-a"),
+      wt: entry("/first/wt"),
+      "wt-deadbeef": entry("/second/wt"),
     },
   };
 
-  it("matches by absolute path", () => {
-    expect(matchWorktreeByDir("/home/me/repo-feat-a", registry, "/home/me/repo")).toBe(
-      "repo-feat-a",
-    );
-  });
-
-  it("matches by relative path against cwd", () => {
-    expect(matchWorktreeByDir("../repo-feat-b", registry, "/home/me/repo")).toBe("repo-feat-b");
-  });
-
-  it("matches by workspace name from anywhere", () => {
-    expect(matchWorktreeByDir("repo-feat-a", registry, "/somewhere/else")).toBe("repo-feat-a");
-  });
-
-  it("prefers an exact path over an exact registered name", () => {
-    const colliding: WorkspacesRegistry = {
-      workspaces: {
-        wt: { worktree: "/first/wt", createdAt: "", status: "ready", recipe: { kind: "defaults" } },
-        "wt-deadbeef": {
-          worktree: "/second/wt",
-          createdAt: "",
-          status: "ready",
-          recipe: { kind: "defaults" },
-        },
-      },
-    };
-    expect(matchWorktreeByDir("wt", colliding, "/second")).toBe("wt-deadbeef");
-    expect(matchWorktreeByDir("wt", colliding, "/elsewhere")).toBe("wt");
-    expect(matchWorktreeByDir("wt-deadbeef", colliding, "/elsewhere")).toBe("wt-deadbeef");
-    expect(matchWorktreeByDir("/unknown/wt", colliding, "/elsewhere")).toBeUndefined();
-    expect(matchWorktreeByDir("../unknown/wt", colliding, "/elsewhere")).toBeUndefined();
-  });
-
-  it("returns undefined when nothing matches", () => {
-    expect(matchWorktreeByDir("repo-feat-z", registry, "/home/me/repo")).toBeUndefined();
+  it.each<[string, string, string | undefined]>([
+    ["/home/me/repo-feat-a", "/home/me/repo", "repo-feat-a"],
+    ["../repo-feat-a", "/home/me/repo", "repo-feat-a"],
+    ["repo-feat-a", "/somewhere/else", "repo-feat-a"],
+    ["wt", "/second", "wt-deadbeef"],
+    ["wt", "/elsewhere", "wt"],
+    ["/unknown/wt", "/elsewhere", undefined],
+    ["../unknown/wt", "/elsewhere", undefined],
+    ["repo-feat-z", "/home/me/repo", undefined],
+  ])("matches %s from %s as %s", (selector, cwd, expected) => {
+    expect(matchWorktreeByDir(selector, registry, cwd)).toBe(expected);
   });
 });

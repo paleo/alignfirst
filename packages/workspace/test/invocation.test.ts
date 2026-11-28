@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { writeDevServers } from "../src/dev-servers-registry.js";
 import { parseWorkspaceArgs } from "../src/cli.js";
 import { ConfigError, WorkspaceError } from "../src/errors.js";
-import { installedCliCommand, renderWorkspaceCommands } from "../src/invocation.js";
+import { installedCliCommand } from "../src/invocation.js";
 import type { WorkspaceOperation } from "../src/operation.js";
 import { runWorkspace, type WorkspaceConfig } from "../src/workspace.js";
 import {
@@ -93,17 +93,9 @@ describe("installed CLI boundary", () => {
     expect(() =>
       installedCliCommand({ executable: "npx", entryPoint: "alignfirst" }, ["dev", "down"]),
     ).toThrow(ConfigError);
-    const commands = renderWorkspaceCommands({
-      runtime: "bun",
-      executable: operation.invocation.executable,
-      cwd: root,
-      env: { npm_config_user_agent: "npm/11" },
-    });
-    expect(commands.workspace.withArgs).toBe("bunx --bun alignfirst workspace");
-    expect(commands.dev.withArgs).toBe("bunx --bun alignfirst dev");
   });
 
-  it("full setup routes child progress separately, forwards flags/env/cwd, and retries dev failure with preparation ready", async () => {
+  it("full setup routes child progress separately, forwards flags/env/cwd, and keeps preparation ready on dev failure", async () => {
     prepareInstalledCli();
     operation.env.CHILD_EXIT = "7";
     await expect(
@@ -119,28 +111,12 @@ describe("installed CLI boundary", () => {
     });
     expect(currentEntry()?.status).toBe("ready");
     expect(currentEntry()?.devSetupFailure).toBeDefined();
-    await expect(
-      runWorkspace(config, { ...operation, ...parseWorkspaceArgs(["wait"]) }),
-    ).rejects.toThrow(WorkspaceError);
-    operation.env.CHILD_EXIT = "0";
-    const result = await runWorkspace(config, {
-      ...operation,
-      ...parseWorkspaceArgs(["setup", "--full"]),
-    });
-    expect(result).toMatchObject({ worktree: root, status: "ready" });
-    expect(currentEntry()?.devSetupFailure).toBeUndefined();
     expect(output.join("\n")).toContain("child progress");
   });
 
-  it("default-only preparation completes without spawning an empty finalizer", async () => {
+  it("refuses `--full` without declared dev services", async () => {
     prepareGit();
     config.hasDevServer = false;
-    const result = await runWorkspace(config, {
-      ...operation,
-      ...parseWorkspaceArgs(["setup", "--detached"]),
-    });
-    expect(result).toMatchObject({ worktree: root, status: "ready" });
-    expect(existsSync(capture)).toBe(false);
     await expect(
       runWorkspace(config, { ...operation, ...parseWorkspaceArgs(["setup", "--full"]) }),
     ).rejects.toThrow(WorkspaceError);

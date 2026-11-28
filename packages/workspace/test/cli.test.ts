@@ -3,333 +3,126 @@ import { describe, expect, it } from "vitest";
 import { parseDevArgs, parseWorkspaceArgs } from "../src/cli.js";
 import { ConfigError } from "../src/errors.js";
 
+const SETUP_DEFAULTS = {
+  kind: "setup",
+  branch: undefined,
+  newBranch: false,
+  from: undefined,
+  force: false,
+  enter: false,
+  dedupe: false,
+  detached: false,
+  full: false,
+};
+
 describe("parseWorkspaceArgs", () => {
-  it("parses bare `setup`", () => {
-    const { command } = parseWorkspaceArgs(["setup"]);
-    expect(command).toMatchObject({ kind: "setup", branch: undefined, newBranch: false });
+  it.each([
+    [["setup"], SETUP_DEFAULTS, false],
+    [["setup", "feat/42"], { ...SETUP_DEFAULTS, branch: "feat/42" }, false],
+    [
+      ["setup", "feat/42", "--force", "--enter", "--verbose"],
+      { ...SETUP_DEFAULTS, branch: "feat/42", force: true, enter: true },
+      true,
+    ],
+    [
+      ["setup", "-c", "feat/42", "--full", "-d", "--dedupe"],
+      {
+        ...SETUP_DEFAULTS,
+        branch: "feat/42",
+        newBranch: true,
+        full: true,
+        detached: true,
+        dedupe: true,
+      },
+      false,
+    ],
+    [
+      ["setup", "feat/456", "-c", "--from", "origin/feat/123", "--detached"],
+      {
+        ...SETUP_DEFAULTS,
+        branch: "feat/456",
+        newBranch: true,
+        from: "origin/feat/123",
+        detached: true,
+      },
+      false,
+    ],
+    [["setup", "--path", "../wt"], { ...SETUP_DEFAULTS, path: "../wt" }, false],
+    [["remove"], { kind: "remove", selector: { dir: undefined }, force: false }, false],
+    [
+      ["remove", "../my-wt", "--force"],
+      { kind: "remove", selector: { dir: "../my-wt" }, force: true },
+      false,
+    ],
+    [["teardown"], { kind: "teardown", selector: { dir: undefined } }, false],
+    [
+      ["teardown", "review-deadbeef", "--verbose"],
+      { kind: "teardown", selector: { dir: "review-deadbeef" } },
+      true,
+    ],
+    [["list"], { kind: "list" }, false],
+    [["prune"], { kind: "prune" }, false],
+    [["status", "../my-wt"], { kind: "status", selector: { dir: "../my-wt" } }, false],
+    [["wait"], { kind: "wait", selector: { dir: undefined } }, false],
+    [
+      ["__finalize", "--force", "--full", "--verbose"],
+      { kind: "finalize", force: true, full: true },
+      true,
+    ],
+    [["--help"], { kind: "help" }, false],
+    [["--guide"], { kind: "guide" }, false],
+  ])("accepts %j", (argv, command, verbose) => {
+    expect(parseWorkspaceArgs(argv)).toEqual({ command, verbose });
   });
 
-  it("parses `setup <branch>` as an existing branch", () => {
-    const { command } = parseWorkspaceArgs(["setup", "feat/42"]);
-    expect(command).toMatchObject({ kind: "setup", branch: "feat/42", newBranch: false });
+  it.each([["-v"], ["--version"]])("parses %s as the version command", (flag) => {
+    expect(parseWorkspaceArgs([flag]).command).toEqual({ kind: "version" });
   });
 
-  it("parses `setup <branch> -c` as a new branch", () => {
-    const { command } = parseWorkspaceArgs(["setup", "feat/42", "-c"]);
-    expect(command).toMatchObject({ kind: "setup", branch: "feat/42", newBranch: true });
+  it.each([
+    ["--dedupe without -c", ["setup", "feat/42", "--dedupe"]],
+    ["--from without -c", ["setup", "feat/456", "--from", "origin/feat/123"]],
+    ["--enter without a branch", ["setup", "--enter"]],
+    ["-c without a branch", ["setup", "-c"]],
+  ])("rejects %s", (_rule, argv) => {
+    expect(() => parseWorkspaceArgs(argv)).toThrow(ConfigError);
   });
 
-  it("threads setup flags", () => {
-    const { command, verbose } = parseWorkspaceArgs([
-      "setup",
-      "feat/42",
-      "--force",
-      "--enter",
-      "--verbose",
-    ]);
-    expect(command).toEqual({
-      kind: "setup",
-      branch: "feat/42",
-      newBranch: false,
-      from: undefined,
-      force: true,
-      enter: true,
-      dedupe: false,
-      detached: false,
-      full: false,
-    });
-    expect(verbose).toBe(true);
-  });
-
-  it("parses `setup --full`, alone or with a branch", () => {
-    expect(parseWorkspaceArgs(["setup", "--full"]).command).toMatchObject({
-      kind: "setup",
-      branch: undefined,
-      full: true,
-    });
-    expect(parseWorkspaceArgs(["setup", "-c", "feat/42", "--full", "-d"]).command).toMatchObject({
-      branch: "feat/42",
-      full: true,
-      detached: true,
-    });
-  });
-
-  it("parses `-d` / `--detached`", () => {
-    expect(parseWorkspaceArgs(["setup", "-d"]).command).toMatchObject({
-      kind: "setup",
-      detached: true,
-    });
-    expect(parseWorkspaceArgs(["setup", "--detached"]).command).toMatchObject({
-      kind: "setup",
-      detached: true,
-    });
-  });
-
-  it("parses `setup -c <branch> --dedupe`", () => {
-    expect(parseWorkspaceArgs(["setup", "feat/42", "-c", "--dedupe"]).command).toMatchObject({
-      kind: "setup",
-      newBranch: true,
-      dedupe: true,
-    });
-  });
-
-  it("rejects `--dedupe` without `-c`", () => {
-    expect(() => parseWorkspaceArgs(["setup", "feat/42", "--dedupe"])).toThrow(ConfigError);
-  });
-
-  it("rejects the removed `-v` verbose short on a subcommand", () => {
-    expect(() => parseWorkspaceArgs(["setup", "feat/42", "-v"])).toThrow(ConfigError);
-  });
-
-  it("parses `-v` and `--version` as the version command", () => {
-    expect(parseWorkspaceArgs(["-v"]).command).toEqual({ kind: "version" });
-    expect(parseWorkspaceArgs(["--version"]).command).toEqual({ kind: "version" });
-  });
-
-  it("parses `setup <branch> -c --from <ref>`", () => {
-    const { command } = parseWorkspaceArgs([
-      "setup",
-      "feat/456",
-      "-c",
-      "--from",
-      "origin/feat/123",
-    ]);
-    expect(command).toMatchObject({
-      kind: "setup",
-      branch: "feat/456",
-      newBranch: true,
-      from: "origin/feat/123",
-    });
-  });
-
-  it("rejects `--from` without `-c`", () => {
-    expect(() => parseWorkspaceArgs(["setup", "feat/456", "--from", "origin/feat/123"])).toThrow(
-      ConfigError,
-    );
-  });
-
-  it("rejects `-c` without a branch", () => {
-    expect(() => parseWorkspaceArgs(["setup", "-c"])).toThrow(ConfigError);
-  });
-
-  it("parses `setup <branch> -c --enter`", () => {
-    const { command } = parseWorkspaceArgs(["setup", "feat/42", "-c", "--enter"]);
-    expect(command).toMatchObject({
-      kind: "setup",
-      branch: "feat/42",
-      newBranch: true,
-      enter: true,
-    });
-  });
-
-  it("rejects `--enter` without a branch", () => {
-    expect(() => parseWorkspaceArgs(["setup", "--enter"])).toThrow(ConfigError);
-  });
-
-  it("rejects an unknown flag on setup", () => {
-    expect(() => parseWorkspaceArgs(["setup", "--nope"])).toThrow(ConfigError);
-  });
-
-  it("rejects extra positionals on setup", () => {
-    expect(() => parseWorkspaceArgs(["setup", "a", "b"])).toThrow(ConfigError);
-  });
-
-  it("parses `remove` without a selector", () => {
-    const { command } = parseWorkspaceArgs(["remove"]);
-    expect(command).toEqual({ kind: "remove", selector: { dir: undefined }, force: false });
-  });
-
-  it("parses `remove <dir> --force`", () => {
-    const { command } = parseWorkspaceArgs(["remove", "../my-wt", "--force"]);
-    expect(command).toEqual({ kind: "remove", selector: { dir: "../my-wt" }, force: true });
-  });
-
-  it.each([undefined, "../my-wt", "/external/review", "review-deadbeef"])(
-    "parses teardown selector %s with verbosity",
-    (dir) => {
-      const selector = dir === undefined ? [] : [dir];
-      expect(parseWorkspaceArgs(["teardown", ...selector])).toEqual({
-        command: { kind: "teardown", selector: { dir } },
-        verbose: false,
-      });
-      expect(parseWorkspaceArgs(["teardown", ...selector, "--verbose"]).verbose).toBe(true);
-    },
-  );
-
-  it.each([["--force"], ["--all"], ["one", "two"], ["--nope"]])(
-    "rejects teardown arguments %s",
-    (...args) => {
-      expect(() => parseWorkspaceArgs(["teardown", ...args])).toThrow(ConfigError);
-    },
-  );
-
-  it("rejects the removed `--slot` flag on remove", () => {
-    expect(() => parseWorkspaceArgs(["remove", "--slot", "8110"])).toThrow(ConfigError);
-  });
-
-  it("parses `list`", () => {
-    const { command } = parseWorkspaceArgs(["list"]);
-    expect(command).toEqual({ kind: "list" });
-  });
-
-  it("parses `prune`", () => {
-    expect(parseWorkspaceArgs(["prune"]).command).toEqual({ kind: "prune" });
-  });
-
-  it("rejects `prune` with a positional", () => {
-    expect(() => parseWorkspaceArgs(["prune", "feat/42"])).toThrow(ConfigError);
-  });
-
-  it("parses `status` and `status <dir>`", () => {
-    expect(parseWorkspaceArgs(["status"]).command).toEqual({
-      kind: "status",
-      selector: { dir: undefined },
-    });
-    expect(parseWorkspaceArgs(["status", "../my-wt"]).command).toEqual({
-      kind: "status",
-      selector: { dir: "../my-wt" },
-    });
-  });
-
-  it("rejects the removed `--slot` flag on status", () => {
-    expect(() => parseWorkspaceArgs(["status", "--slot", "8110"])).toThrow(ConfigError);
-  });
-
-  it("parses `wait`", () => {
-    expect(parseWorkspaceArgs(["wait"]).command).toEqual({
-      kind: "wait",
-      selector: { dir: undefined },
-    });
-  });
-
-  it("parses `__finalize` without a positional", () => {
-    expect(parseWorkspaceArgs(["__finalize"]).command).toEqual({
-      kind: "finalize",
-      force: false,
-      full: false,
-    });
-    expect(parseWorkspaceArgs(["__finalize", "--verbose"]).verbose).toBe(true);
-    expect(parseWorkspaceArgs(["__finalize", "--force", "--full"]).command).toEqual({
-      kind: "finalize",
-      force: true,
-      full: true,
-    });
-  });
-
-  it("rejects a positional on `__finalize`", () => {
-    expect(() => parseWorkspaceArgs(["__finalize", "8110"])).toThrow(ConfigError);
-  });
-
-  it("rejects the retired migration command", () => {
-    expect(() => parseWorkspaceArgs(["migrate-registry-0.30"])).toThrow(ConfigError);
-  });
-
-  it("rejects an unknown subcommand", () => {
-    expect(() => parseWorkspaceArgs(["frobnicate"])).toThrow(ConfigError);
-  });
-
-  it("throws for no command, returns help for --help", () => {
-    expect(() => parseWorkspaceArgs([])).toThrow(ConfigError);
-    expect(parseWorkspaceArgs(["--help"]).command).toEqual({ kind: "help" });
-  });
-
-  it("returns guide for --guide", () => {
-    expect(parseWorkspaceArgs(["--guide"]).command).toEqual({ kind: "guide" });
+  it.each([
+    ["no command", []],
+    ["an unknown subcommand", ["frobnicate"]],
+    ["the retired migration command", ["migrate-registry-0.30"]],
+    ["extra positionals", ["setup", "a", "b"]],
+  ])("rejects %s", (_case, argv) => {
+    expect(() => parseWorkspaceArgs(argv)).toThrow(ConfigError);
   });
 });
 
 describe("parseDevArgs", () => {
-  it("treats bare invocation as foreground", () => {
-    expect(parseDevArgs([])).toEqual({ kind: "foreground", evict: false, restart: false });
+  it.each([
+    [[], { kind: "foreground", evict: false, restart: false }],
+    [["--evict", "--restart"], { kind: "foreground", evict: true, restart: true }],
+    [["up", "--restart"], { kind: "up", evict: false, restart: true }],
+    [["up", "--evict"], { kind: "up", evict: true, restart: false }],
+    [["restart", "--evict"], { kind: "restart", evict: true }],
+    [["down"], { kind: "down", all: false }],
+    [["down", "--all"], { kind: "down", all: true }],
+    [["list"], { kind: "list" }],
+    [["status"], { kind: "status" }],
+    [["setup"], { kind: "setup", force: false, resetPorts: false, fromFinalize: false }],
+    [
+      ["setup", "--force", "--reset-ports", "--from-finalize", "--verbose"],
+      { kind: "setup", force: true, resetPorts: true, fromFinalize: true, verbose: true },
+    ],
+    [["-h"], { kind: "help" }],
+  ])("accepts %j", (argv, command) => {
+    expect(parseDevArgs(argv)).toMatchObject(command);
   });
 
-  it("parses foreground flags", () => {
-    expect(parseDevArgs(["--evict"])).toEqual({ kind: "foreground", evict: true, restart: false });
-    expect(parseDevArgs(["--restart"])).toEqual({
-      kind: "foreground",
-      evict: false,
-      restart: true,
-    });
-  });
-
-  it("parses `up` with flags", () => {
-    expect(parseDevArgs(["up"])).toEqual({ kind: "up", evict: false, restart: false });
-    expect(parseDevArgs(["up", "--evict"])).toEqual({ kind: "up", evict: true, restart: false });
-    expect(parseDevArgs(["up", "--restart"])).toEqual({
-      kind: "up",
-      evict: false,
-      restart: true,
-    });
-  });
-
-  it("parses `restart` with `--evict`", () => {
-    expect(parseDevArgs(["restart"])).toEqual({ kind: "restart", evict: false });
-    expect(parseDevArgs(["restart", "--evict"])).toEqual({ kind: "restart", evict: true });
-  });
-
-  it("rejects `--restart` on `restart`", () => {
-    expect(() => parseDevArgs(["restart", "--restart"])).toThrow(ConfigError);
-  });
-
-  it("parses `down` and `down --all`", () => {
-    expect(parseDevArgs(["down"])).toEqual({ kind: "down", all: false });
-    expect(parseDevArgs(["down", "--all"])).toEqual({ kind: "down", all: true });
-  });
-
-  it("parses `list`", () => {
-    expect(parseDevArgs(["list"])).toEqual({ kind: "list" });
-  });
-
-  it("parses `status`", () => {
-    expect(parseDevArgs(["status"])).toEqual({ kind: "status" });
-  });
-
-  it("rejects positionals on `status`", () => {
-    expect(() => parseDevArgs(["status", "x"])).toThrow(ConfigError);
-  });
-
-  it("parses `setup` and its options", () => {
-    expect(parseDevArgs(["setup"])).toEqual({
-      kind: "setup",
-      force: false,
-      resetPorts: false,
-      fromFinalize: false,
-    });
-    expect(parseDevArgs(["setup", "--force", "--reset-ports", "--from-finalize"])).toEqual({
-      kind: "setup",
-      force: true,
-      resetPorts: true,
-      fromFinalize: true,
-    });
-  });
-
-  it("passes dev setup verbosity to its hook", () => {
-    expect(parseDevArgs(["setup", "--verbose"])).toMatchObject({ kind: "setup", verbose: true });
-  });
-
-  it("rejects positionals and unknown flags on `setup`", () => {
-    expect(() => parseDevArgs(["setup", "x"])).toThrow(ConfigError);
-    expect(() => parseDevArgs(["setup", "--evict"])).toThrow(ConfigError);
-  });
-
-  it("parses `--help` / `-h`", () => {
-    expect(parseDevArgs(["--help"])).toEqual({ kind: "help" });
-    expect(parseDevArgs(["-h"])).toEqual({ kind: "help" });
-  });
-
-  it("rejects `--guide` (only `workspace --guide` prints the guide)", () => {
-    expect(() => parseDevArgs(["--guide"])).toThrow(ConfigError);
-  });
-
-  it("rejects an unknown subcommand", () => {
-    expect(() => parseDevArgs(["bogus"])).toThrow(ConfigError);
-  });
-
-  it("rejects an unknown flag on `up`", () => {
-    expect(() => parseDevArgs(["up", "--nope"])).toThrow(ConfigError);
-  });
-
-  it("rejects positionals on `list`", () => {
-    expect(() => parseDevArgs(["list", "x"])).toThrow(ConfigError);
+  it.each([
+    ["an unknown subcommand", ["bogus"]],
+    ["positionals", ["status", "x"]],
+  ])("rejects %s", (_case, argv) => {
+    expect(() => parseDevArgs(argv)).toThrow(ConfigError);
   });
 });

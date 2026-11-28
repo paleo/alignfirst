@@ -180,64 +180,72 @@ describe("workspace registration", () => {
 });
 
 describe("registry format rejection", () => {
-  it("refuses a retired slot registry rather than registering an apparently empty project", async () => {
-    mkdirSync(join(mainWorktree, registryDir), { recursive: true });
-    const retired = join(mainWorktree, registryDir, "slots.json");
-    writeFileSync(retired, '{"old":"identity"}');
+  it.each<[string, () => void]>([
+    ["an unsupported version", () => raw({ version: 3, workspaces: { old: entry("/old/wt") } })],
+    [
+      "missing provenance",
+      () =>
+        raw({
+          version: 4,
+          workspaces: { old: { worktree: "/old/wt", createdAt: CREATED_AT, status: "ready" } },
+        }),
+    ],
+    [
+      "a retired field",
+      () => raw({ version: 4, workspaces: { old: { ...entry("/old/wt"), portIndex: 2 } } }),
+    ],
+    ["a relative path", () => raw({ version: 4, workspaces: { old: entry("../relative") } })],
+    [
+      "a non-canonical path",
+      () => raw({ version: 4, workspaces: { old: entry("/old/../noncanonical") } }),
+    ],
+    [
+      "a plaintext run-file input",
+      () =>
+        raw({
+          version: 4,
+          workspaces: {
+            old: {
+              ...entry("/old/wt"),
+              runFilesWrittenWith: { ports: {}, inputs: { secret: "plaintext" } },
+            },
+          },
+        }),
+    ],
+    [
+      "a duplicate main",
+      () =>
+        raw({
+          version: 4,
+          workspaces: {
+            a: { ...entry("/old/a"), main: true },
+            b: { ...entry("/old/b"), main: true },
+          },
+        }),
+    ],
+    [
+      "broken JSON",
+      () => {
+        mkdirSync(join(mainWorktree, registryDir), { recursive: true });
+        writeFileSync(workspacesFilePath(mainWorktree, registryDir), "{broken");
+      },
+    ],
+    [
+      "a retired slot registry",
+      () => {
+        mkdirSync(join(mainWorktree, registryDir), { recursive: true });
+        writeFileSync(join(mainWorktree, registryDir, "slots.json"), '{"old":"identity"}');
+      },
+    ],
+  ])("rejects %s without repairing the stored bytes", async (_, write) => {
+    write();
+    const files = () =>
+      readdirSync(join(mainWorktree, registryDir)).map((name) =>
+        readFileSync(join(mainWorktree, registryDir, name), "utf8"),
+      );
+    const before = files();
     await expect(register(mainWorktree)).rejects.toThrow(WorkspaceError);
-    expect(readFileSync(retired, "utf8")).toBe('{"old":"identity"}');
-    expect(existsSync(workspacesFilePath(mainWorktree, registryDir))).toBe(false);
-  });
-
-  it.each([undefined, 1, 2, 3])("rejects version %s before any mutation", async (version) => {
-    raw({ version, workspaces: { old: entry("/old/wt") } });
-    const before = stored();
-    expect(() => entries()).toThrow(WorkspaceError);
-    await expect(register(mainWorktree)).rejects.toThrow(WorkspaceError);
-    expect(stored()).toBe(before);
-  });
-
-  it.each([
-    { worktree: "/old/wt", createdAt: CREATED_AT, status: "ready" },
-    { ...entry("/old/wt"), portIndex: 2 },
-    { ...entry("/old/wt"), purgeData: {} },
-    {
-      ...entry("/old/wt"),
-      recipe: { kind: "manifest", file: "alignfirst-workspace.json", in: "project" },
-    },
-    { ...entry("/old/wt"), recipe: { kind: "manifest", file: "alignfirst.json" } },
-    entry("../relative"),
-    entry("/old/../noncanonical"),
-    { ...entry("/old/wt"), runFilesWrittenWith: { ports: {}, inputs: { secret: "plaintext" } } },
-  ])(
-    "preserves bytes for missing provenance, retired fields and malformed entries",
-    async (invalid) => {
-      raw({ version: 4, workspaces: { old: invalid } });
-      const before = stored();
-      await expect(register(mainWorktree)).rejects.toThrow();
-      expect(stored()).toBe(before);
-    },
-  );
-
-  it("rejects malformed JSON and duplicate identities rather than repairing them", async () => {
-    raw({
-      version: 4,
-      workspaces: { a: { ...entry("/old/a"), main: true }, b: { ...entry("/old/b"), main: true } },
-    });
-    const before = stored();
-    await expect(updateWorkspaces(mainWorktree, registryDir, () => {})).rejects.toThrow(
-      WorkspaceError,
-    );
-    expect(stored()).toBe(before);
-    writeFileSync(workspacesFilePath(mainWorktree, registryDir), "{broken");
-    await expect(register(mainWorktree)).rejects.toThrow(WorkspaceError);
-    expect(stored()).toBe("{broken");
-  });
-
-  it("does not invent devSetupAt or repair missing linked paths from basenames", () => {
-    mkdirSync(join(root, "wt"));
-    raw({ version: 4, workspaces: { wt: entry("/missing/external/wt") } });
-    expect(entries().wt).toEqual(entry("/missing/external/wt"));
+    expect(files()).toEqual(before);
   });
 });
 

@@ -2,7 +2,7 @@ export async function stopProcessGroup(pid: number, timeoutMs = 10_000): Promise
   killProcessGroup(pid, "SIGTERM");
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 100));
     if (!isProcessGroupAlive(pid)) return;
   }
   killProcessGroup(pid, "SIGKILL");

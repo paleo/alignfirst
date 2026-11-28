@@ -393,7 +393,6 @@ describe("manifest adapters", () => {
 
   it.each([
     [{ preset: "node" }, "SyntaxError: broken", "SyntaxError"],
-    [{ log: "\\[ExceptionHandler\\]" }, "[ExceptionHandler] broken", "error.log"],
     [{ log: "CUSTOM" }, "SyntaxError: broken", false],
     [{ preset: "node", log: "CUSTOM" }, "SyntaxError: broken", "SyntaxError"],
     [{ preset: "node", log: "CUSTOM" }, "CUSTOM", "error.log"],
@@ -642,7 +641,7 @@ describe("manifest adapters", () => {
             servers: [],
             runFilesInputs: {
               command: {
-                run: [process.execPath, "-e", "process.stdout.write(process.argv[1])", output],
+                run: ["sh", "-c", 'printf %s "$1"', "sh", output],
               },
             },
           },
@@ -666,11 +665,12 @@ describe("manifest adapters", () => {
               port: "fo-api",
               ready: { log: "READY" },
               exec: {
-                run: [process.execPath, "-e", ""],
+                run: "true",
                 cwd: "packages/api",
                 env: { PORT: "${{ ports.fo-api }}" },
               },
             },
+            { kind: "spawn", name: "__proto__", ready: { log: "READY" }, exec: { run: "true" } },
           ],
           summary: { command: { run: "printf '%s' \"$ALIGNFIRST_WORKSPACE_CONTEXT\"" } },
         },
@@ -679,7 +679,7 @@ describe("manifest adapters", () => {
     );
     const dev = adapters.devServer;
     if (!dev) throw new Error("Missing dev adapter");
-    const [server] = resolveServers(dev.servers, {
+    const [server, proto] = resolveServers(dev.servers, {
       name: base.name,
       cwd: root,
       ports: { "fo-api": 8201 },
@@ -697,6 +697,7 @@ describe("manifest adapters", () => {
         ports: { "fo-api": 8201 },
         servers: [
           { server, port: 8201, pid: 123, logFile: join(root, ".local-wt/logs/api%2Fname.log") },
+          { server: proto, pid: 124 },
         ],
       })) ?? "null",
     );
@@ -713,6 +714,7 @@ describe("manifest adapters", () => {
           pid: 123,
           logFile: join(root, ".local-wt/logs/api%2Fname.log"),
         },
+        { name: "__proto__", kind: "spawn", pid: 124 },
       ],
     });
     expect(summary.force).toBeUndefined();

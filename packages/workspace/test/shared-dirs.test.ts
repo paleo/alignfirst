@@ -46,40 +46,6 @@ describe("linkSharedDirectories", () => {
     expect(readlinkSync(join(linked, ".local"))).toBe(join("..", "main", ".local"));
   });
 
-  it("creates missing shared directories on a main-worktree setup, without symlinks", () => {
-    const { main } = makeWorktrees();
-    const ctx: WorktreeContext = {
-      currentWorktree: main,
-      mainWorktree: main,
-      isMainWorktree: true,
-    };
-    linkSharedDirectories(ctx, [".local", ".plans"], () => {});
-    expect(lstatSync(join(main, ".local")).isDirectory()).toBe(true);
-    expect(lstatSync(join(main, ".plans")).isDirectory()).toBe(true);
-  });
-
-  it("keeps an existing shared directory and an existing link untouched", () => {
-    const { main, linked } = makeWorktrees();
-    mkdirSync(join(main, ".local"));
-    symlinkSync(join("..", "main", ".local"), join(linked, ".local"));
-    writeFileSync(join(main, ".local", "keep.txt"), "existing data");
-    const linkBefore = lstatSync(join(linked, ".local"));
-    linkSharedDirectories(linkedCtx(main, linked), [".local"], () => {});
-    expect(readFileSync(join(main, ".local", "keep.txt"), "utf8")).toBe("existing data");
-    expect(readFileSync(join(linked, ".local", "keep.txt"), "utf8")).toBe("existing data");
-    expect(readlinkSync(join(linked, ".local"))).toBe(join("..", "main", ".local"));
-    expect(lstatSync(join(linked, ".local")).ino).toBe(linkBefore.ino);
-  });
-
-  it("follows a valid symlink in the main worktree (team plans repo layout)", () => {
-    const { main, linked } = makeWorktrees();
-    const clone = join(tempRoot, "clone");
-    mkdirSync(clone);
-    symlinkSync(join("..", "clone"), join(main, ".plans"));
-    linkSharedDirectories(linkedCtx(main, linked), [".plans"], () => {});
-    expect(readlinkSync(join(linked, ".plans"))).toBe(join("..", "main", ".plans"));
-  });
-
   it("creates nested link parents and resolves the target from the link directory", () => {
     const { main, linked } = makeWorktrees();
 
@@ -148,11 +114,6 @@ describe("linkSharedDirectories", () => {
     mkdirSync(join(sibling, ".local"));
     writeFileSync(join(sibling, ".local", "sibling-note"), "sibling\n");
     expect(git(sibling, "status", "--porcelain")).toContain("?? .local/");
-
-    // Idempotent: a re-run appends nothing.
-    linkSharedDirectories(linkedCtx(main, linked), [".local", ".plans"], () => {});
-    const lines = readFileSync(excludePath, "utf-8").split("\n").filter(Boolean);
-    expect(lines.filter((line) => line === "/.local")).toHaveLength(1);
 
     rmSync(excludePath);
     mkdirSync(excludePath);

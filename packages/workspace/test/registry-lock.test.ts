@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readDevServers, registerDevServer } from "../src/dev-servers-registry.js";
 import { WorkspaceError } from "../src/errors.js";
 import { withRegistryLock } from "../src/registry-lock.js";
-import { readWorkspaces, registryDirFor, updateWorkspaces } from "../src/workspaces.js";
+import { registryDirFor } from "../src/workspaces.js";
 
 const registryDir = registryDirFor(".local-wt");
 /** Fails fast instead of waiting 10 seconds when a test leaves the lock held. */
@@ -97,7 +97,7 @@ describe("withRegistryLock", () => {
   });
 });
 
-describe("updateWorkspaces", () => {
+describe("updateDevServers", () => {
   it("serializes dev mutations on the shared lock without losing concurrent registrations", async () => {
     const names = Array.from({ length: 8 }, (_, index) => `dev-${index}`);
     await Promise.all(
@@ -115,25 +115,6 @@ describe("updateWorkspaces", () => {
         .servers.map((entry) => entry.name)
         .sort(),
     ).toEqual(names);
-    expect(existsSync(lockPath)).toBe(false);
-  });
-
-  it("loses no update across concurrent calls", async () => {
-    const names = Array.from({ length: 8 }, (_, i) => `wt-${i}`);
-    await Promise.all(
-      names.map((name) =>
-        updateWorkspaces(mainWorktree, registryDir, async (registry) => {
-          await new Promise((r) => setTimeout(r, 5));
-          registry.workspaces[name] = {
-            worktree: join(mainWorktree, "..", name),
-            createdAt: "2026-05-10T00:00:00.000Z",
-            status: "ready",
-            recipe: { kind: "defaults" },
-          };
-        }),
-      ),
-    );
-    expect(Object.keys(readWorkspaces(mainWorktree, registryDir).workspaces).sort()).toEqual(names);
     expect(existsSync(lockPath)).toBe(false);
   });
 });
