@@ -14,15 +14,13 @@ When the user asks to create a PR:
 
 1. **Pre-flight checks.** Keep them proportionate to the change; all must pass before proceeding.
    - Run `npm run lint:fix`, `npm run build` and `npm run typecheck`.
-   - Run `npm test --workspace <name>` for each package the branch changes. Skip a package whose tests already passed on its current code.
+   - Run `npm test --workspace <name>` for each package the branch changes. Skip a package whose tests already passed on its current code. For an OpenClaw package, this command runs nothing; the OpenClaw row below covers it.
    - Leave the full unit suite and the integration suites of `pi-background`, `workspace` and `aligndev` to the CI.
-   - The CI lacks the three suites below. Run one only when the branch changes the code it covers:
+   - The CI runs no OpenClaw suite. Run them only when the branch changes the code they cover:
 
      | Changed code | Check |
      | --- | --- |
-     | `scripts/`, `skills/aligndev-openclaw-setup/` or `packages/aligndev/src/config.ts` | `npm run test:deployment-templates` |
-     | `packages/service-openclaw-plugin` or an OpenClaw channel mock package | `npm run test:integration --workspace @alignfirst/service-openclaw-plugin` |
-     | `aligndev-openclaw-tests/` | `npm test --prefix aligndev-openclaw-tests` |
+     | OpenClaw packages, AlignDev OpenClaw code, `skills/aligndev-openclaw-setup/` or `aligndev-openclaw-tests/` | `npm run test:openclaw`, or its relevant part (see [Offline helper checks](aligndev-openclaw/running-openclaw-tests.md#offline-helper-checks)) |
 2. **Ensure a changeset exists** when the branch touches `packages/`. Check for at least one changeset file in `.changeset/` (excluding `README.md`); if none exists, create one following [writing-a-changeset.md](writing-a-changeset.md), and include it in the commit.
 3. **Commit and push.** Commit any uncommitted changes, including files modified by `lint:fix`. Then push the branch.
 4. **Generate the PR description.** Use `alignfirst` to find the ticket directory. If a description file (`*-description.md`) already exists **and** is the last file in the directory (no further work was done after it), use its content directly. Otherwise, run `npx -y alignfirst guide description` and follow it. Use the description body as the PR description and the suggested commit message as the PR title.

@@ -61,7 +61,7 @@ Without a nonempty profile `models`, Pi and Antigravity accept any nonblank sele
 
 A nonempty profile `efforts` replaces the harness's built-in effort levels and bounds what `--effort` accepts. New sessions use the profile's `defaultEffort`, which must be one of the accepted levels, else the native default. A resume keeps its recorded effort. Under Pi, an effort overrides a thinking suffix of the model selector.
 
-For Antigravity, prefer a base model name with an effort, such as `--model gemini-3.8-flash --effort low`. A name with an effort suffix conflicts with a different effort, a profile's `defaultEffort` included, and the run fails. The catalog depends on the account: `agy models` lists it.
+For Antigravity, prefer a base model name with an `--effort`. A name with an effort suffix conflicts with a different effort, a profile's `defaultEffort` included, and the run fails. The catalog depends on the account: `agy models` lists it.
 
 Resume retains and validates its recorded user-facing model, ignoring profile defaults. Disallowed names require `--model`; null keeps the native conversation model. Current alias mappings apply even to retained names. The selected native account must contain the original conversation; cross-agent resumes fail, and Pi requires the recorded real directory. No fallback account or replacement conversation is accepted.
 

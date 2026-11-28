@@ -66,7 +66,7 @@ function permissions(harness: CodingAgent): string {
 // The policy of a harness without a finite model list.
 function openModelPolicy(harness: CodingAgent): string {
   return harness === "agy"
-    ? "Any nonblank Antigravity model name, preferably a base name such as `gemini-3.8-flash` with `--effort`"
+    ? "Any nonblank Antigravity model name, preferably a base name with `--effort`"
     : "Any nonblank pi-native selector, preferably `provider/model` (thinking suffixes supported; `--effort` overrides them)";
 }
 

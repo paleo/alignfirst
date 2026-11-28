@@ -62,7 +62,7 @@ Install the latest Node 26 release through the developer's existing version mana
 
 ## Validate and report
 
-Choose checks for the changed surfaces. Builds, typechecks, lint and ordinary unit suites are the baseline. Keep integration tests, packed-install smoke tests, Docker/gateway checks, native CLI acceptance and conversation-model scenarios separate. Run those only when authorized; a dependency upgrade does not override a developer's test restrictions. In particular, the standalone harness's complete `npm test` includes fixture integration, so choose pure helper test files when integrations are prohibited.
+Choose checks for the changed surfaces. Builds, typechecks, lint and ordinary unit suites are the baseline. Keep integration tests, packed-install smoke tests, Docker/gateway checks, native CLI acceptance and conversation-model scenarios separate. Run those only when authorized; a dependency upgrade does not override a developer's test restrictions. `npm test` leaves out the OpenClaw suites; for an upgrade that affects OpenClaw packages, run the relevant parts of `npm run test:openclaw` (see [Offline helper checks](aligndev-openclaw/running-openclaw-tests.md#offline-helper-checks)).
 
 For allowed workspace checks:
 

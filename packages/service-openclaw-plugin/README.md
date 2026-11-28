@@ -104,18 +104,18 @@ handoffs, because deleting a claimed record also deletes its duplicate-start pro
 
 ```bash
 npm run build
-npm test --workspace @alignfirst/service-openclaw-plugin
+npm run test:openclaw --workspace @alignfirst/service-openclaw-plugin
 npm run typecheck --workspace @alignfirst/service-openclaw-plugin
 npm run lint --workspace @alignfirst/service-openclaw-plugin
 ```
 
 Run the complete root `npm run build` before integration, including filtered files. Preflight checks provisioning only; rebuild after source changes. A `THREAD_HANDOFF_PACKED_ROOT` consumer must also have OpenClaw and the built plugins installed separately.
 
-The ordinary test command excludes the real-gateway suite. To exercise the package as an external
+The unit test command excludes the real-gateway suite. To exercise the package as an external
 plugin against the OpenClaw runtime pinned in the root lockfile, including Slack/Discord delivery, concurrent human messages, duplicate starts, same-session continuation, and abrupt restart recovery:
 
 ```bash
-KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace @alignfirst/service-openclaw-plugin
+KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:openclaw-integration --workspace @alignfirst/service-openclaw-plugin
 ```
 
 Retained fixtures are written under `/tmp/thread-handoff-*` with gateway logs, provider requests,

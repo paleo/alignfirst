@@ -55,7 +55,7 @@ git clone --quiet --depth=1 --branch v<version> https://github.com/openclaw/open
 - [`aligndev-openclaw-tests/package.json`](../../aligndev-openclaw-tests/package.json) — the exact `"openclaw"` pin.
 - [`aligndev-openclaw-tests/Dockerfile`](../../aligndev-openclaw-tests/Dockerfile) — the three `npm:@openclaw/<plugin>@<version>` installs.
 - `packages/openclaw-{test,channel-mock-core,discord-mock,slack-mock}/package.json` and `packages/service-openclaw-plugin/package.json` — the `~`-ranged dev dependencies. Raise their floor to the new version, then run `npm install` at the root: the root `package-lock.json` pins the executable the deterministic suite runs, and a range that still matches keeps the old one.
-- [`aligndev-openclaw-tests/openclaw.json`](../../aligndev-openclaw-tests/openclaw.json) — the static `gpt-6.1-terra` row under `models.providers.openai.models`. Delete it when the new release's catalog lists that model.
+- [`aligndev-openclaw-tests/openclaw.json`](../../aligndev-openclaw-tests/openclaw.json) — the OpenAI model row under `models.providers.openai.models`. It declares the Terra model, whose ID comes from `OPENCLAW_TEST_OPENAI_MODEL`, for a release whose static catalog lacks it. Recheck its capability fields against the new catalog.
 - The `peerDependencies` ranges of `service-openclaw-plugin` and `openclaw-channel-mock-core` cap the month. Read the manifests and move the cap when the release starts a new month; a peer range change needs a changeset.
 
 The official plugins require the OpenClaw version they ship with, so the Dockerfile installs and the `openclaw` pin move together.

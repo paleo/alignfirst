@@ -55,7 +55,7 @@ inbound ──▶ │   bus   │ ◀── outbound (every channel plugin)
 
 - **`bus`** — in-memory state store. Conversations, threads, messages, events, cursors. Exposes a small HTTP API consumed by `bus-client.ts` in `channel-mock-core`.
 - **`gateway`** — runs OpenClaw and loads both channel plugins via `plugins.load.paths`. Talks to the bus through its channel plugins; talks to the runner through the mocked-CLI shim. The AlignDev overlay imports mounted Codex credentials, when present, into the `main` agent's auth store before starting the gateway.
-- **`runner`** — runs scenarios serially. Mints a fresh `conversationId` per task, pushes inbounds onto the bus, polls outbounds, asserts, runs Haiku through OpenRouter, writes artifacts.
+- **`runner`** — runs scenarios serially. Mints a fresh `conversationId` per task, pushes inbounds onto the bus, polls outbounds, asserts, runs the judge, writes artifacts.
 
 Healthchecks gate `gateway` on `bus`, and the one-shot `runner` invocation on `gateway`. `runner` is started with `docker compose run --rm --use-aliases runner`; without `--use-aliases` the one-shot container has no network alias and the gateway-side shim's `POST http://runner:43124` fails with `getaddrinfo EAI_AGAIN runner`.
 
@@ -100,7 +100,7 @@ The CLI injects `OPENCLAW_TEST_PROJECT_DIR`, `OPENCLAW_TEST_PACKAGE_DIR`, `ASSIS
 
 ## Mocked-CLI shim
 
-The gateway's PATH is prepended at runtime with `/opt/openclaw-test/mocks/bin/`, where consumer-created symlinks point at one Node shim. The AlignDev consumer links `claude`, `codex`, `pi`, and `gh`; `aligndev` and `alignfirst`, including workspace/dev dispatch, run live from the mounted checkout. Fixture merged `alignfirst.json` recipes and project scripts have no workspace library dependency; scripts consume `ALIGNFIRST_WORKSPACE_CONTEXT` and its resolved `runtimeDir` for owned sidecars. Reset composes conventions with the template recipe, while lightweight conversion removes only recipe sections. Offline checks validate these with the production configuration reader; their frozen application lockfile still installs Express. `aligndev code` selects its child from the aligndev settings that the gateway entrypoint writes from `CODING_AGENT`, while all three coding-agent executables remain intercepted. No real Pi CLI or Pi credentials are needed for child mocks. Its Codex handler also serves `debug models --bundled`, so alias resolution requires neither a host Codex installation nor network access. `aligndev project list --json` scans the real fixture tree and its project configs, and spawns `alignfirst config --json`. The base image ships only the shim binary; a typical consumer line is `RUN for name in claude codex pi gh; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done`. The shim POSTs to `http://runner:43124/mock-cli/invoke` with `{ cli, argv, cwd, stdin }` and replays `{ stdout, stderr, exitCode }`.
+The gateway's PATH is prepended at runtime with `/opt/openclaw-test/mocks/bin/`, where consumer-created symlinks point at one Node shim. The AlignDev consumer links `claude`, `codex`, `pi`, and `gh`; `aligndev` and `alignfirst`, including workspace/dev dispatch, run live from the mounted checkout. Fixture merged `alignfirst.json` recipes and project scripts have no workspace library dependency; scripts consume `ALIGNFIRST_WORKSPACE_CONTEXT` and its resolved `runtimeDir` for owned sidecars. Reset composes conventions with the template recipe, while lightweight conversion removes only recipe sections. Only the scenarios exercise `reset-fixture.mjs` and the template lockfile. `aligndev code` selects its child from the aligndev settings that the gateway entrypoint writes from `CODING_AGENT`, while all three coding-agent executables remain intercepted. No real Pi CLI or Pi credentials are needed for child mocks. Its Codex handler also serves `debug models --bundled`, so alias resolution requires neither a host Codex installation nor network access. `aligndev project list --json` scans the real fixture tree and its project configs, and spawns `alignfirst config --json`. The base image ships only the shim binary; a typical consumer line is `RUN for name in claude codex pi gh; do ln -sf mock-cli-shim "/opt/openclaw-test/mocks/bin/$name"; done`. The shim POSTs to `http://runner:43124/mock-cli/invoke` with `{ cli, argv, cwd, stdin }` and replays `{ stdout, stderr, exitCode }`.
 
 The shared coding helper validates Pi's exact `--mode json [--model <selector>] [--session <native-id>]` argument order and stdin prompt. It emits a deterministic version-3 `session` header, assistant `message_end` records and authoritative `agent_settled` with a boolean `aborted`. Resume preserves the requested ID. Queued fixtures cover identity, malformed records, missing settlement, abort, provider error and authentication failure. Pi occupancy uses only the latest assistant's input, output, cacheRead and cacheWrite; it needs no Codex rollout file. Claude/Codex mocks also preserve resumed identity, and Codex retains its offline bundled-catalog handler.
 
@@ -215,7 +215,7 @@ Facts established on ticket 80 about the limits of the mocks and the runner. Eac
 - **No gateway restart inside a cell.** The runner recreates the stack per cell, so persistence across a restart belongs to the deterministic suite, with SIGKILL, preserved WAL/SHM files and a real process restart.
 - **Attachment-only app replies.** The webchat driver reads a reply's text blocks. A reply that carries only an image is invisible to `waitForReply` and `expectNoReply`.
 - **No Chromium in the image.** The `browser` tool loads and fails at use time.
-- **Cost is partial.** The `openai` provider carries no pricing in `openclaw.json`, so Terra's agent cost always reads `$0`; only its judge cost is real.
+- **Cost is partial.** The `openai` provider carries no pricing in `openclaw.json`, so Terra's agent cost always reads `$0`; only the judge cost is real, once its prices are set.
 - **The 30-second mock run hides harm.** Sonnet ran ninety-six `alcode` executions in one day in the foreground with a 60-second timeout. Against a real coding agent those runs would be killed; against the mock they pass.
 
 ## Harness defect or product defect
@@ -257,16 +257,13 @@ bus history and cannot be selected.
 
 The deterministic external-plugin suite uses the real OpenClaw executable pinned in the root lockfile, a scripted
 local provider, the synthetic bus, and disposable state. Run it with
-`KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace
+`KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:openclaw-integration --workspace
 @alignfirst/service-openclaw-plugin`. Retained `/tmp/thread-handoff-*` fixtures include gateway and
-provider logs plus `<stateDir>/thread-handoff/state.sqlite` (and any WAL/SHM crash files). It covers
-both surfaces: a static takeover with its reply in the thread, a human message delivered while the takeover
-turn runs, concurrent starts behind a running sibling turn, a re-claim inside the takeover turn, a silent
-takeover turn, duplicate starts, same-session continuation, native background exec completion, and pending and post-claim restart recovery. The exec checks run a real background command through the gateway's `exec` tool, capture the trusted plugin-tool factory context with a test-only observer, and require a later completion claim and report in the canonical thread. A negative control removes the completion's trusted route and requires rejection. No synthetic system event stands in for the process exit. A mentioning channel turn that ends on `NO_REPLY` after its starter must stay silent, without the isolated finalizer. A Discord control with the starter in `thread-create` must show the finalizer's answer in the thread.
+provider logs plus `<stateDir>/thread-handoff/state.sqlite` (and any WAL/SHM crash files). Most tests share one gateway per surface, each with its own conversation. On both surfaces, it covers native background exec completion, and duplicate starts with same-session continuation. On Slack, it covers a human message delivered while the takeover turn runs and concurrent starts behind a running sibling turn. On Discord, it covers a retried native starter. A dedicated Slack gateway covers pending and post-claim restart recovery. The exec checks run a real background command through the gateway's `exec` tool, capture the trusted plugin-tool factory context with a test-only observer, and require a later completion claim and report in the canonical thread. No synthetic system event stands in for the process exit. A mentioning channel turn that ends on `NO_REPLY` after its starter must stay silent, without the isolated finalizer. A Discord control with the starter in `thread-create` must show the finalizer's answer in the thread.
 
 The consumer's completion scenarios require the real chained process to exit, the final report to arrive, and the target thread to remain terminal and unchanged for three seconds. `scripts/inspect-thread.ts` records native completion evidence by matching the process prefix in a `prompt.submitted` runtime event and a successful `session.ended` with the same run ID. These native fields are diagnostic: OpenClaw may defer the notice beyond the test window, as described in [OpenClaw Context Engineering](./openclaw-context-engineering.md#heartbeat-cron-scratch-and-prompt).
 
-`BindingMatchSchema` is strict-equality on `peer.id`. No catch-all binding without multi-account channel config. The judge agent (in OpenClaw config) is left config-only and never instantiated; the actual judge runs out-of-process from the runner, using Haiku through OpenRouter by default.
+`BindingMatchSchema` is strict-equality on `peer.id`. No catch-all binding without multi-account channel config. The judge agent (in OpenClaw config) is left config-only and never instantiated; the actual judge runs out-of-process from the runner, on the model set by `OPENCLAW_TEST_JUDGE_MODEL`.
 
 ## Artifacts & cost
 
@@ -278,7 +275,7 @@ Layout: `artifacts/<runStamp>/<modelId>-<scenario>-<channel>[-#<NN>][-<VERDICT>]
 Files per task:
 
 - `scenario-log.jsonl` — appended live as the scenario runs, one `ReportEntry` per line, plus `{ entrySeq, augment }` patch lines whenever a nested field (`assertions`, `scenarioLog`, `failure`) is added to an existing entry. Readers fold patches onto entries by `entrySeq`; last write wins. `agentToolCall` entries are appended at the tail in `ts` order with `entrySeq` values continuing past the live entries'. Full tool result `content` is preserved here — never truncated.
-- `report.json` — final `ScenarioReport`, written once at end. Merges live entries with `agentToolCall` entries and sorts the array by `ts`. `entrySeq` is the same identifier the jsonl uses, so a failure pointing at `entrySeq: 7` resolves to the same entry in both files. A long string `content`, or a `read` call's text content blocks, on `agentToolCall.result` is replaced by `truncatedContent` (60 chars + `…`) for compactness; the jsonl keeps the full value. Adds per-scenario `cost = { agentUsd, judgeUsd, totalUsd, agentTurns }`.
+- `report.json` — final `ScenarioReport`, written once at end. Merges live entries with `agentToolCall` entries and sorts the array by `ts`. `entrySeq` is the same identifier the jsonl uses, so a failure pointing at `entrySeq: 7` resolves to the same entry in both files. A long string `content`, or a `read` call's text content blocks, on `agentToolCall.result` is replaced by `truncatedContent` (60 chars + `…`) for compactness; the jsonl keeps the full value. Adds per-scenario `cost = { agentUsd, judgeUsd, totalUsd, agentTurns }`; `judgeUsd` and `totalUsd` are omitted when the judge cost is unknown.
 - `transcripts.json` — the conversation's session transcripts (see below).
 - `gateway.log` — the gateway's OpenClaw file log, `/tmp/openclaw/openclaw-<date>.log`, copied through the IPC volume at the end of the cell. Provider failures such as an HTTP 401 appear here and nowhere in the transcripts. Under `--reuse-stack` it also holds earlier cells' lines. A failed copy is a runner warning, not a cell failure.
 
@@ -310,7 +307,7 @@ The store lives outside the shared mounts and dies with the per-cell stack recre
 
 A conversation spans **multiple sessions** — Discord's channel session plus a per-thread session (the thread session is where the real work happens), and any subagent sessions — each with its own transcript. Before computing cost, the runner waits for the transcripts to go **quiescent** (`waitForTranscriptQuiescence`): no new message across a settle window AND no session whose last message leaves a turn open (a tool result, or an assistant stop for tool use), bounded by a max wait. The transcript is appended per message, so the settle window alone would return between two tool calls of one turn; the open-turn gate holds until the turn-final assistant message — the one carrying its usage — has landed.
 
-Cost: sum `usage.cost.total` over the assistant messages of every session, plus the judge's inline `usage` priced via an in-runner table. The transcript is written for every provider (OpenClaw computes the cost from the configured per-million-token pricing), so cost and tool-call parsing work under Anthropic, OpenRouter/Qwen, or any other provider.
+Cost: sum `usage.cost.total` over the assistant messages of every session, plus the judge's inline `usage` priced with `OPENCLAW_TEST_JUDGE_INPUT_USD_PER_MTOK` and `OPENCLAW_TEST_JUDGE_OUTPUT_USD_PER_MTOK`. Without both prices, the judge cost and the total are unknown. The transcript is written for every provider (OpenClaw computes the cost from the configured per-million-token pricing), so cost and tool-call parsing work under Anthropic, OpenRouter/Qwen, or any other provider.
 
 Tool calls are read from the same transcripts: walk each session's messages (OpenClaw's neutral message shape — assistant `toolCall` blocks, `toolResult` messages) and union across sessions, deduped by `toolUseId`. Scenarios assert on these calls via `ctx.waitForAgentToolCall(predicate, { label })`, which polls the same aggregated view until a match appears and hard-fails on timeout.
 
@@ -319,9 +316,9 @@ Trajectory capture is default-on (disable with `OPENCLAW_TRAJECTORY=0` on the ga
 ## Judge
 
 `judgeLLM` calls its provider directly from the runner — no bus traffic, no gateway involvement. It
-is not an OpenClaw agent. It defaults to `openrouter/anthropic/claude-haiku-5.5`; the consumer
-Compose stack forwards a host `OPENCLAW_TEST_JUDGE_MODEL` override. LiteLLM-style `anthropic/` and `openrouter/` references are
-supported.
+is not an OpenClaw agent. Its model comes from the required `OPENCLAW_TEST_JUDGE_MODEL`, which the
+Compose stack forwards from the host; the judge fails before any request without it. LiteLLM-style `anthropic/` and `openrouter/` references are
+supported. `OPENCLAW_TEST_JUDGE_EFFORT` optionally sets the reasoning effort.
 
 Prefer structural assertions over `judgeLLM`; reserve the judge for free-form content claims.
 

@@ -59,7 +59,7 @@ Write every command as `{{ALIGNDEV}} …` or `{{ALIGNFIRST}} …`. They render a
 
 ### Core and runbooks
 
-A harness truncates a long command output, so every rendered guide stays under 25,000 characters under `codingAgent` with a recognized harness, and under 40,000 under `openclaw`. `packages/aligndev/test/guide-renders.test.ts` enforces both limits. The unrecognized-harness render of `guide code` holds every harness block, exceeds 25,000 and stays outside the test. An operator shell, which has no output cap, receives it. So does a session whose environment carries the markers of several harnesses; setting `ALIGNDEV_ASSISTANT_HARNESS` restores its own render. The global assistant instructions that the dispatcher appends from `~/.alignfirst/ASSISTANTS.md` fall outside these limits: their author keeps them short.
+A harness truncates a long command output, so every rendered guide stays under 25,000 characters under `codingAgent` with a recognized harness, and under 40,000 under `openclaw`. `packages/aligndev/test/guide-renders.test.ts` enforces the first limit in CI, and `packages/aligndev/test/openclaw/guide-renders.test.ts` the second, through `npm run test:openclaw --workspace aligndev`. The unrecognized-harness render of `guide code` holds every harness block, exceeds 25,000 and stays outside the test. An operator shell, which has no output cap, receives it. So does a session whose environment carries the markers of several harnesses; setting `ALIGNDEV_ASSISTANT_HARNESS` restores its own render. The global assistant instructions that the dispatcher appends from `~/.alignfirst/ASSISTANTS.md` fall outside these limits: their author keeps them short.
 
 A section stays in the core, `working-session`, when most sessions need it. It becomes a runbook, read when its situation arises, when only some sessions need it. A guide read at a moment of its own, such as the completion turn, is a runbook too.
 
@@ -208,7 +208,7 @@ Lesson: the file the assistant reads *first* on a turn sets its frame. If that f
 If the same agent ignores a procedure on one run and follows it on another, the doc is probably ambiguous, not unlucky — but confirm the rate before rewriting. A single failure in ten green runs is variance, not a defect; tightening a 90%-reliable instruction can over-constrain the sibling paths. Measure first:
 
 ```sh
-npm run e2e -- --model gpt-6.1-terra --channel discord-mock --iterations 10 --max-failures 10 A01-new-work-to-be-done
+npm run e2e -- --channel discord-mock --iterations 10 --max-failures 10 A01-new-work-to-be-done
 ```
 
 `--max-failures` defaults to `1` (aborts the pair after the second failure), so raise it to see the full pass/fail rate; omit `--stop-on-fail`. Only if the failure rate is material, tighten the structure — one sentence, one template, one ordering — and re-run to confirm the fix sticks across iterations.

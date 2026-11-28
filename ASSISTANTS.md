@@ -36,6 +36,7 @@ Run the complete `npm run build` from the repository root before checks. Integra
 | `npm run build` | Build every package |
 | `npm test` | Test every package (`npm test --workspace <name>` for one) |
 | `npm run test:integration --workspace <name>` | Run a package's integration suite after the root build |
+| `npm run test:openclaw` | Run the OpenClaw suites, which `npm test` and `test:integration` leave out ([details](docs/aligndev-openclaw/running-openclaw-tests.md#offline-helper-checks)) |
 | `npm run lint` / `npm run lint:fix` | Check / fix with Biome |
 | `npm run docmap` | Browse the project documentation |
 | `npm run workspace -- <command>` | Manage worktree workspaces (`--guide` for the procedures) |
@@ -45,9 +46,9 @@ In the main worktree, `.plans` is a symlink to the `alignfirst/` folder in a clo
 
 ## Packaged acceptance
 
-After building, run `npm run release:smoke -- --cli-only`. It installs checkout tarballs, including the workspace kernel, into an isolated CLI tree and exercises separate package-free disposable consumers. Python acceptance requires `python3` with stdlib `venv`; it uses no pip/network installer. The fixture proves two-package shared imports, virtual-environment/data/port isolation, a real HTTP API, a portless worker and Python content/transform/summary scripts. It does not exercise uv, FastAPI, Celery or Docker.
+After building, run `npm run release:smoke -- --cli-only`. It installs checkout tarballs, including the workspace kernel, into an isolated CLI tree, checks each CLI's version and module resolution, and runs the default workspace lifecycle (setup, child workspace, list, teardown, remove) in a package-free disposable consumer.
 
-Run `BUN_BIN=$(command -v bun) npm run test:cli-runtimes` with Bun **1.4.4** and usable `bwrap`. Missing prerequisites fail acceptance rather than skip a tier. `CLI_RUNTIME_KEEP=1` retains disposable consumers; the runner prints the artifact directory with exact commands and executable/runtime/cwd audit records. The matrix covers Node/Bun launchers and installed-child finalize/stop/removal, restricted PATH and filesystem-proven Node absence. Project commands retain their selected toolchain independently of the CLI runtime. Harness checks use a fake Docker executable and offline native shims, not production services or providers.
+Run `BUN_BIN=$(command -v bun) npm run test:cli-runtimes` with Bun **1.4.4** and usable `bwrap`. Missing prerequisites fail acceptance rather than skip a tier. `CLI_RUNTIME_KEEP=1` retains disposable consumers; the runner prints the artifact directory with exact commands and executable/runtime/cwd audit records. The restricted tier runs `alignfirst` through `bunx --bun` with Node absent from PATH. The isolated tier hides every Node installation in a `bwrap` sandbox, then runs under Bun the alignfirst, aligndev and companion lifecycles, one workspace lifecycle and the openclaw-test harness lifecycle. Harness checks use a fake Docker executable and offline native shims, not production services or providers.
 
 ## OpenClaw regression policy
 

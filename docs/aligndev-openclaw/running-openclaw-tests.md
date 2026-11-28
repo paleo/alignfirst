@@ -23,7 +23,7 @@ This guide documents what is specific to the AlignDev harness. Run its commands 
 
 ```sh
 cp .env.local.example .env.local
-# Configure OPENROUTER_API_KEY, OPENCLAW_CODEX_HOME, and CODING_AGENT as described below.
+# Configure the keys, model IDs, OPENCLAW_CODEX_HOME and CODING_AGENT as described below.
 
 # Create bind-mount outputs as your user so Docker does not create root-owned directories.
 mkdir -p artifacts .gateway-logs
@@ -34,7 +34,7 @@ npm run build --prefix ..
 # Build and pack local packages, install them, then build the harness image.
 npm run env:build
 npm run env:up
-npm run e2e -- --model gpt-6.1-terra --channel slack-mock A03-question
+npm run e2e -- --channel slack-mock A03-question
 npm run env:down
 ```
 
@@ -71,7 +71,7 @@ The stock CLI writes the version-only base tag `paleo/openclaw-test-base:<packag
    ```
 
    Here `default` is the Docker-driver builder on the default context. A container-driver builder cannot resolve a local-only base tag. Set absolute `OPENCLAW_TEST_PROJECT_DIR`, `OPENCLAW_TEST_PACKAGE_DIR`, workspace/config/scenarios/output paths and `ALIGNFIRST_REPO_DIR` before Compose. Pre-create writable bind-mount directories as the caller. Keep the dedicated Codex home outside the build context and mount it read-only.
-3. Securely render a private runtime config using the runner's environment expansion, empty-key provider dropping and selected `agents.entries.main.model`. Keep expanded secrets outside artifacts/build contexts, with mode `0600`. For authorized Terra acceptance, select `openai/gpt-6.1-terra`, use the Haiku/OpenRouter judge and clear Anthropic/Z.AI keys. Forward the same private environment, config and worker paths on every Compose command.
+3. Securely render a private runtime config using the runner's environment expansion, provider dropping (empty key or model ID) and selected `agents.entries.main.model`. Keep expanded secrets outside artifacts/build contexts, with mode `0600`. For authorized Terra acceptance, select the Terra model of `.env.local`, use the Haiku/OpenRouter judge and clear Anthropic/Z.AI keys. Forward the same private environment, config and worker paths on every Compose command.
 4. Refresh a private worker workspace before each cell. Start only the owned bus/gateway with `up -d --no-build --pull never --force-recreate --wait bus gateway`. Invoke `run --rm --no-deps --pull never --use-aliases runner` with the scenario, channel, model ID/ref, iteration index/width, base stamp and results-directory arguments from `packages/openclaw-test/src/loop.ts`. Check both the runner exit and its cell JSON. Recreate between cells; do not use stack reuse.
 5. Wait for every runner and tear down only the explicit owned project with the same Compose files and environment. Remove only its owned volumes/networks when needed. Preserve timestamped results and sanitized build/gateway logs. Inspect exact project/service labels and sanitized load errors; expanded Compose configuration can expose secrets.
 
@@ -79,10 +79,15 @@ Unique tags isolate names, not CPU, RAM, disk or build cache. Agree on a resourc
 
 ## Configuration
 
-Use only Terra (`openai/gpt-6.1-terra`) for conversation-model tests. The static catalog of the pinned OpenClaw 2026.10.9 predates this model, so `openclaw.json` declares it under `models.providers.openai.models`; without that row, the first turn fails with `Unknown model`. The judge runs `openrouter/anthropic/claude-haiku-5.5` on `OPENROUTER_API_KEY`. The Anthropic, Qwen and GLM providers in `openclaw.json` stay as examples at their latest model versions; the runner drops a provider whose key is empty.
+Use only Terra for conversation-model tests, with Haiku through OpenRouter as judge, on `OPENROUTER_API_KEY`. Model IDs live only in the git-ignored `.env.local`; committed files hold placeholders. The static catalog of the pinned OpenClaw 2026.10.9 may lack the selected model, so `openclaw.json` declares one model row per provider under `models.providers.<provider>.models`; without it, the first turn fails with `Unknown model`. The Anthropic, OpenRouter and Z.AI providers stay as examples. The runner drops a provider whose key or model ID resolves empty.
 
+- `OPENCLAW_TEST_OPENAI_MODEL`, `OPENCLAW_TEST_ANTHROPIC_MODEL`, `OPENCLAW_TEST_OPENROUTER_MODEL`, `OPENCLAW_TEST_ZAI_MODEL` — the model ID of each `openclaw.json` provider. Terra needs only the OpenAI one.
+- `OPENCLAW_TEST_MODELS`, `OPENCLAW_DEFAULT_TEST_MODEL` — the agent model catalog and its default. `env up` and a run without `--model` use the default, as the commands below do.
+- `OPENCLAW_TEST_JUDGE_MODEL` — required: the judge's `openrouter/<vendor>/<model>` or `anthropic/<model>` reference. Every harness Compose command, `env down` included, refuses to start without it. The [package README](../../packages/openclaw-test/README.md#judge-model) details the judge variables.
+- `OPENCLAW_TEST_JUDGE_EFFORT` — optional judge effort. Unset, no effort is sent.
+- `OPENCLAW_TEST_JUDGE_INPUT_USD_PER_MTOK`, `OPENCLAW_TEST_JUDGE_OUTPUT_USD_PER_MTOK` — optional judge prices in USD per million tokens. Without both, the judge cost is reported as unknown.
 - `OPENCLAW_WORKSPACE_DIR=./workspace` — the `myassistant` workspace, bind-mounted into the gateway. Workspace edits iterate live.
-- `OPENCLAW_CODEX_HOME` — absolute path to a file-backed Codex home. Required for `openai/gpt-6.1-terra`. The gateway mounts it read-only and imports its ChatGPT/Codex credential into the disposable `main` agent's OpenClaw auth store at startup; no OpenAI Platform API key is required. Create a dedicated login so test authentication is isolated from the main Codex session:
+- `OPENCLAW_CODEX_HOME` — absolute path to a file-backed Codex home. Required for Terra. The gateway mounts it read-only and imports its ChatGPT/Codex credential into the disposable `main` agent's OpenClaw auth store at startup; no OpenAI Platform API key is required. Create a dedicated login so test authentication is isolated from the main Codex session:
 
   ```sh
   mkdir -p .codex-home
@@ -98,8 +103,8 @@ Use only Terra (`openai/gpt-6.1-terra`) for conversation-model tests. The static
 
   The plugin installs, the repair and Doctor share one image layer, which then drops the plugin captures they left. Since 2026.10, loading a plugin with native binaries (Codex) hardlinks its files and checks the link's inode. Overlayfs gives a new inode to a lower-layer file with several links when the link copies it up, so a split layer or a leftover capture makes Codex fail to load: `Native plugin artifact changed during admission`.
 - `ALIGNFIRST_REPO_DIR` — host path to the monorepo root (build it first). Live-mounted read-only at `/opt/alignfirst`; the `aligndev` and `alignfirst` wrappers run both CLIs from the checkout. `aligndev code` runs for real, while `claude`, `codex` and `pi` resolve to the mock through PATH. `aligndev guide` reads its templates at runtime, so edits iterate live: the playbook comes from `packages/aligndev/templates/guide/playbook/`, and the delegation instructions (`aligndev guide code`) from `packages/aligndev/templates/guide/code.md`.
-- `CODING_AGENT=codex|claude|pi` — required mocked-child selector, independent of the OpenClaw conversation model. `CODING_AGENT_MODELS`, a comma-separated list, optionally replaces accepted model names or pins a full Codex slug/Pi-native selector. Both reach the gateway and runner. The pure `scripts/coding-agent-settings.ts` helper generates `code.profiles["mock-agent"]: { harness, models? }` and an `openclaw` profile whose `defaultAgentProfile` is `mock-agent`, with `projectsRoot: "/home/assistant/projects"`. Commands the runner execs in the gateway, such as A09's `aligndev code`, set `ALIGNDEV_ASSISTANT_HARNESS=openclaw`: only OpenClaw's own exec runtime sets `OPENCLAW_SHELL=exec`. The thin writer saves it to `/home/assistant/.alignfirst/aligndev.settings.json`; missing/invalid selectors fail startup. Empty model lists add no override or default model. A09 explicitly selects `terra` for Codex, `sonnet` for Claude or `openai/gpt-6.1-terra` for Pi; model-list overrides must allow that selection. Pi mocks need neither a real Pi CLI nor Pi credentials. Terra/OpenClaw's Codex credential import remains independent, including with a mocked Pi child.
-- [`docker-compose.yml`](../../aligndev-openclaw-tests/docker-compose.yml) — one shared fixture volume on gateway and runner at `/home/assistant/projects`; the monorepo bind mount on `gateway`; `OPENCLAW_TEST_JUDGE_MODEL` defaults to `openrouter/anthropic/claude-haiku-5.5` on `runner` and accepts a host override.
+- `CODING_AGENT=codex|claude|pi` — required mocked-child selector, independent of the OpenClaw conversation model. `CODING_AGENT_MODELS`, a comma-separated list, optionally replaces accepted model names or pins a full Codex slug/Pi-native selector. Both reach the gateway and runner. The pure `scripts/coding-agent-settings.ts` helper generates `code.profiles["mock-agent"]: { harness, models? }` and an `openclaw` profile whose `defaultAgentProfile` is `mock-agent`, with `projectsRoot: "/home/assistant/projects"`. Commands the runner execs in the gateway, such as A09's `aligndev code`, set `ALIGNDEV_ASSISTANT_HARNESS=openclaw`: only OpenClaw's own exec runtime sets `OPENCLAW_SHELL=exec`. The thin writer saves it to `/home/assistant/.alignfirst/aligndev.settings.json`; missing/invalid selectors fail startup. Empty model lists add no override or default model. A09 explicitly selects `terra` for Codex, `sonnet` for Claude or the `PI_CONTRACT_MODEL` selector of `scripts/coding-agent-settings.ts` for Pi; model-list overrides must allow that selection. Pi mocks need neither a real Pi CLI nor Pi credentials. Terra/OpenClaw's Codex credential import remains independent, including with a mocked Pi child.
+- [`docker-compose.yml`](../../aligndev-openclaw-tests/docker-compose.yml) — one shared fixture volume on gateway and runner at `/home/assistant/projects`; the monorepo bind mount on `gateway`; the required `OPENCLAW_TEST_JUDGE_MODEL` on `runner`.
 
 ## Fixtures
 
@@ -113,7 +118,7 @@ An OpenClaw managed worktree, created by a `webchat` conversation with `worktree
 
 `aligndev project` runs for real against the fixture tree and calls `alignfirst config --json` in each child. Scenarios assert on the agent's exec calls and on the filesystem.
 
-A24 and A25 opt into [`scripts/lightweight-fixture.ts`](../../aligndev-openclaw-tests/scripts/lightweight-fixture.ts) after reset. It transforms only `nimbus` into a dependency-free ESM library with a real local origin and `npm test`. It removes only the merged configuration's `workspace`/`devServer` sections and application tooling, retaining conventions, plans settings and explicit instructions, then provides missing or tracked plans, respectively. The tracked case keeps a recognizable `old-history.md`. Existing full-workspace fixtures and assertions remain unchanged. Offline tests also exercise shared untracked plans and an already prepared companion, including profile/other-item preservation and removal that retains shared targets.
+A24 and A25 opt into [`scripts/lightweight-fixture.ts`](../../aligndev-openclaw-tests/scripts/lightweight-fixture.ts) after reset. It transforms only `nimbus` into a dependency-free ESM library with a real local origin and `npm test`. It removes only the merged configuration's `workspace`/`devServer` sections and application tooling, retaining conventions, plans settings and explicit instructions, then provides missing or tracked plans, respectively. The tracked case keeps a recognizable `old-history.md`. Existing full-workspace fixtures and assertions remain unchanged.
 
 The default-mode flow discovers worktrees through `alignfirst workspace list --json`, not directory naming. It removes the recipe sections, keeps the remaining configuration and ignored local runtime storage, and reports protocol-ready preparation. The assistant creates the worktree before coding delegation. Its `onPrompt` mock checks the request and branch, writes a small label change, runs the actual test and reports that result without server claims. Companion inspection runs in the gateway; those paths are not runner-local mounts.
 
@@ -174,7 +179,7 @@ For authorized acceptance, rebuild the CLIs and harness image from `aligndev-ope
 ```bash
 npm run build --prefix ..
 npm run env:build
-CODING_AGENT=codex npm run e2e -- --model gpt-6.1-terra --channel slack-mock --iterations 1 \
+CODING_AGENT=codex npm run e2e -- --channel slack-mock --iterations 1 \
   A01-new-work-to-be-done A08-go-ahead-delegation
 ```
 
@@ -183,7 +188,7 @@ Inspect the cell results, transcripts and gateway logs. Investigate and fix unex
 The app scenarios run on `webchat` only:
 
 ```bash
-CODING_AGENT=codex npm run e2e -- --model gpt-6.1-terra --channel webchat \
+CODING_AGENT=codex npm run e2e -- --channel webchat \
   A26-app-conversation-from-home A27-managed-worktree-conversation
 ```
 
@@ -279,19 +284,25 @@ Existing consumers with retired settings/wrappers/state first follow [the clean-
 
 ## Offline helper checks
 
-From the repository root, using Node 26:
+The OpenClaw suites stay out of `npm test`, `npm run test:integration` and the CI. From the repository root, using Node 26, build the packages, vendor and install the harness packages (see [Vendored packages](#vendored-packages)), then run them all:
 
 ```sh
 npm run build
-npm test --prefix aligndev-openclaw-tests
-npm run typecheck --prefix aligndev-openclaw-tests
-npm test --workspace aligndev -- test/code/pi-agent.test.ts
-sh -n aligndev-openclaw-tests/scripts/gateway-entrypoint.sh
+npm run vendor --prefix aligndev-openclaw-tests
+npm install --prefix aligndev-openclaw-tests
+npm run test:openclaw
 ```
 
-The Node built-in suite checks profile generation, native-agent bypass detection, all three new/resume mock streams against the built adapters, Pi fault queues and current-response context accounting. Its disposable fixture integration runs frozen pnpm installs and the actual workspace/dev lifecycle, including linked worktrees, project port isolation, URL input changes and server cleanup. Native state and writer destinations use temporary directories; unexpected service/provider/CLI operations fail. No scenario runner is imported. Default-mode fixture checks additionally run real checkout AlignFirst workspace commands for shared, missing and tracked plans, discovery/reuse, branch consultation and no-branch status policies, and cleanup. Request-capture negative controls reject omitted requirements while tolerating markup and verb inflections. Parser-only stream permutations remain in AlignDev's Pi adapter tests. A09 source includes profile/session metadata, exact native argv, catchup and failure assertions.
+`npm run test:openclaw` chains four steps; run only the steps a change concerns:
 
-The standalone suite also loads each surface's public factory from the installed vendor package. It verifies shared-host Zod resolution, nested host/local schema composition, invalid-settings rejection and concrete JSON Schema generation. Root source-path tests and CLI/Pi release smoke do not cover this packed OpenClaw boundary.
+1. `npm run test:openclaw --workspaces --if-present` — the unit tests of the five OpenClaw packages and AlignDev's OpenClaw-mode tests (`packages/aligndev/test/openclaw/`).
+2. `npm run test:openclaw-integration --workspace @alignfirst/service-openclaw-plugin` — the deterministic gateway suite described under [Vendored packages](#vendored-packages).
+3. `npm run test:openclaw-templates` — the deployment-template tests and the setup-skill link check (`scripts/test/deployment-*.test.mjs`, `scripts/test/openclaw-setup-skill-links.test.mjs`).
+4. `npm test --prefix aligndev-openclaw-tests` — the harness helper suite.
+
+For a harness change, also run `npm run typecheck --prefix aligndev-openclaw-tests` and `sh -n aligndev-openclaw-tests/scripts/gateway-entrypoint.sh`.
+
+The harness helper suite is pure Node. It checks profile generation, native-agent bypass detection, all three new/resume mock streams against the built adapters, Pi fault queues, current-response context accounting and the fixture port blocks. Request-capture negative controls reject omitted requirements while tolerating markup and verb inflections. A packed-boundary test checks that the installed channel mock and OpenClaw share one Zod instance. Native state and writer destinations use temporary directories; unexpected service/provider/CLI operations fail. The suite runs no package install, Git workspace or AlignFirst lifecycle and imports no scenario runner: only the scenarios exercise `reset-fixture.mjs` and the template lockfile. Parser-only stream permutations remain in AlignDev's Pi adapter tests.
 
 These offline checks do not start Docker, import credentials or execute any scenario, including A09. Record conversation-model results separately from offline checks. Mock success certifies neither Pi authentication/trust nor native service-account permissions. Live deployment acceptance, deployment parity and production headless waiting require their own evidence.
 
@@ -308,10 +319,10 @@ The plugin is explicitly allowlisted, loaded from its installed package path, an
 The complementary deterministic suite makes no model calls and runs outside Docker against the OpenClaw executable pinned in the root lockfile. Complete `npm run build` from the repository root first, including for filtered integration files. Preflight checks provisioning only; rebuild after source changes:
 
 ```sh
-KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:integration --workspace @alignfirst/service-openclaw-plugin --prefix ..
+KEEP_THREAD_HANDOFF_ARTIFACTS=1 npm run test:openclaw-integration --workspace @alignfirst/service-openclaw-plugin --prefix ..
 ```
 
-It retains test-owned gateway logs, scripted-provider requests, configuration, and SQLite restart state under `/tmp/thread-handoff-*`. Omit the environment variable to clean fixtures automatically. Both surfaces cover abrupt pending and post-claim restarts, exact canonical session keys and continuation after restart. Immediate startup keeps its 20-second bound and `attemptCount: 1`; recovery deliberately records a second attempt.
+It retains test-owned gateway logs, scripted-provider requests, configuration, and SQLite restart state under `/tmp/thread-handoff-*`. Omit the environment variable to clean fixtures automatically. Most tests share one Slack and one Discord gateway. A dedicated Slack gateway covers abrupt pending and post-claim restarts, exact canonical session keys and continuation after restart; recovery records a second attempt.
 
 To repeat that suite against a clean standalone packed install outside Docker, set `THREAD_HANDOFF_PACKED_ROOT` to its absolute consumer directory. The fixture selects that install's OpenClaw executable and installed channel/service plugins instead of repository package paths. Provision that consumer separately; the root build does not install it. Its scripted local provider makes no external model requests. This supplements image loading; it does not certify official plugin capture, credential import or Terra behavior.
 
@@ -320,6 +331,6 @@ To repeat that suite against a clean standalone packed install outside Docker, s
 - [`openclaw.json`](../../aligndev-openclaw-tests/openclaw.json) · [`docker-compose.yml`](../../aligndev-openclaw-tests/docker-compose.yml) · [`Dockerfile`](../../aligndev-openclaw-tests/Dockerfile) · [`package.json`](../../aligndev-openclaw-tests/package.json) · [`scripts/vendor-packages.mjs`](../../aligndev-openclaw-tests/scripts/vendor-packages.mjs) — committed.
 - [`sandbox/inbound.sh`](../../aligndev-openclaw-tests/sandbox/inbound.sh) — manual inbound-message helper; see [Manual Gateway Sandbox](./manual-gateway-sandbox.md).
 - `vendor/` (gitignored) — locally-built harness, plugin and docmap tarballs, regenerated by `npm run vendor`.
-- `.env.local` (gitignored) — API keys, workspace/repository paths, and `CODING_AGENT`.
+- `.env.local` (gitignored) — API keys, model IDs, workspace/repository paths, and `CODING_AGENT`.
 - `artifacts/` (gitignored) — per-run outputs.
 - `.gateway-logs/` (gitignored) — `raw-stream.jsonl` (opt-in). Session transcripts live in the gateway's SQLite store; each cell's artifact dir archives them as `transcripts.json`, and the gateway's OpenClaw log as `gateway.log`.

@@ -30,7 +30,7 @@ Loading only registers capabilities. Work belongs to the active runtime, session
 
 Shutdown, session replacement, reload and successful navigation to a different tree point stop owned work. Merely opening or cancelling the tree picker does not stop it. Commands must stay attached; no daemonization or detachment is supported. Cleanup sends TERM immediately, escalates after a shared five-second graceful window, and awaits bounded direct-child reaping and pipe draining. Jobs stop concurrently. Incomplete cleanup remains an explicit error with retained ownership for retry, not a successful cancellation. Crash/SIGKILL recovery and deliberately escaped daemons are outside the guarantee.
 
-Each package has its own small `process-tree.ts` leaf so installation stays independent. Propagate generic fixes and conformance tests to both copies. They supervise observable attached descendants and retained process groups, including Pi's separately grouped bash work. On Linux they read the process table from `/proc` and skip processes being reaped or unreadable, as `ps` does; `ps` serves macOS only. This is process ownership, not an OS sandbox.
+Each package has its own small `process-tree.ts` leaf so installation stays independent. Apply generic fixes to both copies; pi-background's `test/process-tree.test.ts` runs one conformance suite against both. They supervise observable attached descendants and retained process groups, including Pi's separately grouped bash work. On Linux they read the process table from `/proc` and skip processes being reaped or unreadable, as `ps` does; `ps` serves macOS only. This is process ownership, not an OS sandbox.
 
 ## Notices are not workflow completion
 
@@ -69,7 +69,7 @@ npm run lint --workspace @alignfirst/pi-subagent
 npm run lint --workspace @alignfirst/pi-background
 ```
 
-`packages/pi-background/test/integration/aligndev-integration.test.ts` runs through `test:integration` and packs the prebuilt background extension. Complete the root `npm run build` first, including for filtered files. Integration preflight checks provisioning only; rebuild after source changes. It exercises quiet/result identity, out-of-order worktrees, failure/authentication, cancellation and runtime new/resume/fork/reload/quit. Fixture-local executables reject accidental npx/registry fallback.
+`packages/pi-background/test/integration/aligndev-integration.test.ts` runs through `test:integration` and packs the prebuilt background extension. Complete the root `npm run build` first, including for filtered files. Integration preflight checks provisioning only; rebuild after source changes. It exercises exact companion files and quiet results for out-of-order worktrees, and a stop that reaps a TERM-resistant coding child. Fixture-local executables reject accidental npx/registry fallback.
 
 After builds, run the packed-distribution gate:
 
@@ -77,7 +77,7 @@ After builds, run the packed-distribution gate:
 npm run release:smoke
 ```
 
-It installs the CLI tarballs without Pi, then creates three separate disposable Pi installs at the test driver's pinned version. `scripts/pi-packed-smoke.mjs` uses package manifests and the public resource loader/runtime, with network-rejecting scripted providers. It checks assets/peers, duplicate registration, load-time resources, synchronous children, protected compaction/navigation, stale native follow-ups and concurrent process cleanup during replacement. Missing root entries and invalid default factories must fail the public loader check. `scripts/pi-packed-presentation.mjs` checks unversioned npm-source discovery against those same local tarballs, then captures a prompt-free real TUI startup through `scripts/pi-packed-tui.py`. It verifies package labels without `:dist` and single tool registration; Python 3 and a Unix PTY are required. On Linux the combined install also runs nested Pi/bash process groups. The drivers make no external model requests; only npm installation needs registry access.
+It installs the CLI tarballs without Pi, then installs each extension alone in a disposable Pi install at the test driver's pinned version and checks that it bundles no host or sibling copy. `scripts/pi-packed-smoke.mjs` loads the extension through Pi's public resource loader and runtime, with a network-rejecting scripted provider. It checks for load errors, side effects and one tool per extension, then makes one subagent call or one background start followed by a status poll. The drivers make no external model requests; only npm installation needs registry access.
 
 Live tests stay outside `npm test`, CI and release smoke. Opt in explicitly after builds:
 
@@ -85,6 +85,6 @@ Live tests stay outside `npm test`, CI and release smoke. Opt in explicitly afte
 node scripts/pi-live-acceptance.mjs --run
 ```
 
-The runner packs and installs disposable artifacts, resolves the explicit Terra selector from Pi's catalog and checks existing authentication. `PI_ACCEPTANCE_MODEL` can select another explicit Terra ID; it never chooses a non-Terra fallback. An unavailable model or credential fails the command. It copies only the selected provider's stored credential into a mode-0600 temporary auth file and removes the isolated installation in `finally`. Sanitized evidence is retained in the printed directory. The terminal lifecycle probe requires Linux and Python 3. To repeat one group, set `PI_ACCEPTANCE_CASE` to `subagents`, `ordinaryCompletion`, `aligndev`, `failureCancellation` or `cliLifecycle`.
+The runner packs and installs disposable artifacts, resolves the required `PI_ACCEPTANCE_MODEL` selector from Pi's catalog and checks existing authentication. The selector comes from the environment or, failing that, from the git-ignored `scripts/.env`. A missing selector, an unavailable model or a missing credential fails the command. It copies only the selected provider's stored credential into a mode-0600 temporary auth file and removes the isolated installation in `finally`. Sanitized evidence is retained in the printed directory. The terminal lifecycle probe requires Linux and Python 3. To repeat one group, set `PI_ACCEPTANCE_CASE` to `subagents`, `ordinaryCompletion`, `aligndev`, `failureCancellation` or `cliLifecycle`.
 
 Use disposable HOME and Pi settings/session directories and explicitly loaded extensions. Do not modify installed extensions, global trust/settings or expose credentials to test discovery. Follow [Releasing](releasing.md#adding-a-package-name) for the owner's new-name bootstrap and trusted-publisher prerequisites; documentation does not authorize publication.

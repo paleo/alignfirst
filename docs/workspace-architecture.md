@@ -106,7 +106,7 @@ So on external stop the foreground's only job is to stop hanging on dead servers
 
 ## Stop and teardown signal mechanics
 
-`stopProcessGroup(pid, 10_000)` ([`process-control.ts`](../packages/workspace/src/process-control.ts)) sends `SIGTERM` to the **process group** (`process.kill(-pid, …)`, falling back to the bare pid), polls liveness every 300ms, and escalates to `SIGKILL` if the group is still alive at the 10s deadline. Because spawn servers are detached group leaders, signaling the group reaches the whole child tree (e.g. a dev server and the watchers it forks).
+`stopProcessGroup(pid, 10_000)` ([`process-control.ts`](../packages/workspace/src/process-control.ts)) sends `SIGTERM` to the **process group** (`process.kill(-pid, …)`, falling back to the bare pid), polls liveness every 100ms, and escalates to `SIGKILL` if the group is still alive at the 10s deadline. Because spawn servers are detached group leaders, signaling the group reaches the whole child tree (e.g. a dev server and the watchers it forks).
 
 - `dev down` (`stopLocal`) — marks cleanup pending before stopping any PID, stops owned spawn groups and then command services in reverse order, sweeps stale ports and releases the record only on success. Stop failures are collected while remaining services are attempted.
 - `dev down --all` (`stopAllRegistered`) — dispatches each target, aggregates failures and releases only successful paths on fresh locked reads. Failed targets remain retryable even after PID exit.

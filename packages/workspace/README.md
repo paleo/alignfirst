@@ -39,6 +39,6 @@ The complete editor schema ships with AlignFirst. Future breaking majors use seq
 
 ## Maintainer checks
 
-From the repository root, run the complete `npm run build`, then `npm run test:integration --workspace @alignfirst/workspace`. Filtered integration files require the same build. Preflight checks provisioning only; rebuild after source changes. Integration remains serialized because fixtures share ports 47100–47109.
+From the repository root, run the complete `npm run build`, then `npm run test:integration --workspace @alignfirst/workspace`. Filtered integration files require the same build. Preflight checks provisioning only; rebuild after source changes. Integration files run in parallel; each file allocates ports from its own 10-port block from 47100.
 
 For kernel internals and accepted limitations, see [Workspace Architecture](https://github.com/paleo/alignfirst/blob/main/docs/workspace-architecture.md).

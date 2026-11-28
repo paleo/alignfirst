@@ -105,7 +105,7 @@ Set the four values at the top for the selected package. Run this Bash block fro
 git status --short
 ```
 
-The current `release:smoke` checks the alignfirst and docmap tarballs together, not their registry dependency availability. For other packages, also run their package-specific installation checks.
+The current `release:smoke` checks the docmap, workspace, alignfirst and aligndev tarballs together and each Pi extension alone, not their registry dependency availability. For other packages, also run their package-specific installation checks. `npm test` leaves out the OpenClaw suites; for an OpenClaw package, also run `npm run test:openclaw`.
 
 Confirm that the selected tag points to the new version and `latest` is unchanged. Registry metadata can lag for several minutes; retry the lookup before treating a missing version as a failed publish. If another stable release ran concurrently, compare with that release rather than reverting its tag.
 

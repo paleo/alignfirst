@@ -161,19 +161,6 @@ All three protocols retain the injectable `QuotaProcessAdapter`. The default pro
 
 Null protects historical unnamed conversations. Only `--profile` or the project registry selection replaces it. Otherwise the resolver constructs the built-ins of the assistant's harness, ignoring configured profiles and flags; an `openclaw` or unrecognized harness fails. The new record keeps null, and the original transcript stays byte-identical. The recorded agent does not replace harness resolution; existing same-agent and native-identity guards still apply.
 
-## Manual Offline Profile Smoke
-
-The named **manual** check runs direct CLI integration against built `alignfirst` and `aligndev` entry points. Prerequisites are installed workspace dependencies, the repository's Node 26 runtime, Git on PATH, and a POSIX host with executable symlink support. From the repository root:
-
-```sh
-npm run build
-npm run test:coding-profiles
-```
-
-The command runs [`scripts/coding-profiles-smoke.mjs`](../scripts/coding-profiles-smoke.mjs). It checks profile selection (registry, `code.fallbackProfile`, the assistant's profile and its `defaultAgentProfile`, `ALIGNDEV_ASSISTANT_HARNESS=openclaw`), the launcher variables kept from the agent, real CLI reports, linked worktrees, companion placement, resume identity, historical-null resume and independent quota routing. Stale settings, retired keys included, must warn only on stderr while help, guide, JSON reports and a launch succeed; invalid recognized fields must still fail. Reads preserve the settings bytes. Disposable homes, projects and native CLI shims keep it offline and isolate settings, synthetic identities and process cleanup. Native agents, credentials and providers are not required.
-
-This is CLI integration, not OpenClaw deployment, Docker, conversation or provider acceptance. Run it deliberately; it is outside root `npm test`, CI, release smoke and all test matrices.
-
 ## Unified workspaces
 
 `alignfirst workspace` owns creation, adoption, preparation, inventory and cleanup. AlignDev has no second lifecycle engine or command aliases. The assistant runs standard preparation directly, in the foreground, and keeps coding delegation separate. It uses the same commands for configured and manifest-free projects. The latter are protocol-ready, with no dependency installation, build, port allocation or service startup.
