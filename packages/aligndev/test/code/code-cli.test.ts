@@ -25,12 +25,16 @@ import {
 } from "../../src/code/code-cli.js";
 import { resolveEfforts } from "../../src/code/efforts.js";
 import { readMachineId } from "../../src/code/machine-id.js";
+import { readModelList, writeModelList } from "../../src/code/model-lists.js";
 import {
   CLAUDE_DEFAULT_MODELS,
   createExecutableModelResolver,
+  createModelLists,
   type ExecutableModelResolver,
+  type ModelCatalogRunner,
   PiStartupDialogError,
 } from "../../src/code/models.js";
+import { createMemory, type Memory } from "../../src/memory/memory.js";
 import {
   appendTranscript,
   applyCompletion,
@@ -51,6 +55,7 @@ import {
   makeCompanionProject,
   makeSink,
   writeConfig,
+  writeSettings,
 } from "../helpers.js";
 import {
   addWorktree,
@@ -164,6 +169,13 @@ describe("parseCodeArgs", () => {
       includeResult: false,
     });
     expect(parseCodeArgs(["quota"], "aligndev")).toEqual({ kind: "quota" });
+    expect(parseCodeArgs(["models"], "aligndev")).toEqual({ kind: "models", refresh: false });
+    expect(parseCodeArgs(["models", "--profile", "p", "--refresh"], "aligndev")).toEqual({
+      kind: "models",
+      profile: "p",
+      refresh: true,
+    });
+    expect(() => parseCodeArgs(["models", "codex"], "aligndev")).toThrow(Error);
   });
 
   it("leaves the version and guide flags to other commands", () => {
@@ -771,6 +783,121 @@ describe("quota", () => {
       }),
     ).toBe(1);
     expect(stderr.text()).toContain("limits unavailable");
+  });
+});
+
+describe("models", () => {
+  let home: string;
+  let memory: Memory;
+
+  beforeEach(() => {
+    home = makeHome();
+    writeSettings(home, {
+      code: {
+        profiles: {
+          work: { harness: "codex", modelAliases: { fast: "gpt-6.2-luna-fast" } },
+          gemini: { harness: "agy" },
+        },
+      },
+    });
+    memory = createMemory(home);
+  });
+
+  afterEach(() => memory.close());
+
+  async function seed(harness: "codex" | "agy", profile: string, models: string[]): Promise<void> {
+    await writeModelList(
+      memory,
+      harness,
+      { env: {}, profile },
+      { cliVersion: "1.0.0", configDir: null, models },
+    );
+  }
+
+  async function runModels(
+    tokens: string[],
+    runners: Partial<Record<"codex" | "agy", ModelCatalogRunner>>,
+  ) {
+    const stdout = makeSink();
+    const stderr = makeSink();
+    const code = await main({
+      argv: ["node", "aligndev", "code", "models", ...tokens],
+      env: {},
+      home,
+      stdout,
+      stderr,
+      modelLists: createModelLists(memory, runners, async () => "1.0.0"),
+    });
+    return { code, stdout: stdout.text(), stderr: stderr.text() };
+  }
+
+  function catalogs(codex: string[], agyExitCode = 0) {
+    const codexRunner = vi.fn(async () => ({
+      exitCode: 0,
+      stdout: JSON.stringify({ models: codex.map((slug) => ({ slug })) }),
+      stderr: "",
+    }));
+    const agyRunner = vi.fn(async () => ({
+      exitCode: agyExitCode,
+      stdout: "gemini-4-neon-high\tNeon\n",
+      stderr: "native-agy-secret\n",
+    }));
+    return { codex: codexRunner, agy: agyRunner };
+  }
+
+  it("reports the model of each name from the remembered lists without a native command", async () => {
+    await seed("codex", "work", ["gpt-6.2-sol", "gpt-6.1-sol", "gpt-6.2-luna"]);
+    await seed("agy", "gemini", ["gemini-4-neon-high"]);
+    const runners = catalogs([]);
+    const result = await runModels([], runners);
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toMatch(/sol: gpt-6\.2-sol\b/);
+    expect(result.stdout).toMatch(/luna: gpt-6\.2-luna\b/);
+    expect(result.stdout).toMatch(/fast: gpt-6\.2-luna-fast\b/);
+    expect(result.stdout).toMatch(/neon: gemini-4-neon\b/);
+    expect(runners.codex).not.toHaveBeenCalled();
+    expect(runners.agy).not.toHaveBeenCalled();
+  });
+
+  it("refreshes the other profiles when one fails, and keeps the failing profile's list", async () => {
+    await seed("agy", "gemini", ["gemini-3-neon-high"]);
+    const result = await runModels(["--refresh"], catalogs(["gpt-7-sol"], 1));
+    expect(result.code).toBe(1);
+    expect(result.stdout + result.stderr).not.toContain("native-agy-secret");
+    expect((await readModelList(memory, "codex", { env: {}, profile: "work" }))?.models).toEqual([
+      "gpt-7-sol",
+    ]);
+    expect((await readModelList(memory, "agy", { env: {}, profile: "gemini" }))?.models).toEqual([
+      "gemini-3-neon-high",
+    ]);
+  });
+
+  it("shows the old and the new model of a name that a refresh changed", async () => {
+    await seed("codex", "work", ["gpt-6.2-sol", "gpt-6.2-luna"]);
+    const result = await runModels(
+      ["--refresh", "--profile", "work"],
+      catalogs(["gpt-7-sol", "gpt-6.2-luna"]),
+    );
+    expect(result.code).toBe(0);
+    expect(result.stdout).toMatch(/sol: gpt-6\.2-sol → gpt-7-sol\b/);
+    expect(result.stdout).toMatch(/luna: gpt-6\.2-luna \(/);
+  });
+
+  it("refuses to refresh without an available memory", async () => {
+    const file = join(home, "file");
+    writeFileSync(file, "");
+    const runners = catalogs(["gpt-7-sol"]);
+    const code = await main({
+      argv: ["node", "aligndev", "code", "models", "--refresh"],
+      env: {},
+      home,
+      stdout: makeSink(),
+      stderr: makeSink(),
+      modelLists: createModelLists(createMemory(file), runners, async () => "1.0.0"),
+    });
+    expect(code).toBe(1);
+    expect(runners.codex).not.toHaveBeenCalled();
+    expect(runners.agy).not.toHaveBeenCalled();
   });
 });
 

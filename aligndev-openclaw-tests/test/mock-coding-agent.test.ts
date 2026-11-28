@@ -325,6 +325,11 @@ for (const [agent, adapter] of [
       assert.equal(catalog.exitCode, 0);
       assert.match(catalog.stdout, /gpt-6\.1-terra/u);
     }
+    if (agent !== "claude") {
+      const version = await fixture.invoke(agent, ["--version"]);
+      assert.equal(version.exitCode, 0);
+      assert.notEqual(version.stdout.trim(), "");
+    }
   });
 }
 

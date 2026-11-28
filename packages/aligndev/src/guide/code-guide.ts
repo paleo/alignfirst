@@ -6,15 +6,11 @@ import type { CodingProfile, NamedProfile } from "../config.js";
 import { escapeControlCharacters } from "../project/format.js";
 import { type ActiveBlocks, renderGuideTemplate } from "./render-template.js";
 
-// Antigravity alone takes any model name.
-const OPEN_MODEL_POLICY =
-  "A built-in alias (`carbon`, `neon`, `hydrogen`, `flash`) or any Antigravity model name";
-
 export interface CodeGuideOptions {
   active: ActiveBlocks;
   forms: CommandForms;
   harness: CodingAgent;
-  models: readonly string[] | undefined;
+  models: readonly string[];
   defaultModel?: string;
   efforts: readonly string[];
   defaultEffort?: string;
@@ -64,10 +60,10 @@ function permissions(harness: CodingAgent): string {
   }
 }
 
-function modelPolicy(models: readonly string[] | undefined): string {
-  if (models === undefined) return OPEN_MODEL_POLICY;
+function modelPolicy(models: readonly string[]): string {
   if (models.length === 0) return "None: the profile declares no model, so omit `--model`";
-  return `One of ${models.map((model) => `\`${model}\``).join(", ")}`;
+  const names = models.map((model) => `\`${model}\``).join(", ");
+  return models.length === 1 ? `One of ${names}` : `One of ${names}, biggest first`;
 }
 
 // Trusts the settings: no executable, login or environment value is consulted.
@@ -81,28 +77,22 @@ function renderProfiles(profiles: NamedProfile<CodingProfile>[], selected: strin
       profile.harness,
       name === selected ? "yes" : "no",
       profile.default === true ? "yes" : "no",
-      renderModels(profile),
+      renderModels(resolveModels(profile)),
       profile.defaultModel === undefined ? "native default" : cell(profile.defaultModel),
       resolveEfforts(profile.harness, profile.efforts).map(cell).join(", "),
       profile.defaultEffort === undefined ? "native default" : cell(profile.defaultEffort),
     ].join(" | "),
   );
   return [
-    "| Profile | Harness | Selected | Default | Models | Default model | Efforts | Default effort |",
-    "|---------|---------|----------|---------|--------|---------------|---------|----------------|",
+    "| Profile | Harness | Selected | Default | Models, biggest first | Default model | Efforts | Default effort |",
+    "|---------|---------|----------|---------|-----------------------|---------------|---------|----------------|",
     ...rows.map((row) => `| ${row} |`),
     "",
     "Pass `--profile <name>` for another agent or account; omit it to keep the selected profile.",
   ].join("\n");
 }
 
-function renderModels(profile: CodingProfile): string {
-  const models = resolveModels(profile);
-  if (models === undefined) {
-    const aliases = Object.keys(profile.modelAliases ?? {});
-    if (aliases.length === 0) return "any native selector";
-    return `any native selector; aliases ${aliases.map(cell).join(", ")}`;
-  }
+function renderModels(models: readonly string[]): string {
   return models.length === 0 ? "none" : models.map(cell).join(", ");
 }
 

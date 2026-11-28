@@ -834,6 +834,20 @@ describe("profile resolution", () => {
     });
   });
 
+  it.each([
+    [{}, false],
+    [{ models: ["gemini-4-neon-high"] }, true],
+    [{ modelAliases: { high: "gemini-4-neon-high" } }, false],
+    [{ modelAliases: { "gemini-4-neon-high": "gemini-{latest}-neon" } }, true],
+  ])("accepts an Antigravity defaultModel only among its accepted names %j", (extra, accepted) => {
+    const home = makeHome(
+      profileConfig({ harness: "agy", defaultModel: "gemini-4-neon-high", ...extra }),
+    );
+    const resolve = () => resolveCodeConfig(loadConfig(home, "alignfirst"), {});
+    if (accepted) expect(resolve().defaultModel).toBe("gemini-4-neon-high");
+    else expect(resolve).toThrow(Error);
+  });
+
   it.each([{}, { disabled: true }])(
     "rejects a defaultEffort outside the harness's built-in levels %j",
     (extra) => {

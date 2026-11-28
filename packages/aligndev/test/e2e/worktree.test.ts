@@ -107,6 +107,7 @@ describe("built worktree CLI lifecycle", () => {
     );
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({ runtime: childVersion, checks: "passed" });
+    expect(result.stderr).not.toContain("ExperimentalWarning");
   });
 
   it("retains nonzero exits and a failed durable session", () => {

@@ -9,6 +9,7 @@ import {
 } from "./assistant-harness.js";
 import { CODING_AGENTS, type CodingAgent, createAgentAdapter } from "./code/coding-agent.js";
 import { resolveEfforts } from "./code/efforts.js";
+import { CONFIG_DIRECTORY_VARIABLES } from "./code/harness-environment.js";
 import { LATEST, MODEL_FAMILY_NAMES, NO_DECLARED_MODEL, resolveModels } from "./code/models.js";
 import { buildAgentEnv } from "./code/run-agent.js";
 import { errorMessage } from "./errors.js";
@@ -29,14 +30,6 @@ import {
   rejectField,
 } from "./json-shape.js";
 import type { AligndevProjectSettings } from "./project/layout.js";
-
-// Antigravity has one native store and one account per OS user: no variable moves them.
-export const CONFIG_DIRECTORY_VARIABLES: Readonly<Record<CodingAgent, string | undefined>> = {
-  claude: "CLAUDE_CONFIG_DIR",
-  codex: "CODEX_HOME",
-  pi: "PI_CODING_AGENT_DIR",
-  agy: undefined,
-};
 
 const environmentName = matching(/^[A-Za-z_][A-Za-z0-9_]*$/);
 const environmentShape = record(nulFreeString, environmentName);
@@ -683,7 +676,7 @@ function fallbackRemedy(config: LoadedConfig): string {
 function checkDefaultModel(code: CodingProfile, path: string, profile: string | undefined): void {
   if (code.defaultModel === undefined) return;
   const models = resolveModels(code);
-  if (models === undefined || models.includes(code.defaultModel)) return;
+  if (models.includes(code.defaultModel)) return;
   const field = `code.profiles[${JSON.stringify(profile)}].defaultModel`;
   throw invalidConfig(
     path,

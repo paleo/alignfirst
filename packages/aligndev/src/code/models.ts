@@ -1,7 +1,15 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 
+import type { Memory } from "../memory/memory.js";
 import type { CodingAgent } from "./coding-agent.js";
 import { resolveEfforts } from "./efforts.js";
+import {
+  isFresh,
+  nativeDirectory,
+  readModelList,
+  type StoredModelList,
+  writeModelList,
+} from "./model-lists.js";
 
 export const CLAUDE_DEFAULT_MODELS = ["fable", "opus", "sonnet", "haiku"] as const;
 export const CODEX_DEFAULT_MODELS = ["astra", "sol", "terra", "luna"] as const;
@@ -69,6 +77,8 @@ export interface ModelSettings {
 export interface ModelDiscoveryContext {
   cwd: string;
   env: NodeJS.ProcessEnv;
+  // The selected profile's name, absent for the built-in defaults.
+  profile?: string;
 }
 
 export type ModelCatalogRunner = (context: ModelDiscoveryContext) => Promise<CatalogOutput>;
@@ -80,16 +90,46 @@ export interface CatalogOutput {
   stderr: string;
 }
 
+// The trimmed first line of `<cli> --version`; empty when the command fails.
+export type CliVersionReader = (
+  agent: CatalogAgent,
+  context: ModelDiscoveryContext,
+) => Promise<string>;
+
 export type ExecutableModelResolver = (
   agent: CodingAgent,
   selectedModel: string | undefined,
   context: ModelDiscoveryContext,
 ) => Promise<string | undefined>;
 
+export interface ResolverOptions {
+  memory?: Memory;
+  readVersion?: CliVersionReader;
+  // Gives the current day; the write time comes from SQLite.
+  now?: () => Date;
+}
+
+// The model lists of the AlignDev memory, for `aligndev code models`.
+export interface ModelLists {
+  unavailability(): Promise<string | undefined>;
+  // The remembered list of the context's profile, whatever its directory. Runs no native command.
+  read(agent: CatalogAgent, context: ModelDiscoveryContext): Promise<StoredModelList | undefined>;
+  // Runs the version and catalog commands, stores the list and returns it.
+  refresh(agent: CatalogAgent, context: ModelDiscoveryContext): Promise<StoredModelList>;
+  // The model a pattern selects in a list; undefined without a single newest match.
+  select(agent: CatalogAgent, list: StoredModelList, pattern: string): string | undefined;
+}
+
+interface Catalogs {
+  entries: Readonly<Record<CatalogAgent, CatalogEntry>>;
+  cache: CatalogCache;
+}
+
 interface CatalogEntry {
   run: ModelCatalogRunner;
   isSignInRequired(output: CatalogOutput): boolean;
-  parse(stdout: string): readonly CatalogModel[];
+  // The native ids, as the command lists them.
+  parse(stdout: string): readonly string[];
 }
 
 // A text that a pattern matches, and the selector that launches its model.
@@ -110,12 +150,12 @@ interface CatalogCommand {
 // `endInput` closes the command's stdin; an error fails the command.
 type CatalogLineAction = "endInput" | Error;
 
-type CatalogCache = WeakMap<NodeJS.ProcessEnv, Map<CatalogAgent, Promise<readonly CatalogModel[]>>>;
+type CatalogCache = WeakMap<NodeJS.ProcessEnv, Map<CatalogAgent, Promise<readonly string[]>>>;
 
-// The accepted model names of a profile: `undefined` means any nonblank name, an empty list none.
-export function resolveModels(profile: ModelSettings): readonly string[] | undefined {
+// The accepted model names of a profile, biggest model first: its nonempty `models` as written,
+// else its built-in aliases, then its other alias names.
+export function resolveModels(profile: ModelSettings): readonly string[] {
   if (profile.models !== undefined && profile.models.length > 0) return profile.models;
-  if (profile.harness === "agy") return;
   return [
     ...new Set([...builtInAliases(profile).keys(), ...Object.keys(profile.modelAliases ?? {})]),
   ];
@@ -153,24 +193,97 @@ function familyAliases(family: string, prefix = ""): [string, string][] {
   return aliases.map((alias) => [alias, `${prefix}${toPattern(alias)}`]);
 }
 
+// A `{latest}` selector resolves from the remembered model list while it is fresh. The catalog
+// command runs for a missing or stale list, and once more when a fresh list cannot resolve the
+// pattern. Without an available memory, it runs at each resolution.
 export function createExecutableModelResolver(
   runners: Partial<Record<CatalogAgent, ModelCatalogRunner>> = {},
+  options: ResolverOptions = {},
 ): ExecutableModelResolver {
-  const entries = createCatalogEntries(runners);
-  const catalogs: CatalogCache = new WeakMap();
+  const catalogs = createCatalogs(runners);
   return async (agent, selectedModel, context) => {
     if (selectedModel === undefined) return;
     if (!isCatalogAgent(agent) || !selectedModel.includes(LATEST)) return selectedModel;
-    try {
-      const models = await loadCatalog(catalogs, agent, entries[agent], context);
-      return selectNewestModel(models, selectedModel);
-    } catch (error) {
-      if (error instanceof ModelSignInRequiredError || error instanceof PiStartupDialogError) {
-        throw error;
-      }
-      throw new Error(modelPatternError(agent, selectedModel));
+    const memory = await availableMemory(options.memory);
+    if (memory !== undefined) {
+      return resolveRemembered({ ...options, memory, catalogs }, agent, selectedModel, context);
     }
+    const models = await loadCatalog(catalogs, agent, context).catch((error: unknown) => {
+      throw toResolutionError(agent, selectedModel, error);
+    });
+    return resolveIn(agent, models, selectedModel);
   };
+}
+
+interface RememberedResolution extends ResolverOptions {
+  memory: Memory;
+  catalogs: Catalogs;
+}
+
+// No transaction stays open while a native command runs: read, run the command, then write.
+async function resolveRemembered(
+  { memory, catalogs, readVersion = readCliVersion, now = () => new Date() }: RememberedResolution,
+  agent: CatalogAgent,
+  pattern: string,
+  context: ModelDiscoveryContext,
+): Promise<string> {
+  const cliVersion = await readVersion(agent, context);
+  const configDir = nativeDirectory(agent, context.env);
+  const stored = await readModelList(memory, agent, context);
+  const sameDirectory = stored?.configDir === configDir ? stored : undefined;
+  if (sameDirectory !== undefined && isFresh(sameDirectory, cliVersion, configDir, now())) {
+    const model = newestModel(catalogModels(agent, sameDirectory.models), pattern);
+    if (model !== undefined) return model;
+  }
+  let models: readonly string[];
+  try {
+    models = await loadCatalog(catalogs, agent, context);
+  } catch (error) {
+    if (sameDirectory !== undefined) return resolveIn(agent, sameDirectory.models, pattern);
+    throw toResolutionError(agent, pattern, error);
+  }
+  await writeModelList(memory, agent, context, { cliVersion, configDir, models });
+  return resolveIn(agent, models, pattern);
+}
+
+export function createModelLists(
+  memory: Memory,
+  runners: Partial<Record<CatalogAgent, ModelCatalogRunner>> = {},
+  readVersion: CliVersionReader = readCliVersion,
+): ModelLists {
+  const { entries } = createCatalogs(runners);
+  return {
+    unavailability: () => memory.unavailability(),
+    read: (agent, context) => readModelList(memory, agent, context),
+    async refresh(agent, context) {
+      const cliVersion = await readVersion(agent, context);
+      const entry = entries[agent];
+      const models = readCatalog(entry, agent, await entry.run(context));
+      const configDir = nativeDirectory(agent, context.env);
+      await writeModelList(memory, agent, context, { cliVersion, configDir, models });
+      const stored = await readModelList(memory, agent, context);
+      if (stored === undefined) throw new Error("The model list could not be stored.");
+      return stored;
+    },
+    select: (agent, list, pattern) => newestModel(catalogModels(agent, list.models), pattern),
+  };
+}
+
+async function availableMemory(memory: Memory | undefined): Promise<Memory | undefined> {
+  if (memory === undefined || (await memory.unavailability()) !== undefined) return;
+  return memory;
+}
+
+async function readCliVersion(
+  agent: CatalogAgent,
+  context: ModelDiscoveryContext,
+): Promise<string> {
+  try {
+    const output = await runCatalogCommand({ name: agent, args: ["--version"] }, context);
+    return output.exitCode === 0 ? output.stdout.split("\n")[0].trim() : "";
+  } catch {
+    return "";
+  }
 }
 
 // The catalog command reports that the harness has no signed-in account or credentials.
@@ -179,6 +292,10 @@ export class ModelSignInRequiredError extends Error {}
 // A Pi extension opened a dialog that blocks Pi before it serves its catalog. The CLI renders a fixed
 // diagnostic from the type.
 export class PiStartupDialogError extends Error {}
+
+function createCatalogs(runners: Partial<Record<CatalogAgent, ModelCatalogRunner>>): Catalogs {
+  return { entries: createCatalogEntries(runners), cache: new WeakMap() };
+}
 
 function createCatalogEntries(
   runners: Partial<Record<CatalogAgent, ModelCatalogRunner>>,
@@ -190,43 +307,40 @@ function createCatalogEntries(
         ((context) =>
           runCatalogCommand({ name: "codex", args: ["debug", "models", "--bundled"] }, context)),
       isSignInRequired: () => false,
-      parse: (stdout) => parseBundledModelSlugs(stdout).map(toCatalogModel),
+      parse: parseBundledModelSlugs,
     },
     pi: {
       run: runners.pi ?? runPiModelCatalog,
       isSignInRequired: isPiCatalogSignInRequired,
-      parse: (stdout) => parsePiModels(stdout).map(toCatalogModel),
+      parse: parsePiModels,
     },
     agy: {
       run:
         runners.agy ?? ((context) => runCatalogCommand({ name: "agy", args: ["models"] }, context)),
       isSignInRequired: isAgyCatalogSignInRequired,
-      parse: parseAgyModelList,
+      parse: parseAgyModelIds,
     },
   };
 }
 
-function toCatalogModel(selector: string): CatalogModel {
-  return { text: selector, selector };
-}
-
-function isCatalogAgent(agent: CodingAgent): agent is CatalogAgent {
+export function isCatalogAgent(agent: CodingAgent): agent is CatalogAgent {
   return Object.hasOwn(MODEL_PATTERN_HELP, agent);
 }
 
+// The parsed catalog of each effective environment and harness, for the process.
 function loadCatalog(
-  catalogs: CatalogCache,
+  { entries, cache }: Catalogs,
   agent: CatalogAgent,
-  entry: CatalogEntry,
   context: ModelDiscoveryContext,
-): Promise<readonly CatalogModel[]> {
-  let byAgent = catalogs.get(context.env);
+): Promise<readonly string[]> {
+  let byAgent = cache.get(context.env);
   if (byAgent === undefined) {
     byAgent = new Map();
-    catalogs.set(context.env, byAgent);
+    cache.set(context.env, byAgent);
   }
   let catalog = byAgent.get(agent);
   if (catalog === undefined) {
+    const entry = entries[agent];
     catalog = entry.run(context).then((output) => readCatalog(entry, agent, output));
     byAgent.set(agent, catalog);
   }
@@ -237,7 +351,7 @@ function readCatalog(
   entry: CatalogEntry,
   agent: CatalogAgent,
   output: CatalogOutput,
-): readonly CatalogModel[] {
+): readonly string[] {
   if (entry.isSignInRequired(output)) {
     throw new ModelSignInRequiredError(`${MODEL_PATTERN_HELP[agent].label} requires sign-in.`);
   }
@@ -245,22 +359,44 @@ function readCatalog(
   return entry.parse(output.stdout);
 }
 
-// The selector whose text is the pattern with the newest version in place of `{latest}`.
-function selectNewestModel(models: readonly CatalogModel[], pattern: string): string {
+// Names the pattern, never the catalog's own failure.
+function toResolutionError(agent: CatalogAgent, pattern: string, error: unknown): Error {
+  if (error instanceof ModelSignInRequiredError || error instanceof PiStartupDialogError) {
+    return error;
+  }
+  return new Error(modelPatternError(agent, pattern));
+}
+
+function resolveIn(agent: CatalogAgent, models: readonly string[], pattern: string): string {
+  const model = newestModel(catalogModels(agent, models), pattern);
+  if (model === undefined) throw new Error(modelPatternError(agent, pattern));
+  return model;
+}
+
+function catalogModels(agent: CatalogAgent, models: readonly string[]): readonly CatalogModel[] {
+  return agent === "agy" ? splitAgyEfforts(models) : models.map(toCatalogModel);
+}
+
+function toCatalogModel(selector: string): CatalogModel {
+  return { text: selector, selector };
+}
+
+// The selector whose text is the pattern with the newest version in place of `{latest}`;
+// undefined without a match, or when several selectors share the newest version.
+function newestModel(models: readonly CatalogModel[], pattern: string): string | undefined {
   const expression = toVersionExpression(pattern);
   const candidates = models.flatMap(({ text, selector }): VersionedSelector[] => {
     const match = expression.exec(text);
     return match ? [{ selector, major: Number(match[1]), minor: Number(match[2] ?? 0) }] : [];
   });
-  if (candidates.length === 0) throw new Error("The model catalog contains no matching model.");
+  if (candidates.length === 0) return;
   const newest = candidates.reduce((best, candidate) =>
     compareVersions(candidate, best) > 0 ? candidate : best,
   );
   const [selector, ...others] = new Set(
     candidates.filter((c) => compareVersions(c, newest) === 0).map((c) => c.selector),
   );
-  if (others.length > 0) throw new Error("Several models share the newest version.");
-  return selector;
+  return others.length > 0 ? undefined : selector;
 }
 
 interface VersionedSelector {
@@ -383,16 +519,22 @@ function isPiCatalogResponse(record: Record<string, unknown>): boolean {
   return record.type === "response" && record.id === PI_REQUEST_ID;
 }
 
-// Antigravity lists one id per effort of a model. A pattern matches the id or its name without the
-// effort, and both launch that name.
-function parseAgyModelList(output: string): readonly CatalogModel[] {
-  const efforts = resolveEfforts("agy", undefined);
-  return nonblankLines(output).flatMap((line) => {
+function parseAgyModelIds(output: string): readonly string[] {
+  return nonblankLines(output).map((line) => {
     const tab = line.indexOf("\t");
     const id = tab === -1 ? undefined : line.slice(0, tab).trim();
     if (id === undefined || id.length === 0) {
       throw new Error("Antigravity returned a malformed model line");
     }
+    return id;
+  });
+}
+
+// Antigravity lists one id per effort of a model. A pattern matches the id or its name without the
+// effort, and both launch that name.
+function splitAgyEfforts(ids: readonly string[]): readonly CatalogModel[] {
+  const efforts = resolveEfforts("agy", undefined);
+  return ids.flatMap((id) => {
     const effort = efforts.find((level) => id.endsWith(`-${level}`));
     if (effort === undefined) return [toCatalogModel(id)];
     const selector = id.slice(0, -effort.length - 1);

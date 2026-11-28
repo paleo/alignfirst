@@ -1,18 +1,23 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { readModelList, writeModelList } from "../../src/code/model-lists.js";
 import {
   type CatalogOutput,
   createExecutableModelResolver,
+  createModelLists,
   expandBuiltInAlias,
   expandModelAlias,
   type ModelDiscoveryContext,
   ModelSignInRequiredError,
   PiStartupDialogError,
+  type ModelCatalogRunner,
   resolveModels,
 } from "../../src/code/models.js";
+import { createMemory, type Memory, memoryPath } from "../../src/memory/memory.js";
+import { openSqlite } from "../../src/memory/sqlite.js";
 
 const CONTEXT = { cwd: "/project", env: { PATH: "/bin" } };
 const CODEX_PATTERN = "gpt-{latest}-sol";
@@ -111,8 +116,17 @@ describe("resolveModels", () => {
     ).toEqual(["zai/glm-5.4"]);
   });
 
-  it("leaves Antigravity open to any name", () => {
-    expect(resolveModels({ harness: "agy", modelAliases: { fast: "flash" } })).toBeUndefined();
+  it("closes the Antigravity list like the others", () => {
+    expect(resolveModels({ harness: "agy", modelAliases: { fast: "gemini-4-neon" } })).toEqual([
+      "carbon",
+      "neon",
+      "hydrogen",
+      "flash",
+      "fast",
+    ]);
+    expect(resolveModels({ harness: "agy", models: ["gemini-4-neon-high"] })).toEqual([
+      "gemini-4-neon-high",
+    ]);
   });
 });
 
@@ -249,6 +263,171 @@ describe("pattern resolution", () => {
       }),
     ).toBe("gpt-9-sol");
     expect(runner).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("remembered model lists", () => {
+  // SQLite writes the time of a row: each stored row is set to NOON, a time of the same local day
+  // as NOON and of a previous local day for NEXT_DAY, in every time zone.
+  const NOON = new Date("2026-11-28T12:00:00Z");
+  const NEXT_DAY = new Date("2026-11-29T12:00:00Z");
+  const VERSION = "codex-cli 0.172.0";
+  let home: string;
+  let memory: Memory;
+
+  beforeEach(() => {
+    home = mkdtempSync(join(tmpdir(), "aligndev-model-lists-"));
+    memory = createMemory(home);
+  });
+
+  afterEach(() => {
+    memory.close();
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  function resolver(
+    runners: Partial<Record<"codex" | "pi" | "agy", ModelCatalogRunner>>,
+    { version = VERSION, now = NOON } = {},
+  ) {
+    return createExecutableModelResolver(runners, {
+      memory,
+      readVersion: async () => version,
+      now: () => now,
+    });
+  }
+
+  async function seed(
+    harness: "codex" | "pi" | "agy",
+    models: readonly string[],
+    { context = CONTEXT as ModelDiscoveryContext, configDir = null as string | null } = {},
+  ): Promise<void> {
+    await writeModelList(memory, harness, context, { cliVersion: VERSION, configDir, models });
+    await setAllUpdatedAt("2026-11-28 12:00:00");
+  }
+
+  async function setAllUpdatedAt(updatedAt: string): Promise<void> {
+    const database = await openSqlite(memoryPath(home));
+    database.run("UPDATE store SET updated_at = ?", updatedAt);
+    database.close();
+  }
+
+  it("resolves from a fresh list without any catalog command", async () => {
+    await seed("codex", ["gpt-6-sol"]);
+    const runner = vi.fn(async () => codexCatalog(["gpt-7-sol"]));
+    expect(await resolver({ codex: runner })("codex", CODEX_PATTERN, CONTEXT)).toBe("gpt-6-sol");
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it.each<[string, { now?: Date; version?: string }]>([
+    ["a previous day", { now: NEXT_DAY }],
+    ["another CLI version", { version: "codex-cli 0.173.0" }],
+  ])("looks the list up again on %s and stores it", async (_case, options) => {
+    await seed("codex", ["gpt-6-sol"]);
+    const runner = vi.fn(async () => codexCatalog(["gpt-7-sol"]));
+    expect(await resolver({ codex: runner }, options)("codex", CODEX_PATTERN, CONTEXT)).toBe(
+      "gpt-7-sol",
+    );
+    expect(runner).toHaveBeenCalledTimes(1);
+    expect(await readModelList(memory, "codex", CONTEXT)).toMatchObject({
+      cliVersion: options.version ?? VERSION,
+      models: ["gpt-7-sol"],
+    });
+  });
+
+  it("looks the list up again under another native directory and replaces the row", async () => {
+    await seed("codex", ["gpt-6-sol"]);
+    const context = { cwd: "/project", env: { CODEX_HOME: "/codex-b" } };
+    const runner = vi.fn(async () => codexCatalog(["gpt-7-sol"]));
+    expect(await resolver({ codex: runner })("codex", CODEX_PATTERN, context)).toBe("gpt-7-sol");
+    expect(runner).toHaveBeenCalledTimes(1);
+    expect(await readModelList(memory, "codex", context)).toMatchObject({
+      configDir: "/codex-b",
+      models: ["gpt-7-sol"],
+    });
+  });
+
+  it("resolves from the stored list of the same directory when the catalog fails", async () => {
+    await seed("codex", ["gpt-6-sol"]);
+    const before = await readModelList(memory, "codex", CONTEXT);
+    const runner = async () => ({ exitCode: 1, stdout: "", stderr: "" });
+    expect(
+      await resolver({ codex: runner }, { now: NEXT_DAY })("codex", CODEX_PATTERN, CONTEXT),
+    ).toBe("gpt-6-sol");
+    expect(await readModelList(memory, "codex", CONTEXT)).toEqual(before);
+  });
+
+  it.each([
+    ["sign-in", completed(piResponse([])), true],
+    ["failure", { exitCode: 1, stdout: "", stderr: "" }, false],
+  ])(
+    "reports a catalog %s as without a list when only another directory's list is stored",
+    async (_case, output, signIn) => {
+      const context = { cwd: "/project", env: { PI_CODING_AGENT_DIR: "/pi-b" } };
+      for (const stored of [false, true]) {
+        if (stored) await seed("pi", ["openai/gpt-6-sol"]);
+        const error = await resolver({ pi: async () => output })("pi", PI_PATTERN, context).then(
+          () => undefined,
+          (rejection: unknown) => rejection,
+        );
+        expect(error).toBeInstanceOf(Error);
+        expect(error instanceof ModelSignInRequiredError).toBe(signIn);
+      }
+    },
+  );
+
+  it("looks a fresh list without a match up again once", async () => {
+    await seed("codex", ["gpt-6-terra"]);
+    const runner = vi.fn(async () => codexCatalog(["gpt-6-terra", "gpt-6-sol"]));
+    expect(await resolver({ codex: runner })("codex", CODEX_PATTERN, CONTEXT)).toBe("gpt-6-sol");
+    expect(runner).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs the catalog at each resolution and no version command without a memory", async () => {
+    const file = join(home, "file");
+    writeFileSync(file, "");
+    const unavailable = createMemory(file);
+    const readVersion = vi.fn(async () => VERSION);
+    const runner = vi.fn(async () => codexCatalog(["gpt-6-sol"]));
+    for (let i = 0; i < 2; ++i) {
+      const resolve = createExecutableModelResolver(
+        { codex: runner },
+        { memory: unavailable, readVersion },
+      );
+      expect(await resolve("codex", CODEX_PATTERN, CONTEXT)).toBe("gpt-6-sol");
+    }
+    expect(runner).toHaveBeenCalledTimes(2);
+    expect(readVersion).not.toHaveBeenCalled();
+  });
+
+  it("keeps one row per profile of a harness, and one for the built-in profile", async () => {
+    const owners = [CONTEXT, { ...CONTEXT, profile: "a" }, { ...CONTEXT, profile: "a:b" }];
+    for (const [index, owner] of owners.entries()) {
+      const runner = async () => codexCatalog([`gpt-${index}-sol`]);
+      await resolver({ codex: runner })("codex", CODEX_PATTERN, owner);
+    }
+    for (const [index, owner] of owners.entries()) {
+      expect((await readModelList(memory, "codex", owner))?.models).toEqual([`gpt-${index}-sol`]);
+    }
+  });
+
+  it("stores Antigravity ids with their effort and resolves them without it", async () => {
+    await resolver({ agy: async () => completed(AGY_MODELS) })("agy", AGY_PATTERN, CONTEXT);
+    expect((await readModelList(memory, "agy", CONTEXT))?.models).toContain("gemini-4-neon-high");
+    await setAllUpdatedAt("2026-11-28 12:00:00");
+    const runner = vi.fn(async () => completed(""));
+    expect(await resolver({ agy: runner })("agy", AGY_PATTERN, CONTEXT)).toBe("gemini-4-neon");
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it("refreshes a fresh list on request", async () => {
+    await seed("codex", ["gpt-6-sol"]);
+    const lists = createModelLists(
+      memory,
+      { codex: async () => codexCatalog(["gpt-7-sol"]) },
+      async () => VERSION,
+    );
+    expect((await lists.refresh("codex", CONTEXT)).models).toEqual(["gpt-7-sol"]);
+    expect((await readModelList(memory, "codex", CONTEXT))?.models).toEqual(["gpt-7-sol"]);
   });
 });
 

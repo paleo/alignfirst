@@ -23,7 +23,7 @@
     "directory": "packages/aligndev"
   },
   "engines": {
-    "node": ">=22.11.0"
+    "node": ">=22.13.0"
   },
   "packageManager": "npm@12.2.0",
   "type": "module",

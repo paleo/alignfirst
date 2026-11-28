@@ -7,6 +7,7 @@ requireBuiltArtifacts([
   ...["claude-agent", "machine-id", "models", "quota-process", "run-agent", "session-file"].map(
     (name) => `packages/aligndev/dist/code/${name}.js`,
   ),
+  ...["memory", "sqlite"].map((name) => `packages/aligndev/dist/memory/${name}.js`),
 ]);
 
 export default defineConfig({

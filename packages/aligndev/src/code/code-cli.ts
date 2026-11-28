@@ -25,18 +25,18 @@ import { type CodingAgent, createAgentAdapter } from "./coding-agent.js";
 import { readLinkedGitCommonDir } from "./linked-worktree.js";
 import { readMachineId } from "./machine-id.js";
 import { resolveEfforts } from "./efforts.js";
+import { describeModelFailure } from "./model-failure.js";
 import {
   type ExecutableModelResolver,
   expandBuiltInAlias,
   expandModelAlias,
-  modelPatternHint,
-  ModelSignInRequiredError,
+  type ModelLists,
   NO_DECLARED_MODEL,
-  PiStartupDialogError,
   resolveModels,
 } from "./models.js";
+import { showModels } from "./models-cli.js";
 import { renderAuthenticationFailure, renderLoginInstructions } from "./login.js";
-import { describeNativeStorage, describeProfile } from "./native-context.js";
+import { describeNativeStorage, modelDiscoveryContext, nativeContext } from "./native-context.js";
 import { buildPrompt, PROTOCOLS } from "./prompt.js";
 import type { QuotaReader } from "./quota.js";
 import { runAgent, type RunConfig } from "./run-agent.js";
@@ -86,11 +86,6 @@ const CONTEXT_COMPANION_ITEMS: readonly ItemName[] = [
 const TICKET_PATH_ERROR =
   "Error: --ticket must be a single path segment " +
   "(letters, digits, '.', '-', '_'); no path separators or '..'.";
-const PI_STARTUP_DIALOG_ERROR =
-  "A Pi extension opened a dialog at startup, which Pi's RPC mode cannot answer, so the model " +
-  "pattern cannot be resolved from Pi's catalog. To fix it, pin a full `provider/model` selector " +
-  "in the profile's `modelAliases`, or make the extension skip the dialog outside the terminal " +
-  'UI (`ctx.mode !== "tui"`).';
 
 export interface CodeContext {
   cwd: string;
@@ -101,6 +96,7 @@ export interface CodeContext {
   forms: CommandForms;
   alignfirstCommand: string[];
   modelResolver: ExecutableModelResolver;
+  modelLists: ModelLists;
   quotaReader: QuotaReader;
 }
 
@@ -117,6 +113,7 @@ export type CodeCommand =
   | { kind: "help"; profile?: string; status?: boolean }
   | { kind: "status"; target: StatusTarget; includeResult: boolean }
   | { kind: "quota"; profile?: string }
+  | { kind: "models"; profile?: string; refresh: boolean }
   | { kind: "session"; args: SessionArgs };
 
 export type StatusTarget =
@@ -156,6 +153,7 @@ export async function runCode(
       return 0;
     }
     const config = loadSettings();
+    if (command.kind === "models") return await showModels(ctx, config, command);
     const report = readReport(ctx);
     if (command.kind === "session") validateEffectivePlans(ctx);
     const tree = command.kind === "session" ? sessionTreeOf(report, ctx) : undefined;
@@ -376,6 +374,8 @@ export function parseCodeArgs(tokens: string[], aligndev: string): CodeCommand {
       return parseStatusCommand(rest);
     case "quota":
       return parseBareCommand(rest, "quota");
+    case "models":
+      return parseModelsCommand(rest);
     default:
       throw new Error(`Error: unknown command "${command}". Run \`${aligndev} code --help\`.`);
   }
@@ -474,6 +474,21 @@ function parseResumeCommand(tokens: string[]): CodeCommand {
   };
 }
 
+function parseModelsCommand(tokens: string[]): CodeCommand {
+  const { values } = parseArgs({
+    args: tokens,
+    options: {
+      help: { type: "boolean", short: "h", default: false },
+      profile: { type: "string" },
+      refresh: { type: "boolean", default: false },
+    },
+    strict: true,
+  });
+  const profile = values.profile === undefined ? {} : { profile: values.profile };
+  if (values.help) return { kind: "help", ...profile };
+  return { kind: "models", ...profile, refresh: values.refresh };
+}
+
 function parseBareCommand(tokens: string[], kind: "quota" | "help"): CodeCommand {
   const { values } = parseArgs({
     args: tokens,
@@ -491,7 +506,7 @@ function parseBareCommand(tokens: string[], kind: "quota" | "help"): CodeCommand
 
 export function validateSessionArgs(
   args: SessionArgs,
-  models: readonly string[] | undefined,
+  models: readonly string[],
   efforts: readonly string[],
 ): string | undefined {
   const isNew = args.resume === undefined;
@@ -501,12 +516,12 @@ export function validateSessionArgs(
   }
   if (args.model !== undefined) {
     if (args.model.trim() === "") return "Error: --model must be nonblank.";
-    if (models?.length === 0) {
+    if (models.length === 0) {
       return isNew
         ? `Error: --model is not accepted: ${NO_DECLARED_MODEL}, or omit --model.`
         : `Error: --model is not accepted: ${NO_DECLARED_RESUME_MODEL}.`;
     }
-    if (models !== undefined && !models.includes(args.model)) {
+    if (!models.includes(args.model)) {
       return `Error: --model must be one of: ${models.join(", ")}.`;
     }
   }
@@ -620,7 +635,7 @@ async function runSession(
   const selector = expandBuiltInAlias(code, expandModelAlias(model, code.modelAliases));
   let executableModel: string | undefined;
   try {
-    executableModel = await modelResolver(agent, selector, { cwd, env: code.childEnv });
+    executableModel = await modelResolver(agent, selector, modelDiscoveryContext(code, cwd));
   } catch (error) {
     return failModelResolution(ctx, code, args, sessionFilePath, selector, error);
   }
@@ -659,8 +674,6 @@ async function runSession(
   return 1;
 }
 
-// A catalog that requires sign-in takes the login handoff of a native authentication failure,
-// without the catalog's output.
 function failModelResolution(
   ctx: CodeContext,
   code: CodeConfig,
@@ -669,10 +682,7 @@ function failModelResolution(
   selector: string | undefined,
   error: unknown,
 ): number {
-  const authRequired = error instanceof ModelSignInRequiredError;
-  const message = authRequired
-    ? renderAuthenticationFailure(code, ctx.cwd).instructions
-    : modelResolutionError(code, selector, error);
+  const { message, authRequired } = describeModelFailure(code, ctx.cwd, selector, error);
   const completedPath = applyCompletion(sessionFilePath, {
     status: "failed",
     endedAt: new Date().toISOString(),
@@ -682,27 +692,6 @@ function failModelResolution(
   });
   writeFailureDiagnostic(ctx, completedPath, message);
   return authRequired ? EXIT_AUTH_REQUIRED : 1;
-}
-
-// Names the selector, never the resolver's own message.
-function modelResolutionError(
-  code: CodeConfig,
-  selector: string | undefined,
-  error: unknown,
-): string {
-  if (error instanceof PiStartupDialogError)
-    return `${PI_STARTUP_DIALOG_ERROR} ${nativeContext(code)}.`;
-  const hint = modelPatternHint(code.harness, selector);
-  return (
-    `Could not resolve the ${code.harness} model; check --model, ` +
-    "profile.models/modelAliases/modelFamilies and the agent installation. " +
-    `${nativeContext(code)}.` +
-    (hint !== undefined ? ` ${hint}` : "")
-  );
-}
-
-function nativeContext(code: CodeConfig): string {
-  return `${describeProfile(code)} (${describeNativeStorage(code)})`;
 }
 
 function writeFailureDiagnostic(ctx: CodeContext, sessionFilePath: string, message: string): void {
@@ -866,10 +855,10 @@ function selectModel(
   const model = previous?.frontmatter.model ?? undefined;
   if (model === undefined) return;
   const models = resolveModels(code);
-  if (models?.length === 0) {
+  if (models.length === 0) {
     throw new Error(`Error: retained session model is not accepted: ${NO_DECLARED_RESUME_MODEL}.`);
   }
-  if (model.trim() === "" || (models !== undefined && !models.includes(model))) {
+  if (model.trim() === "" || !models.includes(model)) {
     throw new Error(
       "Error: retained session model is not accepted by the selected profile; supply --model with an accepted replacement.",
     );
@@ -1018,18 +1007,14 @@ function createMissingCompanion(report: ProjectReport) {
 
 function renderHelp(
   code: CodeConfig,
-  models: readonly string[] | undefined,
+  models: readonly string[],
   efforts: readonly string[],
   { forms, cwd }: CodeContext,
 ): string {
   const { harness: agent, profile, defaultModel, defaultEffort } = code;
   const { aligndev, alignfirst } = forms;
   const modelPolicy =
-    models === undefined
-      ? "Any nonblank native selector"
-      : models.length === 0
-        ? "None: the profile declares no model"
-        : `One of ${models.join(", ")}`;
+    models.length === 0 ? "None: the profile declares no model" : `One of ${models.join(", ")}`;
   const requires = `Requires: the AlignFirst CLI through \`${forms.alignfirst}\`, for the project layout, side\ntickets and the delegated protocols.`;
   return `aligndev code — run a coding agent through AlignFirst protocols.
 
@@ -1040,6 +1025,7 @@ Usage:
   ${aligndev} code resume <sessionId> [--protocol <protocol>] [--message "..."]
   ${aligndev} code status (<session-file> | --ticket <id> | --no-ticket | --meta <key>) [--result]
   ${aligndev} code quota
+  ${aligndev} code models [--profile <name>] [--refresh]
   ${aligndev} code -h, --help
 
 Commands:
@@ -1050,6 +1036,9 @@ Commands:
                         contextTokens, the context-window occupancy the run ended on, and
                         contextCompacted. Does not start an agent.
   quota                 Show native account limits via the profile's quota source.
+  models                Show the accepted model names of each enabled profile, or of --profile,
+                        and the model each one selects in the remembered model list. --refresh
+                        looks the lists up again first.
 
 Options (status):
   --ticket <id>         Newest run of that ticket.
@@ -1115,7 +1104,7 @@ Config (~/.alignfirst/aligndev.settings.json):
                         no other recognized fields, including configDir: null.
   profile.default       Breaks a tie between several profiles matching the assistant's session;
                         at most one true per harness.
-  --profile <name>      Override for new, resume, quota and help (also guide code).
+  --profile <name>      Override for new, resume, quota, models and help (also guide code).
   Selection             --profile > project registry > recorded named resume > the assistant
                         profile's defaultAgentProfile, or that profile itself > built-ins of a
                         claude, codex, pi or agy harness > code.fallbackProfile. A named reference
@@ -1127,8 +1116,9 @@ Config (~/.alignfirst/aligndev.settings.json):
                         resume without a recorded profile uses the built-ins of the assistant's
                         harness unless a named selection replaces them.
   Model default         ${defaultModel ?? "native default"} (new only). Resume retains and validates its model.
-                        One configured alias expands; {latest} in an alias target selects the
-                        newest version in the agent's catalog.
+                        One configured alias expands. {latest} selects the newest version in the
+                        model list AlignDev remembers, refreshed daily, after an upgrade of the
+                        native CLI or a change of its directory, and by \`code models --refresh\`.
   Effort default        ${defaultEffort ?? "native default"} (new only). Resume retains and validates its effort.
 
 Native configuration: ${describeNativeStorage(code)}.

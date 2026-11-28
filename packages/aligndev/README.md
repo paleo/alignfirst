@@ -86,7 +86,7 @@ Then ask your session to work with aligndev.
 
 ### Requirements
 
-- Node.js 22.11 or later with `npx -y aligndev`, or Bun with `bunx aligndev` (`bun x` is equivalent). Bun 1.4.4 is the tested CLI baseline; compatibility with every older release is not promised.
+- Node.js 22.13 or later with `npx -y aligndev`, or Bun with `bunx aligndev` (`bun x` is equivalent). Bun 1.4.4 is the tested CLI baseline; compatibility with every older release is not promised.
 - The selected child installed and authenticated under the same effective environment and cwd as the child. `aligndev code --help` prints the login command of the selected profile, and so does a run that ends with `auth_required`. The command applies the profile's `unset/env/configDir` to `claude` then `/login`, `codex login`, `pi` then `/login <provider>` (or configured provider credentials), or `agy` then sign in. A bare login in another shell may select another account. Pi keeps its own runtime requirements; see the [extension compatibility baseline](https://github.com/paleo/alignfirst/blob/main/docs/pi-extensions.md#supported-and-tested-baseline).
 - For Pi, declare the models in the profile: see `modelFamilies` under [Settings](#settings). Authenticate in the same account/configuration used by the child; never expose credential values in diagnostics.
 - Linux or macOS, or Windows through WSL.
@@ -141,7 +141,7 @@ For multiple accounts and independent quota sources:
       "codex-personal": { "harness": "codex", "defaultModel": "sol" },
       "pi-codex": {
         "harness": "pi", "defaultModel": "sol",
-        "modelFamilies": { "gpt": "openai-codex" },
+        "modelFamilies": { "gpt": "openai" },
         "quota": { "source": "codex" }
       },
       "pi-anthropic": {
@@ -157,7 +157,7 @@ For multiple accounts and independent quota sources:
 
 A Claude Code session without `CLAUDE_CONFIG_DIR` is described by `claude-personal` and delegates to `codex-personal`. A session whose `CLAUDE_CONFIG_DIR` is `~/.claude-work` is described by `claude-work` and delegates to it. A Pi assistant delegates to `pi-codex`; `pi-anthropic` is disabled.
 
-A Pi profile accepts only the models it declares. The `modelFamilies` of `pi-codex` declares `astra`, `sol`, `terra` and `luna`: `sol` selects the newest `gpt-…-sol` model that Pi lists under its `openai-codex` provider. `pi-anthropic` declares `fable`, `opus`, `sonnet` and `haiku` under `anthropic`. Availability depends on Pi's catalog and credentials.
+A Pi profile accepts only the models it declares. The `modelFamilies` of `pi-codex` declares `astra`, `sol`, `terra` and `luna`: `sol` selects the newest `gpt-…-sol` model that Pi lists under its `openai` provider. `pi-anthropic` declares `fable`, `opus`, `sonnet` and `haiku` under `anthropic`. Availability depends on Pi's catalog and credentials.
 
 On an account shared by OpenClaw and coding-agent sessions:
 
@@ -191,7 +191,7 @@ A coding-agent profile accepts:
 - `env` — literal environment values for non-secret configuration. No interpolation or shell expansion. Keep credentials in native stores or separately provisioned process environments.
 - `unset` — inherited variables to remove, including API keys that select an unintended authentication route. A variable cannot occur in both `env` and `unset`. A string or null `configDir` cannot coexist with its native directory variable in either field.
 - `defaultModel` — new-session default, validated against accepted names. Omission uses the native default.
-- `models` — a nonempty list replaces the accepted names. An empty list adds no override. Otherwise Claude, Codex and Pi accept their built-in aliases plus the `modelAliases` names, and Antigravity accepts every nonblank name. A Pi profile that declares nothing accepts no model: it runs Pi's own default and rejects `--model` and `defaultModel`. Built-in aliases go from the biggest model to the smallest:
+- `models` — a nonempty list replaces the accepted names. An empty list adds no override. Otherwise a profile accepts its built-in aliases plus the `modelAliases` names. A Pi profile that declares nothing accepts no model: it runs Pi's own default and rejects `--model` and `defaultModel`. The assistant sees the accepted names in their order, biggest model first, so a profile that mixes families or adds names declares `models` in that order. Built-in aliases go from the biggest model to the smallest:
 
   | Harness | Built-in aliases | Pattern |
   | --- | --- | --- |
@@ -199,7 +199,7 @@ A coding-agent profile accepts:
   | `codex` | `astra`, `sol`, `terra`, `luna` | `gpt-{latest}-<alias>` |
   | `agy` | `carbon`, `neon`, `hydrogen`, `flash` | `gemini-{latest}-<alias>` |
   | `pi` | those of its `modelFamilies`, in the order of the settings | see `modelFamilies` |
-- `modelFamilies` — Pi only. Maps a model family to the text placed before its model names: a Pi provider, optionally followed by the id prefix of a gateway, as in `openrouter/openai`. Each entry declares the aliases of its family:
+- `modelFamilies` — Pi only. Maps a model family to the text placed before its model names: the Pi provider as the first column of `pi --list-models` prints it, optionally followed by the id prefix of a gateway, as in `openrouter/openai`. Each entry declares the aliases of its family:
 
   | Family | Aliases | Pattern |
   | --- | --- | --- |
@@ -208,7 +208,7 @@ A coding-agent profile accepts:
   | `gemini` | `carbon`, `neon`, `hydrogen`, `flash` | `<prefix>/gemini-{latest}-<alias>` |
 
   An id of another shape, such as Bedrock's `us.anthropic.claude-opus-…`, is declared through `modelAliases`.
-- `modelAliases` — one-step name → selector mappings. AlignDev validates the chosen name, expands it once, then replaces a built-in alias with its pattern. An entry named like a built-in alias overrides it. A target with `{latest}` is a pattern: the placeholder stands for the version, and AlignDev selects the newest one the agent's catalog lists. `"glm": "zai/glm-{latest}"` follows the newest `glm` model of Pi's `zai` provider; `"kimi": "moonshotai/kimi-k3.1-pro"` pins one model. A pattern holds `{latest}` once and matches a whole name, so a variant with a further suffix never matches. Antigravity's effort ending is the exception: a pattern matches an id with or without it and selects the id without it. A version is a major number, optionally followed by `.` or `-` and a minor number, each of one to three digits, so `{latest}` never stands for a date. The launch fails when several names share the newest version. A pattern takes no thinking suffix, and a `claude` profile rejects `{latest}`.
+- `modelAliases` — one-step name → selector mappings. AlignDev validates the chosen name, expands it once, then replaces a built-in alias with its pattern. An entry named like a built-in alias overrides it. A target with `{latest}` is a pattern: the placeholder stands for the version, and AlignDev selects the newest one in the model list it remembers (see [The AlignDev Memory](#the-aligndev-memory)). `"glm": "zai/glm-{latest}"` follows the newest `glm` model of Pi's `zai` provider; `"kimi": "moonshotai/kimi-k3.1-pro"` pins one model. A pattern holds `{latest}` once and matches a whole name, so a variant with a further suffix never matches. Antigravity's effort ending is the exception: a pattern matches an id with or without it and selects the id without it. A version is a major number, optionally followed by `.` or `-` and a minor number, each of one to three digits, so `{latest}` never stands for a date. The launch fails when several names share the newest version. A pattern takes no thinking suffix, and a `claude` profile rejects `{latest}`.
 - `efforts` — a nonempty list replaces the harness's built-in effort levels and bounds what AlignDev passes. An empty list adds no override. Entries are free strings, so a level AlignDev does not know can be listed.
 - `defaultEffort` — pins new sessions to one of the accepted levels. Without it, a session launched without `--effort` runs at the native default, which AlignDev does not read.
 
@@ -237,11 +237,21 @@ Selection for new sessions, help, `guide code`, and quota:
 4. The assistant profile's `defaultAgentProfile`, or the assistant's profile itself.
 5. Without an assistant's profile: the built-in defaults of a Claude Code, Codex, Pi or Antigravity harness, or `code.fallbackProfile` for an `openclaw` or unrecognized harness. Without that key, the error names the remedies; with one enabled coding-agent profile, it prints the line to add.
 
-A named reference never falls through: a `--profile`, project selection, recorded profile, `defaultAgentProfile` or `code.fallbackProfile` that names a missing, disabled or `openclaw` profile fails. Project selections use the actual working directory, matching linked worktrees through AlignFirst; help/guide/quota need no `.plans` or Git repository. `--profile` is rejected on status and unrelated guide topics. `aligndev guide code` lists every enabled coding-agent profile with its harness and models, so the assistant passes `--profile <name>` for another agent or account.
+A named reference never falls through: a `--profile`, project selection, recorded profile, `defaultAgentProfile` or `code.fallbackProfile` that names a missing, disabled or `openclaw` profile fails. Project selections use the actual working directory, matching linked worktrees through AlignFirst; help, guide, quota and models need no `.plans` or Git repository. `--profile` is rejected on status and unrelated guide topics. `aligndev guide code` lists every enabled coding-agent profile with its harness and models, so the assistant passes `--profile <name>` for another agent or account.
 
 `aligndev code quota [--profile <name>]` needs neither a ticket nor `.plans` and starts no coding session. Explicit quota settings start from the caller environment without its launcher variables, apply only their own `unset`, `env` and source-specific `configDir`, then strip the assistant's session identities. Coding-profile overrides and Pi credentials are not copied into the quota environment. The same path and validation rules apply. Select quota storage only when needed: omission inherits independently from the original caller, null removes the source's native directory variable, and a string selects explicit storage. Pair each Pi profile with the intended Codex or Claude account, using a custom quota directory when account separation is intended. Reports name the profile and native source; the limits belong to that CLI's account. AlignDev does not verify that it matches Pi's account or infer it from a model. Native requests time out after 30 seconds and await bounded process cleanup.
 
 For example, `"configDir": null` forces native-default mode despite an inherited directory variable; `"configDir": "~/.claude-work"` deliberately selects custom Claude storage. On macOS, explicitly setting `CLAUDE_CONFIG_DIR` to the default path can select different Keychain credentials from leaving it unset. Such a string remains valid and is distinct from omission or null. Confirm the intended mode before changing an existing selection; AlignDev performs no settings rewrite, credential transfer or automatic login. A null reset changes only directory routing, not HOME, PATH or API-key precedence.
+
+### The AlignDev Memory
+
+`~/.alignfirst/aligndev.store.sqlite` is the AlignDev memory: a SQLite file shared by the AlignDev instances of the OS account, created at the first use. It holds paths and native CLI versions, so it stays local to the machine. Node.js reads it through `node:sqlite`, Bun through `bun:sqlite`.
+
+The memory keeps the model list of each harness and profile, so a `{latest}` pattern needs no catalog command at each launch. A launch reads the native CLI version (`codex --version`, `pi --version` or `agy --version`), then resolves from the remembered list. The catalog command runs again when the list is missing, on the first use of a day, after an upgrade of the native CLI or a change of its native directory, and when the list cannot resolve the pattern. When the command fails, the list of the same directory still serves.
+
+`aligndev code models [--profile <name>] [--refresh]` shows the accepted names of each enabled profile, or of the given one, and the model each name selects in the remembered list. `--refresh` looks the lists up again first.
+
+AlignDev works without the memory. When the file cannot be opened, read or written, or comes from a newer AlignDev, AlignDev leaves it untouched and runs the catalog command at each launch. `aligndev code models` reports the reason.
 
 ### Global Assistant Instructions
 
