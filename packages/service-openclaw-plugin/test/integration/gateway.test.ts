@@ -3,10 +3,13 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 import { createBus, injectQaBusInboundMessage } from "@alignfirst/openclaw-channel-mock-core";
 import type { OpenClawPluginToolContext } from "openclaw/plugin-sdk/plugin-entry";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { ATTEMPT_SPACING_MS } from "../../src/thread-handoff/service.js";
+import { resolveDatabasePath } from "../../src/thread-handoff/state.js";
 import { killGateway, observeGateway } from "./gateway-process.js";
 import {
   claimStatus,
@@ -19,16 +22,16 @@ import {
 import {
   createProviderScript,
   createProviderGate,
+  findThreadId,
+  mentionsConversation,
   resolveThreadId,
+  starterFor,
   TAKEOVER_MESSAGE,
   FINALIZER_ANSWER,
-  STARTER,
   MARKER,
-  RACING_HUMAN,
-  RACING_HUMAN_HANDLED,
   HUMAN_DURING_SEED,
   HUMAN_DURING_SEED_HANDLED,
-  type FixtureOptions,
+  type ConversationOptions,
   type ProviderReply,
   type ProviderScript,
 } from "./gateway-provider.js";
@@ -36,15 +39,19 @@ import {
 const REPO_ROOT = resolve(import.meta.dirname, "../../../..");
 const PACKED_ROOT = process.env.THREAD_HANDOFF_PACKED_ROOT;
 const OPENCLAW = resolve(PACKED_ROOT ?? REPO_ROOT, "node_modules/.bin/openclaw");
+const SURFACES = ["slack", "discord"] as const;
 
 const BOT_MENTION = "@openclaw";
 
 const FINALIZER_FALLBACK = "no final summary was produced";
 
 const execFileAsync = promisify(execFile);
-const fixtures: FixtureOwner[] = [];
+const testOwners: FixtureOwner[] = [];
 
-type Surface = "slack" | "discord";
+type Surface = (typeof SURFACES)[number];
+type BusMessage = ReturnType<
+  ReturnType<typeof createBus>["state"]["getSnapshot"]
+>["messages"][number];
 
 interface Fixture {
   root: string;
@@ -52,7 +59,7 @@ interface Fixture {
   channelId: string;
   bus: ReturnType<typeof createBus>;
   busServer: Server;
-  providerServer: Server;
+  script: ProviderScript;
   gateway: ChildProcessWithoutNullStreams;
   gatewayPort: number;
   gatewayLog: string[];
@@ -67,536 +74,334 @@ interface FixtureOwner {
   servers: Server[];
   gateways: Set<ChildProcessWithoutNullStreams>;
   handlers: Set<Promise<void>>;
-  options: FixtureOptions;
   failures: unknown[];
   gatewayLog: string[];
   providerLog: string[];
   providerScript?: ProviderScript;
 }
 
+/** One test's conversation on a gateway. Its ID scopes every assertion on shared state. */
+interface Project {
+  fixture: Fixture;
+  id: string;
+}
+
 afterEach(async () => {
-  const failures: unknown[] = [];
-  while (fixtures.length > 0) {
-    const fixture = fixtures.pop();
-    if (!fixture) continue;
-    try {
-      await stopFixture(fixture);
-    } catch (error) {
-      failures.push(error);
-    }
-  }
-  if (failures.length > 0) throw new AggregateError(failures, "Gateway fixture cleanup failed");
+  await stopOwners(testOwners);
 });
 
 describe("OpenClaw external-plugin gateway", () => {
-  it.each(["slack", "discord"] as const)(
-    "claims and delivers a %s native exec completion on its canonical thread",
-    async (surface) => {
-      const fixture = await startFixture(surface, { nativeExecCompletion: true });
-      await injectRootMessage(fixture, "Project-X", "Start native completion verification.");
-      const completed = await waitForMessage(
-        fixture,
-        (message) => message.text === "NATIVE_COMPLETION_REPORTED",
-        40_000,
-      );
-      const threadId = resolveThreadId(surface, fixture.bus.state.getSnapshot(), "Project-X");
-      expect(completed.threadId).toBe(threadId);
-      expect(completed.conversation.id).toBe("Project-X");
-      expect(providerContentIncludes(fixture, "Exec completed (")).toBe(true);
-      expect(providerContentIncludes(fixture, "NATIVE_EXEC_OUTPUT")).toBe(true);
-      expect([...providerClaimResults(fixture).values()]).toEqual(["claimed", "alreadyClaimed"]);
-      const contexts = (await readFile(resolve(fixture.root, "tool-contexts.jsonl"), "utf8"))
-        .trim()
-        .split("\n")
-        .map((line): OpenClawPluginToolContext => JSON.parse(line));
-      expect(contexts).toContainEqual(
-        expect.objectContaining({
-          sessionKey: canonicalSessionKey(fixture, threadId),
-          deliveryContext: expect.objectContaining({
-            channel: fixture.channelId,
-            to: surface === "slack" ? "Project-X" : `channel:${threadId}`,
-          }),
-        }),
-      );
-      const completionContexts = contexts.filter(
-        (context) =>
-          context.nativeChannelId === undefined && context.deliveryContext?.to !== undefined,
-      );
-      expect(completionContexts).not.toHaveLength(0);
-      expect(
-        completionContexts.every(
-          (context) =>
-            context.sessionKey === canonicalSessionKey(fixture, threadId) &&
-            (surface !== "slack" || context.deliveryContext?.threadId === threadId),
+  describe("on one shared gateway per surface", () => {
+    const sharedOwners: FixtureOwner[] = [];
+    const shared = new Map<Surface, Fixture>();
+
+    beforeAll(async () => {
+      const results = await Promise.allSettled(
+        SURFACES.map((surface) =>
+          startFixture(surface, sharedOwners, { observeToolContexts: true }),
         ),
-      ).toBe(true);
-      expectNoIsolatedFinalization(fixture);
-    },
-  );
-
-  it("rejects a native exec completion with missing trusted routing", async () => {
-    const fixture = await startFixture("slack", {
-      nativeExecCompletion: true,
-      dropCompletionRoute: true,
-    });
-    await injectRootMessage(fixture, "Project-X", "Verify the native completion routing guard.");
-    await waitForMessage(
-      fixture,
-      (message) => message.text === "NATIVE_COMPLETION_CLAIM_REJECTED",
-      40_000,
-    );
-    expect(providerContentIncludes(fixture, "Exec completed (")).toBe(true);
-    expect(providerContentIncludes(fixture, "unsupportedContext:")).toBe(true);
-    expect([...providerClaimResults(fixture).values()]).toEqual(["claimed", "error"]);
-    expect(outboundMessages(fixture, "NATIVE_COMPLETION_REPORTED")).toHaveLength(0);
-  });
-
-  it.each(["slack", "discord"] as const)(
-    "keeps a claimed %s seed silent while awaiting a human answer",
-    async (surface) => {
-      const fixture = await startFixture(surface, { silenceAfterClaim: true });
-      const inbound = await injectRootMessage(
-        fixture,
-        "Project-X",
-        "Start a task that needs a human answer.",
       );
-      await waitForHandoffSettlement(
-        fixture,
-        inbound.message.id,
-        "Start a task that needs a human answer.",
-      );
-      expect(
-        fixture.bus.state
-          .getSnapshot()
-          .messages.filter((message) => message.direction === "outbound")
-          .map((message) => message.text),
-      ).toEqual([STARTER]);
-    },
-  );
-
-  it.each(["slack", "discord"] as const)(
-    "ends a mentioning %s channel turn silently on its starter",
-    async (surface) => {
-      const fixture = await startFixture(surface, {
-        answerFinalizer: true,
-        silenceAfterClaim: true,
-      });
-      const inbound = await injectRootMessage(fixture, "Project-X", `${BOT_MENTION} start a task.`);
-      await waitForHandoffSettlement(fixture, inbound.message.id, `${BOT_MENTION} start a task.`);
-
-      expect(providerContentIncludes(fixture, '"status": "queued"')).toBe(true);
-      expect(providerContentIncludes(fixture, TAKEOVER_MESSAGE)).toBe(true);
-      expect(await handoffStates(fixture)).toEqual(["claimed"]);
-      const snapshot = fixture.bus.state.getSnapshot();
-      const expectedThreadId =
-        surface === "slack"
-          ? snapshot.messages.find((message) => message.direction === "inbound")?.id
-          : snapshot.threads[0]?.id;
-      expect(expectedThreadId).toBeTruthy();
-      expect(
-        allOutbound(fixture).map((message) => [
-          message.text,
-          message.conversation.id,
-          message.threadId,
-        ]),
-      ).toEqual([[STARTER, "Project-X", expectedThreadId]]);
-      expectNoIsolatedFinalization(fixture);
-    },
-  );
-
-  it("posts the isolated finalizer into a Discord thread created with its starter", async () => {
-    const fixture = await startFixture("discord", {
-      answerFinalizer: true,
-      starterInThreadCreate: true,
+      for (const result of results) {
+        if (result.status === "rejected") throw result.reason;
+        shared.set(result.value.surface, result.value);
+      }
     });
-    await injectRootMessage(fixture, "Project-X", `${BOT_MENTION} start a task.`);
-    const finalizer = await waitForMessage(fixture, (message) =>
-      message.text.includes(FINALIZER_ANSWER),
-    );
-    const threadId = fixture.bus.state.getSnapshot().threads[0]?.id;
-    expect(threadId).toBeTruthy();
-    expect(finalizer.threadId).toBe(threadId);
-    expect(allOutbound(fixture).map((message) => message.threadId)).toEqual([threadId, threadId]);
-  });
 
-  it.each(["slack", "discord"] as const)(
-    "starts and continues the canonical %s thread without a human nudge",
-    async (surface) => {
-      const fixture = await startFixture(surface, { duplicateStart: true });
-      const inspection = await runOpenClaw(fixture, [
-        "plugins",
-        "inspect",
-        "alignfirst-service",
-        "--json",
-        "--runtime",
+    afterAll(async () => {
+      await stopOwners(sharedOwners);
+    });
+
+    function openProject(surface: Surface, id: string, options: ConversationOptions = {}) {
+      const fixture = shared.get(surface);
+      if (!fixture) throw new Error(`The shared ${surface} gateway did not start`);
+      return registerProject(fixture, id, options);
+    }
+
+    it.each(SURFACES)(
+      "claims and delivers a %s native exec completion on its canonical thread",
+      async (surface) => {
+        const project = openProject(surface, `Native-${surface}`, { nativeExecCompletion: true });
+        await injectMessage(project, "Start native completion verification.");
+        const completed = await waitForMessage(
+          project,
+          (message) => message.text === "NATIVE_COMPLETION_REPORTED",
+          40_000,
+        );
+        const threadId = projectThreadId(project);
+        const sessionKey = canonicalSessionKey(project, threadId);
+        expect(completed.threadId).toBe(threadId);
+        expect(providerContentIncludes(project, "Exec completed (")).toBe(true);
+        expect(providerContentIncludes(project, "NATIVE_EXEC_OUTPUT")).toBe(true);
+        expect(claimResults(project, sessionKey)).toEqual(["claimed", "alreadyClaimed"]);
+        const contexts = await projectToolContexts(project, threadId);
+        expect(contexts).toContainEqual(
+          expect.objectContaining({
+            sessionKey,
+            deliveryContext: expect.objectContaining({
+              channel: project.fixture.channelId,
+              to: surface === "slack" ? project.id : `channel:${threadId}`,
+            }),
+          }),
+        );
+        const completionContexts = contexts.filter(
+          (context) =>
+            context.nativeChannelId === undefined && context.deliveryContext?.to !== undefined,
+        );
+        expect(completionContexts).not.toHaveLength(0);
+        expect(
+          completionContexts.every(
+            (context) =>
+              context.sessionKey === sessionKey &&
+              (surface !== "slack" || context.deliveryContext?.threadId === threadId),
+          ),
+        ).toBe(true);
+        expectNoIsolatedFinalization(project);
+      },
+    );
+
+    it("ends a mentioning Slack channel turn silently on its starter", async () => {
+      const project = openProject("slack", "Silent-slack", { silenceAfterClaim: true });
+      const text = `${BOT_MENTION} start a task.`;
+      const inbound = await injectMessage(project, text);
+      await waitForHandoffSettlement(project, inbound.message.id, text);
+
+      expect(providerContentIncludes(project, '"status": "queued"')).toBe(true);
+      expect(providerContentIncludes(project, TAKEOVER_MESSAGE)).toBe(true);
+      expect(handoffStates(project)).toEqual(["claimed"]);
+      expect(allOutbound(project).map((message) => [message.text, message.threadId])).toEqual([
+        [starterFor(project.id), inbound.message.id],
       ]);
-      expect(inspection).toContain('"origin": "config"');
-      expect(inspection).toContain('"status": "loaded"');
+      expectNoIsolatedFinalization(project);
+    });
 
-      const rootMessage = await injectQaBusInboundMessage({
-        baseUrl: serverUrl(fixture.busServer),
-        input: {
-          accountId: fixture.channelId,
-          conversation: { kind: "channel", id: "Project-X", title: "Project-X" },
-          senderId: "User-A",
-          senderName: "User A",
-          text: "Start the complete task now.",
-        },
+    it("posts the isolated finalizer into a Discord thread created with its starter", async () => {
+      const project = openProject("discord", "Finalizer-discord", {
+        starterInThreadCreate: true,
       });
-      const started = await waitForMessage(fixture, (message) => message.text === MARKER);
-      const expectedThreadId =
-        surface === "slack"
-          ? rootMessage.message.id
-          : fixture.bus.state.getSnapshot().threads[0]?.id;
-      expect(expectedThreadId).toBeTruthy();
-      if (!expectedThreadId) throw new Error("native thread ID was not observed");
-      expect(started.threadId).toBe(expectedThreadId);
-      expect(started.conversation.id).toBe("Project-X");
-      expect(
-        fixture.bus.state
-          .getSnapshot()
-          .messages.filter(
-            (message) => message.direction === "outbound" && message.text === STARTER,
-          ),
-      ).toHaveLength(1);
-      const records = JSON.parse(
-        await runOpenClaw(fixture, ["thread-handoff", "list", "--json"]),
-      ) as Array<HandoffObservation & { parentConversationId: string; accountId: string }>;
-      expect(records).toHaveLength(1);
-      expect(records[0]).toMatchObject({
-        state: "claimed",
-        threadId: expectedThreadId,
-        parentConversationId: "Project-X",
-        accountId: fixture.channelId,
-      });
-      expect(records[0]).toMatchObject({
-        attemptCount: 1,
-        claimedBy: { sessionId: expect.stringMatching(/^[0-9a-f-]{36}$/u) },
-      });
-      expect(records[0].targetSessionKey).toBe(canonicalSessionKey(fixture, expectedThreadId));
-      requireClaimOwnership(fixture.root, records);
-      expect(providerContentIncludes(fixture, '"status": "queued"')).toBe(true);
-      expect(providerContentIncludes(fixture, '"status": "claimed"')).toBe(true);
-      expect(providerContentIncludes(fixture, '"status": "alreadyStarted"')).toBe(true);
-      expect(providerContentIncludes(fixture, TAKEOVER_MESSAGE)).toBe(true);
-      expect(providerToolCallIncludes(fixture, "message", { action: "read" })).toBe(true);
-      expect(providerToolCallIncludes(fixture, "thread_handoff", { action: "claim" }, true)).toBe(
-        true,
+      await injectMessage(project, `${BOT_MENTION} start a task.`);
+      const finalizer = await waitForMessage(project, (message) =>
+        message.text.includes(FINALIZER_ANSWER),
       );
-      expect(
-        surface === "slack"
-          ? providerContentIncludes(fixture, '"receipt"') &&
-              providerContentIncludes(fixture, '"deliveryStatus"')
-          : providerContentIncludes(fixture, '"parentMessageId"') &&
-              providerToolCallIncludes(fixture, "message", { action: "thread-reply" }),
-      ).toBe(true);
+      const threadId = projectThreadId(project);
+      expect(finalizer.threadId).toBe(threadId);
+      expect(allOutbound(project).map((message) => message.threadId)).toEqual([threadId, threadId]);
+    });
 
-      await injectQaBusInboundMessage({
-        baseUrl: serverUrl(fixture.busServer),
-        input: {
-          accountId: fixture.channelId,
-          conversation: { kind: "channel", id: "Project-X", title: "Project-X" },
-          senderId: "User-A",
-          senderName: "User A",
-          text: "Continue in this same thread.",
-          threadId: expectedThreadId,
-        },
-      });
-      const continued = await waitForMessage(
-        fixture,
-        (message) => message.text === "SAME_SESSION_CONTINUED",
-      );
-      expect(continued.threadId).toBe(expectedThreadId);
+    it.each(SURFACES)(
+      "starts and continues the canonical %s thread without a human nudge",
+      async (surface) => {
+        const project = openProject(surface, `Canonical-${surface}`, { duplicateStart: true });
+        const { fixture } = project;
+        const inspection = await runOpenClaw(fixture, [
+          "plugins",
+          "inspect",
+          "alignfirst-service",
+          "--json",
+          "--runtime",
+        ]);
+        expect(inspection).toContain('"origin": "config"');
+        expect(inspection).toContain('"status": "loaded"');
 
-      expect(
-        fixture.bus.state
-          .getSnapshot()
-          .messages.filter(
-            (message) => message.direction === "outbound" && message.text === MARKER,
-          ),
-      ).toHaveLength(1);
-      expect(allOutbound(fixture).filter((message) => message.threadId === undefined)).toEqual([]);
-    },
-  );
-
-  it.each(["slack", "discord"] as const)(
-    "preserves a %s human reply racing the first seed turn",
-    async (surface) => {
-      const fixture = await startFixture(surface);
-      const rootMessage = await injectRootMessage(fixture, "Project-X", "Start with a reply.");
-      await waitForMessage(fixture, (message) => message.text === STARTER);
-      const threadId =
-        surface === "slack"
-          ? rootMessage.message.id
-          : fixture.bus.state.getSnapshot().threads[0]?.id;
-      if (!threadId) throw new Error("native thread ID was not observed");
-
-      await injectQaBusInboundMessage({
-        baseUrl: serverUrl(fixture.busServer),
-        input: {
-          accountId: fixture.channelId,
-          conversation: { kind: "channel", id: "Project-X", title: "Project-X" },
-          senderId: "User-A",
-          senderName: "User A",
-          text: RACING_HUMAN,
+        const rootMessage = await injectMessage(project, "Start the complete task now.");
+        const started = await waitForMessage(project, (message) => message.text === MARKER);
+        const threadId = projectThreadId(project);
+        if (surface === "slack") expect(threadId).toBe(rootMessage.message.id);
+        expect(started.threadId).toBe(threadId);
+        expect(outboundMessages(project, starterFor(project.id))).toHaveLength(1);
+        const records = projectRecords(project);
+        expect(records).toHaveLength(1);
+        expect(records[0]).toMatchObject({
+          state: "claimed",
           threadId,
-        },
-      });
+          parentConversationId: project.id,
+          accountId: fixture.channelId,
+          attemptCount: 1,
+          claimedBy: { sessionId: expect.stringMatching(/^[0-9a-f-]{36}$/u) },
+        });
+        expect(records[0].targetSessionKey).toBe(canonicalSessionKey(project, threadId));
+        requireClaimOwnership(fixture.root, records);
+        expect(providerContentIncludes(project, '"status": "queued"')).toBe(true);
+        expect(providerContentIncludes(project, '"status": "claimed"')).toBe(true);
+        expect(providerContentIncludes(project, '"status": "alreadyStarted"')).toBe(true);
+        expect(providerContentIncludes(project, TAKEOVER_MESSAGE)).toBe(true);
+        expect(providerToolCallIncludes(project, "message", { action: "read" })).toBe(true);
+        expect(providerToolCallIncludes(project, "thread_handoff", { action: "claim" }, true)).toBe(
+          true,
+        );
+        expect(
+          surface === "slack"
+            ? providerContentIncludes(project, '"receipt"') &&
+                providerContentIncludes(project, '"deliveryStatus"')
+            : providerContentIncludes(project, '"parentMessageId"') &&
+                providerToolCallIncludes(project, "message", { action: "thread-reply" }),
+        ).toBe(true);
 
-      const handled = await waitForMessage(
-        fixture,
-        (message) => message.text === RACING_HUMAN_HANDLED,
-      );
-      expect(handled.threadId).toBe(threadId);
-    },
-  );
+        await injectMessage(project, "Continue in this same thread.", threadId);
+        const continued = await waitForMessage(
+          project,
+          (message) => message.text === "SAME_SESSION_CONTINUED",
+        );
+        expect(continued.threadId).toBe(threadId);
+        expect(outboundMessages(project, MARKER)).toHaveLength(1);
+        expect(allOutbound(project).filter((message) => message.threadId === undefined)).toEqual(
+          [],
+        );
+      },
+    );
 
-  it.each(["slack", "discord"] as const)(
-    "delivers a %s human message sent while the seed turn runs",
-    async (surface) => {
+    it("delivers a Slack human message sent while the seed turn runs", async () => {
       const seedGate = createProviderGate();
-      const options: FixtureOptions = { seedGate };
-      const fixture = await startFixture(surface, options);
-      const rootMessage = await injectRootMessage(fixture, "Project-X", "Start, reply mid-seed.");
-      await waitUntil(
-        () => {
-          assertProviderHealthy(fixture);
-          return seedGate.entered;
-        },
-        20_000,
-        () => `the seed turn did not enter its response gate\n${diagnostics(fixture)}`,
-      );
-      const threadId =
-        surface === "slack"
-          ? rootMessage.message.id
-          : fixture.bus.state.getSnapshot().threads[0]?.id;
-      if (!threadId) throw new Error("native thread ID was not observed");
+      const project = openProject("slack", "MidSeed-slack", { seedGate });
+      const text = "Start, reply mid-seed.";
+      const rootMessage = await injectMessage(project, text);
+      await waitForGate(project.fixture, seedGate, "seed");
+      const threadId = projectThreadId(project);
 
-      const human = await injectQaBusInboundMessage({
-        baseUrl: serverUrl(fixture.busServer),
-        input: {
-          accountId: fixture.channelId,
-          conversation: { kind: "channel", id: "Project-X", title: "Project-X" },
-          senderId: "User-A",
-          senderName: "User A",
-          text: HUMAN_DURING_SEED,
-          threadId,
-        },
-      });
+      const human = await injectMessage(project, HUMAN_DURING_SEED, threadId);
       await waitUntil(
-        () => dispatchObserved(fixture, "start", human.message.id),
+        () => dispatchObserved(project.fixture, "start", human.message.id),
         20_000,
-        () => `Human inbound did not reach gateway while seed held\n${diagnostics(fixture)}`,
+        () =>
+          `Human inbound did not reach gateway while seed held\n${diagnostics(project.fixture)}`,
       );
       expect(seedGate.released).toBe(false);
       seedGate.release();
-      await waitForHandoffSettlement(fixture, rootMessage.message.id, "Start, reply mid-seed.");
-      await waitForMessage(fixture, (message) => message.text === MARKER);
+      await waitForHandoffSettlement(project, rootMessage.message.id, text);
+      await waitForMessage(project, (message) => message.text === MARKER);
       const handled = await waitForMessage(
-        fixture,
+        project,
         (message) => message.text === HUMAN_DURING_SEED_HANDLED,
         30_000,
       );
       expect(handled.threadId).toBe(threadId);
       await waitUntil(
-        () => dispatchObserved(fixture, "done", human.message.id),
+        () => dispatchObserved(project.fixture, "done", human.message.id),
         20_000,
-        () => `Human dispatch did not settle\n${diagnostics(fixture)}`,
+        () => `Human dispatch did not settle\n${diagnostics(project.fixture)}`,
       );
-    },
-  );
+    });
 
-  it.each(["slack", "discord"] as const)(
-    "keeps a repeated %s claim idempotent inside the seed turn",
-    async (surface) => {
-      const fixture = await startFixture(surface, { claimTwice: true });
-      const inbound = await injectRootMessage(
-        fixture,
-        "Project-X",
-        "Start a task and claim it twice.",
-      );
-      await waitForMessage(fixture, (message) => message.text === MARKER);
-      await waitForHandoffSettlement(
-        fixture,
-        inbound.message.id,
-        "Start a task and claim it twice.",
-      );
-      const claimResults = providerClaimResults(fixture);
-      expect(claimResults.size).toBe(2);
-      expect([...claimResults.values()]).toEqual(["claimed", "claimed"]);
-      const claims = observedClaims(fixture.root);
-      expect(new Set(claims.map((claim) => claim.toolCallId)).size).toBe(2);
-      expect(new Set(claims.map((claim) => claim.runId)).size).toBe(1);
-      requireClaimOwnership(fixture.root, await handoffRecords(fixture), claims);
-      expect(
-        fixture.bus.state
-          .getSnapshot()
-          .messages.filter(
-            (message) => message.direction === "outbound" && message.text === MARKER,
-          ),
-      ).toHaveLength(1);
-    },
-  );
-
-  it.each(["slack", "discord"] as const)(
-    "starts two concurrent %s handoffs behind a running sibling turn",
-    async (surface) => {
+    it("starts two concurrent Slack handoffs behind a running sibling turn", async () => {
       const siblingGate = createProviderGate();
-      const options: FixtureOptions = { siblingGate };
-      const fixture = await startFixture(surface, options);
-      const sibling = await injectRootMessage(fixture, "Project-X", "Keep this turn busy.");
+      const sibling = openProject("slack", "Sibling-slack", { siblingGate });
+      const { fixture } = sibling;
+      const projects = ["TaskY-slack", "TaskZ-slack"].map((id) => openProject("slack", id));
+      const siblingRoot = await injectMessage(sibling, "Keep this turn busy.");
+      await waitForGate(fixture, siblingGate, "sibling");
+      await Promise.all(projects.map((project) => injectMessage(project, `Start ${project.id}.`)));
       await waitUntil(
         () => {
           assertProviderHealthy(fixture);
-          return siblingGate.entered;
-        },
-        20_000,
-        () =>
-          `the sibling turn did not enter its response gate; provider requests: ${fixture.providerLog.length}\n${diagnostics(fixture)}`,
-      );
-      await Promise.all([
-        injectRootMessage(fixture, "Project-Y", "Start task Y."),
-        injectRootMessage(fixture, "Project-Z", "Start task Z."),
-      ]);
-      await waitUntil(
-        () => {
-          assertProviderHealthy(fixture);
-          return outboundMessages(fixture, MARKER).length === 2;
+          return projects.every((project) => outboundMessages(project, MARKER).length === 1);
         },
         20_000,
         () => `concurrent handoffs did not finish\n${diagnostics(fixture)}`,
       );
-      const records = await handoffRecords(fixture);
+      const ids = projects.map((project) => project.id);
+      const records = handoffRecords(fixture).filter((record) =>
+        ids.includes(record.parentConversationId),
+      );
       expect(records.map((record) => record.state)).toEqual(["claimed", "claimed"]);
       requireClaimOwnership(fixture.root, records);
       expect(siblingGate.released).toBe(false);
       siblingGate.release();
       await waitUntil(
-        () => dispatchObserved(fixture, "done", sibling.message.id),
+        () => dispatchObserved(fixture, "done", siblingRoot.message.id),
         20_000,
         () => `Sibling dispatch did not settle\n${diagnostics(fixture)}`,
       );
-    },
-  );
+    });
 
-  it.each(["slack", "discord"] as const)(
-    "recovers one pending %s startup across abrupt and post-claim restarts",
-    async (surface) => {
-      const options = { holdFirstSeed: true };
-      const fixture = await startFixture(surface, options);
-      await injectRootMessage(fixture, "Project-X", "Start and survive a restart.");
-      await waitUntil(
-        () => {
-          assertProviderHealthy(fixture);
-          return fixture.providerLog.some((entry) => entry.includes(TAKEOVER_MESSAGE));
-        },
-        20_000,
-        () => "the first pending seed was not observed",
-      );
-      const threadId = resolveThreadId(surface, fixture.bus.state.getSnapshot(), "Project-X");
-      const pending = JSON.parse(
-        await runOpenClaw(fixture, ["thread-handoff", "list", "--json"]),
-      ) as Array<{ state: string; targetSessionKey: string; attemptCount: number }>;
-      expect(pending).toHaveLength(1);
-      expect(pending[0]).toMatchObject({
-        state: "pending",
-        targetSessionKey: canonicalSessionKey(fixture, threadId),
-        attemptCount: 1,
-      });
-
-      options.holdFirstSeed = false;
-      await restartGateway(fixture, "SIGKILL");
-      const started = await waitForMessage(fixture, (message) => message.text === MARKER, 150_000);
-      expect(started.threadId).toBe(threadId);
-      const claimed = await handoffRecords(fixture);
-      expect(claimed).toMatchObject([{ state: "claimed", attemptCount: 2 }]);
-      requireClaimOwnership(fixture.root, claimed);
-
-      await restartGateway(fixture, "SIGKILL");
-      await new Promise((resolveWait) => setTimeout(resolveWait, 65_000));
-      expect(outboundMessages(fixture, MARKER)).toHaveLength(1);
-      const recovered = await handoffRecords(fixture);
-      expect(recovered).toMatchObject([
-        {
-          state: "claimed",
-          attemptCount: 2,
-          targetSessionKey: canonicalSessionKey(fixture, threadId),
-          threadId,
-        },
-      ]);
-      requireClaimOwnership(fixture.root, recovered);
-      await injectQaBusInboundMessage({
-        baseUrl: serverUrl(fixture.busServer),
-        input: {
-          accountId: fixture.channelId,
-          conversation: { kind: "channel", id: "Project-X", title: "Project-X" },
-          senderId: "User-A",
-          text: "Continue in this same thread.",
-          threadId,
-        },
-      });
-      const continued = await waitForMessage(
-        fixture,
-        (message) => message.text === "SAME_SESSION_CONTINUED",
-      );
-      expect(continued.threadId).toBe(threadId);
-      expect(allOutbound(fixture).map((message) => message.threadId)).toEqual([
-        threadId,
-        threadId,
-        threadId,
-      ]);
-      expectNoIsolatedFinalization(fixture);
-    },
-    300_000,
-  );
-
-  it.each(["slack", "discord"] as const)(
-    "retries one failed %s native starter without duplicating delivery",
-    async (surface) => {
-      const fixture = await startFixture(surface);
+    it("retries one failed Discord native starter without duplicating delivery", async () => {
+      const project = openProject("discord", "Retry-discord");
+      const { fixture } = project;
+      // The bus fault is global: an earlier test's channel turn must not consume it.
+      await waitForSettledDispatches(fixture);
       fixture.bus.state.failNext({
-        operation: surface === "slack" ? "outbound-message" : "thread-create",
+        operation: "thread-create",
         message: "planned recoverable starter failure",
       });
-      await injectQaBusInboundMessage({
-        baseUrl: serverUrl(fixture.busServer),
-        input: {
-          accountId: fixture.channelId,
-          conversation: { kind: "channel", id: "Project-X", title: "Project-X" },
-          senderId: "User-A",
-          senderName: "User A",
-          text: "Recover from one native delivery failure.",
-        },
-      });
-      await waitForMessage(fixture, (message) => message.text === MARKER);
-      const snapshot = fixture.bus.state.getSnapshot();
+      await injectMessage(project, "Recover from one native delivery failure.");
+      await waitForMessage(project, (message) => message.text === MARKER);
+      expect(outboundMessages(project, starterFor(project.id))).toHaveLength(1);
       expect(
-        snapshot.messages.filter(
-          (message) => message.direction === "outbound" && message.text === STARTER,
-        ),
+        fixture.bus.state
+          .getSnapshot()
+          .threads.filter((thread) => thread.conversationId === project.id),
       ).toHaveLength(1);
-      if (surface === "discord") expect(snapshot.threads).toHaveLength(1);
       expect(
-        fixture.providerLog.some((entry) => entry.includes("planned recoverable starter failure")),
+        providerEntries(project).some((entry) =>
+          entry.includes("planned recoverable starter failure"),
+        ),
       ).toBe(true);
-      expect(await handoffStates(fixture)).toEqual(["claimed"]);
-    },
-  );
+      expect(handoffStates(project)).toEqual(["claimed"]);
+    });
+  });
+
+  it("recovers one pending Slack startup across abrupt and post-claim restarts", async () => {
+    const fixture = await startFixture("slack", testOwners, { observeToolContexts: false });
+    const options: ConversationOptions = { holdFirstSeed: true };
+    const project = registerProject(fixture, "Recovery-slack", options);
+    await injectMessage(project, "Start and survive a restart.");
+    await waitForSeedAttempt(project, 1);
+    const threadId = projectThreadId(project);
+    const sessionKey = canonicalSessionKey(project, threadId);
+    expect(projectRecords(project)).toMatchObject([
+      { state: "pending", targetSessionKey: sessionKey, attemptCount: 1 },
+    ]);
+
+    options.holdFirstSeed = false;
+    await restartGateway(fixture);
+    const started = await waitForMessage(project, (message) => message.text === MARKER);
+    expect(started.threadId).toBe(threadId);
+    const claimed = projectRecords(project);
+    expect(claimed).toMatchObject([{ state: "claimed", attemptCount: 2 }]);
+    requireClaimOwnership(fixture.root, claimed);
+    await waitForSeedAttempt(project, 2);
+
+    await restartGateway(fixture);
+    // Startup recovery records an attempt before "persistence ready", so a wrong restart shows here.
+    const recovered = projectRecords(project);
+    expect(recovered).toMatchObject([
+      { state: "claimed", attemptCount: 2, targetSessionKey: sessionKey, threadId },
+    ]);
+    expect(outboundMessages(project, MARKER)).toHaveLength(1);
+    requireClaimOwnership(fixture.root, recovered);
+    const [listing, continued] = await Promise.all([
+      runOpenClaw(fixture, ["thread-handoff", "list", "--json"]),
+      injectMessage(project, "Continue in this same thread.", threadId).then(() =>
+        waitForMessage(project, (message) => message.text === "SAME_SESSION_CONTINUED"),
+      ),
+    ]);
+    expect(JSON.parse(listing)).toMatchObject([
+      { handoffId: recovered[0].handoffId, state: "claimed", attemptCount: 2 },
+    ]);
+    expect(continued.threadId).toBe(threadId);
+    expect(allOutbound(project).map((message) => message.threadId)).toEqual([
+      threadId,
+      threadId,
+      threadId,
+    ]);
+    expectNoIsolatedFinalization(project);
+  });
 });
 
-async function startFixture(surface: Surface, options: FixtureOptions = {}): Promise<Fixture> {
+async function startFixture(
+  surface: Surface,
+  owners: FixtureOwner[],
+  params: { observeToolContexts: boolean },
+): Promise<Fixture> {
   const root = await mkdtemp(resolve(tmpdir(), `thread-handoff-${surface}-`));
   const owner: FixtureOwner = {
     root,
     servers: [],
     gateways: new Set(),
     handlers: new Set(),
-    options,
     failures: [],
     gatewayLog: [],
     providerLog: [],
   };
-  fixtures.push(owner);
+  owners.push(owner);
   const stateDir = resolve(root, "state");
   const workspace = resolve(root, "workspace");
   await mkdir(workspace, { recursive: true });
@@ -613,7 +418,7 @@ async function startFixture(surface: Surface, options: FixtureOptions = {}): Pro
   owner.servers.push(busServer);
   await listen(busServer);
   const providerLog = owner.providerLog;
-  const script = createProviderScript(surface, bus, options);
+  const script = createProviderScript(surface, bus);
   owner.providerScript = script;
   const providerServer = createServer((request, response) => {
     ownHttpHandler(owner, response, () =>
@@ -624,8 +429,8 @@ async function startFixture(surface: Surface, options: FixtureOptions = {}): Pro
   await listen(providerServer);
   const channelId = `${surface}-mock`;
   const configPath = resolve(root, "openclaw.json");
-  const handoffPluginPath = options.nativeExecCompletion
-    ? await createContextObserver(root, options)
+  const handoffPluginPath = params.observeToolContexts
+    ? await createContextObserver(root)
     : undefined;
   const passiveObserverPath = await createPassiveObserver(root);
   const gatewayPort = await reservePort();
@@ -648,13 +453,13 @@ async function startFixture(surface: Surface, options: FixtureOptions = {}): Pro
   );
   const gatewayLog = owner.gatewayLog;
   const gateway = await launchGateway(configPath, stateDir, gatewayPort, gatewayLog, owner);
-  const fixture = {
+  return {
     root,
     surface,
     channelId,
     bus,
     busServer,
-    providerServer,
+    script,
     gateway,
     gatewayPort,
     gatewayLog,
@@ -663,7 +468,6 @@ async function startFixture(surface: Surface, options: FixtureOptions = {}): Pro
     stateDir,
     owner,
   };
-  return fixture;
 }
 
 function ownHttpHandler(
@@ -723,13 +527,8 @@ async function writeObserverPackage(observer: string): Promise<void> {
   );
 }
 
-async function createContextObserver(root: string, options: FixtureOptions): Promise<string> {
-  const pluginRoot = resolve(
-    PACKED_ROOT ?? REPO_ROOT,
-    PACKED_ROOT === undefined
-      ? "packages/service-openclaw-plugin"
-      : "node_modules/@alignfirst/service-openclaw-plugin",
-  );
+async function createContextObserver(root: string): Promise<string> {
+  const pluginRoot = packagePath("service-openclaw-plugin");
   const observer = resolve(root, "context-observer");
   await mkdir(observer);
   await writeObserverPackage(observer);
@@ -751,15 +550,21 @@ export default { ...plugin, register(api) {
         agentId, sessionKey, sessionId, messageChannel, nativeChannelId,
         agentAccountId, deliveryContext,
       }) + "\\n");
-      const dropRoute = ${options.dropCompletionRoute === true} &&
-        nativeChannelId === undefined && deliveryContext?.to !== undefined;
-      return tool(dropRoute ? { ...context, deliveryContext: undefined } : context);
+      return tool(context);
     }, options);
   }});
 }};
 `,
   );
   return observer;
+}
+
+function packagePath(name: string): string {
+  return resolve(
+    PACKED_ROOT ?? REPO_ROOT,
+    PACKED_ROOT === undefined ? "packages" : "node_modules/@alignfirst",
+    name,
+  );
 }
 
 function buildConfig(params: {
@@ -780,19 +585,8 @@ function buildConfig(params: {
       load: {
         paths: [
           params.passiveObserverPath,
-          resolve(
-            PACKED_ROOT ?? REPO_ROOT,
-            PACKED_ROOT === undefined
-              ? `packages/openclaw-${params.surface}-mock`
-              : `node_modules/@alignfirst/openclaw-${params.surface}-mock`,
-          ),
-          params.handoffPluginPath ??
-            resolve(
-              PACKED_ROOT ?? REPO_ROOT,
-              PACKED_ROOT === undefined
-                ? "packages/service-openclaw-plugin"
-                : "node_modules/@alignfirst/service-openclaw-plugin",
-            ),
+          packagePath(`openclaw-${params.surface}-mock`),
+          params.handoffPluginPath ?? packagePath("service-openclaw-plugin"),
         ],
       },
       entries: {
@@ -905,17 +699,29 @@ async function handleProvider(
   response.end("data: [DONE]\n\n");
 }
 
-async function waitForHandoffSettlement(fixture: Fixture, inboundId: string, parentPrompt: string) {
+function registerProject(fixture: Fixture, id: string, options: ConversationOptions): Project {
+  fixture.script.register(id, options);
+  return { fixture, id };
+}
+
+async function waitForHandoffSettlement(project: Project, inboundId: string, parentPrompt: string) {
+  const { fixture } = project;
   await waitUntil(
     () => {
       assertProviderHealthy(fixture);
+      const threadId = findThreadId(fixture.surface, fixture.bus.state.getSnapshot(), project.id);
+      if (threadId === undefined) return false;
+      const sessionKey = canonicalSessionKey(project, threadId);
       return (
-        observedClaims(fixture.root).some((claim) => claimStatus(claim) === "claimed") &&
+        observedClaims(fixture.root).some(
+          (claim) => claim.sessionKey === sessionKey && claimStatus(claim) === "claimed",
+        ) &&
         toolObservations(fixture.root).some(
           (event) =>
             event.phase === "after" &&
             event.toolName === "thread_handoff" &&
             event.params.action === "start" &&
+            event.params.threadId === threadId &&
             event.result?.details?.status === "queued",
         )
       );
@@ -923,7 +729,7 @@ async function waitForHandoffSettlement(fixture: Fixture, inboundId: string, par
     20_000,
     () => `Seed claim and parent start hooks not observed\n${diagnostics(fixture)}`,
   );
-  const records = await handoffRecords(fixture);
+  const records = projectRecords(project);
   expect(records).toHaveLength(1);
   const record = records[0];
   const claims = observedClaims(fixture.root);
@@ -946,17 +752,62 @@ async function waitForHandoffSettlement(fixture: Fixture, inboundId: string, par
         successfulRun(fixture.stateDir, parent, parentPrompt) &&
         successfulRun(fixture.stateDir, seed, TAKEOVER_MESSAGE) &&
         dispatchObserved(fixture, "done", inboundId) &&
-        fixture.gatewayLog
-          .join("")
-          .includes(
-            `thread-handoff ${record.handoffId} start attempt ${record.attemptCount} completed`,
-          )
+        attemptCompleted(fixture, record.handoffId, record.attemptCount)
       );
     },
     30_000,
     () =>
       `Parent/seed runs and dispatches did not settle (${parent.runId}, ${seed.runId})\n${diagnostics(fixture)}`,
   );
+}
+
+/** A kill during a seed turn makes OpenClaw replay that turn and absorb the next message. */
+async function waitForSeedAttempt(project: Project, attempt: number): Promise<void> {
+  const { fixture } = project;
+  await waitUntil(
+    () => {
+      assertProviderHealthy(fixture);
+      const [record] = projectRecords(project);
+      return record !== undefined && attemptCompleted(fixture, record.handoffId, attempt);
+    },
+    20_000,
+    () => `seed attempt ${attempt} did not complete\n${diagnostics(fixture)}`,
+  );
+}
+
+async function waitForGate(
+  fixture: Fixture,
+  gate: { entered: boolean },
+  turn: string,
+): Promise<void> {
+  await waitUntil(
+    () => {
+      assertProviderHealthy(fixture);
+      return gate.entered;
+    },
+    20_000,
+    () => `the ${turn} turn did not enter its response gate\n${diagnostics(fixture)}`,
+  );
+}
+
+async function waitForSettledDispatches(fixture: Fixture): Promise<void> {
+  await waitUntil(
+    () => {
+      const log = fixture.gatewayLog.join("");
+      const started = log.matchAll(/inbound dispatch start id=(\S+)/gu);
+      return [...started].every(([, id]) =>
+        new RegExp(`inbound dispatch (?:done|failed) id=${id}\\b`, "u").test(log),
+      );
+    },
+    30_000,
+    () => `Earlier inbound dispatches did not settle\n${diagnostics(fixture)}`,
+  );
+}
+
+function attemptCompleted(fixture: Fixture, handoffId: string, attempt: number): boolean {
+  return fixture.gatewayLog
+    .join("")
+    .includes(`thread-handoff ${handoffId} start attempt ${attempt} completed`);
 }
 
 function dispatchObserved(fixture: Fixture, phase: "start" | "done", id: string): boolean {
@@ -975,17 +826,16 @@ function assertProviderHealthy(fixture: Fixture): void {
 }
 
 async function waitForMessage(
-  fixture: Fixture,
-  predicate: (
-    message: ReturnType<Fixture["bus"]["state"]["getSnapshot"]>["messages"][number],
-  ) => boolean,
+  project: Project,
+  predicate: (message: BusMessage) => boolean,
   timeoutMs = 20_000,
-) {
-  let found: ReturnType<Fixture["bus"]["state"]["getSnapshot"]>["messages"][number] | undefined;
+): Promise<BusMessage> {
+  const { fixture } = project;
+  let found: BusMessage | undefined;
   await waitUntil(
     () => {
       assertProviderHealthy(fixture);
-      found = fixture.bus.state.getSnapshot().messages.find(predicate);
+      found = projectMessages(project).find(predicate);
       return found !== undefined;
     },
     timeoutMs,
@@ -997,48 +847,106 @@ async function waitForMessage(
   return found;
 }
 
-function allOutbound(fixture: Fixture) {
-  return fixture.bus.state
+function projectMessages(project: Project): BusMessage[] {
+  return project.fixture.bus.state
     .getSnapshot()
-    .messages.filter((message) => message.direction === "outbound");
+    .messages.filter((message) => message.conversation.id === project.id);
 }
 
-function expectNoIsolatedFinalization(fixture: Fixture) {
+function allOutbound(project: Project): BusMessage[] {
+  return projectMessages(project).filter((message) => message.direction === "outbound");
+}
+
+function outboundMessages(project: Project, text: string): BusMessage[] {
+  return allOutbound(project).filter((message) => message.text === text);
+}
+
+function expectNoIsolatedFinalization(project: Project) {
   expect(
-    allOutbound(fixture).filter(
+    allOutbound(project).filter(
       (message) =>
         message.text.includes(FINALIZER_ANSWER) || message.text.includes(FINALIZER_FALLBACK),
     ),
   ).toEqual([]);
 }
 
-function outboundMessages(fixture: Fixture, text: string) {
-  return fixture.bus.state
-    .getSnapshot()
-    .messages.filter((message) => message.direction === "outbound" && message.text === text);
+function projectThreadId(project: Project): string {
+  return resolveThreadId(
+    project.fixture.surface,
+    project.fixture.bus.state.getSnapshot(),
+    project.id,
+  );
 }
 
-function canonicalSessionKey(fixture: Fixture, threadId: string): string {
-  return fixture.surface === "slack"
-    ? `agent:main:${fixture.channelId}:channel:project-x:thread:${threadId.toLowerCase()}`
-    : `agent:main:${fixture.channelId}:channel:${threadId.toLowerCase()}`;
+function canonicalSessionKey(project: Project, threadId: string): string {
+  const { channelId, surface } = project.fixture;
+  return surface === "slack"
+    ? `agent:main:${channelId}:channel:${project.id.toLowerCase()}:thread:${threadId.toLowerCase()}`
+    : `agent:main:${channelId}:channel:${threadId.toLowerCase()}`;
 }
 
-async function handoffRecords(fixture: Fixture): Promise<HandoffObservation[]> {
-  return JSON.parse(await runOpenClaw(fixture, ["thread-handoff", "list", "--json"]));
+function claimResults(project: Project, sessionKey: string): string[] {
+  return observedClaims(project.fixture.root)
+    .filter((claim) => claim.sessionKey === sessionKey)
+    .map(claimStatus);
 }
 
-async function handoffStates(fixture: Fixture): Promise<string[]> {
-  return (await handoffRecords(fixture)).map((record) => record.state);
+async function projectToolContexts(
+  project: Project,
+  threadId: string,
+): Promise<OpenClawPluginToolContext[]> {
+  const contexts = (await readFile(resolve(project.fixture.root, "tool-contexts.jsonl"), "utf8"))
+    .trim()
+    .split("\n")
+    .map((line): OpenClawPluginToolContext => JSON.parse(line));
+  const id = project.id.toLowerCase();
+  return contexts.filter((context) =>
+    [context.sessionKey, context.deliveryContext?.to].some(
+      (value) =>
+        value !== undefined && (value.toLowerCase().includes(id) || value.includes(threadId)),
+    ),
+  );
+}
+
+/** Reads the plugin's store directly: `openclaw thread-handoff list` takes about 14 s. */
+function handoffRecords(fixture: Fixture): HandoffObservation[] {
+  const database = new DatabaseSync(resolveDatabasePath(fixture.stateDir), { readOnly: true });
+  try {
+    database.exec("PRAGMA busy_timeout = 2000;");
+    return database
+      .prepare("SELECT record_json FROM handoffs ORDER BY rowid")
+      .all()
+      .map((row) => {
+        if (typeof row.record_json !== "string") throw new Error("Invalid handoff record JSON");
+        return JSON.parse(row.record_json);
+      });
+  } finally {
+    database.close();
+  }
+}
+
+function projectRecords(project: Project): HandoffObservation[] {
+  return handoffRecords(project.fixture).filter(
+    (record) => record.parentConversationId === project.id,
+  );
+}
+
+function handoffStates(project: Project): string[] {
+  return projectRecords(project).map((record) => record.state);
+}
+
+/** Provider requests of the project; each resolved its conversation from the project ID. */
+function providerEntries(project: Project): string[] {
+  return project.fixture.providerLog.filter((entry) => mentionsConversation(entry, project.id));
 }
 
 function providerToolCallIncludes(
-  fixture: Fixture,
+  project: Project,
   name: string,
   expected: Record<string, unknown>,
   exact = false,
 ): boolean {
-  return fixture.providerLog.some((entry) => {
+  return providerEntries(project).some((entry) => {
     const body = JSON.parse(entry) as {
       messages?: Array<{
         tool_calls?: Array<{ function: { name: string; arguments: string } }>;
@@ -1057,8 +965,8 @@ function providerToolCallIncludes(
   });
 }
 
-function providerContentIncludes(fixture: Fixture, expected: string) {
-  return fixture.providerLog.some((entry) => {
+function providerContentIncludes(project: Project, expected: string) {
+  return providerEntries(project).some((entry) => {
     const body = JSON.parse(entry) as { messages?: Array<{ content?: unknown }> };
     return body.messages?.some(
       (message) => typeof message.content === "string" && message.content.includes(expected),
@@ -1066,32 +974,26 @@ function providerContentIncludes(fixture: Fixture, expected: string) {
   });
 }
 
-function providerClaimResults(fixture: Fixture): Map<string, string> {
-  return new Map(
-    observedClaims(fixture.root).map((claim) => [
-      `${claim.sessionId}/${claim.runId}/${claim.toolCallId}`,
-      claimStatus(claim),
-    ]),
-  );
-}
-
-async function injectRootMessage(fixture: Fixture, conversationId: string, text: string) {
+async function injectMessage(project: Project, text: string, threadId?: string) {
   return await injectQaBusInboundMessage({
-    baseUrl: serverUrl(fixture.busServer),
+    baseUrl: serverUrl(project.fixture.busServer),
     input: {
-      accountId: fixture.channelId,
-      conversation: { kind: "channel", id: conversationId, title: conversationId },
+      accountId: project.fixture.channelId,
+      conversation: { kind: "channel", id: project.id, title: project.id },
       senderId: "User-A",
       senderName: "User A",
       text,
+      threadId,
     },
   });
 }
 
-async function restartGateway(fixture: Fixture, signal: NodeJS.Signals) {
-  await killGateway(fixture.gateway, signal);
-  fixture.owner.providerScript?.restart();
-  fixture.gatewayLog.push(`\n--- gateway restart after ${signal} ---\n`);
+async function restartGateway(fixture: Fixture) {
+  await killGateway(fixture.gateway);
+  rewindLastAttempts(fixture.stateDir);
+  fixture.script.restart();
+  fixture.gatewayLog.push("\n--- gateway restart after SIGKILL ---\n");
+  const restartOffset = fixture.gatewayLog.length;
   fixture.gateway = await launchGateway(
     fixture.configPath,
     fixture.stateDir,
@@ -1099,6 +1001,35 @@ async function restartGateway(fixture: Fixture, signal: NodeJS.Signals) {
     fixture.gatewayLog,
     fixture.owner,
   );
+  // On an existing agent database, OpenClaw rejects inbound messages until this background step ends.
+  await waitUntil(
+    () =>
+      fixture.gatewayLog
+        .slice(restartOffset)
+        .join("")
+        .includes("agent database recovered after background inspection and preparation"),
+    30_000,
+    () => `restarted gateway did not admit its agent database\n${diagnostics(fixture)}`,
+  );
+}
+
+/** Makes every handoff eligible for startup recovery, as if the attempt spacing had elapsed. */
+function rewindLastAttempts(stateDir: string): void {
+  const database = new DatabaseSync(resolveDatabasePath(stateDir));
+  try {
+    database.exec("PRAGMA busy_timeout = 2000;");
+    const rewind = ATTEMPT_SPACING_MS + 1_000;
+    const { changes } = database
+      .prepare(
+        `UPDATE handoffs SET last_attempted_at = last_attempted_at - ?,
+           record_json = json_replace(record_json, '$.lastAttemptedAt', last_attempted_at - ?)
+         WHERE last_attempted_at IS NOT NULL`,
+      )
+      .run(rewind, rewind);
+    if (changes !== 1) throw new Error(`Expected one attempted handoff, rewound ${changes}`);
+  } finally {
+    database.close();
+  }
 }
 
 async function launchGateway(
@@ -1133,17 +1064,9 @@ async function launchGateway(
 }
 
 async function runOpenClaw(fixture: Fixture, args: string[]): Promise<string> {
-  return await runConfiguredOpenClaw(fixture.configPath, fixture.stateDir, args);
-}
-
-async function runConfiguredOpenClaw(
-  configPath: string,
-  stateDir: string,
-  args: string[],
-): Promise<string> {
   const result = await execFileAsync(OPENCLAW, args, {
     cwd: REPO_ROOT,
-    env: buildOpenClawEnv(configPath, stateDir),
+    env: buildOpenClawEnv(fixture.configPath, fixture.stateDir),
     encoding: "utf8",
     timeout: 30_000,
     maxBuffer: 1024 * 1024,
@@ -1177,6 +1100,20 @@ function buildOpenClawEnv(configPath: string, stateDir: string): NodeJS.ProcessE
   };
 }
 
+async function stopOwners(owners: FixtureOwner[]): Promise<void> {
+  const failures: unknown[] = [];
+  while (owners.length > 0) {
+    const owner = owners.pop();
+    if (!owner) continue;
+    try {
+      await stopFixture(owner);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length > 0) throw new AggregateError(failures, "Gateway fixture cleanup failed");
+}
+
 async function stopFixture(owner: FixtureOwner) {
   const failures = [...owner.failures];
   const attempt = async (operation: () => Promise<unknown>) => {
@@ -1186,9 +1123,8 @@ async function stopFixture(owner: FixtureOwner) {
       failures.push(error);
     }
   };
-  owner.options.seedGate?.release();
-  owner.options.siblingGate?.release();
-  for (const gateway of owner.gateways) await attempt(() => killGateway(gateway, "SIGTERM"));
+  owner.providerScript?.releaseGates();
+  for (const gateway of owner.gateways) await attempt(() => killGateway(gateway));
   for (const server of [...owner.servers].reverse()) await attempt(() => closeServer(server));
   await attempt(() =>
     boundedCleanup(Promise.all([...owner.handlers]), "Provider handlers did not settle"),

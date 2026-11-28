@@ -3,23 +3,19 @@ import type { createBus } from "@alignfirst/openclaw-channel-mock-core";
 
 export const TAKEOVER_MESSAGE = "Take over this thread.";
 export const FINALIZER_ANSWER = "ISOLATED_FINALIZER_ANSWER";
-export const STARTER = "Project: Project-X\nTask: preserve this exact starter.";
 export const MARKER = "TARGET_SESSION_STARTED";
-export const RACING_HUMAN = "RACING_HUMAN_REPLY";
-export const RACING_HUMAN_HANDLED = "RACING_HUMAN_HANDLED";
 export const HUMAN_DURING_SEED = "HUMAN_DURING_SEED_REPLY";
 export const HUMAN_DURING_SEED_HANDLED = "HUMAN_DURING_SEED_HANDLED";
 const SILENT_TOKEN = "HEARTBEAT_OK";
 const RESTART_RECOVERY_PROMPT = "Your previous turn was interrupted";
+const STARTER_TASK = "Task: preserve this exact starter.";
 
 type Surface = "slack" | "discord";
 type Snapshot = ReturnType<ReturnType<typeof createBus>["state"]["getSnapshot"]>;
 
-export interface FixtureOptions {
-  answerFinalizer?: boolean;
+/** Scripted behaviour of one conversation. */
+export interface ConversationOptions {
   nativeExecCompletion?: boolean;
-  dropCompletionRoute?: boolean;
-  claimTwice?: boolean;
   duplicateStart?: boolean;
   starterInThreadCreate?: boolean;
   holdFirstSeed?: boolean;
@@ -45,12 +41,16 @@ export interface ProviderReply {
 
 export interface ProviderScript {
   reply(body: Record<string, unknown>): ProviderReply;
+  /** Registers a conversation; its ID must not contain another registered ID, case-insensitively. */
+  register(conversationId: string, options: ConversationOptions): void;
+  releaseGates(): void;
   restart(): void;
 }
 
 interface ScriptState {
   instance: string;
   sequence: number;
+  conversations: Map<string, ConversationOptions>;
   flows: Map<string, Flow>;
   historicalCalls: Set<string>;
 }
@@ -58,7 +58,6 @@ interface ScriptState {
 interface Flow {
   issued: Map<string, IssuedCall>;
   repeatedStart: boolean;
-  repeatedClaim: boolean;
 }
 
 interface IssuedCall {
@@ -69,7 +68,7 @@ interface IssuedCall {
 interface Turn {
   id: string;
   surface: Surface;
-  options: FixtureOptions;
+  options: ConversationOptions;
   flow: Flow;
   user: string;
   snapshot: Snapshot;
@@ -91,18 +90,38 @@ interface ToolCall {
   function: { name: string; arguments: string };
 }
 
+export function starterFor(conversationId: string): string {
+  return `Project: ${conversationId}\n${STARTER_TASK}`;
+}
+
 export function createProviderScript(
   surface: Surface,
   bus: ReturnType<typeof createBus>,
-  options: FixtureOptions,
 ): ProviderScript {
   const state: ScriptState = {
     instance: randomUUID().replaceAll("-", "").slice(0, 24),
     sequence: 0,
+    conversations: new Map(),
     flows: new Map(),
     historicalCalls: new Set(),
   };
   return {
+    register(conversationId, options) {
+      for (const registered of state.conversations.keys()) {
+        if (
+          mentionsConversation(registered, conversationId) ||
+          mentionsConversation(conversationId, registered)
+        )
+          throw new Error(`Conversation IDs overlap: ${registered}, ${conversationId}`);
+      }
+      state.conversations.set(conversationId, options);
+    },
+    releaseGates() {
+      for (const options of state.conversations.values()) {
+        options.seedGate?.release();
+        options.siblingGate?.release();
+      }
+    },
     restart() {
       // Interrupted transcript calls are history, never permission for a new run's effect.
       for (const flow of state.flows.values()) {
@@ -116,19 +135,16 @@ export function createProviderScript(
       }
       // Keep IDs alphanumeric and within OpenClaw's 40-character wire limit.
       const id = `${state.instance}${++state.sequence}`;
-      if (!Array.isArray(body.tools)) {
-        if (options.answerFinalizer) return { id, content: FINALIZER_ANSWER };
-        throw new Error("Unexpected isolated finalizer request");
-      }
+      // Tests that must not finalize assert it on the bus.
+      if (!Array.isArray(body.tools)) return { id, content: FINALIZER_ANSWER };
       // The local OpenAI wire messages are checked through their call/result identities below.
       const messages = body.messages as Message[];
-      return replyToTurn({
-        id,
-        surface,
-        options,
-        snapshot: bus.state.getSnapshot(),
-        ...readCurrentFlow(messages, state),
-      });
+      const snapshot = bus.state.getSnapshot();
+      const { prefix, ...current } = readCurrentFlow(messages, state);
+      const conversationId = resolveConversationId(snapshot, prefix);
+      const options = state.conversations.get(conversationId);
+      if (!options) throw new Error(`Unregistered conversation: ${conversationId}`);
+      return replyToTurn({ id, surface, options, snapshot, conversationId, ...current });
     },
   };
 }
@@ -144,7 +160,7 @@ function readCurrentFlow(wireMessages: Message[], state: ScriptState) {
   const key = createHash("sha256").update(prefix).digest("hex");
   let flow = state.flows.get(key);
   if (!flow) {
-    flow = { issued: new Map(), repeatedStart: false, repeatedClaim: false };
+    flow = { issued: new Map(), repeatedStart: false };
     state.flows.set(key, flow);
   }
   const current = messages.slice(boundary + 1);
@@ -206,11 +222,7 @@ function readStatus(content: string): unknown {
   }
 }
 
-function replyToTurn(input: Omit<Turn, "conversationId"> & { prefix: string }): ProviderReply {
-  const turn: Turn = {
-    ...input,
-    conversationId: resolveConversationId(input.snapshot, input.prefix),
-  };
+function replyToTurn(turn: Turn): ProviderReply {
   const { user, options } = turn;
   if (options.nativeExecCompletion && user.includes("Exec completed ("))
     return replyToNativeCompletion(turn);
@@ -218,7 +230,6 @@ function replyToTurn(input: Omit<Turn, "conversationId"> & { prefix: string }): 
     return respond(turn, { content: "NO_REPLY", gate: options.siblingGate });
   if (user.includes("Continue in this same thread."))
     return respond(turn, { content: "SAME_SESSION_CONTINUED" });
-  if (user.includes(RACING_HUMAN)) return respond(turn, { content: RACING_HUMAN_HANDLED });
   if (user.includes(HUMAN_DURING_SEED))
     return respond(turn, { content: HUMAN_DURING_SEED_HANDLED });
   if (user.includes(TAKEOVER_MESSAGE)) return replyToTakeover(turn);
@@ -226,9 +237,14 @@ function replyToTurn(input: Omit<Turn, "conversationId"> & { prefix: string }): 
   return replyToParent(turn);
 }
 
+/** Case-insensitive: some prompts carry the conversation only in a lowercased session key. */
+export function mentionsConversation(text: string, conversationId: string): boolean {
+  return text.toLowerCase().includes(conversationId.toLowerCase());
+}
+
 function resolveConversationId(snapshot: Snapshot, prompt: string): string {
   const conversation = snapshot.conversations.findLast((candidate) =>
-    prompt.includes(candidate.id),
+    mentionsConversation(prompt, candidate.id),
   );
   if (!conversation)
     throw new Error("Provider could not resolve conversation from current segment");
@@ -241,8 +257,6 @@ function replyToNativeCompletion(turn: Turn): ProviderReply {
   if (!isClaim(turn.issued)) throw new Error("Native completion did not return its own claim");
   if (turn.status === "alreadyClaimed")
     return respond(turn, { content: "NATIVE_COMPLETION_REPORTED" });
-  if (turn.status === "error" && turn.options.dropCompletionRoute)
-    return respond(turn, { content: "NATIVE_COMPLETION_CLAIM_REJECTED" });
   throw new Error(`Unexpected native completion claim: ${turn.status}`);
 }
 
@@ -251,16 +265,12 @@ function isClaim(issued: IssuedCall): boolean {
 }
 
 function replyToTakeover(turn: Turn): ProviderReply {
-  const { options, issued, status, flow, resultText } = turn;
+  const { options, issued, status, resultText } = turn;
   if (options.holdFirstSeed) return respond(turn, { content: SILENT_TOKEN });
   if (!issued) return respond(turn, { tool: "thread_handoff", arguments: { action: "claim" } });
   if (isClaim(issued)) {
     if (status === "alreadyClaimed") return respond(turn, { content: SILENT_TOKEN });
     if (status !== "claimed") throw new Error(`Unexpected takeover claim: ${status}`);
-    if (options.claimTwice && !flow.repeatedClaim) {
-      flow.repeatedClaim = true;
-      return respond(turn, { tool: "thread_handoff", arguments: { action: "claim" } });
-    }
     const threadId = resolveThreadId(turn.surface, turn.snapshot, turn.conversationId);
     return respond(turn, {
       tool: "message",
@@ -277,7 +287,7 @@ function replyToTakeover(turn: Turn): ProviderReply {
   if (
     issued.name !== "message" ||
     issued.arguments.action !== "read" ||
-    !resultText?.includes("preserve this exact starter.")
+    !resultText?.includes(STARTER_TASK)
   )
     throw new Error("Unexpected takeover tool result");
   if (options.nativeExecCompletion)
@@ -294,17 +304,24 @@ export function resolveThreadId(
   snapshot: Snapshot,
   conversationId: string,
 ): string {
-  const threadId =
-    surface === "slack"
-      ? snapshot.messages.find(
-          (message) =>
-            message.direction === "inbound" &&
-            message.threadId === undefined &&
-            message.conversation.id === conversationId,
-        )?.id
-      : snapshot.threads.find((thread) => thread.conversationId === conversationId)?.id;
+  const threadId = findThreadId(surface, snapshot, conversationId);
   if (threadId === undefined) throw new Error("Provider could not resolve native thread ID");
   return threadId;
+}
+
+export function findThreadId(
+  surface: Surface,
+  snapshot: Snapshot,
+  conversationId: string,
+): string | undefined {
+  return surface === "slack"
+    ? snapshot.messages.find(
+        (message) =>
+          message.direction === "inbound" &&
+          message.threadId === undefined &&
+          message.conversation.id === conversationId,
+      )?.id
+    : snapshot.threads.find((thread) => thread.conversationId === conversationId)?.id;
 }
 
 function replyToParent(turn: Turn): ProviderReply {
@@ -359,7 +376,7 @@ function deliverStarter(turn: Turn, rootId: string): ProviderReply {
         action: "send",
         target: `channel:${turn.conversationId}`,
         threadId: rootId,
-        message: STARTER,
+        message: starterFor(turn.conversationId),
       },
     });
   const thread = turn.snapshot.threads.find(
@@ -368,7 +385,11 @@ function deliverStarter(turn: Turn, rootId: string): ProviderReply {
   if (thread)
     return respond(turn, {
       tool: "message",
-      arguments: { action: "thread-reply", threadId: thread.id, message: STARTER },
+      arguments: {
+        action: "thread-reply",
+        threadId: thread.id,
+        message: starterFor(turn.conversationId),
+      },
     });
   return respond(turn, {
     tool: "message",
@@ -377,7 +398,7 @@ function deliverStarter(turn: Turn, rootId: string): ProviderReply {
       target: `channel:${turn.conversationId}`,
       threadName: `${turn.conversationId} work`,
       messageId: rootId,
-      ...(turn.options.starterInThreadCreate ? { message: STARTER } : {}),
+      ...(turn.options.starterInThreadCreate ? { message: starterFor(turn.conversationId) } : {}),
     },
   });
 }

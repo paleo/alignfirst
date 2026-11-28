@@ -23,6 +23,7 @@ export interface HandoffObservation {
   threadId: string;
   targetSessionKey: string;
   channelId: string;
+  accountId: string;
   parentConversationId: string;
   attemptCount: number;
   claimedBy?: { sessionId: string; runId?: string };
