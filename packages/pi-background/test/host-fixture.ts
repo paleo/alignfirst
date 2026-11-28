@@ -38,7 +38,6 @@ export interface HostOptions {
     signal?: AbortSignal,
   ) => Promise<Response> | Response;
   automaticCompaction?: boolean;
-  persisted?: boolean;
   fileExtensions?: string[];
   tools?: string[];
 }
@@ -202,9 +201,7 @@ export async function host(options: HostOptions = {}) {
     {
       cwd,
       agentDir,
-      sessionManager: options.persisted
-        ? SessionManager.create(cwd, join(cwd, "sessions"))
-        : SessionManager.inMemory(cwd),
+      sessionManager: SessionManager.inMemory(cwd),
     },
   );
   const bind = async () => {

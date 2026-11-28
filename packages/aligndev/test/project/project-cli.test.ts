@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { ProjectInventory } from "../../src/project/discovery.js";
 import { findFreeBlock, type PortRange } from "../../src/project/ports.js";
@@ -373,6 +373,27 @@ describe("project classification and companions", () => {
     });
     expect(existsSync(join(fixture.home, ".alignfirst", "companions", "two"))).toBe(false);
     expect(existsSync(join(one, ".plans"))).toBe(false);
+  });
+
+  it("forwards the real alignfirst's stale-registry warnings without their values", async () => {
+    const fixture = makeFixture();
+    const app = makeRepository(fixture.root, "app");
+    writeRegistry(fixture.home, {
+      unknownRegistry: "private-consumer-value",
+      projects: { [app]: { aligndev: { profile: "work", unknownSelection: "private-value" } } },
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const status = await runProjects(fixture, ["status", app, "--json"]);
+      expect(status.code, status.stderr).toBe(0);
+      expect(JSON.parse(status.stdout)).toMatchObject({ aligndev: { profile: "work" } });
+      const forwarded = warn.mock.calls.map(([line]) => String(line)).join("\n");
+      expect(forwarded).toContain("unknownRegistry");
+      expect(forwarded).toContain("unknownSelection");
+      expect(forwarded).not.toContain("private-");
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("skips a repository holding another project's .plans target", async () => {

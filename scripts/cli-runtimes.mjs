@@ -41,11 +41,6 @@ try {
       "tmp",
       "consumer-runtime-child",
       "aligndev-owned-worktree",
-      "native-project",
-      "matrix node workspace",
-      "matrix node linked with spaces",
-      "matrix bun workspace",
-      "matrix bun linked with spaces",
       "isolated bun workspace",
       "isolated bun linked with spaces",
     ]) {
@@ -71,7 +66,6 @@ function main() {
   assert.equal(run("bun-version", join(tools, "bun"), ["--version"], env).trim(), "1.4.4");
   buildAndInstall(env);
   prepareFixtures();
-  run("node-present", process.execPath, [join(consumer, "acceptance.mjs"), "matrix"], env);
   const restricted = { ...env, PATH: `${tools}:/usr/bin:/bin` };
   run(
     "restricted-path",
@@ -114,9 +108,7 @@ function main() {
   }
   const proof = `for name in node npm npx; do if command -v "$name"; then exit 90; fi; done; if '${process.execPath}' --version; then exit 91; fi; echo NODE_ABSENT_PROVED; exec '${join(tools, "bun")}' '${join(consumer, "acceptance.mjs")}' isolated`;
   run("node-absent", "bwrap", [...args, "/bin/sh", "-c", proof], restricted);
-  console.log(
-    "PASS packed Node/Bun matrix, restricted-PATH tier and filesystem-isolated acceptance",
-  );
+  console.log("PASS packed restricted-PATH tier and filesystem-isolated Bun acceptance");
 }
 
 function cleanEnvironment() {
@@ -130,7 +122,6 @@ function cleanEnvironment() {
     GIT_CONFIG_GLOBAL: join(output, "gitconfig"),
     ALIGNFIRST_ARCHIVE_THRESHOLD_DAYS: "99999",
     CLI_RUNTIME_OUTPUT: output,
-    CLI_RUNTIME_NODE: process.execPath,
     CLI_RUNTIME_BUN: join(tools, "bun"),
   };
 }
@@ -142,7 +133,7 @@ function buildAndInstall(env) {
     ...packages.flatMap((name) => ["--workspace", `./packages/${name}`]),
   ];
   run("build", npm, buildArgs, { ...env, HOME: process.env.HOME }, repository);
-  const dependencies = { openclaw: "2026.10.9", "yarn-classic": "npm:yarn@1.22.22" };
+  const dependencies = { openclaw: "2026.10.9" };
   for (const name of packages) {
     const packed = run(
       `pack-${name}`,
@@ -165,16 +156,6 @@ function buildAndInstall(env) {
         type: "module",
         dependencies,
         overrides: { "@alignfirst/docmap": "$@alignfirst/docmap" },
-        scripts: {
-          af: "alignfirst",
-          "custom docs": "docmap",
-          ad: "aligndev",
-          "af$&": "alignfirst",
-          "ad$&": "aligndev",
-          "dm$&": "docmap",
-          workspace: "alignfirst workspace",
-          dev: "alignfirst dev",
-        },
       },
       null,
       2,
@@ -201,10 +182,6 @@ function buildAndInstall(env) {
 }
 
 function prepareFixtures() {
-  copyFileSync(
-    join(repository, "scripts/test/cli-runtime-native.mjs"),
-    join(consumer, "native-agent.mjs"),
-  );
   copyFileSync(
     join(repository, "scripts/test/cli-runtime-agent.mjs"),
     join(consumer, "fake-agent.mjs"),

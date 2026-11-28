@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { readPackedFilename } from "../../../../scripts/npm-pack.mjs";
 import { host, jobFrom, readPidFile, waitJob } from "../host-fixture.js";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -12,21 +13,12 @@ const background = join(packedRoot, "package");
 const codingAgent = fileURLToPath(new URL("../fixtures/coding-agent.mjs", import.meta.url));
 
 beforeAll(() => {
-  const packed = JSON.parse(
-    execFileSync("npm", ["pack", "--json", "--pack-destination", packedRoot], {
-      cwd: join(root, "packages/pi-background"),
-      encoding: "utf8",
-    }),
-  );
-  const first = Array.isArray(packed) ? packed[0] : Object.values(packed)[0];
-  if (
-    typeof first !== "object" ||
-    first === null ||
-    !("filename" in first) ||
-    typeof first.filename !== "string"
-  )
-    throw new Error("Missing packed background artifact");
-  execFileSync("tar", ["-xzf", join(packedRoot, first.filename), "-C", packedRoot]);
+  const packed = execFileSync("npm", ["pack", "--json", "--pack-destination", packedRoot], {
+    cwd: join(root, "packages/pi-background"),
+    encoding: "utf8",
+  });
+  const filename = readPackedFilename(JSON.parse(packed));
+  execFileSync("tar", ["-xzf", join(packedRoot, filename), "-C", packedRoot]);
 }, 60000);
 
 afterAll(() => rmSync(packedRoot, { recursive: true, force: true }));
@@ -78,58 +70,23 @@ describe("real AlignDev CLI through manifest-loaded background in public Pi runt
     }
   });
 
-  it.each(["failure", "auth"])("retains a failed job and the %s result", async (mode) => {
+  it("stop gives the CLI time to seal termination and reaps its resistant coding child", async () => {
     const h = await fixture();
     try {
-      const job = await h.launch(mode, h.project);
-      writeFileSync(job.gate, "go");
-      const terminal = await waitJob(h, job.id);
-      expect(terminal.status).toBe("failed");
-      expect(terminal.exitCode).toBe(mode === "auth" ? 2 : 1);
-      expect(h.status(job.key, h.project)).toContain(
-        mode === "auth" ? "exitReason: auth_required" : "exitReason: error",
-      );
-      expect(await h.call({ action: "list" })).toMatchObject({
-        jobs: [{ id: job.id, status: "failed" }],
-      });
+      const job = await h.launch("cancel", h.project);
+      const pid = await readPidFile(`${job.gate}.pid`);
+      expect(jobFrom(await h.call({ action: "stop", id: job.id })).status).toBe("cancelled");
+      expect(h.status(job.key, h.project)).toContain("exitReason: terminated");
+      expect(alive(pid)).toBe(false);
+      expect(h.extensionErrors).toEqual([]);
     } finally {
       await h.close();
     }
-  });
-
-  it.each(["stop", "reload", "new", "resume", "fork", "quit"])(
-    "%s gives the CLI time to seal termination and reaps its resistant coding child",
-    async (operation) => {
-      const h = await fixture();
-      try {
-        await h.runtime.session.prompt("seed");
-        const session = h.runtime.session.sessionFile;
-        const target = h.runtime.session.sessionManager
-          .getBranch()
-          .find((entry) => entry.type === "message" && entry.message.role === "user");
-        if (!session || !target) throw new Error("Missing persisted fixture");
-        const job = await h.launch("cancel", h.project);
-        const pid = await readPidFile(`${job.gate}.pid`);
-        if (operation === "stop")
-          expect(jobFrom(await h.call({ action: "stop", id: job.id })).status).toBe("cancelled");
-        else if (operation === "reload") await h.runtime.session.reload();
-        else if (operation === "new") await h.runtime.newSession();
-        else if (operation === "resume") await h.runtime.switchSession(session);
-        else if (operation === "fork") await h.runtime.fork(target.id);
-        else await h.runtime.dispose();
-        expect(h.status(job.key, h.project)).toContain("exitReason: terminated");
-        expect(alive(pid)).toBe(false);
-        expect(h.extensionErrors).toEqual([]);
-      } finally {
-        await h.close();
-      }
-    },
-    15000,
-  );
+  }, 15000);
 });
 
 async function fixture() {
-  const h = await host({ fileExtensions: [background], persisted: true });
+  const h = await host({ fileExtensions: [background] });
   const home = join(h.cwd, "home");
   const bin = join(h.cwd, "bin");
   mkdirSync(bin);

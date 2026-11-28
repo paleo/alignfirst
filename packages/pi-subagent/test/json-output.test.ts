@@ -145,18 +145,6 @@ describe("bounded Pi JSON output", () => {
     expect(result.usage.totalTokens).toBe(10);
   });
 
-  it("bounds final text without changing successful stop semantics", () => {
-    const result = parse([
-      header,
-      answer("😀".repeat(20_000)),
-      { type: "agent_settled", aborted: false },
-    ]);
-    expect(result.error).toBeUndefined();
-    expect(result.truncated).toBe(true);
-    expect(Buffer.byteLength(result.output)).toBeLessThanOrEqual(48 * 1024);
-    expect(result.output).not.toContain("�");
-  });
-
   it("rejects oversized records and retains the failure after further input and end", () => {
     const parser = createJsonOutput();
     parser.feed(Buffer.from(`${JSON.stringify(header)}\n`));

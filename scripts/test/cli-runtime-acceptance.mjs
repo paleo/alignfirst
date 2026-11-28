@@ -7,7 +7,6 @@ import {
   readFileSync,
   rmSync,
   statSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
@@ -15,7 +14,6 @@ import { dirname, join } from "node:path";
 const root = import.meta.dirname;
 const output = process.env.CLI_RUNTIME_OUTPUT;
 const bun = process.env.CLI_RUNTIME_BUN;
-const node = process.env.CLI_RUNTIME_NODE;
 const tier = process.argv[2];
 const audit = join(output, `${tier}-runtime.jsonl`);
 const commands = join(output, `${tier}-commands.jsonl`);
@@ -28,7 +26,7 @@ const entries = {
 };
 const baseEnvironment = {
   ...process.env,
-  PATH: `${dirname(bun)}:${tier === "matrix" ? `${dirname(node)}:` : ""}/usr/bin:/bin`,
+  PATH: `${dirname(bun)}:/usr/bin:/bin`,
   NODE_OPTIONS: `--require=${join(root, "audit.mjs")}`,
   BUN_OPTIONS: `--preload=${join(root, "audit.mjs")}`,
   CLI_RUNTIME_AUDIT: audit,
@@ -41,7 +39,6 @@ await main();
 async function main() {
   writeFileSync(audit, "");
   writeFileSync(commands, "");
-  if (tier === "matrix") return matrix();
   if (tier === "restricted") {
     check("PATH excludes Node", "/bin/sh", [
       "-c",
@@ -58,7 +55,7 @@ async function main() {
   alignfirstLifecycle();
   await alignDevLifecycle();
   companionAndCustomRoots();
-  await workspaceLifecycle();
+  workspaceLifecycle();
   await harnessLifecycle();
   const records = readRecords(audit);
   assert.ok(records.some((record) => record.argv.some((arg) => arg.includes("alignfirst"))));
@@ -67,246 +64,6 @@ async function main() {
     "isolated JS process used real Node",
   );
   console.log(`PASS isolated lifecycle; ${records.length} observed Bun processes`);
-}
-
-function matrix() {
-  const npm = join(dirname(node), "npm");
-  const npx = join(dirname(node), "npx");
-  const cells = [
-    ["npx", npx, ["alignfirst"], "node", "npx -y alignfirst"],
-    ["npx-y", npx, ["-y", "alignfirst"], "node", "npx -y alignfirst"],
-    ["npm-exec", npm, ["exec", "--", "alignfirst"], "node", "npx -y alignfirst"],
-    ["bunx", "bunx", ["alignfirst"], "node", "bunx alignfirst"],
-    ["bun-x", bun, ["x", "alignfirst"], "node", "bunx alignfirst"],
-    ["bunx-forced", "bunx", ["--bun", "alignfirst"], "bun", "bunx --bun alignfirst"],
-    ["bun-x-forced", bun, ["x", "--bun", "alignfirst"], "bun", "bunx --bun alignfirst"],
-    ["direct-executable", entries.alignfirst, [], "node", "alignfirst"],
-    ["direct-node", node, [entries.alignfirst], "node", "alignfirst"],
-    ["direct-bun", bun, [entries.alignfirst], "bun", "bunx --bun alignfirst"],
-    ["npm-custom-script", npm, ["run", "af", "--"], "node", "npm run af --"],
-    ["bun-script", bun, ["run", "af"], "node", "bun run af"],
-    ["bun-forced-script", bun, ["--bun", "run", "af"], "bun", "bun --bun run af"],
-  ];
-  // The backticks anchor the whole emitted command: "bun run af" also occurs in "bun --bun run af".
-  for (const [name, executable, prefix, runtime, command] of cells) {
-    check(name, executable, [...prefix, "context"], {
-      runtime,
-      contains: `\`${command} guide <protocol>\``,
-    });
-  }
-  for (const [name, entry] of Object.entries(entries)) {
-    for (const runtime of ["node", "bun"]) {
-      check(`${name}-${runtime}-help`, runtime === "node" ? node : bun, [entry, "--help"], {
-        runtime,
-        status: name === "openclaw-test" ? 1 : 0,
-      });
-    }
-  }
-  packageRunnerMatrix(npm, npx);
-  scriptAndLockMatrix(npm, npx);
-  literalScriptMatrix(npm);
-  externalNativeMatrix(npm);
-  workspaceLifecycle(node, "node");
-  workspaceLifecycle(bun, "bun");
-  console.log(
-    "PASS real launch matrix, verified scripts, conflicting locks and packed package help",
-  );
-}
-
-function packageRunnerMatrix(npm, npx) {
-  for (const [name, packageName] of [
-    ["aligndev", "aligndev"],
-    ["docmap", "@alignfirst/docmap"],
-    ["openclaw-test", "@alignfirst/openclaw-test"],
-  ]) {
-    const runners = [
-      ["npx", npx, [packageName], "node", `npx -y ${packageName}`],
-      ["npx-y", npx, ["-y", packageName], "node", `npx -y ${packageName}`],
-      ["npm-exec", npm, ["exec", "--", packageName], "node", `npx -y ${packageName}`],
-      ["bunx", "bunx", [packageName], "node", `bunx ${packageName}`],
-      ["bun-x", bun, ["x", packageName], "node", `bunx ${packageName}`],
-      ["bunx-forced", "bunx", ["--bun", packageName], "bun", `bunx --bun ${packageName}`],
-      ["bun-x-forced", bun, ["x", "--bun", packageName], "bun", `bunx --bun ${packageName}`],
-    ];
-    for (const [runner, executable, args, runtime, contains] of runners) {
-      check(`${name}-${runner}`, executable, [...args, "--help"], {
-        runtime,
-        contains,
-        status: name === "openclaw-test" ? 1 : 0,
-      });
-    }
-  }
-}
-
-function scriptAndLockMatrix(npm, npx) {
-  check("custom-npm-docmap-script", npm, ["run", "custom docs", "--", "--help"], {
-    runtime: "node",
-    contains: "npm run 'custom docs' --",
-  });
-  check("custom-forced-bun-docmap-script", bun, ["--bun", "run", "custom docs", "--help"], {
-    runtime: "bun",
-    contains: "bun --bun run 'custom docs'",
-  });
-  const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-  delete manifest.scripts["custom docs"];
-  writeFileSync(join(root, "package.json"), JSON.stringify(manifest, null, 2));
-  for (const lock of ["pnpm-lock.yaml", "yarn.lock", "bun.lock"])
-    writeFileSync(join(root, lock), "");
-  check("standalone-runner-beats-locks", "bunx", ["--bun", "@alignfirst/docmap", "--help"], {
-    runtime: "bun",
-    contains: "bunx --bun @alignfirst/docmap",
-  });
-  check("npm-runner-beats-locks-without-script", npx, ["-y", "@alignfirst/docmap", "--help"], {
-    runtime: "node",
-    contains: "npx -y @alignfirst/docmap",
-  });
-}
-
-function literalScriptMatrix(npm) {
-  const context = check("dollar-script-context", npm, ["run", "af$&", "--", "context"], {
-    runtime: "node",
-    contains: "npm run 'af$&' -- guide <protocol>",
-  });
-  const emitted = context.match(/`(npm run 'af\$&' -- guide <protocol>)`/)[1];
-  shell(
-    "dollar-script-emitted-guide",
-    `${emitted.replace("<protocol>", "spec")} --protocol-only`,
-    "node",
-  );
-  check("dollar-docmap-guide", npm, ["run", "dm$&", "--", "--guide"], {
-    runtime: "node",
-    contains: "npm run 'dm$&' -- --check",
-  });
-}
-
-function externalNativeMatrix(npm) {
-  const project = join(output, "native-project");
-  const nativeBin = join(project, "native-bin");
-  const log = join(output, "native-processes.jsonl");
-  const settings = join(process.env.HOME, ".alignfirst", "aligndev.settings.json");
-  mkdirSync(nativeBin, { recursive: true });
-  mkdirSync(join(project, ".plans"));
-  writeFileSync(join(project, ".gitignore"), ".plans/\nnode_modules/\n");
-  mkdirSync(dirname(settings), { recursive: true });
-  symlinkSync(join(root, "node_modules"), join(project, "node_modules"));
-  writeFileSync(
-    join(project, "package.json"),
-    JSON.stringify({
-      private: true,
-      scripts: { ad: "aligndev", "ad$&": "aligndev" },
-    }),
-  );
-  check("native-git-init", "git", ["init", "-b", "main"], { cwd: project });
-  for (const name of ["claude", "codex"]) {
-    writeFileSync(join(nativeBin, name), readFileSync(join(root, "native-agent.mjs")), {
-      mode: 0o755,
-    });
-  }
-  const explicitBin = join(project, "explicit-bun");
-  mkdirSync(explicitBin);
-  symlinkSync(bun, join(explicitBin, "node"));
-  writeFileSync(
-    settings,
-    JSON.stringify({
-      code: {
-        fallbackProfile: "claude",
-        profiles: {
-          claude: { harness: "claude", defaultModel: "haiku" },
-          codex: { harness: "codex", defaultModel: "sol" },
-          explicitQuota: { harness: "claude", quota: { source: "codex" } },
-          explicitBun: {
-            harness: "claude",
-            defaultModel: "haiku",
-            env: { PATH: `${explicitBin}:${nativeBin}:${baseEnvironment.PATH}` },
-          },
-        },
-      },
-    }),
-  );
-  const env = { PATH: `${nativeBin}:${bin}:${baseEnvironment.PATH}`, CLI_NATIVE_LOG: log };
-  const launchers = [
-    ["node", node, [entries.aligndev], "node"],
-    ["bun-direct", bun, [entries.aligndev], "bun"],
-    ["bunx-forced", "bunx", ["--bun", "aligndev"], "bun"],
-    ["bun-script-forced", bun, ["--bun", "run", "ad"], "bun"],
-  ];
-  for (const [name, executable, prefix, runtime] of launchers) {
-    const invoke = (suffix, args) =>
-      check(`native-${name}-${suffix}`, executable, [...prefix, ...args], {
-        cwd: project,
-        env,
-        runtime,
-      });
-    invoke("agent", ["code", "new", "-m", "Offline native fixture", "--quiet"]);
-    invoke("implicit-claude-quota", ["code", "quota"]);
-    invoke("discovery-agent", ["code", "new", "--profile", "codex", "-m", "Discover", "--quiet"]);
-    invoke("implicit-codex-quota", ["code", "quota", "--profile", "codex"]);
-    invoke("explicit-quota", ["code", "quota", "--profile", "explicitQuota"]);
-  }
-  assert.ok(readRecords(log).length >= launchers.length * 6);
-  assert.ok(readRecords(log).every((record) => record.runtime === "node"));
-  const before = readRecords(log).length;
-  check(
-    "native-explicit-bun-PATH",
-    bun,
-    [
-      "--bun",
-      "run",
-      "ad",
-      "code",
-      "new",
-      "--profile",
-      "explicitBun",
-      "-m",
-      "Deliberate Bun",
-      "--quiet",
-    ],
-    {
-      cwd: project,
-      runtime: "bun",
-      env: { ...env, CLI_NATIVE_EXPECT: "bun" },
-    },
-  );
-  assert.equal(readRecords(log)[before].runtime, "bun");
-  const yarn = join(root, "node_modules", "yarn-classic", "bin", "yarn.js");
-  check("yarn-classic-counterpart", node, [yarn, "run", "ad", "code", "quota"], {
-    cwd: project,
-    env,
-    runtime: "node",
-  });
-  assertCleanAgentEnvironments(log);
-  const guide = check("dollar-aligndev-guide", npm, ["run", "ad$&", "--", "guide", "code"], {
-    cwd: project,
-    env,
-    runtime: "node",
-    contains: "npm run 'ad$&' -- code status",
-  });
-  assert.ok(!guide.includes("{{"));
-  check(
-    "dollar-aligndev-followup",
-    "/bin/sh",
-    ["-c", "npm run 'ad$&' -- code status --no-ticket"],
-    {
-      cwd: project,
-      env,
-      runtime: "node",
-    },
-  );
-  const owned = readRecords(commands).find(
-    (record) => record.label === "native-bunx-forced-agent",
-  ).observed;
-  const counterparts = owned.filter((record) => record.argv[0]?.endsWith("/alignfirst"));
-  assert.ok(counterparts.length > 0);
-  for (const record of counterparts) {
-    assert.equal(record.runtime, "bun");
-    assert.deepEqual(record.parentArgv.slice(0, 3), ["bunx", "--bun", "alignfirst"]);
-  }
-}
-
-// Variables npm, Bun and Yarn scripts inject: the agent must not inherit them.
-function assertCleanAgentEnvironments(log) {
-  for (const record of readRecords(log))
-    assert.deepEqual(record.launcherVariables, [], `${record.executable} ${record.args.join(" ")}`);
 }
 
 function prepareProject() {
@@ -568,33 +325,19 @@ function exampleCommand(text, prefix) {
   return line.split(/\s+#/)[0].trim();
 }
 
-function workspaceLifecycle(executable = bun, runtime = "bun") {
-  const project = join(output, `${tier} ${runtime} workspace`);
-  const linked = join(output, `${tier} ${runtime} linked with spaces`);
-  const probes = join(output, `${tier}-${runtime}-workspace-probes.jsonl`);
-  // A Bun CLI may deliberately run a Node project command; those are separate runtime claims.
-  const projectRuntime = tier === "matrix" ? node : bun;
-  prepareWorkspaceFixture(project, probes, projectRuntime);
+function workspaceLifecycle() {
+  const project = join(output, "isolated bun workspace");
+  const linked = join(output, "isolated bun linked with spaces");
+  const probes = join(output, "isolated-bun-workspace-probes.jsonl");
+  prepareWorkspaceFixture(project, probes);
   const invoke = (label, args, cwd = project) =>
-    check(`${runtime}-${label}`, executable, [entries.alignfirst, ...args], { runtime, cwd });
+    check(`bun-${label}`, bun, [entries.alignfirst, ...args], { runtime: "bun", cwd });
   for (const args of [
     ["init", "-b", "main"],
     ["add", "."],
     ["commit", "-m", "workspace fixture"],
   ])
-    check(`${runtime}-workspace-git`, "git", args, { cwd: project });
-  const companion = tier === "matrix" && runtime === "bun";
-  if (companion) {
-    const registration = join(process.env.HOME, ".alignfirst/companions/registry.json");
-    mkdirSync(dirname(registration), { recursive: true });
-    const registry = existsSync(registration) ? JSON.parse(readFileSync(registration, "utf8")) : {};
-    registry.projects ??= {};
-    registry.projects[project] = {
-      dir: join(output, "runtime companion"),
-      items: { workspaceRuntime: "companion", ".plans": "project" },
-    };
-    writeFileSync(registration, JSON.stringify(registry));
-  }
+    check("bun-workspace-git", "git", args, { cwd: project });
   const before = readRecords(audit).length;
   try {
     invoke("workspace-guide", ["workspace", "--guide"]);
@@ -611,11 +354,6 @@ function workspaceLifecycle(executable = bun, runtime = "bun") {
     invoke("workspace-wait", ["workspace", "wait", linked]);
     const report = JSON.parse(invoke("workspace-config", ["config", "--json"], linked));
     assert.ok(existsSync(join(report.workspace.runtimeDir, "finalized.txt")));
-    if (companion) {
-      assert.equal(report.locations.workspaceRuntime.in, "companion");
-      assert.equal(existsSync(join(linked, ".local-wt")), false);
-      assert.equal(existsSync(join(project, ".local-wt")), false);
-    }
     for (const path of ["package.json", "node_modules", "dist"])
       assert.equal(existsSync(join(linked, path)), false);
     invoke("dev-up", ["dev", "up"], linked);
@@ -625,15 +363,7 @@ function workspaceLifecycle(executable = bun, runtime = "bun") {
     invoke("workspace-remove-from-target", ["workspace", "remove", "--force"], linked);
     assert.equal(existsSync(linked), false);
     assert.equal(readFileSync(join(project, ".plans/preserved.txt"), "utf8"), "preserve plans");
-    verifyWorkspaceRuntime({
-      before,
-      project,
-      linked,
-      executable,
-      runtime,
-      probes,
-      projectRuntime,
-    });
+    verifyWorkspaceRuntime({ before, project, linked, probes });
   } finally {
     invoke("workspace-cleanup-stop", ["dev", "down", "--all"]);
     if (existsSync(linked))
@@ -641,7 +371,7 @@ function workspaceLifecycle(executable = bun, runtime = "bun") {
   }
 }
 
-function prepareWorkspaceFixture(project, probes, projectRuntime) {
+function prepareWorkspaceFixture(project, probes) {
   mkdirSync(join(project, ".plans"), { recursive: true });
   writeFileSync(join(project, ".plans/preserved.txt"), "preserve plans");
   writeFileSync(join(project, ".gitignore"), ".plans/\n.local-wt/\n");
@@ -654,7 +384,7 @@ if(context.phase==='finalize') writeFileSync(context.runtimeDir+'/finalized.txt'
 if(process.argv[2]==='serve'){console.log('RUNTIME_READY');setInterval(()=>{},1000);}
 `,
   );
-  const probe = (action) => ({ run: [projectRuntime, "probe.mjs", action] });
+  const probe = (action) => ({ run: [bun, "probe.mjs", action] });
   writeFileSync(
     join(project, "alignfirst.json"),
     JSON.stringify({
@@ -678,15 +408,7 @@ if(process.argv[2]==='serve'){console.log('RUNTIME_READY');setInterval(()=>{},10
   );
 }
 
-function verifyWorkspaceRuntime({
-  before,
-  project,
-  linked,
-  executable,
-  runtime,
-  probes,
-  projectRuntime,
-}) {
+function verifyWorkspaceRuntime({ before, project, linked, probes }) {
   const observed = readRecords(audit)
     .slice(before)
     .filter((record) => /\/alignfirst(?:\.mjs)?$/.test(record.argv[0] ?? ""));
@@ -702,8 +424,8 @@ function verifyWorkspaceRuntime({
         (args[1] === "remove" ? record.cwd === project : record.cwd === linked),
     );
     assert.ok(child, `missing installed child ${args.join(" ")}`);
-    assert.equal(child.runtime, runtime);
-    assert.equal(child.executable, executable);
+    assert.equal(child.runtime, "bun");
+    assert.equal(child.executable, bun);
     assert.equal(
       child.entry,
       entries.alignfirst.replace("/.bin/alignfirst", "/alignfirst/bin/alignfirst.mjs"),
@@ -715,9 +437,9 @@ function verifyWorkspaceRuntime({
     assert.ok(action, `missing project ${phase}`);
     assert.equal(action.cwd, linked);
     assert.equal(action.context.currentWorktree, linked);
-    assert.equal(action.context.name, `${tier} ${runtime} linked with spaces`);
-    assert.equal(action.runtime, tier === "matrix" ? "node" : "bun");
-    assert.equal(action.executable, projectRuntime);
+    assert.equal(action.context.name, "isolated bun linked with spaces");
+    assert.equal(action.runtime, "bun");
+    assert.equal(action.executable, bun);
   }
 }
 

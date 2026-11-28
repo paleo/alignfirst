@@ -32,16 +32,5 @@ emit({
 emit({ type: "message_end", message: assistant("PRIVATE-INTERNAL-TRANSCRIPT", "toolUse") });
 if (mode === "cancel") process.on("SIGTERM", () => {});
 while (!existsSync(gate)) await new Promise((resolve) => setTimeout(resolve, 10));
-if (mode === "auth") {
-  process.stderr.write("No API key found for integration-fixture.\n");
-  process.exitCode = 1;
-} else {
-  emit({
-    type: "message_end",
-    message: assistant(
-      mode === "failure" ? "fixture failure" : `FINAL:${mode}`,
-      mode === "failure" ? "error" : "stop",
-    ),
-  });
-  emit({ type: "agent_settled", aborted: false });
-}
+emit({ type: "message_end", message: assistant(`FINAL:${mode}`) });
+emit({ type: "agent_settled", aborted: false });

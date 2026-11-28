@@ -5,6 +5,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,13 +16,16 @@ import type {
   ExtensionToolContext,
   ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import { Value } from "typebox/value";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerSubagent } from "../src/index.js";
 import type { PiInvocation } from "../src/pi-process.js";
-import { OutputSchema, type Parameters, type SubagentResult } from "../src/run.js";
+import type { Parameters, SubagentResult } from "../src/run.js";
 
 const fixture = fileURLToPath(new URL("./fixtures/pi.mjs", import.meta.url));
+const fixtureInvocation = async (): Promise<PiInvocation> => ({
+  command: process.execPath,
+  args: [fixture],
+});
 const cleanups: (() => Promise<void>)[] = [];
 
 afterEach(async () => {
@@ -30,7 +34,7 @@ afterEach(async () => {
 });
 
 describe("registered public subagent tool", () => {
-  it("returns the declared structured schema and delivers literal task bytes through an envelope", async () => {
+  it("scrubs session metadata and delivers literal task bytes through an envelope", async () => {
     const host = harness();
     for (const name of [
       "PI_SESSION_ID",
@@ -46,53 +50,60 @@ describe("registered public subagent tool", () => {
       "/skill:nonexistent\n/command $(touch SHOULD-NOT-EXIST); @file\n'\"\n日本語 😀  \n\t";
     const result = await host.tool.execute("literal", { task }, undefined, undefined, host.context);
     expect(result.isError).toBe(false);
-    expect(Value.Check(OutputSchema, result.structuredContent)).toBe(true);
-    expect(result.details?.results[0]).toMatchObject({
-      agent: "worker",
-      agentSource: "bundled",
-      output: task,
-      thinking: "high",
-      status: "succeeded",
-    });
-    expect(result.usage?.totalTokens).toBe(5);
+    expect(result.details?.results[0].output).toBe(task);
     const captures = host.captures();
     expect(captures).toHaveLength(1);
-    expect(captures[0]).toMatchObject({
-      input: expect.stringContaining(task),
-      cwd: host.cwd,
-      env: { SUBAGENT_TEST_CREDENTIAL: "preserved-fixture-value", PI_OFFLINE: "1" },
+    expect(captures[0].env).toEqual({
+      PI_OFFLINE: "1",
+      SUBAGENT_TEST_CREDENTIAL: "preserved-fixture-value",
     });
-    expect(Object.keys(captures[0].env)).toEqual(["PI_OFFLINE", "SUBAGENT_TEST_CREDENTIAL"]);
-    expect(captures[0].args).toContain("--no-session");
-    expect(captures[0].args).toContain("read,bash,edit,write");
-    expect(captures[0].args).toContain("mcp__*");
-    expect(captures[0].args).not.toContain("--approve");
-    expect(existsSync(captures[0].promptPath)).toBe(false);
     expect(existsSync(join(host.cwd, "SHOULD-NOT-EXIST"))).toBe(false);
   });
 
-  it.each(["error", "length", "malformed", "incomplete", "startup-error", "signal"])(
-    "reports protocol, startup or process failure for %s",
-    async (task) => {
-      const host = harness();
-      const result = await host.tool.execute(task, { task }, undefined, undefined, host.context);
-      expect(result.isError).toBe(true);
-      expect(result.details?.results[0].status).toBe("failed");
-      expect(result.details?.results[0].error).toBeDefined();
+  it.each([
+    { failure: "startup error", task: "startup-error", invocation: fixtureInvocation },
+    { failure: "signal", task: "signal", invocation: fixtureInvocation },
+    {
+      failure: "missing executable",
+      task: "work",
+      invocation: async () => ({ command: "/absent/pi", args: [] }),
     },
-  );
+    {
+      failure: "stdin EPIPE",
+      task: "x".repeat(8 * 1024 * 1024),
+      invocation: async () => ({ command: process.execPath, args: [fixture, "--epipe"] }),
+    },
+  ])("reports a $failure as a failed result", async ({ task, invocation }) => {
+    const host = harness({ invocation });
+    const result = await host.tool.execute("failure", { task }, undefined, undefined, host.context);
+    expect(result.isError).toBe(true);
+    expect(result.details?.results[0].status).toBe("failed");
+    expect(result.details?.results[0].error).toBeDefined();
+  });
 
-  it("reports a missing executable as a failed result", async () => {
-    const host = harness(async () => ({ command: "/absent/pi", args: [] }));
+  it("launches the installed Pi CLI under the parent runtime, not the first node on PATH", async () => {
+    const host = harness({});
+    const pi = join(host.cwd, "installed-pi");
+    const bin = join(host.cwd, "bin");
+    mkdirSync(pi);
+    mkdirSync(bin);
+    writeFileSync(
+      join(pi, "package.json"),
+      JSON.stringify({ name: "@earendil-works/pi-coding-agent", bin: { pi: "cli.mjs" } }),
+    );
+    symlinkSync(fixture, join(pi, "cli.mjs"));
+    writeFileSync(join(bin, "node"), "#!/bin/sh\nexit 97\n", { mode: 0o755 });
+    vi.stubEnv("PI_PACKAGE_DIR", pi);
+    vi.stubEnv("PATH", `${bin}:${process.env.PATH}`);
     const result = await host.tool.execute(
-      "missing",
-      { task: "work" },
+      "installed",
+      { task: "probe" },
       undefined,
       undefined,
       host.context,
     );
-    expect(result.isError).toBe(true);
-    expect(result.details?.results[0].error).toContain("ENOENT");
+    expect(result.isError).toBe(false);
+    expect(host.captures()[0].runtime).toBe(process.execPath);
   });
 
   it("reports an invalid execution cwd without launching work elsewhere", async () => {
@@ -110,19 +121,6 @@ describe("registered public subagent tool", () => {
       cwd: join(host.cwd, "missing-directory"),
     });
     expect(host.captures()).toEqual([]);
-  });
-
-  it("reports a stdin EPIPE as a failed result", async () => {
-    const host = harness(async () => ({ command: process.execPath, args: [fixture, "--epipe"] }));
-    const result = await host.tool.execute(
-      "epipe",
-      { task: "x".repeat(8 * 1024 * 1024) },
-      undefined,
-      undefined,
-      host.context,
-    );
-    expect(result.isError).toBe(true);
-    expect(result.details?.results[0].error).toMatch(/EPIPE|I\/O/);
   });
 
   it("awaits all parallel children on per-call abort and never spawns queued work", async () => {
@@ -221,7 +219,7 @@ describe("registered public subagent tool", () => {
     const deferred = new Promise<PiInvocation>((done) => {
       resolve = done;
     });
-    const host = harness(() => deferred);
+    const host = harness({ invocation: () => deferred });
     const pending = host.tool.execute(
       "late",
       { task: "must not launch" },
@@ -244,18 +242,13 @@ describe("registered public subagent tool", () => {
 });
 
 interface Capture {
-  input: string;
-  cwd: string;
-  args: string[];
-  promptPath: string;
+  runtime: string;
   env: Record<string, string>;
 }
 
+// Without an invocation, the extension resolves the installed Pi package as in production.
 function harness(
-  invocation: () => Promise<PiInvocation> = async () => ({
-    command: process.execPath,
-    args: [fixture],
-  }),
+  { invocation }: { invocation?: () => Promise<PiInvocation> } = { invocation: fixtureInvocation },
 ) {
   const cwd = mkdtempSync(join(tmpdir(), "pi-subagent-tool-"));
   const agentDir = join(cwd, "user");

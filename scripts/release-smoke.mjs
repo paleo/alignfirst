@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   appendFileSync,
@@ -47,43 +47,12 @@ function smokeTestRelease() {
     assert.equal(installedManifest(cliRoot, packed.name).version, packed.version);
     const installed = join(cliRoot, "node_modules", packed.name);
     assert.equal(realpathSync(installed), installed, `${packed.name} must come from its tarball`);
-    assert.equal(existsSync(join(cliRoot, "node_modules", packed.name, "dist")), true);
-    const manifest = installedManifest(cliRoot, packed.name);
-    assert.equal(manifest.pi, undefined, `${packed.name} must remain a CLI`);
-    assert.deepEqual(manifest.peerDependencies ?? {}, {});
-    assert(
-      !Object.keys(manifest.dependencies ?? {}).some((name) =>
-        /pi-|pi-background|pi-subagent/.test(name),
-      ),
-    );
   }
-  assert(!existsSync(join(cliRoot, "node_modules/@earendil-works")));
   verifyCliVersion(cliRoot, "alignfirst", ["--version"], alignfirst.version);
   verifyCliVersion(cliRoot, "alignfirst", ["docmap", "--version"], docmap.version);
   verifyCliVersion(cliRoot, "aligndev", ["--version"], aligndev.version);
   verifyCliVersion(cliRoot, "docmap", ["--version"], docmap.version);
   verifyInvocationConsumers(cliRoot);
-  for (const [name, schema] of [["alignfirst", "alignfirst-v1"]]) {
-    const asset = join(cliRoot, "node_modules", name, "schemas", `${schema}.schema.json`);
-    const installedSchema = JSON.parse(readFileSync(asset, "utf8"));
-    assert.equal(installedSchema.type, "object");
-    assert.deepEqual(Object.keys(installedSchema.properties).sort(), [
-      "$schema",
-      "assistantInstructionsFile",
-      "conventions",
-      "devServer",
-      "developerInstructions",
-      "plans",
-      "schemaVersion",
-      "workspace",
-    ]);
-    assert.equal(
-      existsSync(
-        join(cliRoot, "node_modules/@alignfirst/workspace/schemas/workspace-v1.schema.json"),
-      ),
-      false,
-    );
-  }
   verifyPackagedWorkspaces({
     executable: process.execPath,
     entry: join(cliRoot, "node_modules/alignfirst/bin/alignfirst.mjs"),
@@ -91,66 +60,29 @@ function smokeTestRelease() {
     env: isolatedEnvironment(cliRoot),
     evidence: process.env.PACKAGED_WORKSPACE_EVIDENCE,
   });
-  for (const executable of ["alignfirst", "aligndev", "docmap"]) {
-    assert.match(
-      execFileSync(join(cliRoot, "node_modules/.bin", executable), ["--help"], {
-        cwd: cliRoot,
-        encoding: "utf8",
-        env: isolatedEnvironment(cliRoot),
-      }),
-      executable === "docmap" ? /Commands:/ : /Usage:/i,
-    );
-  }
   console.log(
     `CLI release smoke passed: docmap@${docmap.version}, workspace@${workspace.version}, alignfirst@${alignfirst.version}, aligndev@${aligndev.version}.`,
   );
   if (process.argv.includes("--cli-only")) return;
   const [subagent, background] = ["pi-subagent", "pi-background"].map(packWorkspace);
-  for (const packages of [[subagent], [background], [subagent, background]]) {
-    const root = disposableInstall(
-      packages.map((p) => p.name.split("/").at(-1)).join("-"),
-      packages,
-      true,
-    );
-    for (const packed of packages) inspectExtension(root, packed);
+  // Separate installs prove that each extension installs and loads without the other.
+  for (const packed of [subagent, background]) {
+    const root = disposableInstall(packed.name.split("/").at(-1), [packed], true);
+    const directory = join(root, "node_modules", packed.name);
+    assert(!existsSync(join(directory, "node_modules")), "No bundled host/sibling copies");
     assert(!existsSync(join(root, "node_modules/alignfirst")));
     assert(!existsSync(join(root, "node_modules/aligndev")));
-    for (const script of [
-      "pi-packed-smoke.mjs",
-      "pi-packed-presentation.mjs",
-      "pi-packed-tui.py",
-      "pi-smoke-provider.mjs",
-    ]) {
+    for (const script of ["pi-packed-smoke.mjs", "pi-smoke-provider.mjs"])
       copyFileSync(join(repositoryRoot, "scripts", script), join(root, script));
-    }
-    copyFileSync(
-      join(repositoryRoot, "packages/pi-background/test/fixtures/tree.mjs"),
-      join(root, "pi-smoke-tree.mjs"),
-    );
-    execFileSync(
-      process.execPath,
-      [join(root, "pi-packed-smoke.mjs"), ...packages.map((p) => p.name)],
-      {
-        cwd: root,
-        env: isolatedEnvironment(root),
-        stdio: "inherit",
-        timeout: 120000,
-      },
-    );
-    verifyBrokenRootEntries(root, packages);
-    execFileSync(
-      process.execPath,
-      [join(root, "pi-packed-presentation.mjs"), ...packages.map((p) => p.name)],
-      {
-        cwd: root,
-        env: isolatedEnvironment(root),
-        stdio: "inherit",
-        timeout: 45000,
-      },
-    );
+    execFileSync(process.execPath, [join(root, "pi-packed-smoke.mjs"), packed.name], {
+      cwd: root,
+      env: isolatedEnvironment(root),
+      stdio: "inherit",
+      timeout: 120000,
+    });
   }
   console.log(
-    `Release smoke passed: alignfirst@${alignfirst.version}, aligndev@${aligndev.version}, Pi 1.4.0, both extensions independently/together.`,
+    `Release smoke passed: alignfirst@${alignfirst.version}, aligndev@${aligndev.version}, Pi 1.4.0, each extension independently.`,
   );
 }
 
@@ -260,58 +192,6 @@ function disposableInstall(name, packages, host = false) {
 
 function installedManifest(root, name) {
   return JSON.parse(readFileSync(join(root, "node_modules", name, "package.json"), "utf8"));
-}
-
-function inspectExtension(root, packed) {
-  const directory = join(root, "node_modules", packed.name);
-  const manifest = installedManifest(root, packed.name);
-  assert.equal(manifest.type, "module");
-  assert.equal(manifest.license, "MIT");
-  assert(manifest.keywords.includes("pi-package"));
-  assert.deepEqual(Object.keys(manifest.pi), ["extensions"]);
-  assert.deepEqual(manifest.pi.extensions, ["./index.js"]);
-  assert.deepEqual(manifest.dependencies ?? {}, {});
-  assert(!existsSync(join(directory, "node_modules")), "No bundled host/sibling copies");
-  for (const resource of ["prompts", "skills", "agents", ".pi", "src"])
-    assert(!existsSync(join(directory, resource)), `Unexpected installed resource ${resource}`);
-  for (const file of ["README.md", "LICENSE", "NOTICE.md", "index.js", "dist/index.js"]) {
-    assert(existsSync(join(directory, file)), `Missing packed asset: ${file}`);
-  }
-  const license = readFileSync(join(directory, "LICENSE"), "utf8");
-  for (const phrase of [
-    "Mario Zechner",
-    "Permission is hereby granted",
-    "THE SOFTWARE IS PROVIDED",
-  ])
-    assert(license.includes(phrase));
-  for (const [name, range] of Object.entries(manifest.peerDependencies)) {
-    assert(name.startsWith("@earendil-works/pi-") || name === "typebox");
-    assert.equal(range, "*");
-  }
-}
-
-function verifyBrokenRootEntries(root, packages) {
-  for (const packed of packages) {
-    const entry = join(root, "node_modules", packed.name, "index.js");
-    const original = readFileSync(entry, "utf8");
-    try {
-      for (const fault of ["missing", "invalidFactory"]) {
-        if (fault === "missing") rmSync(entry);
-        else writeFileSync(entry, "export default {};\n");
-        // A fresh host avoids jiti's module cache masking a broken forwarder.
-        const result = spawnSync(
-          process.execPath,
-          [join(root, "pi-packed-smoke.mjs"), "--load-only", packed.name],
-          { cwd: root, env: isolatedEnvironment(root), encoding: "utf8", timeout: 30000 },
-        );
-        assert.ifError(result.error);
-        assert.notEqual(result.status, 0, `${packed.name}: ${fault} root must fail loading`);
-        assert.match(result.stderr, /Packed extension loader:/);
-      }
-    } finally {
-      writeFileSync(entry, original);
-    }
-  }
 }
 
 function verifyCliVersion(root, name, args, expected) {

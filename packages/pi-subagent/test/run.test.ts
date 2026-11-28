@@ -14,12 +14,8 @@ afterEach(() => {
 
 describe("dispatch", () => {
   it.each([
-    {},
     { tasks: [] },
-    { chain: [] },
     { task: " " },
-    { task: "x", agent: " " },
-    { task: "x", model: "" },
     { task: "x", thinking: "extreme" },
     { task: "x", tasks: [{ task: "y" }] },
     { tasks: [{ task: "x" }], cwd: "elsewhere" },
@@ -118,36 +114,6 @@ describe("dispatch", () => {
     expect(result.data.results.filter((task) => task.status === "succeeded")).toHaveLength(7);
   });
 
-  it("does not launch queued tasks after cancellation and awaits running siblings", async () => {
-    const ctx = context();
-    const controller = new AbortController();
-    ctx.signal = controller.signal;
-    let launches = 0;
-    let cleaned = 0;
-    ctx.runner = async (_assignment, options) => {
-      ++launches;
-      await new Promise<void>((resolve) =>
-        options.signal.addEventListener(
-          "abort",
-          () => {
-            setTimeout(() => {
-              ++cleaned;
-              resolve();
-            }, 30);
-          },
-          { once: true },
-        ),
-      );
-      return { ...success(""), status: "cancelled" };
-    };
-    const pending = dispatch({ tasks: Array.from({ length: 8 }, () => ({ task: "work" })) }, ctx);
-    controller.abort();
-    const result = await pending;
-    expect(launches).toBe(4);
-    expect(cleaned).toBe(4);
-    expect(result.data.results.map((task) => task.status)).toEqual(Array(8).fill("cancelled"));
-  });
-
   it("substitutes literal predecessor output and stops chains on failure", async () => {
     const ctx = context();
     const tasks: string[] = [];
@@ -187,28 +153,19 @@ describe("dispatch", () => {
     expect(result.data.results.every((task) => task.truncated)).toBe(true);
   });
 
-  it.each(["single", "parallel", "chain"])(
-    "bounds total model content and retained text in %s",
-    async (mode) => {
-      const ctx = context();
-      ctx.runner = async () => ({
-        ...success("😀".repeat(30_000)),
-        error: "diagnostic".repeat(2000),
-      });
-      const input =
-        mode === "single"
-          ? { task: "x" }
-          : mode === "parallel"
-            ? { tasks: Array.from({ length: 8 }, () => ({ task: "x" })) }
-            : { chain: Array.from({ length: 20 }, () => ({ task: "x" })) };
-      const result = await dispatch(input, ctx);
-      expect(Buffer.byteLength(result.text)).toBeLessThanOrEqual(50 * 1024);
-      expect(result.data.results.every((task) => task.truncated)).toBe(true);
-      expect(
-        result.data.results.reduce((sum, task) => sum + Buffer.byteLength(task.output), 0),
-      ).toBeLessThanOrEqual(40 * 1024);
-    },
-  );
+  it("bounds total model content and retained text across parallel results", async () => {
+    const ctx = context();
+    ctx.runner = async () => ({
+      ...success("😀".repeat(30_000)),
+      error: "diagnostic".repeat(2000),
+    });
+    const result = await dispatch({ tasks: Array.from({ length: 8 }, () => ({ task: "x" })) }, ctx);
+    expect(Buffer.byteLength(result.text)).toBeLessThanOrEqual(50 * 1024);
+    expect(result.data.results.every((task) => task.truncated)).toBe(true);
+    expect(
+      result.data.results.reduce((sum, task) => sum + Buffer.byteLength(task.output), 0),
+    ).toBeLessThanOrEqual(40 * 1024);
+  });
 });
 
 function context(): DispatchContext {

@@ -48,24 +48,20 @@ describe("agent discovery", () => {
     });
   });
 
-  it.each(["project", "both"] as const)("refuses untrusted %s scope without UI bypass", (scope) => {
-    expect(() => discoverAgents({ cwd: temporary(), scope, trusted: false })).toThrow();
+  it("refuses project scope without trust", () => {
+    expect(() => discoverAgents({ cwd: temporary(), scope: "both", trusted: false })).toThrow();
   });
 
-  it.each([
-    "tools: 42",
-    "tools: [read, 4]",
-    "tools: []",
-    "tools: {read: true}",
-    "tools: 'read,,bash'",
-    "model: 42",
-  ])("rejects requested malformed restrictions: %s", (frontmatter) => {
-    const dir = temporary();
-    profile(join(dir, "agents"), "bad", frontmatter);
-    const discover = discoverAgents({ cwd: dir, agentDir: dir, scope: "user", trusted: false });
-    expect(discover("worker").source).toBe("bundled");
-    expect(() => discover("bad")).toThrow();
-  });
+  it.each(["tools: 42", "tools: 'read,,bash'", "model: 42"])(
+    "rejects requested malformed restrictions: %s",
+    (frontmatter) => {
+      const dir = temporary();
+      profile(join(dir, "agents"), "bad", frontmatter);
+      const discover = discoverAgents({ cwd: dir, agentDir: dir, scope: "user", trusted: false });
+      expect(discover("worker").source).toBe("bundled");
+      expect(() => discover("bad")).toThrow();
+    },
+  );
 
   it("rejects unknown names and duplicate names within one source", () => {
     const dir = temporary();

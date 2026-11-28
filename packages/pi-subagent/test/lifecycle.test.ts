@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +10,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { registerSubagent } from "../src/index.js";
+import { launchManaged } from "../src/process-tree.js";
 import provider from "./fixtures/provider.js";
 
 const fixture = fileURLToPath(new URL("./fixtures/pi.mjs", import.meta.url));
@@ -96,7 +97,98 @@ describe.skipIf(process.platform !== "linux")("actual SDK extension lifecycle", 
       rmSync(cwd, { recursive: true, force: true });
     }
   }, 15_000);
+  it("actual Pi parent shutdown awaits nested Pi/bash cleanup", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "pi-subagent-parent-shutdown-"));
+    const config = join(dir, "config");
+    const pids = join(dir, "pids");
+    const cli = fileURLToPath(
+      new URL("./cli.js", import.meta.resolve("@earendil-works/pi-coding-agent")),
+    );
+    const providerFile = fileURLToPath(new URL("./fixtures/provider.ts", import.meta.url));
+    const extension = fileURLToPath(new URL("../src/index.ts", import.meta.url));
+    mkdirSync(config);
+    mkdirSync(pids);
+    writeFileSync(join(config, "settings.json"), JSON.stringify({ extensions: [providerFile] }));
+    let diagnostics = "";
+    const managed = launchManaged({
+      command: process.execPath,
+      args: [
+        cli,
+        "--mode",
+        "json",
+        "-p",
+        "--no-session",
+        "--no-extensions",
+        "-e",
+        providerFile,
+        "-e",
+        extension,
+        "--no-skills",
+        "--no-prompt-templates",
+        "--no-context-files",
+        "--no-themes",
+        "--offline",
+        "--model",
+        "subagent-fixture/local",
+        "--tools",
+        "subagent",
+      ],
+      cwd: dir,
+      env: {
+        ...process.env,
+        HOME: dir,
+        PI_CODING_AGENT_DIR: config,
+        PI_OFFLINE: "1",
+        PI_SKIP_VERSION_CHECK: "1",
+        SUBAGENT_PARENT_TASK: "run the bash fixture",
+        SUBAGENT_PARENT_SCOPE: "user",
+        // Each child's bash records its PID, then becomes a long-running process.
+        SUBAGENT_FIXTURE_COMMAND: `: > '${pids}'/$$; exec sleep 60`,
+      },
+      stdout: () => {},
+      stderr(chunk) {
+        diagnostics += chunk.toString();
+      },
+      inputError: () => {},
+    });
+    managed.child.stdin.end("Delegate the deterministic assignments.");
+    const shells: { pid: number; identity: string }[] = [];
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await managed.spawned;
+      await waitFor(() => readdirSync(pids).length === 2).catch((error) => {
+        throw new Error(`${error.message}\n${diagnostics}`);
+      });
+      for (const name of readdirSync(pids)) {
+        const identity = processFields(Number(name))?.[19];
+        if (identity === undefined) throw new Error("Nested bash exited before shutdown.");
+        shells.push({ pid: Number(name), identity });
+      }
+      // Signal only the direct Pi parent: the extension alone must reach the nested work.
+      managed.child.kill("SIGTERM");
+      await Promise.race([
+        managed.exited,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`Parent shutdown timed out:\n${diagnostics}`)),
+            10_000,
+          );
+        }),
+      ]);
+      expect(shells.filter(isLive)).toEqual([]);
+    } finally {
+      clearTimeout(timer);
+      for (const shell of shells) if (isLive(shell)) process.kill(shell.pid, "SIGKILL");
+      await managed.stop(Date.now()).catch(() => {});
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 15_000);
 });
+
+function isLive({ pid, identity }: { pid: number; identity: string }): boolean {
+  const fields = processFields(pid);
+  return fields?.[19] === identity && fields[0] !== "Z";
+}
 
 function processFields(pid: number): string[] | undefined {
   try {
